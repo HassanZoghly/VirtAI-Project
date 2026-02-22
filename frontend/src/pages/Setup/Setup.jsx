@@ -1,4 +1,3 @@
-import Footer from '../Overview/components/Footer/Footer';
 import './Setup.css';
 
 function Setup() {

@@ -1,0 +1,69 @@
+:root {
+  --font-body: "Google Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-display: "Space Grotesk", var(--font-body);
+
+  /* Type scale */
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --h3: 1.25rem;
+  --h2: 1.5rem;
+  --h1: 2rem;
+
+  /* Dark theme */
+  --primary-bg: #121212;
+  --secondary-bg: #1a1a1a;
+  --card-bg: #1e1e1e;
+  --modal-bg: #252525;
+
+  --accent: #f0c852;
+  --accent-2: #d4af37;
+  --accent-soft: rgba(212, 175, 55, 0.1);
+
+  --text-primary: #ffffff;
+  --text-secondary: #b0b0b0;
+  --text-muted: #808080;
+
+  --border-color: #333333;
+
+  --success: #4caf50;
+  --warning: #ff9800;
+  --error: #f44336;
+
+  --transition-fast: 0.2s;
+  --transition-normal: 0.3s;
+  --transition-slow: 0.5s;
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+
+/* ── Prevent flash of unstyled/white background ── */
+html, body {
+  background-color: #121212;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* App root */
+#root {
+  min-height: 100vh;
+}
+
+/* ── Custom scrollbar ── */
+/* Firefox */
+* {
+  cursor: inherit;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-2) var(--secondary-bg);
+}
+
+/* Webkit */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--secondary-bg); }
+::-webkit-scrollbar-thumb {
+  background: var(--accent-2);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }

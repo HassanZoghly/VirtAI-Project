@@ -377,7 +377,7 @@ const Setup = () => {
                         onClick={handleBack}
                         aria-label={currentStep === 1 ? "Go back to home" : "Go to previous step"}
                     >
-                        <span aria-hidden="true">{currentStep === 1 ? "←" : "←"}</span>
+                        <span aria-hidden="true">←</span>
                         {currentStep === 1 ? "Back to Home" : "Back"}
                     </button>
 

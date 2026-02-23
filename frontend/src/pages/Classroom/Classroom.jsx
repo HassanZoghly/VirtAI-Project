@@ -1,11 +1,14 @@
+import { lazy, Suspense } from "react";
 import './Classroom.css';
 
-function Classroom() {
-  return (
-    <main>
-      <h1>Classroom</h1>
-    </main>
-  );
-}
+const ClassroomShell = lazy(() => import("./components/ClassroomShell.jsx"));
 
-export default Classroom;
+export default function Classroom() {
+    return (
+        <div className="classroom-page">
+            <Suspense fallback={null}>
+                <ClassroomShell />
+            </Suspense>
+        </div>
+    );
+}

@@ -86,22 +86,6 @@
   outline-offset: 3px;
 }
 
-.nf__btn--primary {
-  background-color: #f0c852;
-  color: #111111;
-}
-
-.nf__btn--primary:hover {
-  background-color: #d4af37;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 28px rgba(240, 200, 82, 0.28);
-}
-
-.nf__btn--primary:active {
-  transform: translateY(0);
-  box-shadow: none;
-}
-
 .nf__btn--secondary {
   background-color: transparent;
   color: #616161;

@@ -150,17 +150,6 @@
     background: rgba(212, 175, 55, 0.1);
 }
 
-.setup__tab.active::after {
-    content: '';
-    position: absolute;
-    bottom: -1px;
-    left: 20%;
-    right: 20%;
-    height: 2px;
-    background: var(--accent);
-    border-radius: 2px;
-}
-
 .setup__tab-icon {
     font-size: 1.2rem;
 }
@@ -318,6 +307,7 @@
 .setup__select,
 .setup__input {
     width: 100%;
+    box-sizing: border-box;
     padding: var(--setup-spacing-md) var(--setup-spacing-lg);
     background: var(--secondary-bg);
     border: 1px solid var(--border-color);

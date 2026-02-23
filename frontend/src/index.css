@@ -50,3 +50,20 @@ html, body {
 #root {
   min-height: 100vh;
 }
+
+/* ── Custom scrollbar ── */
+/* Firefox */
+* {
+  cursor: inherit;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-2) var(--secondary-bg);
+}
+
+/* Webkit */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--secondary-bg); }
+::-webkit-scrollbar-thumb {
+  background: var(--accent-2);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }

@@ -22,15 +22,15 @@
 
 .site-footer__built {
   margin: 0;
-  font-size: var(--text-sm, 0.875rem);
-  color: var(--text-secondary, #b0b0b0);
-  font-weight: 500;
+  font-size: 1.05rem;
+  color: #f0f0f0;
+  font-weight: 600;
 }
 
 .site-footer__tag {
   margin: 0;
-  font-size: 0.75rem;
-  color: var(--text-muted, #616161);
+  font-size: 0.9rem;
+  color: #d0d0d0;
   letter-spacing: 0.03em;
 }
 

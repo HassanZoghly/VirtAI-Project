@@ -25,5 +25,5 @@ export const avatarImages = {
     },
 };
 
-export const getAvatarById = (id) => avatarImages[id] || avatarImages.mariam;
+export const getAvatarById = (id) => avatarImages[id] || avatarImages.omar;
 export const getAvatarModelPath = (id) => getAvatarById(id).modelPath;

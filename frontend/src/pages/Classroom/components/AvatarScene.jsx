@@ -3,7 +3,7 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { Environment, OrbitControls, useGLTF, useFBX, ContactShadows } from "@react-three/drei";
 import * as THREE from "three";
 
-// ------------------------ error boundary ------------------------
+// Error boundary
 class AvatarErrorBoundary extends Component {
     constructor(props) {
         super(props);
@@ -23,21 +23,14 @@ class AvatarErrorBoundary extends Component {
     }
 }
 
-// ------------------------ paths config ------------------------
+// Animation paths
 const ANIM = {
     greeting: [{ fbx: "/models/animations/Greeting/Greeting.fbx" }],
-    idle: [
-        { fbx: "/models/animations/Idle/Idle.fbx" },
-    ],
-    think: [
-        { fbx: "/models/animations/Think/Think.fbx" },
-    ],
+    idle: [{ fbx: "/models/animations/Idle/Idle.fbx" }],
 };
 
-// Max jaw rotation in radians for lip sync
 const JAW_OPEN_MAX = 0.15;
 
-// ------------------------ R3F model + animations ------------------------
 function AvatarRig({
     modelPath,
     animState,
@@ -48,77 +41,67 @@ function AvatarRig({
     const group = useRef();
     const { scene } = useGLTF(modelPath);
 
-    // FBX loads
     const greetingFBX = useFBX(ANIM.greeting[0].fbx);
     const idleFBX = useFBX(ANIM.idle[0].fbx);
-    const thinkFBX = useFBX(ANIM.think[0].fbx);
 
-    // Mixer / actions
     const mixerRef = useRef(null);
     const actionsRef = useRef({});
     const currentActionRef = useRef(null);
 
-    // Lip sync refs
     const jawBoneRef = useRef(null);
     const jawRestRotation = useRef(null);
     const currentAmplitudeRef = useRef(0);
 
-    // Pre-process scene
     useEffect(() => {
         scene.traverse((o) => {
-        if (o.isMesh || o.isSkinnedMesh) {
-            o.castShadow = true;
-            o.receiveShadow = true;
-            if (o.isSkinnedMesh) o.frustumCulled = false;
-            if (o.material) {
-            const mats = Array.isArray(o.material) ? o.material : [o.material];
-            mats.forEach((mat) => {
-                mat.side = THREE.DoubleSide;
-                mat.needsUpdate = true;
-            });
+            if (o.isMesh || o.isSkinnedMesh) {
+                o.castShadow = true;
+                o.receiveShadow = true;
+                if (o.isSkinnedMesh) o.frustumCulled = false;
+                if (o.material) {
+                    const mats = Array.isArray(o.material) ? o.material : [o.material];
+                    mats.forEach((mat) => {
+                        mat.side = THREE.DoubleSide;
+                        mat.needsUpdate = true;
+                    });
+                }
             }
-        }
 
-        // Find jaw bone for lip sync
-        if (o.isBone) {
-            const name = o.name.toLowerCase();
-            if (
-            name.includes("jaw") ||
-            name.includes("chin") ||
-            name === "head_joint" // common in ReadyPlayerMe
-            ) {
-            if (!jawBoneRef.current) {
-                jawBoneRef.current = o;
-                jawRestRotation.current = o.rotation.x;
+            if (o.isBone) {
+                const name = o.name.toLowerCase();
+                if (
+                    name.includes("jaw") ||
+                    name.includes("chin") ||
+                    name === "head_joint"
+                ) {
+                    if (!jawBoneRef.current) {
+                        jawBoneRef.current = o;
+                        jawRestRotation.current = o.rotation.x;
+                    }
+                }
             }
-            }
-        }
         });
 
         onModelReady?.();
-    }, [scene]);
+    }, [scene, onModelReady]);
 
-    // Prepare clips
     const clips = useMemo(() => {
         const result = [];
-        function normalizeClip(clip, name) {
-        const c = clip.clone();
-        c.name = name;
-        return c;
-        }
+        const normalizeClip = (clip, name) => {
+            const c = clip.clone();
+            c.name = name;
+            return c;
+        };
 
         const g = greetingFBX.animations?.[0];
-        const i1 = idleFBX.animations?.[0];
-        const t1 = thinkFBX.animations?.[0];
+        const i = idleFBX.animations?.[0];
 
         if (g) result.push(normalizeClip(g, "greeting"));
-        if (i1) result.push(normalizeClip(i1, "idle"));
-        if (t1) result.push(normalizeClip(t1, "think"));
+        if (i) result.push(normalizeClip(i, "idle"));
 
         return result;
-    }, [greetingFBX, idleFBX, thinkFBX]);
+    }, [greetingFBX, idleFBX]);
 
-    // Init mixer & actions
     useEffect(() => {
         if (!scene || clips.length === 0) return;
 
@@ -127,19 +110,19 @@ function AvatarRig({
 
         const actions = {};
         for (const clip of clips) {
-        const action = mixer.clipAction(clip);
-        action.enabled = true;
-        action.clampWhenFinished = true;
-        actions[clip.name] = action;
+            const action = mixer.clipAction(clip);
+            action.enabled = true;
+            action.clampWhenFinished = true;
+            actions[clip.name] = action;
         }
         actionsRef.current = actions;
 
         return () => {
-        mixer.stopAllAction();
-        mixer.uncacheRoot(scene);
-        mixerRef.current = null;
-        actionsRef.current = {};
-        currentActionRef.current = null;
+            mixer.stopAllAction();
+            mixer.uncacheRoot(scene);
+            mixerRef.current = null;
+            actionsRef.current = {};
+            currentActionRef.current = null;
         };
     }, [scene, clips]);
 
@@ -149,11 +132,11 @@ function AvatarRig({
         if (!next) return;
 
         if (once) {
-        next.setLoop(THREE.LoopOnce, 1);
-        next.reset();
+            next.setLoop(THREE.LoopOnce, 1);
+            next.reset();
         } else {
-        next.setLoop(loop, Infinity);
-        next.reset();
+            next.setLoop(loop, Infinity);
+            next.reset();
         }
 
         next.enabled = true;
@@ -161,94 +144,76 @@ function AvatarRig({
 
         const cur = currentActionRef.current;
         if (cur && cur !== next) {
-        cur.crossFadeTo(next, fade, false);
+            cur.crossFadeTo(next, fade, false);
         } else {
-        next.fadeIn(fade);
+            next.fadeIn(fade);
         }
         currentActionRef.current = next;
 
         if (once && mixerRef.current) {
-        const mixer = mixerRef.current;
-        const onFinish = (e) => {
-            if (e.action === next) {
-            mixer.removeEventListener("finished", onFinish);
-            onGreetingFinished?.();
-            }
-        };
-        mixer.addEventListener("finished", onFinish);
+            const mixer = mixerRef.current;
+            const onFinish = (e) => {
+                if (e.action === next) {
+                    mixer.removeEventListener("finished", onFinish);
+                    onGreetingFinished?.();
+                }
+            };
+            mixer.addEventListener("finished", onFinish);
         }
     }
 
-    // Drive animation by animState
     useEffect(() => {
         if (!actionsRef.current || !scene) return;
 
         if (animState === "greeting") {
-        playAction("greeting", { fade: 0.2, once: true });
-        return;
+            playAction("greeting", { fade: 0.2, once: true });
+            return;
         }
-        if (animState === "idle") {
-        playAction("idle", { fade: 0.25 });
-        return;
-        }
-        if (animState === "thinking") {
-        playAction("think", { fade: 0.25 });
-        return;
-        }
-        if (animState === "speaking") {
-        // "talk" animation unavailable — fall back to idle
-        playAction("idle", { fade: 0.15 });
-        return;
+        if (animState === "idle" || animState === "speaking") {
+            playAction("idle", { fade: 0.25 });
+            return;
         }
     }, [animState, scene]);
 
-    // Update mixer + lip sync
     useFrame((_, dt) => {
         if (mixerRef.current) mixerRef.current.update(dt);
 
-        // Lip sync: smooth interpolation of jaw bone based on speech amplitude
         if (jawBoneRef.current && jawRestRotation.current !== null) {
-        const target = animState === "speaking" ? Math.max(0, Math.min(1, speechAmplitude)) : 0;
-
-        // Smooth lerp
-        currentAmplitudeRef.current = THREE.MathUtils.lerp(
-            currentAmplitudeRef.current,
-            target,
-            dt * 12 // smoothing factor
-        );
-
-        // Apply jaw rotation (additive to rest)
-        jawBoneRef.current.rotation.x =
-            jawRestRotation.current + currentAmplitudeRef.current * JAW_OPEN_MAX;
+            const target = animState === "speaking" ? Math.max(0, Math.min(1, speechAmplitude)) : 0;
+            currentAmplitudeRef.current = THREE.MathUtils.lerp(
+                currentAmplitudeRef.current,
+                target,
+                dt * 12
+            );
+            jawBoneRef.current.rotation.x =
+                jawRestRotation.current + currentAmplitudeRef.current * JAW_OPEN_MAX;
         }
     });
 
     useEffect(() => {
         if (animState !== "speaking") {
-        currentAmplitudeRef.current = 0;
-        if (jawBoneRef.current && jawRestRotation.current !== null) {
-            jawBoneRef.current.rotation.x = jawRestRotation.current;
-        }
+            currentAmplitudeRef.current = 0;
+            if (jawBoneRef.current && jawRestRotation.current !== null) {
+                jawBoneRef.current.rotation.x = jawRestRotation.current;
+            }
         }
     }, [animState]);
 
     return (
         <group ref={group} position={[0, -1.25, 0]} scale={1.25}>
-        <primitive object={scene} />
+            <primitive object={scene} />
         </group>
     );
 }
 
-// ------------------------ main scene wrapper ------------------------
-/**
-* @param {{
-*   avatarData: object|null,
-*   avatarMode: "idle"|"thinking"|"speaking",
-*   speechAmplitude: number,
-* }} props
-*/
-export default function AvatarScene({ avatarData, avatarMode = "idle", speechAmplitude = 0, onAvatarLoaded }) {
-
+export default function AvatarScene({
+    avatarData,
+    avatarMode = "idle",
+    speechAmplitude = 0,
+    onAvatarLoaded,
+    modelPath: explicitModelPath,
+    onError, 
+}) {
     const loadStartRef = useRef(0);
     const [animState, setAnimState] = useState("idle");
     const greetedRef = useRef(false);
@@ -256,19 +221,14 @@ export default function AvatarScene({ avatarData, avatarMode = "idle", speechAmp
 
     const handleGreetingFinished = () => {
         isGreetingRef.current = false;
-
         if (avatarMode === "speaking") {
-        setAnimState("speaking");
-        return;
+            setAnimState("speaking");
+        } else {
+            setAnimState("idle");
         }
-        if (avatarMode === "thinking") {
-        setAnimState("thinking");
-        return;
-        }
-        setAnimState("idle");
     };
 
-    const modelPath = avatarData?.modelPath || "/models/avatar2.glb";
+    const modelPath = explicitModelPath || avatarData?.modelPath || "/models/avatar1.glb";
 
     useEffect(() => {
         loadStartRef.current = performance.now();
@@ -281,23 +241,18 @@ export default function AvatarScene({ avatarData, avatarMode = "idle", speechAmp
         onAvatarLoaded?.();
 
         if (!greetedRef.current) {
-        greetedRef.current = true;
-        isGreetingRef.current = true;
-        setAnimState("greeting");
+            greetedRef.current = true;
+            isGreetingRef.current = true;
+            setAnimState("greeting");
         }
     };
 
-    // Map WS avatarMode to internal animation states (after greeting finishes)
     useEffect(() => {
-        const mappedState = avatarMode === "speaking"
-        ? "speaking"
-        : avatarMode === "thinking"
-        ? "thinking"
-        : "idle";
+        const mappedState = avatarMode === "speaking" ? "speaking" : "idle";
 
         if (isGreetingRef.current) {
-        if (mappedState === "idle") return;
-        isGreetingRef.current = false;
+            if (mappedState === "idle") return;
+            isGreetingRef.current = false;
         }
 
         setAnimState(mappedState);
@@ -305,44 +260,44 @@ export default function AvatarScene({ avatarData, avatarMode = "idle", speechAmp
 
     return (
         <AvatarErrorBoundary fallback={<div style={{ width: "100%", height: "100%", background: "rgb(22 22 22)" }} />}>
-        <div style={{ width: "100%", height: "100%" }}>
-        <Canvas
-            shadows
-            dpr={[1, 1.5]}
-            camera={{ position: [0, 0.2, 3.6], fov: 45, near: 0.01, far: 100 }}
-            gl={{ antialias: true, alpha: true, preserveDrawingBuffer: false }}
-        >
-            <ambientLight intensity={0.6} />
-            <directionalLight position={[4, 6, 4]} intensity={1.0} castShadow />
-            <directionalLight position={[-4, 5, -3]} intensity={0.35} />
-            <pointLight position={[0, 2, 2]} intensity={0.35} />
+            <div style={{ width: "100%", height: "100%" }}>
+                <Canvas
+                    shadows
+                    dpr={[1, 1.5]}
+                    camera={{ position: [0, 0.2, 3.6], fov: 45, near: 0.01, far: 100 }}
+                    gl={{ antialias: true, alpha: true, preserveDrawingBuffer: false }}
+                >
+                    <ambientLight intensity={0.6} />
+                    <directionalLight position={[4, 6, 4]} intensity={1.0} castShadow />
+                    <directionalLight position={[-4, 5, -3]} intensity={0.35} />
+                    <pointLight position={[0, 2, 2]} intensity={0.35} />
 
-            <Environment preset="studio" />
+                    <Environment preset="studio" />
 
-            <Suspense fallback={null}>
-                <AvatarErrorBoundary fallback={null}>
-                <AvatarRig
-                    modelPath={modelPath}
-                    animState={animState}
-                    onGreetingFinished={handleGreetingFinished}
-                    speechAmplitude={speechAmplitude}
-                    onModelReady={handleModelReady}
-                />
-                </AvatarErrorBoundary>
-            </Suspense>
+                    <Suspense fallback={null}>
+                        <AvatarErrorBoundary fallback={null}>
+                            <AvatarRig
+                                modelPath={modelPath}
+                                animState={animState}
+                                onGreetingFinished={handleGreetingFinished}
+                                speechAmplitude={speechAmplitude}
+                                onModelReady={handleModelReady}
+                            />
+                        </AvatarErrorBoundary>
+                    </Suspense>
 
-            <ContactShadows position={[0, -1.25, 0]} opacity={0.35} scale={10} blur={2} far={4} />
+                    <ContactShadows position={[0, -1.25, 0]} opacity={0.35} scale={10} blur={2} far={4} />
 
-            <OrbitControls
-            enablePan={false}
-            enableZoom
-            minDistance={1.5}
-            maxDistance={6.5}
-            minPolarAngle={Math.PI / 4}
-            maxPolarAngle={Math.PI / 2}
-            />
-        </Canvas>
-        </div>
+                    <OrbitControls
+                        enablePan={false}
+                        enableZoom
+                        minDistance={1.5}
+                        maxDistance={6.5}
+                        minPolarAngle={Math.PI / 4}
+                        maxPolarAngle={Math.PI / 2}
+                    />
+                </Canvas>
+            </div>
         </AvatarErrorBoundary>
     );
-    }
+}

@@ -28,7 +28,7 @@ const toast = new Toast('tr');
 
 const AvatarScene = lazy(() => import("./AvatarScene.jsx"));
 
-const HEALTH_URL = "/api/health";
+const HEALTH_URL = "/api/v1/health";
 const HEALTH_INTERVAL = 15000;
 const AVATAR_MODEL_PATH = "/models/avatar1.glb";
 
@@ -137,10 +137,6 @@ function SessionList({ sessions, currentSessionId, onSessionSelect, onNewSession
     );
 }
 
-function AvatarLoader() {
-    return <div className="avatar-loader"></div>;
-}
-
 export default function ClassroomShell() {
     const navigate = useNavigate();
 
@@ -155,9 +151,7 @@ export default function ClassroomShell() {
     const [currentSessionId, setCurrentSessionId] = useState(sessions[0].id);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [inputValue, setInputValue] = useState("");
-    const [avatarData, setAvatarData] = useState(null);
     const [avatarLoaded, setAvatarLoaded] = useState(false);
-    const [avatarVisible, setAvatarVisible] = useState(false);
     const [backendStatus, setBackendStatus] = useState("checking");
     const [avatarError, setAvatarError] = useState(false);
 
@@ -169,21 +163,23 @@ export default function ClassroomShell() {
     const shouldStickToBottom = useRef(true);
     const textareaRef = useRef(null);
 
+    // Load avatar data from localStorage (memoized)
+    const avatarData = useMemo(() => {
+        try {
+            const saved = localStorage.getItem("virtai-settings");
+            if (!saved) return null;
+            const settings = JSON.parse(saved);
+            return settings?.character ? getAvatarById(settings.character) : null;
+        } catch {
+            console.warn("Failed to parse settings");
+            return null;
+        }
+    }, []);
+
     const currentSession = useMemo(
         () => sessions.find((s) => s.id === currentSessionId) || sessions[0],
         [sessions, currentSessionId]
     );
-
-    useEffect(() => {
-        try {
-            const saved = localStorage.getItem("virtai-settings");
-            if (!saved) return;
-            const settings = JSON.parse(saved);
-            if (settings?.character) setAvatarData(getAvatarById(settings.character) || null);
-        } catch {
-            console.warn("Failed to parse settings");
-        }
-    }, []);
 
     useEffect(() => {
         const check = async () => {
@@ -436,29 +432,31 @@ export default function ClassroomShell() {
             </div>
 
             <div className="split-container">
-                <div className="avatar-panel" style={{ background: avatarVisible ? '#333' : '' }}>
-                    {backendStatus === "offline" ? (
-                        <div className="avatar-offline-placeholder">
-                            <PiWifiSlashFill className="offline-icon" />
-                            <p>Avatar unavailable<br />due to server connection</p>
-                        </div>
-                    ) : (
-                        <>
-                            {!avatarLoaded && <AvatarLoader />}
-                            <div className={`avatar-canvas-wrapper${avatarVisible ? " visible" : ""}`}>
-                                <Suspense fallback={null}>
-                                    <AvatarScene
-                                        modelPath={AVATAR_MODEL_PATH}
-                                        avatarData={avatarData}
-                                        onAvatarLoaded={() => setAvatarLoaded(true)}
-                                        onError={handleAvatarError}
-                                    />
-                                </Suspense>
+                {/* Avatar Panel */}
+                <div className="avatar-panel" style={{ background: avatarLoaded ? '#333' : '' }}>
+                    {/* Loader */}
+                    {!avatarLoaded && !avatarError && (
+                        <div className="avatar-loader-container">
+                            <div className="avatar-loader">
+                                <div className="avatar-loader-fill" />
                             </div>
-                        </>
+                        </div>
                     )}
+
+                    {/* Avatar Canvas */}
+                    <div className="avatar-canvas-wrapper visible">
+                        <Suspense fallback={null}>
+                            <AvatarScene
+                                modelPath={AVATAR_MODEL_PATH}
+                                avatarData={avatarData}
+                                onAvatarLoaded={() => setAvatarLoaded(true)}
+                                onError={handleAvatarError}
+                            />
+                        </Suspense>
+                    </div>
                 </div>
 
+                {/* Chat Panel */}
                 <div className="chat-panel">
                     <div className="chat-messages" ref={chatScrollRef} onScroll={handleChatScroll}>
                         {currentSession.messages.length === 0 ? (

@@ -1,4 +1,4 @@
-import { Component, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import React, { Component, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Environment, OrbitControls, useGLTF, useFBX, ContactShadows } from "@react-three/drei";
 import * as THREE from "three";
@@ -14,6 +14,9 @@ class AvatarErrorBoundary extends Component {
     }
     componentDidCatch(err) {
         console.warn("[AvatarScene] Caught error, showing fallback:", err.message);
+        if (this.props.onError) {
+            this.props.onError(err);
+        }
     }
     render() {
         if (this.state.hasError) {
@@ -31,7 +34,8 @@ const ANIM = {
 
 const JAW_OPEN_MAX = 0.15;
 
-function AvatarRig({
+// استخدم React.memo لمنع إعادة التصيير غير الضرورية
+const AvatarRig = React.memo(function AvatarRig({
     modelPath,
     animState,
     onGreetingFinished,
@@ -52,7 +56,12 @@ function AvatarRig({
     const jawRestRotation = useRef(null);
     const currentAmplitudeRef = useRef(0);
 
+    // إضافة حالة للتأكد من أن المشهد جاهز
+    const [sceneReady, setSceneReady] = useState(false);
+
     useEffect(() => {
+        if (!scene) return;
+        // تأكد من أن traverse يعمل
         scene.traverse((o) => {
             if (o.isMesh || o.isSkinnedMesh) {
                 o.castShadow = true;
@@ -77,11 +86,12 @@ function AvatarRig({
                     if (!jawBoneRef.current) {
                         jawBoneRef.current = o;
                         jawRestRotation.current = o.rotation.x;
+                        console.log("Jaw bone found:", o.name);
                     }
                 }
             }
         });
-
+        setSceneReady(true);
         onModelReady?.();
     }, [scene, onModelReady]);
 
@@ -93,8 +103,8 @@ function AvatarRig({
             return c;
         };
 
-        const g = greetingFBX.animations?.[0];
-        const i = idleFBX.animations?.[0];
+        const g = greetingFBX?.animations?.[0];
+        const i = idleFBX?.animations?.[0];
 
         if (g) result.push(normalizeClip(g, "greeting"));
         if (i) result.push(normalizeClip(i, "idle"));
@@ -103,7 +113,7 @@ function AvatarRig({
     }, [greetingFBX, idleFBX]);
 
     useEffect(() => {
-        if (!scene || clips.length === 0) return;
+        if (!scene || !sceneReady || clips.length === 0) return;
 
         mixerRef.current = new THREE.AnimationMixer(scene);
         const mixer = mixerRef.current;
@@ -124,12 +134,15 @@ function AvatarRig({
             actionsRef.current = {};
             currentActionRef.current = null;
         };
-    }, [scene, clips]);
+    }, [scene, sceneReady, clips]);
 
     function playAction(name, { loop = THREE.LoopRepeat, fade = 0.25, once = false } = {}) {
         const actions = actionsRef.current;
         const next = actions[name];
-        if (!next) return;
+        if (!next) {
+            console.warn(`Action ${name} not found`);
+            return;
+        }
 
         if (once) {
             next.setLoop(THREE.LoopOnce, 1);
@@ -163,17 +176,15 @@ function AvatarRig({
     }
 
     useEffect(() => {
-        if (!actionsRef.current || !scene) return;
+        if (!actionsRef.current || !scene || !sceneReady) return;
 
+        console.log("Playing animation:", animState);
         if (animState === "greeting") {
             playAction("greeting", { fade: 0.2, once: true });
-            return;
-        }
-        if (animState === "idle" || animState === "speaking") {
+        } else if (animState === "idle" || animState === "speaking") {
             playAction("idle", { fade: 0.25 });
-            return;
         }
-    }, [animState, scene]);
+    }, [animState, scene, sceneReady]);
 
     useFrame((_, dt) => {
         if (mixerRef.current) mixerRef.current.update(dt);
@@ -204,20 +215,22 @@ function AvatarRig({
             <primitive object={scene} />
         </group>
     );
-}
+});
 
-export default function AvatarScene({
+// مكون AvatarScene مع memo
+const AvatarScene = React.memo(function AvatarScene({
     avatarData,
     avatarMode = "idle",
     speechAmplitude = 0,
     onAvatarLoaded,
     modelPath: explicitModelPath,
-    onError, 
+    onError,
 }) {
     const loadStartRef = useRef(0);
     const [animState, setAnimState] = useState("idle");
     const greetedRef = useRef(false);
     const isGreetingRef = useRef(false);
+    const [loadError, setLoadError] = useState(null);
 
     const handleGreetingFinished = () => {
         isGreetingRef.current = false;
@@ -232,8 +245,14 @@ export default function AvatarScene({
 
     useEffect(() => {
         loadStartRef.current = performance.now();
-        useGLTF.preload(modelPath);
-    }, [modelPath]);
+        try {
+            // Preload model
+            useGLTF.preload(modelPath);
+        } catch (err) {
+            setLoadError(err);
+            onError?.(err);
+        }
+    }, [modelPath, onError]);
 
     const handleModelReady = () => {
         const elapsed = performance.now() - loadStartRef.current;
@@ -247,6 +266,11 @@ export default function AvatarScene({
         }
     };
 
+    const handleModelError = (err) => {
+        setLoadError(err);
+        onError?.(err);
+    };
+
     useEffect(() => {
         const mappedState = avatarMode === "speaking" ? "speaking" : "idle";
 
@@ -258,8 +282,14 @@ export default function AvatarScene({
         setAnimState(mappedState);
     }, [avatarMode]);
 
+    if (loadError) {
+        return <div style={{ width: "100%", height: "100%", background: "rgb(22 22 22)", display: "flex", alignItems: "center", justifyContent: "center", color: "#ef4444" }}>
+            Failed to load avatar
+        </div>;
+    }
+
     return (
-        <AvatarErrorBoundary fallback={<div style={{ width: "100%", height: "100%", background: "rgb(22 22 22)" }} />}>
+        <AvatarErrorBoundary fallback={<div style={{ width: "100%", height: "100%", background: "rgb(22 22 22)" }} />} onError={onError}>
             <div style={{ width: "100%", height: "100%" }}>
                 <Canvas
                     shadows
@@ -275,7 +305,7 @@ export default function AvatarScene({
                     <Environment preset="studio" />
 
                     <Suspense fallback={null}>
-                        <AvatarErrorBoundary fallback={null}>
+                        <AvatarErrorBoundary fallback={null} onError={handleModelError}>
                             <AvatarRig
                                 modelPath={modelPath}
                                 animState={animState}
@@ -300,4 +330,6 @@ export default function AvatarScene({
             </div>
         </AvatarErrorBoundary>
     );
-}
+});
+
+export default AvatarScene;

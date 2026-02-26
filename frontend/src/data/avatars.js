@@ -7,22 +7,22 @@ export const avatarImages = {
         description: "Friendly and approachable tutor",
         gender: "male",
     },
-    mariam: {
-        id: "mariam",
-        name: "Dr. Mariam",
-        image: "/assets/avatar/avatar2.ico",
-        modelPath: "/models/avatar2.glb",
-        description: "Professional and experienced educator",
-        gender: "female",
-    },
-    khaled: {
-        id: "khaled",
-        name: "Dr. Khaled",
-        image: "/assets/avatar/avatar3.ico",
-        modelPath: "/models/avatar3.glb",
-        description: "Expert in advanced topics",
-        gender: "male",
-    },
+    // mariam: {
+    //     id: "mariam",
+    //     name: "Dr. Mariam",
+    //     image: "/assets/avatar/avatar2.ico",
+    //     modelPath: "/models/avatar2.glb",
+    //     description: "Professional and experienced educator",
+    //     gender: "female",
+    // },
+    // khaled: {
+    //     id: "khaled",
+    //     name: "Dr. Khaled",
+    //     image: "/assets/avatar/avatar3.ico",
+    //     modelPath: "/models/avatar3.glb",
+    //     description: "Expert in advanced topics",
+    //     gender: "male",
+    // },
 };
 
 export const getAvatarById = (id) => avatarImages[id] || avatarImages.omar;

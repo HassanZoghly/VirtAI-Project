@@ -1,13 +1,13 @@
 from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import AsyncGenerator, Callable
 
 
 # ── Message Roles ─────────────────────────────────────────────────────────────
 class MessageRole(str, Enum):
-    SYSTEM    = "system"
-    USER      = "user"
+    SYSTEM = "system"
+    USER = "user"
     ASSISTANT = "assistant"
 
 
@@ -15,8 +15,10 @@ class MessageRole(str, Enum):
 @dataclass
 class ChatMessage:
     """A single message in the conversation history"""
+
     role: MessageRole
     content: str
+
     def to_dict(self) -> dict:
         return {
             "role": self.role.value,
@@ -27,14 +29,16 @@ class ChatMessage:
 @dataclass
 class LLMChunk:
     """A single streaming chunk from the LLM"""
-    token: str                    # the token text
-    is_done: bool = False         # True = stream finished
-    sentence: str | None = None   # set when a full sentence is ready
+
+    token: str  # the token text
+    is_done: bool = False  # True = stream finished
+    sentence: str | None = None  # set when a full sentence is ready
 
 
 @dataclass
 class LLMResult:
     """Full result after streaming is complete"""
+
     full_text: str
     sentences: list[str] = field(default_factory=list)
     prompt_tokens: int = 0
@@ -54,27 +58,21 @@ class ConversationHistory:
     Manages conversation history with automatic trimming.
     Keeps the system prompt always at index 0.
     """
+
     system_prompt: str
-    max_messages: int = 20       # max user+assistant pairs to keep
+    max_messages: int = 20  # max user+assistant pairs to keep
     _messages: list[ChatMessage] = field(default_factory=list)
 
     def add_user_message(self, content: str) -> None:
-        self._messages.append(
-            ChatMessage(role=MessageRole.USER, content=content)
-        )
+        self._messages.append(ChatMessage(role=MessageRole.USER, content=content))
         self._trim()
 
     def add_assistant_message(self, content: str) -> None:
-        self._messages.append(
-            ChatMessage(role=MessageRole.ASSISTANT, content=content)
-        )
+        self._messages.append(ChatMessage(role=MessageRole.ASSISTANT, content=content))
 
     def get_messages(self) -> list[dict]:
         """Returns messages formatted for the API"""
-        system = ChatMessage(
-            role=MessageRole.SYSTEM,
-            content=self.system_prompt
-        )
+        system = ChatMessage(role=MessageRole.SYSTEM, content=self.system_prompt)
         return [system.to_dict()] + [m.to_dict() for m in self._messages]
 
     def clear(self) -> None:
@@ -86,7 +84,7 @@ class ConversationHistory:
         Keeps only the last N message pairs.
         Always removes in pairs (user + assistant) to keep history consistent.
         """
-        max_raw = self.max_messages * 2   # pairs → individual messages
+        max_raw = self.max_messages * 2  # pairs → individual messages
         if len(self._messages) > max_raw:
             self._messages = self._messages[-max_raw:]
 

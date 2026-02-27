@@ -8,3 +8,8 @@ logs/
 *.pyo
 *.pyd
 .env
+.data/
+.coverage
+dist/
+__tests__
+processing/

@@ -1,13 +1,13 @@
 """
 Utilities for TTS Service
 """
+
 import base64
-import re
-from typing import List, Dict, Optional
-import wave
 import io
-from pydub import AudioSegment
+import re
+
 from loguru import logger
+from pydub import AudioSegment
 
 from app.services.tts.base import VisemeEvent, WordBoundary
 
@@ -30,24 +30,24 @@ def clean_text_for_tts(text: str) -> str:
     - Ensure proper punctuation
     """
     # Remove markdown bold/italic
-    text = re.sub(r'\*{1,3}(.+?)\*{1,3}', r'\1', text)
+    text = re.sub(r"\*{1,3}(.+?)\*{1,3}", r"\1", text)
 
     # Remove markdown code blocks
-    text = re.sub(r'`{1,3}[^`]*`{1,3}', '', text)
+    text = re.sub(r"`{1,3}[^`]*`{1,3}", "", text)
 
     # Remove URLs
-    text = re.sub(r'http[s]?://\S+', '', text)
+    text = re.sub(r"http[s]?://\S+", "", text)
 
     # Remove emojis (optional)
     # text = re.sub(r'[^\w\s.,!?؟،؛]', '', text)
 
     # Clean extra whitespace
-    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r"\s+", " ", text).strip()
 
     return text
 
 
-def split_text_for_tts(text: str, max_length: int = 500) -> List[str]:
+def split_text_for_tts(text: str, max_length: int = 500) -> list[str]:
     """
     Split long text into smaller chunks
     Makes TTS faster and starts streaming quickly
@@ -60,7 +60,7 @@ def split_text_for_tts(text: str, max_length: int = 500) -> List[str]:
         return [text]
 
     # Split on sentence boundaries
-    sentence_pattern = r'(?<=[.!?؟!])\s+'
+    sentence_pattern = r"(?<=[.!?؟!])\s+"
     sentences = re.split(sentence_pattern, text)
 
     chunks = []
@@ -95,7 +95,7 @@ def calculate_audio_duration(audio_bytes: bytes, format: str = "mp3") -> float:
         return len(audio_bytes) / bytes_per_ms
 
 
-def visemes_to_dict_list(visemes: List[VisemeEvent]) -> List[Dict]:
+def visemes_to_dict_list(visemes: list[VisemeEvent]) -> list[dict]:
     """Convert list of VisemeEvent objects to dicts for JSON"""
     return [
         {
@@ -107,7 +107,7 @@ def visemes_to_dict_list(visemes: List[VisemeEvent]) -> List[Dict]:
     ]
 
 
-def word_boundaries_to_dict_list(boundaries: List[WordBoundary]) -> List[Dict]:
+def word_boundaries_to_dict_list(boundaries: list[WordBoundary]) -> list[dict]:
     """Convert list of WordBoundary objects to dicts for JSON"""
     return [
         {
@@ -119,32 +119,34 @@ def word_boundaries_to_dict_list(boundaries: List[WordBoundary]) -> List[Dict]:
     ]
 
 
-def merge_viseme_lists(viseme_lists: List[List[VisemeEvent]]) -> List[VisemeEvent]:
+def merge_viseme_lists(viseme_lists: list[list[VisemeEvent]]) -> list[VisemeEvent]:
     """
     Merge multiple viseme lists from different TTS chunks
     Adjusts offsets for sequential playback
     """
     if not viseme_lists:
         return []
-    
+
     merged = []
     time_offset = 0.0
-    
+
     for viseme_list in viseme_lists:
         for viseme in viseme_list:
-            merged.append(VisemeEvent(
-                offset_ms=viseme.offset_ms + time_offset,
-                viseme_id=viseme.viseme_id,
-                duration_ms=viseme.duration_ms
-            ))
-        
+            merged.append(
+                VisemeEvent(
+                    offset_ms=viseme.offset_ms + time_offset,
+                    viseme_id=viseme.viseme_id,
+                    duration_ms=viseme.duration_ms,
+                )
+            )
+
         if viseme_list:
             time_offset += viseme_list[-1].offset_ms + viseme_list[-1].duration_ms
-    
+
     return merged
 
 
-def estimate_tts_cost(text: str) -> Dict[str, int]:
+def estimate_tts_cost(text: str) -> dict[str, int]:
     """
     Estimate TTS cost based on text length
     Returns character count and estimated duration
@@ -154,9 +156,9 @@ def estimate_tts_cost(text: str) -> Dict[str, int]:
     # Average word length: ~5 characters
     words = len(text.split())
     estimated_seconds = (words / 150) * 60
-    
+
     return {
         "characters": char_count,
         "words": words,
-        "estimated_seconds": round(estimated_seconds, 1)
+        "estimated_seconds": round(estimated_seconds, 1),
     }

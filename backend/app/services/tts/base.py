@@ -1,40 +1,46 @@
 from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
-from typing import AsyncGenerator, Optional, List, Dict
+from typing import Optional
 
 
 @dataclass
 class VisemeEvent:
     """Single viseme event"""
-    offset_ms: float      # Event timestamp
-    viseme_id: int        # Viseme ID (0-21)
-    duration_ms: float    # Event duration
+
+    offset_ms: float  # Event timestamp
+    viseme_id: int  # Viseme ID (0-21)
+    duration_ms: float  # Event duration
 
 
 @dataclass
 class WordBoundary:
     """Word boundary event for precise lip sync"""
+
     word: str
-    offset_ms: float      # Start time
-    duration_ms: float    # Word duration
+    offset_ms: float  # Start time
+    duration_ms: float  # Word duration
 
 
 @dataclass
 class TTSResult:
     """Complete TTS result"""
+
     audio_bytes: bytes
-    visemes: List[VisemeEvent] = field(default_factory=list)
-    word_boundaries: List[WordBoundary] = field(default_factory=list)
+    visemes: list[VisemeEvent] = field(default_factory=list)
+    word_boundaries: list[WordBoundary] = field(default_factory=list)
     audio_duration_ms: float = 0.0
     sample_rate: int = 24000
     format: str = "mp3"
+    file_path: Optional[str] = None  # Path to stored audio file
 
 
 @dataclass
 class TTSChunk:
     """Streaming chunk"""
-    audio_data: Optional[bytes] = None   # None if not audio
-    viseme: Optional[VisemeEvent] = None # None if not viseme
+
+    audio_data: Optional[bytes] = None  # None if not audio
+    viseme: Optional[VisemeEvent] = None  # None if not viseme
     word_boundary: Optional[WordBoundary] = None  # None if not word
     is_done: bool = False
 
@@ -62,11 +68,11 @@ class BaseTTSProvider(ABC):
         pass
 
     @abstractmethod
-    async def get_available_voices(self) -> List[Dict[str, str]]:
+    async def get_available_voices(self) -> list[dict[str, str]]:
         """List of available voices"""
         pass
 
     @abstractmethod
-    async def get_voice_settings(self, voice_name: str) -> Dict[str, any]:
+    async def get_voice_settings(self, voice_name: str) -> dict[str, any]:
         """Get available settings for a specific voice"""
         pass

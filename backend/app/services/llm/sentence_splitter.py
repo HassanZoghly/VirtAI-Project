@@ -10,6 +10,7 @@ Why do we need this?
 English sentence endings: . ? !
 Also split on comma (,) after a threshold length.
 """
+
 from __future__ import annotations
 
 # Characters that definitively end a sentence (English only)
@@ -26,13 +27,54 @@ FORCE_SPLIT_LENGTH = 300
 
 # Common abbreviations that should not trigger sentence split on dot
 ABBREVIATIONS = {
-    "mr", "mrs", "ms", "dr", "prof", "rev", "hon", "pres",
-    "gov", "sen", "rep", "st", "ave", "blvd", "rd", "ln",
-    "e.g", "i.e", "vs", "etc", "inc", "ltd", "co", "corp",
-    "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep",
-    "oct", "nov", "dec", "sept", "al", "gen", "col", "cmdr",
-    "lt", "cpl", "sgt", "pfc", "pvt", "capt", "maj", "adm",
-    "mrs", "ms", "mr", "dr", "prof"
+    "mr",
+    "mrs",
+    "ms",
+    "dr",
+    "prof",
+    "rev",
+    "hon",
+    "pres",
+    "gov",
+    "sen",
+    "rep",
+    "st",
+    "ave",
+    "blvd",
+    "rd",
+    "ln",
+    "e.g",
+    "i.e",
+    "vs",
+    "etc",
+    "inc",
+    "ltd",
+    "co",
+    "corp",
+    "jan",
+    "feb",
+    "mar",
+    "apr",
+    "jun",
+    "jul",
+    "aug",
+    "sep",
+    "oct",
+    "nov",
+    "dec",
+    "sept",
+    "al",
+    "gen",
+    "col",
+    "cmdr",
+    "lt",
+    "cpl",
+    "sgt",
+    "pfc",
+    "pvt",
+    "capt",
+    "maj",
+    "adm",
 }
 
 
@@ -49,6 +91,7 @@ class SentenceSplitter:
         if remainder:
             send_to_tts(remainder)
     """
+
     def __init__(self) -> None:
         self._buffer: str = ""
 
@@ -85,7 +128,7 @@ class SentenceSplitter:
                 if char == "." and self._is_abbreviation(buf, i):
                     continue
                 sentence = buf[: i + 1].strip()
-                self._buffer = buf[i + 1:].lstrip()
+                self._buffer = buf[i + 1 :].lstrip()
                 if sentence:
                     return sentence
 
@@ -94,7 +137,7 @@ class SentenceSplitter:
             for i, char in enumerate(buf):
                 if char in SOFT_SENTENCE_ENDINGS:
                     sentence = buf[: i + 1].strip()
-                    self._buffer = buf[i + 1:].lstrip()
+                    self._buffer = buf[i + 1 :].lstrip()
                     if sentence:
                         return sentence
 

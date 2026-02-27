@@ -1,14 +1,17 @@
 """
 Audio validation and preprocessing before sending to ASR.
 """
+
 from __future__ import annotations
+
 from loguru import logger
+
 from app.core.errors import AudioException
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-MAX_AUDIO_SIZE_BYTES = 24 * 1024 * 1024    # 24 MB
-MIN_AUDIO_SIZE_BYTES = 1024                # 1 KB 
-MAX_AUDIO_DURATION_SEC = 120               # 2 minutes max
+MAX_AUDIO_SIZE_BYTES = 24 * 1024 * 1024  # 24 MB
+MIN_AUDIO_SIZE_BYTES = 1024  # 1 KB
+MAX_AUDIO_DURATION_SEC = 120  # 2 minutes max
 
 SUPPORTED_FORMATS = {"webm", "wav", "mp3", "mp4", "m4a", "mpeg", "mpga", "ogg"}
 
@@ -30,13 +33,11 @@ def validate_audio_size(audio_bytes: bytes) -> None:
     size = len(audio_bytes)
     if size < MIN_AUDIO_SIZE_BYTES:
         raise AudioException(
-            f"Audio too small ({size} bytes). "
-            f"Minimum is {MIN_AUDIO_SIZE_BYTES} bytes."
+            f"Audio too small ({size} bytes). " f"Minimum is {MIN_AUDIO_SIZE_BYTES} bytes."
         )
     if size > MAX_AUDIO_SIZE_BYTES:
         raise AudioException(
-            f"Audio too large ({size:,} bytes). "
-            f"Maximum is {MAX_AUDIO_SIZE_BYTES:,} bytes."
+            f"Audio too large ({size:,} bytes). " f"Maximum is {MAX_AUDIO_SIZE_BYTES:,} bytes."
         )
 
 

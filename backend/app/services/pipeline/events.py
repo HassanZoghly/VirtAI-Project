@@ -3,6 +3,7 @@ Pipeline internal events.
 These flow through the pipeline and get converted
 to WebSocket messages by the WebSocket handler.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -12,33 +13,33 @@ from typing import Optional
 
 class PipelineEventType(Enum):
     # ── Status ────────────────────────────────────────────────────────────────
-    LISTENING   = auto()    # mic is active
-    PROCESSING  = auto()    # ASR running
-    THINKING    = auto()    # LLM running
-    SPEAKING    = auto()    # TTS running
-    IDLE        = auto()    # done
+    LISTENING = auto()  # mic is active
+    PROCESSING = auto()  # ASR running
+    THINKING = auto()  # LLM running
+    SPEAKING = auto()  # TTS running
+    IDLE = auto()  # done
 
     # ── ASR ───────────────────────────────────────────────────────────────────
-    TRANSCRIPT  = auto()    # ASR result ready
+    TRANSCRIPT = auto()  # ASR result ready
 
     # ── LLM ───────────────────────────────────────────────────────────────────
-    LLM_TOKEN   = auto()    # single token
-    LLM_SENTENCE= auto()    # full sentence ready → triggers TTS
-    LLM_DONE    = auto()    # full response done
+    LLM_TOKEN = auto()  # single token
+    LLM_SENTENCE = auto()  # full sentence ready → triggers TTS
+    LLM_DONE = auto()  # full response done
 
     # ── TTS ───────────────────────────────────────────────────────────────────
-    TTS_VISEMES = auto()    # viseme events for a sentence
-    TTS_AUDIO   = auto()    # audio chunk
-    TTS_DONE    = auto()    # sentence TTS done
+    TTS_VISEMES = auto()  # viseme events for a sentence
+    TTS_AUDIO = auto()  # audio chunk
+    TTS_DONE = auto()  # sentence TTS done
 
     # ── Errors ────────────────────────────────────────────────────────────────
-    ERROR       = auto()
-    WARNING     = auto()    # non-fatal warning
+    ERROR = auto()
+    WARNING = auto()  # non-fatal warning
 
     # ── Control ───────────────────────────────────────────────────────────────
-    ABORT       = auto()    # stop everything
-    HEARTBEAT   = auto()    # keepalive
-    CLEANUP     = auto()    # session cleanup
+    ABORT = auto()  # stop everything
+    HEARTBEAT = auto()  # keepalive
+    CLEANUP = auto()  # session cleanup
 
 
 # ── Event Data Classes ────────────────────────────────────────────────────────
@@ -46,7 +47,7 @@ class PipelineEventType(Enum):
 class PipelineEvent:
     type: PipelineEventType
     data: dict = field(default_factory=dict)
-    session_id: Optional[str] = None   # for tracking
+    session_id: Optional[str] = None  # for tracking
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

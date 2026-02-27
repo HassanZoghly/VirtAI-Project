@@ -7,15 +7,15 @@ Why Groq for LLM?
 - Full streaming support
 - Same API key as ASR
 """
+
 from __future__ import annotations
 
 import time
-from typing import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Callable
 
 from groq import AsyncGroq
 from loguru import logger
 
-from app.core.config import get_settings
 from app.core.errors import LLMException
 from app.services.llm.base import (
     BaseLLMProvider,
@@ -24,8 +24,6 @@ from app.services.llm.base import (
     LLMResult,
 )
 from app.services.llm.sentence_splitter import SentenceSplitter
-
-settings = get_settings()
 
 
 class GroqLLMProvider(BaseLLMProvider):
@@ -37,18 +35,36 @@ class GroqLLMProvider(BaseLLMProvider):
             → yield LLMChunk(token=token)        ← frontend shows typing
             → if sentence complete:
                 → yield LLMChunk(sentence=sent)  ← pipeline triggers TTS
+
+    Configuration is injected via constructor parameters.
     """
+
     def __init__(
         self,
-        model: str | None = None,
-        max_tokens: int | None = None,
-        temperature: float | None = None,
+        model: str = "llama-3.3-70b-versatile",
+        max_tokens: int = 512,
+        temperature: float = 0.7,
         api_key: str | None = None,
     ):
-        self.model       = model       or settings.LLM_MODEL
-        self.max_tokens  = max_tokens  or settings.LLM_MAX_TOKENS
-        self.temperature = temperature or settings.LLM_TEMPERATURE
-        self._client     = AsyncGroq(api_key=api_key or settings.GROQ_API_KEY)
+        """
+        Initialize GroqLLMProvider with configuration.
+
+        Args:
+            model: Model identifier (e.g., "llama-3.3-70b-versatile")
+            max_tokens: Maximum tokens to generate
+            temperature: Sampling temperature (0.0 to 2.0)
+            api_key: Groq API key (required)
+
+        Raises:
+            ValueError: If api_key is not provided
+        """
+        if not api_key:
+            raise ValueError("api_key is required for GroqLLMProvider")
+
+        self.model = model
+        self.max_tokens = max_tokens
+        self.temperature = temperature
+        self._client = AsyncGroq(api_key=api_key)
         logger.info(
             f"GroqLLMProvider initialized | "
             f"model={self.model} | "
@@ -64,9 +80,9 @@ class GroqLLMProvider(BaseLLMProvider):
             if usage and hasattr(usage, "usage"):
                 u = usage.usage
                 return {
-                    "prompt_tokens":     getattr(u, "prompt_tokens",     0),
+                    "prompt_tokens": getattr(u, "prompt_tokens", 0),
                     "completion_tokens": getattr(u, "completion_tokens", 0),
-                    "total_tokens":      getattr(u, "total_tokens",      0),
+                    "total_tokens": getattr(u, "total_tokens", 0),
                 }
         except Exception:
             pass
@@ -122,7 +138,7 @@ class GroqLLMProvider(BaseLLMProvider):
             )
         except Exception as e:
             logger.error(f"Groq LLM stream init failed: {e}")
-            raise LLMException(f"LLM stream failed: {str(e)}")
+            raise LLMException(f"LLM stream failed: {e!s}")
 
         # ── Process stream ────────────────────────────────────────────────────
         try:
@@ -157,7 +173,7 @@ class GroqLLMProvider(BaseLLMProvider):
                     yield LLMChunk(token="", sentence=sentence)
         except Exception as e:
             logger.error(f"LLM stream error during iteration: {e}")
-            raise LLMException(f"LLM stream error: {str(e)}")
+            raise LLMException(f"LLM stream error: {e!s}")
 
         # ── Flush remaining buffer ────────────────────────────────────────────
         remainder = splitter.flush()
@@ -177,6 +193,7 @@ class GroqLLMProvider(BaseLLMProvider):
             f"sentences={len(full_text)}"
         )
         yield LLMChunk(token="", is_done=True)
+
     async def complete(
         self,
         history: ConversationHistory,
@@ -199,10 +216,10 @@ class GroqLLMProvider(BaseLLMProvider):
             )
         except Exception as e:
             logger.error(f"Groq LLM complete failed: {e}")
-            raise LLMException(f"LLM complete failed: {str(e)}")
+            raise LLMException(f"LLM complete failed: {e!s}")
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         full_text = response.choices[0].message.content or ""
-        
+
         # Split into sentences for convenience
         splitter = SentenceSplitter()
         sentences: list[str] = []
@@ -213,12 +230,12 @@ class GroqLLMProvider(BaseLLMProvider):
         remainder = splitter.flush()
         if remainder:
             sentences.append(remainder)
-        
+
         # Usage
         usage = response.usage
-        prompt_tokens     = getattr(usage, "prompt_tokens",     0)
+        prompt_tokens = getattr(usage, "prompt_tokens", 0)
         completion_tokens = getattr(usage, "completion_tokens", 0)
-        total_tokens      = getattr(usage, "total_tokens",      0)
+        total_tokens = getattr(usage, "total_tokens", 0)
         logger.success(
             f"LLM complete done | "
             f"elapsed={elapsed_ms:.0f}ms | "

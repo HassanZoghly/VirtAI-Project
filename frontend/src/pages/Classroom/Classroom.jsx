@@ -1,7 +1,7 @@
-import { lazy, Suspense } from "react";
-import "./Classroom.css";
+import { lazy, Suspense } from 'react';
+import './Classroom.css';
 
-const ClassroomShell = lazy(() => import("./components/ClassroomShell.jsx"));
+const ClassroomShell = lazy(() => import('./components/ClassroomShell.jsx'));
 
 function ShellFallback() {
   return (

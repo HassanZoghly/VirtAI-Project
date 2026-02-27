@@ -1,6 +1,7 @@
 """
 FastAPI Application Entry Point.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -10,6 +11,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
+from app.api.v1.dependencies import init_session_manager
+from app.api.v1.router import router as api_v1_router
 from app.core.config import get_settings
 from app.core.errors import (
     AvatarBaseException,
@@ -17,8 +20,6 @@ from app.core.errors import (
     generic_exception_handler,
 )
 from app.core.logging import setup_logging
-from app.api.v1.router import router as api_v1_router
-from app.api.v1.dependencies import init_session_manager
 from app.services.pipeline.session_manager import SessionManager
 
 settings = get_settings()
@@ -36,16 +37,60 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
 
-    # Initialize session manager
-    session_manager = SessionManager(session_timeout_sec=300)
+    # Check for GROQ_API_KEY in development mode
+    if not settings.GROQ_API_KEY:
+        if settings.ENVIRONMENT == "development":
+            logger.warning(
+                "⚠️  GROQ_API_KEY is not set! "
+                "LLM and ASR features will not work. "
+                "WebSocket connections will still be accepted but will return errors for AI features."
+            )
+        else:
+            logger.error(
+                "❌ GROQ_API_KEY is required in production mode! "
+                "Please set GROQ_API_KEY environment variable."
+            )
+            raise ValueError("GROQ_API_KEY is required in production mode")
+
+    # Create service factories that use centralized settings
+    from app.services.llm.groq_provider import GroqLLMProvider
+    from app.services.tts.edge_tts_provider import EdgeTTSProvider
+
+    def create_llm_service() -> GroqLLMProvider:
+        """Factory function to create LLM service with centralized settings."""
+        if not settings.GROQ_API_KEY:
+            logger.warning("LLM service created without API key - will fail on use")
+        return GroqLLMProvider(
+            model=settings.LLM_MODEL,
+            max_tokens=settings.LLM_MAX_TOKENS,
+            temperature=settings.LLM_TEMPERATURE,
+            api_key=settings.GROQ_API_KEY or "dummy-key-for-dev",
+        )
+
+    def create_tts_service() -> EdgeTTSProvider:
+        """Factory function to create TTS service with centralized settings."""
+        return EdgeTTSProvider(
+            voice=settings.TTS_VOICE,
+            rate=settings.TTS_RATE,
+            volume=settings.TTS_VOLUME,
+            pitch=settings.TTS_PITCH,
+        )
+
+    # Initialize session manager with configuration and service factories
+    session_manager = SessionManager(
+        session_timeout_sec=settings.SESSION_TIMEOUT_SEC,
+        session_cleanup_interval=settings.SESSION_CLEANUP_INTERVAL,
+        llm_service_factory=create_llm_service,
+        tts_service_factory=create_tts_service,
+    )
     init_session_manager(session_manager)
 
-    # Background task: cleanup idle sessions every 60 seconds
+    # Background task: cleanup idle sessions at configured interval
     async def cleanup_task():
         try:
             while True:
-                await asyncio.sleep(60)
-                removed = await session_manager.cleanup_idle()  # ✅ await هنا
+                await asyncio.sleep(settings.SESSION_CLEANUP_INTERVAL)
+                removed = await session_manager.cleanup_idle()
                 if removed:
                     logger.info(f"Cleanup: removed {removed} idle sessions")
         except asyncio.CancelledError:
@@ -56,7 +101,11 @@ async def lifespan(app: FastAPI):
     background_tasks.add(task)
     task.add_done_callback(background_tasks.discard)
 
-    logger.info("Session cleanup task started")
+    logger.info(
+        f"Session cleanup task started | "
+        f"timeout={settings.SESSION_TIMEOUT_SEC}s | "
+        f"interval={settings.SESSION_CLEANUP_INTERVAL}s"
+    )
     logger.info(f"Server ready on {settings.HOST}:{settings.PORT}")
 
     yield
@@ -102,6 +151,7 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(
         "app.main:app",
         host=settings.HOST,

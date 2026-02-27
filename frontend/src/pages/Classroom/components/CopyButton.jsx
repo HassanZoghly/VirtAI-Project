@@ -20,4 +20,4 @@ export default function CopyButton({ content }) {
       {copied ? <PiCheckCircleFill /> : <PiCopyFill />}
     </button>
   );
-} 
+}

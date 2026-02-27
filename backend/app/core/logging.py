@@ -1,6 +1,8 @@
 import sys
 from pathlib import Path
+
 from loguru import logger
+
 from app.core.config import get_settings
 
 
@@ -17,7 +19,7 @@ def setup_logging() -> None:
         "<magenta>PID:{process}</magenta> | "
         "<level>{message}</level>"
     )
-    
+
     logger.add(
         sys.stdout,
         format=fmt,
@@ -26,7 +28,7 @@ def setup_logging() -> None:
         backtrace=True,
         diagnose=settings.DEBUG,
     )
-    
+
     logger.add(
         "logs/app_{time:YYYY-MM-DD}.log",
         format=fmt,
@@ -66,9 +68,11 @@ def setup_logging() -> None:
         )
 
     logger.configure(
-        patcher=lambda record: record["message"].replace(
-            settings.GROQ_API_KEY, "[REDACTED]"
-        ) if settings.GROQ_API_KEY in record["message"] else record
+        patcher=lambda record: (
+            record["message"].replace(settings.GROQ_API_KEY, "[REDACTED]")
+            if settings.GROQ_API_KEY in record["message"]
+            else record
+        )
     )
 
     logger.info(f"[*] Logging initialized | ENV: {settings.ENVIRONMENT}")

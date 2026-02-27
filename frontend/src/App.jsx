@@ -1,9 +1,9 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import { lazy, Suspense, useEffect, Component } from "react";
-import { HelmetProvider, Helmet } from "react-helmet-async";
-import "./App.css";
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense, useEffect, Component } from 'react';
+import { HelmetProvider, Helmet } from 'react-helmet-async';
+import './App.css';
 
-const preloadClassroom = () => import("./pages/Classroom/Classroom.jsx");
+const preloadClassroom = () => import('./pages/Classroom/Classroom.jsx');
 const Classroom = lazy(preloadClassroom);
 
 class ErrorBoundary extends Component {
@@ -15,7 +15,7 @@ class ErrorBoundary extends Component {
     return { hasError: true };
   }
   componentDidCatch(error, errorInfo) {
-    console.error("Error caught by boundary:", error, errorInfo);
+    console.error('Error caught by boundary:', error, errorInfo);
   }
   render() {
     if (this.state.hasError) {

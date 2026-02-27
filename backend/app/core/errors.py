@@ -1,21 +1,23 @@
-from datetime import datetime
-from fastapi import Request, WebSocket
-from fastapi.responses import JSONResponse
-from fastapi import status
-from loguru import logger
-from typing import Optional, Dict, Any
 import traceback
+from datetime import datetime
+from typing import Any, Optional
+
+from fastapi import Request, WebSocket, status
+from fastapi.responses import JSONResponse
+from loguru import logger
+
 from app.core.config import get_settings
 
 
 class AvatarBaseException(Exception):
     """Base exception for all avatar app errors"""
+
     def __init__(
         self,
         message: str,
         code: str = "UNKNOWN_ERROR",
         status_code: int = status.HTTP_400_BAD_REQUEST,
-        details: Optional[Dict[str, Any]] = None
+        details: Optional[dict[str, Any]] = None,
     ):
         self.message = message
         self.code = code
@@ -25,39 +27,23 @@ class AvatarBaseException(Exception):
 
 
 class ASRException(AvatarBaseException):
-    def __init__(self, message: str, details: Optional[Dict] = None):
-        super().__init__(
-            message=f"ASR Error: {message}",
-            code="ASR_ERROR",
-            details=details
-        )
+    def __init__(self, message: str, details: Optional[dict] = None):
+        super().__init__(message=f"ASR Error: {message}", code="ASR_ERROR", details=details)
 
 
 class LLMException(AvatarBaseException):
-    def __init__(self, message: str, details: Optional[Dict] = None):
-        super().__init__(
-            message=f"LLM Error: {message}",
-            code="LLM_ERROR",
-            details=details
-        )
+    def __init__(self, message: str, details: Optional[dict] = None):
+        super().__init__(message=f"LLM Error: {message}", code="LLM_ERROR", details=details)
 
 
 class TTSException(AvatarBaseException):
-    def __init__(self, message: str, details: Optional[Dict] = None):
-        super().__init__(
-            message=f"TTS Error: {message}",
-            code="TTS_ERROR",
-            details=details
-        )
+    def __init__(self, message: str, details: Optional[dict] = None):
+        super().__init__(message=f"TTS Error: {message}", code="TTS_ERROR", details=details)
 
 
 class AudioException(AvatarBaseException):
-    def __init__(self, message: str, details: Optional[Dict] = None):
-        super().__init__(
-            message=f"Audio Error: {message}",
-            code="AUDIO_ERROR",
-            details=details
-        )
+    def __init__(self, message: str, details: Optional[dict] = None):
+        super().__init__(message=f"Audio Error: {message}", code="AUDIO_ERROR", details=details)
 
 
 class RateLimitException(AvatarBaseException):
@@ -66,17 +52,17 @@ class RateLimitException(AvatarBaseException):
             message="Too many requests. Please try again later.",
             code="RATE_LIMIT",
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            details={"retry_after": retry_after}
+            details={"retry_after": retry_after},
         )
 
 
 class ValidationException(AvatarBaseException):
-    def __init__(self, message: str, details: Optional[Dict] = None):
+    def __init__(self, message: str, details: Optional[dict] = None):
         super().__init__(
             message=f"Validation Error: {message}",
             code="VALIDATION_ERROR",
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            details=details
+            details=details,
         )
 
 
@@ -86,22 +72,20 @@ class ServiceUnavailableException(AvatarBaseException):
             message=f"{service} service is currently unavailable",
             code="SERVICE_UNAVAILABLE",
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            details={"service": service}
+            details={"service": service},
         )
 
 
 class WebSocketException(Exception):
     """Custom WebSocket exception"""
+
     def __init__(self, message: str, code: str = "WS_ERROR"):
         self.message = message
         self.code = code
         super().__init__(message)
 
 
-async def avatar_exception_handler(
-    request: Request,
-    exc: AvatarBaseException
-) -> JSONResponse:
+async def avatar_exception_handler(request: Request, exc: AvatarBaseException) -> JSONResponse:
     if exc.status_code >= 500:
         logger.error(f"[{exc.code}] {exc.message} | Details: {exc.details}")
     else:
@@ -111,7 +95,7 @@ async def avatar_exception_handler(
         "error": exc.code,
         "message": exc.message,
         "timestamp": datetime.utcnow().isoformat(),
-        "path": request.url.path
+        "path": request.url.path,
     }
 
     settings = get_settings()
@@ -124,17 +108,14 @@ async def avatar_exception_handler(
     )
 
 
-async def generic_exception_handler(
-    request: Request,
-    exc: Exception
-) -> JSONResponse:
+async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.exception(f"Unhandled exception: {exc}")
 
     response_content = {
         "error": "INTERNAL_ERROR",
         "message": "An unexpected error occurred",
         "timestamp": datetime.utcnow().isoformat(),
-        "path": request.url.path
+        "path": request.url.path,
     }
 
     settings = get_settings()

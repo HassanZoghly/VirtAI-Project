@@ -6,6 +6,7 @@ Model options (Groq):
     - whisper-large-v3-turbo     → fast + accurate  ← our default
     - distil-whisper-large-v3-en → English only, fastest
 """
+
 from __future__ import annotations
 
 import io
@@ -25,28 +26,27 @@ settings = get_settings()
 class GroqWhisperASR(BaseASRProvider):
     """
     ASR using Groq's Whisper API.
-    
+
     Why Groq for ASR?
     - Extremely fast inference (fastest Whisper available)
     - Supports multiple languages including English and Arabic
     - verbose_json gives us segments + word timestamps
     - Same API key as LLM (no extra cost setup)
     """
+
     def __init__(
         self,
         model: str | None = None,
         language: str | None = None,
         api_key: str | None = None,
     ):
-        self.model    = model    or settings.ASR_MODEL
+        self.model = model or settings.ASR_MODEL
         self.language = language or settings.ASR_LANGUAGE
-        self._client  = AsyncGroq(api_key=api_key or settings.GROQ_API_KEY)
+        self._client = AsyncGroq(api_key=api_key or settings.GROQ_API_KEY)
         logger.info(
-            f"GroqWhisperASR initialized | "
-            f"model={self.model} | "
-            f"language={self.language}"
+            f"GroqWhisperASR initialized | " f"model={self.model} | " f"language={self.language}"
         )
-    
+
     # ── Private Helpers ───────────────────────────────────────────────────────
     def _parse_word_timestamps(self, raw_words: list[dict]) -> list[WordTimestamp]:
         """
@@ -61,12 +61,14 @@ class GroqWhisperASR(BaseASRProvider):
         words = []
         for w in raw_words:
             try:
-                words.append(WordTimestamp(
-                    word=w.get("word", "").strip(),
-                    start_ms=float(w.get("start", 0)) * 1000,
-                    end_ms=float(w.get("end", 0)) * 1000,
-                    confidence=float(w.get("probability", 1.0)),
-                ))
+                words.append(
+                    WordTimestamp(
+                        word=w.get("word", "").strip(),
+                        start_ms=float(w.get("start", 0)) * 1000,
+                        end_ms=float(w.get("end", 0)) * 1000,
+                        confidence=float(w.get("probability", 1.0)),
+                    )
+                )
             except (ValueError, TypeError) as e:
                 logger.warning(f"Failed to parse word timestamp: {w} | {e}")
         return words
@@ -74,7 +76,7 @@ class GroqWhisperASR(BaseASRProvider):
     def _parse_segments(self, raw_segments: list[dict]) -> list[ASRSegment]:
         """
         Parses segments from Groq verbose_json response.
-        
+
         Groq segment format:
         {
             "id": 0,
@@ -98,25 +100,27 @@ class GroqWhisperASR(BaseASRProvider):
                         f"text='{seg.get('text', '')}'"
                     )
                     continue
-                
+
                 # Parse word timestamps if available
                 raw_words = seg.get("words", [])
                 words = self._parse_word_timestamps(raw_words)
-                
+
                 # Confidence from log probability
                 avg_logprob = float(seg.get("avg_logprob", -0.5))
                 confidence = min(1.0, max(0.0, 1.0 + avg_logprob))
-                segments.append(ASRSegment(
-                    text=seg.get("text", "").strip(),
-                    start_ms=float(seg.get("start", 0)) * 1000,
-                    end_ms=float(seg.get("end", 0)) * 1000,
-                    words=words,
-                    confidence=confidence,
-                ))
+                segments.append(
+                    ASRSegment(
+                        text=seg.get("text", "").strip(),
+                        start_ms=float(seg.get("start", 0)) * 1000,
+                        end_ms=float(seg.get("end", 0)) * 1000,
+                        words=words,
+                        confidence=confidence,
+                    )
+                )
             except (ValueError, TypeError, KeyError) as e:
                 logger.warning(f"Failed to parse ASR segment: {seg} | {e}")
         return segments
-    
+
     def _build_asr_result(
         self,
         response,
@@ -128,14 +132,14 @@ class GroqWhisperASR(BaseASRProvider):
         """
         # Full transcript
         transcript = getattr(response, "text", "").strip()
-        
+
         # Segments (only in verbose_json)
         raw_segments = getattr(response, "segments", None) or []
         segments = self._parse_segments(raw_segments)
-        
+
         # Detected language
         detected_language = getattr(response, "language", self.language) or self.language
-        
+
         # Overall confidence (average of segments)
         if segments:
             avg_confidence = sum(s.confidence for s in segments) / len(segments)
@@ -148,7 +152,7 @@ class GroqWhisperASR(BaseASRProvider):
             duration_ms=duration_ms,
             confidence=avg_confidence,
         )
-    
+
     # ── Public Methods ────────────────────────────────────────────────────────
     async def transcribe(
         self,
@@ -158,20 +162,20 @@ class GroqWhisperASR(BaseASRProvider):
     ) -> ASRResult:
         """
         Transcribes audio to text using Groq Whisper.
-        
+
         Args:
             audio_bytes : raw audio data from the WebSocket
             audio_format: declared format (will be validated + auto-detected)
             language    : override language (None → use instance default)
-        
+
         Returns:
             ASRResult with transcript + segments + word timestamps
         """
-        
+
         # ── Validate ─────────────────────────────────────────────────────────
         fmt = validate_audio(audio_bytes, audio_format)
         lang = language or self.language
-        
+
         logger.info(
             f"ASR transcribe start | "
             f"size={len(audio_bytes):,}B | "
@@ -180,31 +184,31 @@ class GroqWhisperASR(BaseASRProvider):
             f"model={self.model}"
         )
         start_time = time.perf_counter()
-        
+
         # ── Call Groq Whisper ─────────────────────────────────────────────────
         try:
             # Groq SDK expects a file-like object with a name
             audio_file = io.BytesIO(audio_bytes)
             audio_file.name = f"audio.{fmt}"
-            
+
             response = await self._client.audio.transcriptions.create(
                 model=self.model,
                 file=audio_file,
                 language=lang,
-                response_format="verbose_json",   # gives segments + words
+                response_format="verbose_json",  # gives segments + words
                 timestamp_granularities=["word", "segment"],
             )
         except Exception as e:
             logger.error(f"Groq ASR API call failed: {e}")
-            raise ASRException(f"ASR transcription failed: {str(e)}")
-        
+            raise ASRException(f"ASR transcription failed: {e!s}")
+
         # ── Parse Response ────────────────────────────────────────────────────
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         result = self._build_asr_result(
             response=response,
             duration_ms=elapsed_ms,
         )
-        
+
         # ── Guard: Empty Transcript ───────────────────────────────────────────
         if result.is_empty:
             raise ASRException("ASR returned empty transcript — no speech detected")
@@ -218,7 +222,7 @@ class GroqWhisperASR(BaseASRProvider):
             f"transcript='{result.transcript[:60]}...'"
         )
         return result
-    
+
     async def transcribe_chunks(
         self,
         audio_chunks: list[bytes],
@@ -228,7 +232,7 @@ class GroqWhisperASR(BaseASRProvider):
         """
         Convenience method: joins chunks then transcribes.
         Used by the WebSocket handler which collects chunks incrementally.
-        
+
         Args:
             audio_chunks: list of raw audio bytes received over WebSocket
             audio_format: declared format
@@ -236,14 +240,11 @@ class GroqWhisperASR(BaseASRProvider):
         """
         if not audio_chunks:
             raise ASRException("No audio chunks provided")
-        
+
         combined = b"".join(audio_chunks)
-        logger.debug(
-            f"Joining {len(audio_chunks)} chunks → "
-            f"{len(combined):,} bytes total"
-        )
+        logger.debug(f"Joining {len(audio_chunks)} chunks → " f"{len(combined):,} bytes total")
         return await self.transcribe(combined, audio_format, language)
-    
+
     async def is_available(self) -> bool:
         """
         Quick health check against Groq API.
@@ -259,14 +260,14 @@ class GroqWhisperASR(BaseASRProvider):
             )
             audio_file = io.BytesIO(silent_wav)
             audio_file.name = "health_check.wav"
-            
+
             await self._client.audio.transcriptions.create(
                 model=self.model,
                 file=audio_file,
                 response_format="text",
             )
             return True
-        
+
         except Exception as e:
             logger.warning(f"ASR health check failed: {e}")
             return False

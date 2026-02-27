@@ -7,7 +7,13 @@
     "scripts": {
         "dev": "vite",
         "build": "vite build",
-        "preview": "vite preview"
+        "preview": "vite preview",
+        "test": "vitest --run",
+        "test:watch": "vitest",
+        "lint": "eslint src --ext .js,.jsx",
+        "lint:fix": "eslint src --ext .js,.jsx --fix",
+        "format": "prettier --write \"src/**/*.{js,jsx,json,css}\"",
+        "format:check": "prettier --check \"src/**/*.{js,jsx,json,css}\""
     },
     "dependencies": {
         "@react-three/drei": "9.105.6",
@@ -26,8 +32,16 @@
         }
     },
     "devDependencies": {
+        "@testing-library/jest-dom": "^6.9.1",
+        "@testing-library/react": "^16.3.2",
         "@vitejs/plugin-react": "^4.2.1",
-        "vite": "^7.3.1"
+        "eslint": "^8.57.0",
+        "eslint-plugin-react": "^7.33.2",
+        "eslint-plugin-react-hooks": "^4.6.0",
+        "happy-dom": "^20.7.0",
+        "prettier": "^3.2.5",
+        "vite": "^7.3.1",
+        "vitest": "^4.0.18"
     },
     "engines": {
         "node": ">=18.18"

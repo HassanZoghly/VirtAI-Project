@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 @dataclass
 class WordTimestamp:
     """Single word with its timing"""
+
     word: str
     start_ms: float
     end_ms: float
@@ -14,20 +15,22 @@ class WordTimestamp:
 @dataclass
 class ASRSegment:
     """A segment of transcribed speech"""
+
     text: str
     start_ms: float
     end_ms: float
     words: list[WordTimestamp] = field(default_factory=list)
     confidence: float = 1.0
-    language: str = "en"                            # changed from "ar" to "en"
+    language: str = "en"  # changed from "ar" to "en"
 
 
 @dataclass
 class ASRResult:
     """Full result from ASR"""
-    transcript: str                              # full text
+
+    transcript: str  # full text
     segments: list[ASRSegment] = field(default_factory=list)
-    language: str = "en"                            # changed from "ar" to "en"
+    language: str = "en"  # changed from "ar" to "en"
     duration_ms: float = 0.0
     confidence: float = 1.0
 

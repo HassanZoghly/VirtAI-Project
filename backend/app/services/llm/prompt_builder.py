@@ -2,7 +2,9 @@
 Builds system prompts for different avatars and scenarios.
 Each avatar can have a different personality and teaching style.
 """
+
 from __future__ import annotations
+
 from app.services.llm.base import ConversationHistory
 
 # ── Avatar Personalities ──────────────────────────────────────────────────────
@@ -18,7 +20,6 @@ Your teaching style:
 - End with a follow-up question to check understanding
 
 Always respond in English, regardless of the student's input language.""",
-
     "avatar2": """You are an AI educational assistant named "Dr. Mariam".
 You are professional, structured, and precise in your explanations.
 Your teaching style:
@@ -29,7 +30,6 @@ Your teaching style:
 - Keep responses concise (2-4 sentences per answer)
 
 Always respond in English.""",
-
     "avatar3": """You are an AI educational assistant named "Dr. Khaled".
 You are creative, energetic, and make learning fun and engaging.
 Your teaching style:

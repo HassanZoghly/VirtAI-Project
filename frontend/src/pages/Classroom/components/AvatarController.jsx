@@ -125,6 +125,9 @@ export default function AvatarController({
       bodyMotion={bodyMotion}
       onModelLoaded={handleModelLoaded}
       onError={onError}
+      audioRef={audioRef}
+      mouthCues={mouthCues}
+      isPlaying={isPlayingAudio}
     />
   );
 }

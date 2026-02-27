@@ -26,6 +26,17 @@ function useWSClient(url) {
   const lastErrorTimeRef = useRef(0); // Throttle error logging
 
   const connect = useCallback(() => {
+    // STRICT CONNECTION GUARD: Never create new WS if one exists in CONNECTING/OPEN
+    if (wsRef.current) {
+      const state = wsRef.current.readyState;
+      if (state === WebSocket.CONNECTING || state === WebSocket.OPEN) {
+        if (import.meta.env.DEV) {
+          console.debug('[WS] Socket already exists in state:', ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][state]);
+        }
+        return;
+      }
+    }
+
     // Prevent multiple simultaneous connection attempts
     if (isConnectingRef.current) {
       if (import.meta.env.DEV) {
@@ -41,7 +52,14 @@ function useWSClient(url) {
       wsRef.current = socket;
       isIntentionalCloseRef.current = false; // Reset intentional close flag
 
+      if (import.meta.env.DEV) {
+        console.debug('[WS] Creating new WebSocket, state: CONNECTING');
+      }
+
       socket.onopen = () => {
+        if (import.meta.env.DEV) {
+          console.debug('[WS] State transition: CONNECTING → OPEN');
+        }
         isConnectingRef.current = false;
         setIsConnected(true);
         reconnectAttempts.current = 0;
@@ -100,48 +118,64 @@ function useWSClient(url) {
       };
 
       socket.onerror = (error) => {
-        isConnectingRef.current = false;
+        const state = socket.readyState;
+        
+        // CRITICAL: Suppress ALL errors during intentional close (StrictMode cleanup)
+        if (isIntentionalCloseRef.current) {
+          if (import.meta.env.DEV) {
+            console.debug('[WS] Error during intentional close (suppressed), state:', ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][state]);
+          }
+          return;
+        }
+        
+        if (import.meta.env.DEV) {
+          console.debug('[WS] Error event, state:', ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][state]);
+        }
         
         // Throttle error logging (max once per 5 seconds to prevent spam)
         const now = Date.now();
         const shouldLog = now - lastErrorTimeRef.current > 5000;
         
-        // Only log errors if not intentionally closing and not in CONNECTING state during cleanup
-        const isConnecting = socket.readyState === WebSocket.CONNECTING;
-        const shouldSuppressError = isIntentionalCloseRef.current && isConnecting;
-        
-        if (!shouldSuppressError && shouldLog) {
-          console.error('[WS] Connection error (backend may not be running). Retrying with backoff...');
+        if (shouldLog) {
+          console.error('[WS] Connection error. Is backend running at', url, '?');
           lastErrorTimeRef.current = now;
-        } else if (import.meta.env.DEV && shouldSuppressError) {
-          console.debug('[WS] Connection error during intentional close (suppressed)');
         }
       };
 
       socket.onclose = (event) => {
+        const wasIntentional = isIntentionalCloseRef.current;
+        
+        if (import.meta.env.DEV) {
+          console.debug(`[WS] State transition: → CLOSED (code: ${event.code}, reason: "${event.reason || 'none'}", intentional: ${wasIntentional})`);
+        }
+        
         isConnectingRef.current = false;
         setIsConnected(false);
         wsRef.current = null;
 
         // Don't reconnect if this was an intentional close
-        if (isIntentionalCloseRef.current) {
+        if (wasIntentional) {
           if (import.meta.env.DEV) {
             console.debug('[WS] Intentional close, not reconnecting');
           }
           return;
         }
 
-        // Log close reason (throttled)
-        const now = Date.now();
-        if (import.meta.env.DEV && now - lastErrorTimeRef.current > 5000) {
-          console.debug(`[WS] Disconnected (code: ${event.code}, reason: ${event.reason || 'none'}), reconnecting...`);
-          lastErrorTimeRef.current = now;
+        // Only reconnect on abnormal close (not 1000 = normal, not 1001 = going away)
+        if (event.code === 1000 || event.code === 1001) {
+          if (import.meta.env.DEV) {
+            console.debug('[WS] Normal close, not reconnecting');
+          }
+          return;
         }
 
         // Exponential backoff reconnection
-        // Delays: 1s, 2s, 4s, 8s, 16s, 30s (max)
         const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
         reconnectAttempts.current += 1;
+
+        if (import.meta.env.DEV) {
+          console.debug(`[WS] Abnormal close, reconnecting in ${delay}ms (attempt ${reconnectAttempts.current})`);
+        }
 
         // Clear any existing reconnect timeout
         if (reconnectTimeoutRef.current) {
@@ -183,7 +217,11 @@ function useWSClient(url) {
 
     // Cleanup on unmount
     return () => {
-      isIntentionalCloseRef.current = true; // Mark as intentional close
+      if (import.meta.env.DEV) {
+        console.debug('[WS] Cleanup: marking intentional close');
+      }
+      
+      isIntentionalCloseRef.current = true; // Mark as intentional close FIRST
       isConnectingRef.current = false; // Reset connecting flag
 
       // Clear reconnect timeout
@@ -192,11 +230,29 @@ function useWSClient(url) {
         reconnectTimeoutRef.current = null;
       }
 
-      // Close WebSocket only if OPEN (avoid errors on CONNECTING state)
+      // Detach handlers BEFORE closing to prevent error events
       if (wsRef.current) {
-        if (wsRef.current.readyState === WebSocket.OPEN) {
-          wsRef.current.close();
+        const socket = wsRef.current;
+        const state = socket.readyState;
+        
+        if (import.meta.env.DEV) {
+          console.debug('[WS] Cleanup: detaching handlers, state:', ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][state]);
         }
+        
+        // Detach all handlers to prevent events during close
+        socket.onopen = null;
+        socket.onmessage = null;
+        socket.onerror = null;
+        socket.onclose = null;
+        
+        // Only close if OPEN (avoid "closed before established" on CONNECTING)
+        if (state === WebSocket.OPEN) {
+          socket.close(1000, 'Component unmount');
+        } else if (state === WebSocket.CONNECTING) {
+          // For CONNECTING state, close will trigger error - but handlers are detached
+          socket.close();
+        }
+        
         wsRef.current = null;
       }
     };

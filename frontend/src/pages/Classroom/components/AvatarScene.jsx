@@ -1,7 +1,8 @@
-import React, { Component, Suspense, useEffect, useMemo, useRef } from 'react';
+import React, { Component, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Environment, OrbitControls, useGLTF, useFBX, ContactShadows } from '@react-three/drei';
 import * as THREE from 'three';
+import { useRealismEnhancements } from '../../../hooks/useRealismEnhancements';
 
 // Error boundary
 class AvatarErrorBoundary extends Component {
@@ -49,6 +50,9 @@ const AvatarRig = React.memo(function AvatarRig({
   morphTargets = {},
   bodyMotion = { headBob: 0, chestBob: 0 },
   onModelLoaded,
+  audioRef,
+  mouthCues,
+  isPlaying,
 }) {
   const group = useRef();
   const { scene } = useGLTF(modelPath);
@@ -66,15 +70,37 @@ const AvatarRig = React.memo(function AvatarRig({
   const headMeshRef = useRef(null);
   const teethMeshRef = useRef(null);
 
-  // Refs for skeleton bones (for body motion)
+  // Refs for skeleton bones (for subtle head motion only - NO spine to prevent deformation)
   const headBoneRef = useRef(null);
-  const spineBoneRef = useRef(null);
+
+  // Track if scene has been inspected (prevent duplicate logs)
+  const sceneInspectedRef = useRef(false);
+
+  // Head motion state (for smooth continuous motion without cuts)
+  const headMotionStateRef = useRef({
+    time: 0,
+    currentPitch: 0,
+    currentYaw: 0,
+    currentRoll: 0,
+  });
+
+  // Use realism enhancements
+  const enhancedMorphTargets = useRealismEnhancements(
+    scene,
+    morphTargets,
+    isPlaying,
+    audioRef,
+    mouthCues
+  );
 
   // Setup scene materials and shadows + inspect morph targets
   useEffect(() => {
-    if (!scene) {
+    if (!scene || sceneInspectedRef.current) {
       return;
     }
+
+    // Mark as inspected to prevent duplicate logs
+    sceneInspectedRef.current = true;
 
     // CRITICAL: Inspect scene graph and identify mouth meshes
     const mouthMeshes = [];
@@ -132,7 +158,7 @@ const AvatarRig = React.memo(function AvatarRig({
         }
       }
 
-      // Find skeleton bones for body motion
+      // Find skeleton bones for subtle head motion only (NO spine to prevent deformation)
       if (o.isBone) {
         // Common bone names for head: Head, head, mixamorigHead
         if (o.name.toLowerCase().includes('head') && !headBoneRef.current) {
@@ -141,13 +167,8 @@ const AvatarRig = React.memo(function AvatarRig({
             console.debug('[AvatarScene] Found head bone:', o.name);
           }
         }
-        // Common bone names for spine/chest: Spine, Spine1, Spine2, mixamorigSpine1
-        if ((o.name.toLowerCase().includes('spine') || o.name.toLowerCase().includes('chest')) && !spineBoneRef.current) {
-          spineBoneRef.current = o;
-          if (import.meta.env.DEV) {
-            console.debug('[AvatarScene] Found spine bone:', o.name);
-          }
-        }
+        // NOTE: Spine bone manipulation DISABLED to prevent body deformation
+        // Previously caused chest/shoulder warping
       }
     });
 
@@ -261,26 +282,28 @@ const AvatarRig = React.memo(function AvatarRig({
     playAction(currentAnimation, { fade: 0.25 });
   }, [currentAnimation, scene]);
 
-  // Update animation mixer and apply morph targets (NO BODY MOTION to prevent deformation)
+  // Update animation mixer and apply enhanced morph targets with realism
   useFrame((_, dt) => {
     // Update animation mixer
     if (mixerRef.current) {
       mixerRef.current.update(dt);
     }
 
-    // Apply morph targets ONLY to head and teeth meshes (prevents body deformation)
+    // Apply ENHANCED morph targets (with coarticulation, jaw coupling, etc.)
     if (headMeshRef.current && headMeshRef.current.morphTargetInfluences) {
-      applyMorphTargetsSmooth(headMeshRef.current, morphTargets);
+      applyMorphTargetsSmooth(headMeshRef.current, enhancedMorphTargets);
     }
     if (teethMeshRef.current && teethMeshRef.current.morphTargetInfluences) {
-      applyMorphTargetsSmooth(teethMeshRef.current, morphTargets);
+      applyMorphTargetsSmooth(teethMeshRef.current, enhancedMorphTargets);
     }
 
-    // DISABLED: Body motion causes visual deformation (spine bone affects entire body mesh)
-    // TODO: Re-enable with proper bone isolation or IK constraints
-    // if (bodyMotion && (bodyMotion.headBob > 0 || bodyMotion.chestBob > 0)) {
-    //   applyBodyMotion(headBoneRef.current, spineBoneRef.current, bodyMotion);
-    // }
+    // Apply subtle head motion ONLY (NO spine to prevent body deformation)
+    if (isPlaying && headBoneRef.current) {
+      applySubtleHeadMotion(headBoneRef.current, enhancedMorphTargets, dt, headMotionStateRef.current);
+    } else if (headBoneRef.current) {
+      // Return head to neutral when not speaking (slower for smoother transition)
+      applyReturnToNeutral(headBoneRef.current, dt, headMotionStateRef.current);
+    }
   });
 
   return (
@@ -362,61 +385,94 @@ function applyMorphTargetsSmooth(mesh, morphTargets) {
 }
 
 /**
- * Apply subtle body motion to skeleton bones
- * Creates natural head and chest bobbing during speech
+ * Apply subtle head motion ONLY (NO spine to prevent body deformation)
+ * Creates natural head nodding during speech driven by mouth openness
+ * SMOOTH CONTINUOUS MOTION - No cuts or snaps!
  * 
  * @param {THREE.Bone} headBone - Head bone reference
- * @param {THREE.Bone} spineBone - Spine/chest bone reference
- * @param {Object} bodyMotion - { headBob: number, chestBob: number }
+ * @param {Object} morphTargets - Current morph targets (to derive motion from mouth openness)
+ * @param {number} deltaTime - Time since last frame (for smooth animation)
+ * @param {Object} state - Motion state object (for continuity between frames)
  */
-function applyBodyMotion(headBone, spineBone, bodyMotion) {
-  const { headBob = 0, chestBob = 0 } = bodyMotion;
+function applySubtleHeadMotion(headBone, morphTargets, deltaTime, state) {
+  if (!headBone) return;
 
-  // Apply head bob (subtle Y-axis rotation and position offset)
-  if (headBone && headBob > 0) {
-    // Subtle nod motion (rotation around X-axis)
-    const headRotation = headBob * 0.05; // Max ~3 degrees
-    headBone.rotation.x = THREE.MathUtils.lerp(
-      headBone.rotation.x,
-      headRotation,
-      0.2 // Smooth interpolation
-    );
+  // Update time continuously (no jumps!)
+  state.time += deltaTime;
 
-    // Subtle vertical bob
-    const headOffset = headBob * 0.5; // Max 0.5cm * headBob
-    headBone.position.y = THREE.MathUtils.lerp(
-      headBone.position.y,
-      headOffset,
-      0.2
-    );
-  } else if (headBone) {
-    // Return to neutral position when not speaking
-    headBone.rotation.x = THREE.MathUtils.lerp(headBone.rotation.x, 0, 0.1);
-    headBone.position.y = THREE.MathUtils.lerp(headBone.position.y, 0, 0.1);
+  // Calculate mouth openness from viseme influences (AA, E, I, O, U are open vowels)
+  const openVowels = ['viseme_aa', 'viseme_E', 'viseme_I', 'viseme_O', 'viseme_U', 'jawOpen'];
+  let mouthOpenness = 0;
+  for (const vowel of openVowels) {
+    if (morphTargets[vowel]) {
+      mouthOpenness = Math.max(mouthOpenness, morphTargets[vowel]);
+    }
   }
 
-  // Apply chest bob (subtle breathing motion)
-  if (spineBone && chestBob > 0) {
-    // Subtle chest expansion (scale on Z-axis)
-    const chestScale = 1.0 + chestBob * 0.02; // Max 2% expansion
-    spineBone.scale.z = THREE.MathUtils.lerp(
-      spineBone.scale.z,
-      chestScale,
-      0.15
-    );
+  // Calculate target rotations using continuous sine waves
+  // Very subtle pitch (up/down nod) - driven by speech + breathing
+  const speechNod = mouthOpenness * 0.015; // Max ~0.86 degrees
+  const breathingNod = Math.sin(state.time * 0.3) * 0.008; // Slow breathing rhythm ±0.46 degrees
+  const targetPitch = speechNod + breathingNod;
 
-    // Subtle forward/back motion
-    const chestOffset = chestBob * 0.3; // Max 0.3cm * chestBob
-    spineBone.position.z = THREE.MathUtils.lerp(
-      spineBone.position.z,
-      chestOffset,
-      0.15
-    );
-  } else if (spineBone) {
-    // Return to neutral when not speaking
-    spineBone.scale.z = THREE.MathUtils.lerp(spineBone.scale.z, 1.0, 0.1);
-    spineBone.position.z = THREE.MathUtils.lerp(spineBone.position.z, 0, 0.1);
-  }
+  // Very subtle yaw (left/right turn) - independent slow drift
+  const targetYaw = Math.sin(state.time * 0.2) * 0.012; // ±0.69 degrees
+
+  // Very subtle roll (head tilt) - adds 3D realism
+  const targetRoll = Math.sin(state.time * 0.15) * 0.008; // ±0.46 degrees
+
+  // CRITICAL: Smooth interpolation using delta time for frame-rate independence
+  // This ensures motion is smooth regardless of FPS
+  const smoothness = 1.0 - Math.pow(0.001, deltaTime); // Exponential smoothing
+  const pitchSpeed = Math.min(smoothness * 0.05, 1.0);
+  const yawSpeed = Math.min(smoothness * 0.03, 1.0);
+  const rollSpeed = Math.min(smoothness * 0.02, 1.0);
+
+  // Update current state smoothly
+  state.currentPitch = THREE.MathUtils.lerp(state.currentPitch, targetPitch, pitchSpeed);
+  state.currentYaw = THREE.MathUtils.lerp(state.currentYaw, targetYaw, yawSpeed);
+  state.currentRoll = THREE.MathUtils.lerp(state.currentRoll, targetRoll, rollSpeed);
+
+  // Apply clamped values to bone
+  headBone.rotation.x = THREE.MathUtils.clamp(state.currentPitch, -0.03, 0.03);
+  headBone.rotation.y = THREE.MathUtils.clamp(state.currentYaw, -0.025, 0.025);
+  headBone.rotation.z = THREE.MathUtils.clamp(state.currentRoll, -0.02, 0.02);
+}
+
+/**
+ * Return head to neutral position smoothly when not speaking
+ * 
+ * @param {THREE.Bone} headBone - Head bone reference
+ * @param {number} deltaTime - Time since last frame
+ * @param {Object} state - Motion state object
+ */
+function applyReturnToNeutral(headBone, deltaTime, state) {
+  if (!headBone) return;
+
+  // Continue time for smooth transition
+  state.time += deltaTime;
+
+  // Target is neutral (0, 0, 0) but keep subtle idle motion
+  const idleBreathing = Math.sin(state.time * 0.25) * 0.005; // Very subtle breathing
+  const idleDrift = Math.sin(state.time * 0.18) * 0.008; // Very subtle drift
+
+  const targetPitch = idleBreathing;
+  const targetYaw = idleDrift;
+  const targetRoll = 0;
+
+  // Slower return to neutral for smooth transition
+  const smoothness = 1.0 - Math.pow(0.001, deltaTime);
+  const returnSpeed = Math.min(smoothness * 0.02, 1.0); // Slower than speaking motion
+
+  // Update current state smoothly
+  state.currentPitch = THREE.MathUtils.lerp(state.currentPitch, targetPitch, returnSpeed);
+  state.currentYaw = THREE.MathUtils.lerp(state.currentYaw, targetYaw, returnSpeed);
+  state.currentRoll = THREE.MathUtils.lerp(state.currentRoll, targetRoll, returnSpeed);
+
+  // Apply to bone
+  headBone.rotation.x = state.currentPitch;
+  headBone.rotation.y = state.currentYaw;
+  headBone.rotation.z = state.currentRoll;
 }
 
 /**
@@ -437,6 +493,9 @@ const AvatarScene = React.memo(function AvatarScene({
   bodyMotion = { headBob: 0, chestBob: 0 },
   onModelLoaded,
   onError,
+  audioRef,
+  mouthCues,
+  isPlaying,
 }) {
   const loadStartRef = useRef(0);
 
@@ -495,6 +554,9 @@ const AvatarScene = React.memo(function AvatarScene({
                 morphTargets={morphTargets}
                 bodyMotion={bodyMotion}
                 onModelLoaded={handleModelReady}
+                audioRef={audioRef}
+                mouthCues={mouthCues}
+                isPlaying={isPlaying}
               />
             </AvatarErrorBoundary>
           </Suspense>

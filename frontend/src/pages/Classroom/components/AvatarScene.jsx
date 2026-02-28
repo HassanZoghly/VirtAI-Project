@@ -31,14 +31,52 @@ class AvatarErrorBoundary extends Component {
 const ANIM = {
   greeting: [{ fbx: '/models/animations/Greeting/Greeting.fbx' }],
   idle: [{ fbx: '/models/animations/Idle/Idle.fbx' }],
-  // Think and Talk animations are missing - will fallback to idle
+  talk: [{ fbx: '/models/animations/Talk/Talk.fbx' }],
 };
 
 // Animation fallback map for missing animations
 const ANIMATION_FALLBACK = {
   thinking: 'idle',
-  speaking: 'idle',
+  speaking: 'talk',
 };
+
+// Fuzzy animation name matching
+export const ANIMATION_ALIASES = {
+  talk: ['talk', 'speaking', 'speak', 'talking', 'idle_talking', 'talk_retargeted'],
+  idle: ['idle', 'standing', 'neutral'],
+  greeting: ['greeting', 'wave', 'hello'],
+};
+
+/**
+ * Resolve animation name using fuzzy matching
+ * @param {string} requestedName - Requested animation name
+ * @param {string[]} availableClips - Available clip names
+ * @returns {string|null} - Resolved clip name or null
+ */
+export function resolveAnimationName(requestedName, availableClips) {
+  const requested = requestedName.toLowerCase();
+
+  // 1. Exact match (case-insensitive)
+  const exactMatch = availableClips.find(clip => clip.toLowerCase() === requested);
+  if (exactMatch) return exactMatch;
+
+  // 2. Check aliases
+  const aliases = ANIMATION_ALIASES[requested] || [requested];
+  for (const alias of aliases) {
+    const match = availableClips.find(clip =>
+      clip.toLowerCase().includes(alias.toLowerCase())
+    );
+    if (match) return match;
+  }
+
+  // 3. If only one clip exists, use it (auto-select)
+  if (availableClips.length === 1) {
+    console.debug(`[AvatarScene] Auto-selecting only available clip: ${availableClips[0]}`);
+    return availableClips[0];
+  }
+
+  return null;
+}
 
 /**
  * AvatarRig - Pure 3D rendering component
@@ -60,11 +98,13 @@ const AvatarRig = React.memo(function AvatarRig({
   // Load only animations that exist
   const greetingFBX = useFBX(ANIM.greeting[0].fbx);
   const idleFBX = useFBX(ANIM.idle[0].fbx);
+  const talkFBX = useFBX(ANIM.talk[0].fbx);
 
   const mixerRef = useRef(null);
   const actionsRef = useRef({});
   const currentActionRef = useRef(null);
   const currentActionNameRef = useRef(null); // Track current action name to prevent re-triggers
+  const clipNameCacheRef = useRef({}); // Cache resolved names
 
   // Refs for morph target meshes
   const headMeshRef = useRef(null);
@@ -191,6 +231,7 @@ const AvatarRig = React.memo(function AvatarRig({
 
     const g = greetingFBX?.animations?.[0];
     const i = idleFBX?.animations?.[0];
+    const t = talkFBX?.animations?.[0];
 
     if (g) {
       result.push(normalizeClip(g, 'greeting'));
@@ -198,9 +239,12 @@ const AvatarRig = React.memo(function AvatarRig({
     if (i) {
       result.push(normalizeClip(i, 'idle'));
     }
+    if (t) {
+      result.push(normalizeClip(t, 'talk'));
+    }
 
     return result;
-  }, [greetingFBX, idleFBX]);
+  }, [greetingFBX, idleFBX, talkFBX]);
 
   // Setup animation mixer
   useEffect(() => {
@@ -220,6 +264,13 @@ const AvatarRig = React.memo(function AvatarRig({
     }
     actionsRef.current = actions;
 
+    // Log available clips for debugging
+    if (import.meta.env.DEV) {
+      console.debug('[AvatarScene] Available animation clips:',
+        clips.map(c => `${c.name} (${c.duration.toFixed(2)}s)`).join(', ')
+      );
+    }
+
     return () => {
       mixer.stopAllAction();
       mixer.uncacheRoot(scene);
@@ -234,26 +285,35 @@ const AvatarRig = React.memo(function AvatarRig({
   const playAction = (name, { loop = THREE.LoopRepeat, fade = 0.25 } = {}) => {
     const actions = actionsRef.current;
 
-    // Check if animation exists, use fallback if not
-    let animationName = name;
-    if (!actions[name] && ANIMATION_FALLBACK[name]) {
-      animationName = ANIMATION_FALLBACK[name];
-      if (import.meta.env.DEV) {
-        console.debug(`[AvatarScene] Animation '${name}' not found, using fallback '${animationName}'`);
+    // Check cache first
+    let resolvedName = clipNameCacheRef.current[name];
+
+    // If not cached, resolve using fuzzy matching
+    if (!resolvedName) {
+      const availableClips = Object.keys(actions);
+      resolvedName = resolveAnimationName(name, availableClips);
+
+      if (!resolvedName && ANIMATION_FALLBACK[name]) {
+        // Try fallback
+        resolvedName = resolveAnimationName(ANIMATION_FALLBACK[name], availableClips);
+      }
+
+      if (resolvedName) {
+        clipNameCacheRef.current[name] = resolvedName; // Cache it
+        if (import.meta.env.DEV) {
+          console.debug(`[AvatarScene] Resolved '${name}' → '${resolvedName}'`);
+        }
       }
     }
 
-    // CRITICAL: Prevent re-triggering the same animation
-    if (currentActionNameRef.current === animationName) {
-      if (import.meta.env.DEV) {
-        console.debug(`[AvatarScene] Already playing '${animationName}', skipping re-trigger`);
-      }
+    // Prevent re-triggering same animation
+    if (currentActionNameRef.current === resolvedName) {
       return;
     }
 
-    const next = actions[animationName];
+    const next = actions[resolvedName];
     if (!next) {
-      console.warn(`[AvatarScene] Action ${animationName} not found`);
+      console.warn(`[AvatarScene] Animation '${name}' not found (tried: ${resolvedName})`);
       return;
     }
 
@@ -270,7 +330,7 @@ const AvatarRig = React.memo(function AvatarRig({
     }
 
     currentActionRef.current = next;
-    currentActionNameRef.current = animationName; // Track the name
+    currentActionNameRef.current = resolvedName;
   };
 
   // Handle animation changes

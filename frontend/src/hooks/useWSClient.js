@@ -24,6 +24,7 @@ function useWSClient(url) {
   const isIntentionalCloseRef = useRef(false); // Track intentional closes
   const isConnectingRef = useRef(false); // Prevent multiple simultaneous connections
   const lastErrorTimeRef = useRef(0); // Throttle error logging
+  const mountIdRef = useRef(Math.random()); // Unique ID per mount to detect stale connections
 
   const connect = useCallback(() => {
     // STRICT CONNECTION GUARD: Never create new WS if one exists in CONNECTING/OPEN
@@ -46,10 +47,16 @@ function useWSClient(url) {
     }
 
     isConnectingRef.current = true;
+    const currentMountId = mountIdRef.current;
+    
+    // Generate unique instance ID for this connection
+    const instanceId = Math.random().toString(36).substring(7);
 
     try {
       const socket = new WebSocket(url);
       wsRef.current = socket;
+      socket._mountId = currentMountId; // Tag socket with mount ID
+      socket._instanceId = instanceId; // Tag socket with instance ID
       isIntentionalCloseRef.current = false; // Reset intentional close flag
 
       if (import.meta.env.DEV) {
@@ -57,6 +64,24 @@ function useWSClient(url) {
       }
 
       socket.onopen = () => {
+        // Ignore if this socket is from a stale instance
+        if (socket._instanceId !== instanceId) {
+          if (import.meta.env.DEV) {
+            console.debug('[WS] Ignoring onopen from stale instance');
+          }
+          socket.close();
+          return;
+        }
+        
+        // Ignore if this socket is from a stale mount
+        if (socket._mountId !== mountIdRef.current) {
+          if (import.meta.env.DEV) {
+            console.debug('[WS] Ignoring onopen from stale mount');
+          }
+          socket.close();
+          return;
+        }
+        
         if (import.meta.env.DEV) {
           console.debug('[WS] State transition: CONNECTING → OPEN');
         }
@@ -64,9 +89,7 @@ function useWSClient(url) {
         setIsConnected(true);
         reconnectAttempts.current = 0;
 
-        if (import.meta.env.DEV) {
-          console.debug('[WS] Connected to', url);
-        }
+        console.log('[WS] ✅ Connected to backend');
 
         // Flush message queue
         if (messageQueue.current.length > 0) {
@@ -132,17 +155,34 @@ function useWSClient(url) {
           console.debug('[WS] Error event, state:', ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][state]);
         }
         
-        // Throttle error logging (max once per 5 seconds to prevent spam)
+        // Throttle error logging (max once per 10 seconds to prevent spam)
         const now = Date.now();
-        const shouldLog = now - lastErrorTimeRef.current > 5000;
+        const shouldLog = now - lastErrorTimeRef.current > 10000;
         
         if (shouldLog) {
-          console.error('[WS] Connection error. Is backend running at', url, '?');
+          console.warn('[WS] ⚠️ Backend offline - will retry automatically');
+          console.info('[WS] 💡 Start backend: cd backend && python -m uvicorn app.main:app --reload');
           lastErrorTimeRef.current = now;
         }
       };
 
       socket.onclose = (event) => {
+        // Ignore if this socket is from a stale instance
+        if (socket._instanceId !== instanceId) {
+          if (import.meta.env.DEV) {
+            console.debug('[WS] Ignoring onclose from stale instance');
+          }
+          return;
+        }
+        
+        // Ignore if this socket is from a stale mount
+        if (socket._mountId !== mountIdRef.current) {
+          if (import.meta.env.DEV) {
+            console.debug('[WS] Ignoring onclose from stale mount');
+          }
+          return;
+        }
+        
         const wasIntentional = isIntentionalCloseRef.current;
         
         if (import.meta.env.DEV) {
@@ -169,12 +209,15 @@ function useWSClient(url) {
           return;
         }
 
-        // Exponential backoff reconnection
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
+        // Exponential backoff reconnection capped at 5 seconds (not 30s)
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 5000);
         reconnectAttempts.current += 1;
 
         if (import.meta.env.DEV) {
           console.debug(`[WS] Abnormal close, reconnecting in ${delay}ms (attempt ${reconnectAttempts.current})`);
+        } else if (reconnectAttempts.current === 1) {
+          // Show user-friendly message on first reconnect attempt
+          console.log('[WS] 🔄 Reconnecting to backend...');
         }
 
         // Clear any existing reconnect timeout
@@ -190,10 +233,11 @@ function useWSClient(url) {
     } catch (err) {
       isConnectingRef.current = false;
       
-      // Throttle error logging
+      // Throttle error logging (max once per 10 seconds)
       const now = Date.now();
-      if (now - lastErrorTimeRef.current > 5000) {
-        console.error('[WS] Failed to create WebSocket (is backend running?):', err.message);
+      if (now - lastErrorTimeRef.current > 10000) {
+        console.warn('[WS] ⚠️ Backend offline - will retry automatically');
+        console.info('[WS] 💡 Start backend: cd backend && python -m uvicorn app.main:app --reload');
         lastErrorTimeRef.current = now;
       }
 
@@ -213,6 +257,9 @@ function useWSClient(url) {
 
   // Initialize connection on mount
   useEffect(() => {
+    // Generate new mount ID for this mount
+    mountIdRef.current = Math.random();
+    
     connect();
 
     // Cleanup on unmount
@@ -230,7 +277,7 @@ function useWSClient(url) {
         reconnectTimeoutRef.current = null;
       }
 
-      // Detach handlers BEFORE closing to prevent error events
+      // Detach handlers and close socket
       if (wsRef.current) {
         const socket = wsRef.current;
         const state = socket.readyState;
@@ -239,19 +286,19 @@ function useWSClient(url) {
           console.debug('[WS] Cleanup: detaching handlers, state:', ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][state]);
         }
         
-        // Detach all handlers to prevent events during close
+        // Detach all handlers BEFORE closing to prevent events
         socket.onopen = null;
         socket.onmessage = null;
         socket.onerror = null;
         socket.onclose = null;
         
-        // Only close if OPEN (avoid "closed before established" on CONNECTING)
-        if (state === WebSocket.OPEN) {
+        // Only close if OPEN or CLOSING (NOT CONNECTING)
+        // This prevents "closed before established" browser error
+        if (state === WebSocket.OPEN || state === WebSocket.CLOSING) {
           socket.close(1000, 'Component unmount');
-        } else if (state === WebSocket.CONNECTING) {
-          // For CONNECTING state, close will trigger error - but handlers are detached
-          socket.close();
         }
+        // For CONNECTING state, just detach handlers (no close)
+        // This prevents the browser error during React StrictMode cleanup
         
         wsRef.current = null;
       }

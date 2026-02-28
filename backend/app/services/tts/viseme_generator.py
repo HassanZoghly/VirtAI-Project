@@ -43,9 +43,10 @@ class VisemeGenerator:
 
         Args:
             rhubarb_path: Optional path to Rhubarb executable.
-                         If None, will search in common locations.
+                         If None, will check RHUBARB_PATH env var, then search common locations.
         """
-        self.rhubarb_path = rhubarb_path
+        # Check environment variable first if rhubarb_path is None
+        self.rhubarb_path = rhubarb_path or os.environ.get('RHUBARB_PATH')
         self._rhubarb_available: Optional[bool] = None
 
     def _find_rhubarb_executable(self) -> Optional[str]:
@@ -123,9 +124,13 @@ class VisemeGenerator:
         executable = self._find_rhubarb_executable()
         if not executable:
             logger.warning(
-                "Rhubarb Lip Sync not found. "
-                "Viseme generation will return empty mouthCues. "
-                "Install from: https://github.com/DanielSWolf/rhubarb-lip-sync"
+                "Rhubarb Lip Sync not found. Using fallback amplitude-based lip sync.\n"
+                "For better accuracy, install Rhubarb Lip Sync:\n"
+                "  Download: https://github.com/DanielSWolf/rhubarb-lip-sync/releases\n"
+                "  Windows: Extract to C:\\Program Files\\Rhubarb Lip Sync\\ or set RHUBARB_PATH\n"
+                "  Linux: Extract to /usr/local/bin/ or ~/rhubarb/ or set RHUBARB_PATH\n"
+                "  macOS: Extract to /usr/local/bin/ or install via Homebrew, or set RHUBARB_PATH\n"
+                "  Environment: export RHUBARB_PATH=/path/to/rhubarb"
             )
             self._rhubarb_available = False
             return False
@@ -279,6 +284,130 @@ class VisemeGenerator:
 
         return mouth_cues
 
+    def _generate_fallback_cues(self, audio_path: str) -> list[MouthCue]:
+        """
+        Generate fallback mouth cues from audio amplitude envelope.
+
+        Creates simple open/close mouth movements synchronized with audio peaks.
+        This is a basic fallback when Rhubarb is unavailable.
+
+        Args:
+            audio_path: Path to audio file (MP3)
+
+        Returns:
+            List of MouthCue objects with simple open/close patterns
+        """
+        try:
+            import numpy as np
+            from pydub import AudioSegment
+
+            # Load audio file
+            audio = AudioSegment.from_file(audio_path)
+
+            # Convert to mono and get raw samples
+            audio = audio.set_channels(1)
+            samples = np.array(audio.get_array_of_samples(), dtype=np.float64)
+            frame_rate = audio.frame_rate
+
+            # Handle very short audio
+            if len(samples) < 10:
+                logger.warning(f"Audio too short for fallback cues: {len(samples)} samples")
+                return []
+
+            # Calculate amplitude envelope (RMS in 50ms windows)
+            # For very short audio, use smaller windows
+            window_size = int(frame_rate * 0.05)  # 50ms windows
+            hop_size = int(frame_rate * 0.02)  # 20ms hop (overlap)
+
+            # Adjust window size for short audio
+            if window_size > len(samples):
+                window_size = max(10, len(samples) // 4)
+                hop_size = max(1, window_size // 4)
+            
+            if hop_size < 1:
+                hop_size = 1
+
+            envelope = []
+            i = 0
+            while i + window_size <= len(samples):
+                window = samples[i:i + window_size]
+                rms = np.sqrt(np.mean(window ** 2))
+                envelope.append(rms)
+                i += hop_size
+
+            # Handle case where no windows were processed
+            if len(envelope) == 0:
+                # Try with a single window covering all samples
+                if len(samples) > 0:
+                    rms = np.sqrt(np.mean(samples ** 2))
+                    envelope = [rms]
+                    window_size = len(samples)
+                    hop_size = len(samples)
+                else:
+                    logger.warning(f"No envelope data generated for audio: {audio_path}")
+                    return []
+
+            # Normalize envelope to 0-1
+            max_rms = np.max(envelope)
+            if max_rms > 0:
+                envelope = [e / max_rms for e in envelope]
+            else:
+                # All silence
+                logger.warning(f"Audio contains only silence: {audio_path}")
+                return []
+
+            # Generate mouth cues based on amplitude threshold
+            mouth_cues = []
+            threshold = 0.15  # Amplitude threshold for mouth open
+
+            is_open = False
+            start_time = 0.0
+
+            for i, amplitude in enumerate(envelope):
+                time = i * (hop_size / frame_rate)  # Convert to seconds
+
+                if amplitude > threshold and not is_open:
+                    # Start opening mouth
+                    start_time = time
+                    is_open = True
+                elif amplitude <= threshold and is_open:
+                    # Close mouth
+                    # Use viseme_aa for open mouth (most open vowel)
+                    mouth_cues.append(MouthCue(
+                        start=start_time,
+                        end=time,
+                        value="viseme_aa"
+                    ))
+                    is_open = False
+
+            # Close final cue if still open
+            if is_open:
+                duration = len(audio) / 1000.0  # pydub duration in ms
+                mouth_cues.append(MouthCue(
+                    start=start_time,
+                    end=duration,
+                    value="viseme_aa"
+                ))
+
+            logger.info(
+                f"Generated fallback mouth cues | "
+                f"cues={len(mouth_cues)} | "
+                f"audio={audio_path}"
+            )
+
+            return mouth_cues
+
+        except ImportError as e:
+            logger.warning(f"Fallback cue generation requires numpy and pydub: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Failed to generate fallback cues: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Failed to generate fallback cues: {e}")
+            return []
+
+
     def _validate_path_component(self, component: str) -> bool:
         """
         Validate path component for security (prevent directory traversal).
@@ -335,10 +464,11 @@ class VisemeGenerator:
         # Check Rhubarb availability
         if not self._check_rhubarb_availability():
             logger.warning(
-                f"Viseme generation skipped (Rhubarb unavailable) | "
+                f"Rhubarb unavailable, using fallback | "
                 f"session={session_id} | message={message_id}"
             )
-            return []
+            # Generate fallback cues instead of returning empty
+            return self._generate_fallback_cues(audio_path)
 
         # Verify audio file exists
         if not os.path.isfile(audio_path):

@@ -28,10 +28,14 @@ class AvatarErrorBoundary extends Component {
 }
 
 // Animation paths - only include animations that exist
+// Add cache-busting in dev to ensure fresh loads after FBX updates
+// Create stable cache-busting timestamp at module load (not on every render)
+const CACHE_BUST = import.meta.env.DEV ? `?v=${Date.now()}` : '';
+
 const ANIM = {
-  greeting: [{ fbx: '/models/animations/Greeting/Greeting.fbx' }],
-  idle: [{ fbx: '/models/animations/Idle/Idle.fbx' }],
-  talk: [{ fbx: '/models/animations/Talk/Talk.fbx' }],
+  greeting: [{ fbx: `/models/animations/Greeting/Greeting.fbx${CACHE_BUST}` }],
+  idle: [{ fbx: `/models/animations/Idle/Idle.fbx${CACHE_BUST}` }],
+  talk: [{ fbx: `/models/animations/Talk/Talk.fbx${CACHE_BUST}` }],
 };
 
 // Animation fallback map for missing animations
@@ -96,9 +100,32 @@ const AvatarRig = React.memo(function AvatarRig({
   const { scene } = useGLTF(modelPath);
 
   // Load only animations that exist
+  // Log URLs to verify correct paths
+  if (import.meta.env.DEV) {
+    console.debug('[AvatarScene] Loading animations from:');
+    console.debug('  - Greeting:', ANIM.greeting[0].fbx);
+    console.debug('  - Idle:', ANIM.idle[0].fbx);
+    console.debug('  - Talk:', ANIM.talk[0].fbx);
+  }
+
   const greetingFBX = useFBX(ANIM.greeting[0].fbx);
   const idleFBX = useFBX(ANIM.idle[0].fbx);
   const talkFBX = useFBX(ANIM.talk[0].fbx);
+
+  // Log loaded FBX data to verify animations are present
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.debug('[AvatarScene] FBX Load Status:');
+      console.debug('  - Greeting FBX:', greetingFBX ? `✓ Loaded (${greetingFBX.animations?.length || 0} clips)` : '✗ Not loaded');
+      console.debug('  - Idle FBX:', idleFBX ? `✓ Loaded (${idleFBX.animations?.length || 0} clips)` : '✗ Not loaded');
+      console.debug('  - Talk FBX:', talkFBX ? `✓ Loaded (${talkFBX.animations?.length || 0} clips)` : '✗ Not loaded');
+
+      if (talkFBX?.animations?.[0]) {
+        console.debug('  - Talk clip name:', talkFBX.animations[0].name);
+        console.debug('  - Talk clip duration:', talkFBX.animations[0].duration.toFixed(2) + 's');
+      }
+    }
+  }, [greetingFBX, idleFBX, talkFBX]);
 
   const mixerRef = useRef(null);
   const actionsRef = useRef({});
@@ -235,12 +262,29 @@ const AvatarRig = React.memo(function AvatarRig({
 
     if (g) {
       result.push(normalizeClip(g, 'greeting'));
+      if (import.meta.env.DEV) {
+        console.debug('[AvatarScene] ✓ Added greeting animation');
+      }
+    } else if (import.meta.env.DEV) {
+      console.warn('[AvatarScene] ✗ Greeting animation not available');
     }
+
     if (i) {
       result.push(normalizeClip(i, 'idle'));
+      if (import.meta.env.DEV) {
+        console.debug('[AvatarScene] ✓ Added idle animation');
+      }
+    } else if (import.meta.env.DEV) {
+      console.warn('[AvatarScene] ✗ Idle animation not available');
     }
+
     if (t) {
       result.push(normalizeClip(t, 'talk'));
+      if (import.meta.env.DEV) {
+        console.debug('[AvatarScene] ✓ Added talk animation');
+      }
+    } else if (import.meta.env.DEV) {
+      console.warn('[AvatarScene] ✗ Talk animation not available - check FBX file');
     }
 
     return result;

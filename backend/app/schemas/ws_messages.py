@@ -313,6 +313,7 @@ class ClientMessageType(str, Enum):
     TEXT_INPUT = "text_input"
     PING = "ping"
     ABORT = "abort"
+    VOICE_MODE_STOP = "voice_mode_stop"
 
 
 class ServerMessageType(str, Enum):

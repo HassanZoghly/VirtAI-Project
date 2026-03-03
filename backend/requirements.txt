@@ -10,6 +10,8 @@ edge-tts==6.1.18
 
 # Audio Processing
 pydub>=0.25.1
+faster-whisper==0.10.0
+ffmpeg-python==0.2.0
 
 # Utils
 python-dotenv==1.0.1

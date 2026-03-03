@@ -41,10 +41,20 @@ class Settings(BaseSettings):
     # Groq API
     GROQ_API_KEY: str = Field(default="", description="Groq API Key (optional in dev mode)")
 
+    # OpenAI API (for fallback)
+    OPENAI_API_KEY: str = Field(default="", description="OpenAI API Key (optional, for ASR fallback)")
+
     # ASR (Whisper via Groq)
     ASR_MODEL: str = "whisper-large-v3-turbo"
     ASR_LANGUAGE: str = "en"
     ASR_RESPONSE_FORMAT: str = "verbose_json"  # for timestamps
+
+    # ASR (faster-whisper for streaming)
+    ASR_MODEL_SIZE: str = "base"  # tiny, base, small, medium, large
+    ASR_DEVICE: str = "cpu"  # cpu or cuda
+    ASR_COMPUTE_TYPE: str = "int8"  # int8, float16, float32
+    MAX_AUDIO_BUFFER_SIZE: int = 10485760  # 10MB in bytes
+    AUDIO_CHUNK_TIMEOUT: int = 30  # seconds
 
     # LLM (via Groq)
     LLM_MODEL: str = "llama-3.3-70b-versatile"

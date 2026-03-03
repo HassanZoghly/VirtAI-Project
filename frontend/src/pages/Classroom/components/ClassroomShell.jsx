@@ -22,6 +22,7 @@ import {
 import { getAvatarById } from '../../../data/avatars';
 import Toast from '../../../utils/toast';
 import CopyButton from './CopyButton';
+import VoiceModeButton from '../../../components/VoiceModeButton';
 import useWSClient from '../../../hooks/useWSClient';
 import useConversationReducer from '../../../hooks/useConversationReducer';
 
@@ -657,9 +658,14 @@ export default function ClassroomShell() {
             <button className="input-icon-btn" title="Attach file" type="button" disabled>
               <PiPaperclipFill />
             </button>
-            <button className="input-icon-btn" title="Voice input" type="button" disabled>
-              <PiMicrophoneFill />
-            </button>
+
+            {/* Voice Mode Button - Requirements 1.1, 1.4 */}
+            <div style={{ marginBottom: '4px' }}>
+              <VoiceModeButton
+                wsClient={{ isConnected, send, onMessage }}
+                pipelineState={conversationState.pipelineState}
+              />
+            </div>
 
             <textarea
               ref={textareaRef}

@@ -600,7 +600,6 @@ class ConversationPipeline:
 
         result = await self._asr.transcribe_chunks(
             audio_chunks=audio_buffer.chunks,
-            audio_format=audio_buffer.format,
         )
 
         logger.info(f"ASR result: '{result.transcript}'")

@@ -1,36 +1,42 @@
 """
 Audio-related Pydantic schemas
 used across WebSocket messages and API responses.
+
+The audio pipeline uses raw PCM binary frame protocol:
+- Frontend captures audio via AudioContext + AudioWorklet
+- Audio is transmitted as raw Int16 PCM bytes via WebSocket binary frames
+- Backend receives and concatenates PCM bytes directly without container parsing
+- PCM format is implicit: 16kHz sample rate, mono channel, 16-bit signed integer
 """
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class AudioChunk(BaseModel):
-    """A single audio chunk received from the frontend via WebSocket."""
+    """
+    A single audio chunk received from the frontend via WebSocket binary frame.
+    
+    The audio data is raw PCM bytes (16kHz, mono, Int16) transmitted via
+    WebSocket binary frames. No format field is needed since PCM is implicit
+    in the binary frame protocol.
+    """
 
     data: bytes
     index: int = 0
-    format: str = "webm"
-
-    @field_validator("format")
-    def validate_format(cls, v: str) -> str:
-        """Normalize format to lowercase and remove leading dot."""
-        return v.lower().lstrip(".")
 
 
 class AudioBuffer(BaseModel):
-    """Accumulated audio chunks ready for ASR."""
+    """
+    Accumulated audio chunks ready for ASR processing.
+    
+    The buffer stores raw PCM bytes that can be safely concatenated
+    without container parsing. PCM format is implicit: 16kHz, mono, Int16.
+    """
 
     chunks: list[bytes] = Field(default_factory=list)
-    format: str = "webm"
     total_size: int = 0
-
-    @field_validator("format")
-    def validate_format(cls, v: str) -> str:
-        return v.lower().lstrip(".")
 
     def add_chunk(self, chunk: bytes) -> None:
         self.chunks.append(chunk)

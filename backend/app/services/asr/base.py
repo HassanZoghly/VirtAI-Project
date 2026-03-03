@@ -66,3 +66,33 @@ class BaseASRProvider(ABC):
     async def is_available(self) -> bool:
         """Health check - is the ASR service reachable?"""
         ...
+
+
+@dataclass
+class StreamingASRResult:
+    """Result from streaming ASR transcription"""
+
+    transcript: str
+    confidence: float = 1.0
+    language: str = "en"
+    is_final: bool = True
+
+
+class StreamingASRService(ABC):
+    """Abstract base class for streaming ASR services"""
+
+    @abstractmethod
+    async def transcribe_stream(
+        self, audio_chunks: list[bytes], audio_format: str = "webm"
+    ) -> StreamingASRResult:
+        """
+        Transcribe accumulated audio chunks from streaming input.
+
+        Args:
+            audio_chunks: List of audio byte chunks
+            audio_format: Audio format (webm, opus, wav)
+
+        Returns:
+            StreamingASRResult with transcript and metadata
+        """
+        ...

@@ -17,10 +17,27 @@ from loguru import logger
 
 from app.core.config import get_settings
 from app.core.errors import ASRException
-from app.services.asr.audio_validator import validate_audio
 from app.services.asr.base import ASRResult, ASRSegment, BaseASRProvider, WordTimestamp
 
 settings = get_settings()
+
+
+# ── Simple Audio Validation (replaces audio_validator.py) ────────────────────
+MAX_AUDIO_SIZE_BYTES = 24 * 1024 * 1024  # 24 MB
+MIN_AUDIO_SIZE_BYTES = 1024  # 1 KB
+
+
+def validate_audio_size(audio_bytes: bytes) -> None:
+    """Validates audio size is within acceptable range."""
+    size = len(audio_bytes)
+    if size < MIN_AUDIO_SIZE_BYTES:
+        raise ASRException(
+            f"Audio too small ({size} bytes). Minimum is {MIN_AUDIO_SIZE_BYTES} bytes."
+        )
+    if size > MAX_AUDIO_SIZE_BYTES:
+        raise ASRException(
+            f"Audio too large ({size:,} bytes). Maximum is {MAX_AUDIO_SIZE_BYTES:,} bytes."
+        )
 
 
 class GroqWhisperASR(BaseASRProvider):
@@ -165,7 +182,7 @@ class GroqWhisperASR(BaseASRProvider):
 
         Args:
             audio_bytes : raw audio data from the WebSocket
-            audio_format: declared format (will be validated + auto-detected)
+            audio_format: audio format (webm, wav, mp3, etc.)
             language    : override language (None → use instance default)
 
         Returns:
@@ -173,13 +190,13 @@ class GroqWhisperASR(BaseASRProvider):
         """
 
         # ── Validate ─────────────────────────────────────────────────────────
-        fmt = validate_audio(audio_bytes, audio_format)
+        validate_audio_size(audio_bytes)
         lang = language or self.language
 
         logger.info(
             f"ASR transcribe start | "
             f"size={len(audio_bytes):,}B | "
-            f"format={fmt} | "
+            f"format={audio_format} | "
             f"language={lang} | "
             f"model={self.model}"
         )
@@ -189,7 +206,7 @@ class GroqWhisperASR(BaseASRProvider):
         try:
             # Groq SDK expects a file-like object with a name
             audio_file = io.BytesIO(audio_bytes)
-            audio_file.name = f"audio.{fmt}"
+            audio_file.name = f"audio.{audio_format}"
 
             response = await self._client.audio.transcriptions.create(
                 model=self.model,

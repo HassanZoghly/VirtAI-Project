@@ -1,6 +1,4 @@
-"""
-Quick test script to check if backend is running
-"""
+"""Quick test script to check if backend is running"""
 import requests
 
 print("🔍 Testing backend connection...\n")
@@ -16,7 +14,7 @@ try:
         print(f"⚠️  Backend responded but with status code: {response.status_code}")
 except requests.exceptions.ConnectionError:
     print("❌ Backend is NOT running!")
-    print("\n📝 To start backend:")
+    print("\n- To start backend:")
     print("   1. Open a new terminal")
     print("   2. cd backend")
     print("   3. python -m app.main")

@@ -331,23 +331,49 @@ function useWSClient(url) {
 
   /**
    * Send a message through WebSocket
-   * If disconnected, message is queued for later delivery
+   * If disconnected, message is queued for later delivery.
+   * Binary data (ArrayBuffer, Blob, TypedArray) is sent directly as a binary frame.
    *
-   * @param {Object} message - Message object to send
+   * @param {Object|ArrayBuffer|Blob} message - Message object or binary data to send
    */
   const send = useCallback(
     (message) => {
       if (isConnected && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         try {
-          wsRef.current.send(JSON.stringify(message));
+          // Send binary data directly without JSON serialization
+          if (
+            message instanceof ArrayBuffer ||
+            message instanceof Blob ||
+            ArrayBuffer.isView(message)
+          ) {
+            wsRef.current.send(message);
+          } else {
+            wsRef.current.send(JSON.stringify(message));
+          }
         } catch (err) {
           console.error('[WS] Failed to send message:', err);
-          // Queue message if send fails
-          messageQueue.current.push(message);
+          // Queue message if send fails (only queue JSON messages)
+          if (
+            !(
+              message instanceof ArrayBuffer ||
+              message instanceof Blob ||
+              ArrayBuffer.isView(message)
+            )
+          ) {
+            messageQueue.current.push(message);
+          }
         }
       } else {
-        // Queue message for later
-        messageQueue.current.push(message);
+        // Queue JSON messages for later (binary data is time-sensitive, drop it)
+        if (
+          !(
+            message instanceof ArrayBuffer ||
+            message instanceof Blob ||
+            ArrayBuffer.isView(message)
+          )
+        ) {
+          messageQueue.current.push(message);
+        }
       }
     },
     [isConnected]

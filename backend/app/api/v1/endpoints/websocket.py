@@ -439,11 +439,19 @@ class WebSocketHandler:
         is_voice_mode = "is_final" in data or "is_final" in data.get("data", {})
 
         if is_voice_mode:
-            # Route to voice mode handler
+            # Voice mode JSON audio_chunk is a control signal (actual audio goes via binary frames).
+            # Extract is_final and trigger processing of buffered audio if needed.
             voice_handler = self._get_voice_mode_handler()
-            # Voice mode data can be at top level or nested in 'data'
             voice_data = data if "is_final" in data else data.get("data", {})
-            await voice_handler.handle_audio_chunk(voice_data)
+            is_final = voice_data.get("is_final", False)
+
+            if is_final and voice_handler.audio_pipeline.get_buffer_size() > 0:
+                logger.debug(f"Voice mode finalize signal | session={self.session.session_id}")
+                await voice_handler.process_accumulated_audio()
+            else:
+                logger.debug(
+                    f"Voice mode control message | is_final={is_final} | session={self.session.session_id}"
+                )
             return
 
         # Legacy audio chunk handling (for old protocol)

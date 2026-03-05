@@ -10,10 +10,11 @@
 /* Position status indicators above the button when in inline layout */
 .voice-mode-container .voice-status-indicator {
     position: absolute;
-    bottom: calc(100% + 0.5rem);
-    left: 50%;
-    transform: translateX(-50%);
-    white-space: nowrap;
+    bottom: calc(100% + 0.75rem);
+    right: -8px;
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
     z-index: 1000;
 }
 
@@ -109,9 +110,12 @@
 }
 
 @keyframes processing-glow {
-    0%, 100% {
+
+    0%,
+    100% {
         box-shadow: 0 0 20px rgba(33, 150, 243, 0.3);
     }
+
     50% {
         box-shadow: 0 0 30px rgba(33, 150, 243, 0.5);
     }
@@ -190,12 +194,18 @@
 /* =============== Status Indicator =============== */
 .voice-status-indicator {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    border-radius: 8px;
+    padding: 12px 16px;
+    border-radius: 10px;
     font-size: 0.875rem;
-    max-width: 300px;
+    min-width: 240px;
+    max-width: 380px;
+    width: max-content;
+    line-height: 1.5;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
     animation: slide-in 0.3s ease;
 }
 
@@ -222,13 +232,18 @@
     color: var(--warning, #ff9800);
 }
 
-/* Error indicator */
+/* Error indicator — compact: icon + retry button only */
 .voice-status-indicator.error {
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.3);
+    background: rgba(30, 20, 20, 0.97);
+    border: 1px solid rgba(239, 68, 68, 0.5);
     color: var(--error, #ef4444);
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: row;
+    align-items: center;
+    min-width: auto;
+    max-width: 420px;
+    width: fit-content;
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
 }
 
 .voice-status-indicator.error .status-icon {
@@ -293,13 +308,10 @@
     }
 
     .voice-status-indicator {
-        font-size: 0.8125rem;
-        padding: 0.4rem 0.6rem;
-        max-width: 250px;
-    }
-
-    .status-text {
-        font-size: 0.8125rem;
+        font-size: 0.875rem;
+        padding: 8px 12px;
+        min-width: 180px;
+        max-width: 320px;
     }
 }
 

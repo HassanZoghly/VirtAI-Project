@@ -152,29 +152,23 @@ export default function VoiceModeButton({
         </div>
       )}
 
-      {/* Error message display (Requirement 8.3, 8.4, 8.5, 9.4, 10.5, 11.5) */}
-      {error && errorDisplay && (
+      {/* Error display — icon + retry only (Requirement 8.3, 8.4, 8.5) */}
+      {error && (
         <div className="voice-status-indicator error" role="alert" aria-live="assertive">
           <PiWarningCircleFill className="status-icon" />
-          <div className="status-content">
-            <span className="status-text">{errorDisplay.message}</span>
-            {errorDisplay.instruction && (
-              <span className="status-instruction">{errorDisplay.instruction}</span>
-            )}
-            {canRetry && (
-              <button
-                className="retry-button"
-                onClick={() => {
-                  clearError();
-                  startListening();
-                }}
-                type="button"
-                aria-label="Retry voice mode"
-              >
-                Try Again
-              </button>
-            )}
-          </div>
+          {canRetry && (
+            <button
+              className="retry-button"
+              onClick={() => {
+                clearError();
+                startListening();
+              }}
+              type="button"
+              aria-label="Retry voice mode"
+            >
+              Try Again
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -27,13 +27,6 @@ export default function MessageList({
   pipelineState,
   onSendText,
 }) {
-  const suggestions = [
-    'Explain quantum computing simply',
-    'What is machine learning?',
-    'Help me understand calculus',
-    'Teach me about neural networks',
-  ];
-
   return (
     <div className="chat-messages" ref={chatScrollRef} onScroll={onScroll} role="log" aria-label="Chat messages">
       {messages.length === 0 ? (
@@ -41,17 +34,6 @@ export default function MessageList({
           <PiLightbulbFilament className="welcome-icon" />
           <h2 className="welcome-title">Start a conversation</h2>
           <p className="welcome-subtitle">Ask {avatarName} anything to begin your lesson.</p>
-          <div className="suggestion-chips">
-            {suggestions.map((text) => (
-              <button
-                key={text}
-                className="suggestion-chip"
-                onClick={() => onSendText?.(text)}
-              >
-                {text}
-              </button>
-            ))}
-          </div>
         </div>
       ) : (
         <div className="chat-stream">
@@ -113,7 +95,8 @@ export default function MessageList({
           )}
           <div ref={messagesEndRef} />
         </div>
-      )}
-    </div>
+      )
+      }
+    </div >
   );
 }

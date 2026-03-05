@@ -45,18 +45,24 @@
 }
 
 .loader {
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background:
-    radial-gradient(farthest-side, #deb841 94%, #0000) top/8px 8px no-repeat,
-    conic-gradient(#0000 30%, #deb841);
-  -webkit-mask: radial-gradient(farthest-side, #0000 calc(100% - 8px), #000 0);
-  animation: s3 1s infinite linear;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  height: 60px;
 }
 
-@keyframes s3 {
-  100% {
-    transform: rotate(1turn);
-  }
+.loader span {
+  width: 8px;
+  height: 100%;
+  background: #F5F1EC;
+  border-radius: 4px;
+  animation: bars 1.2s infinite ease-in-out;
+}
+
+.loader span:nth-child(1) { animation-delay: -0.24s; }
+.loader span:nth-child(2) { animation-delay: -0.12s; }
+
+@keyframes bars {
+  0%, 40%, 100% { transform: scaleY(0.4); }
+  20% { transform: scaleY(1); }
 }

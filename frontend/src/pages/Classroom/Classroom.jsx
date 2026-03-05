@@ -6,7 +6,7 @@ const ClassroomShell = lazy(() => import('./components/ClassroomShell.jsx'));
 function ShellFallback() {
   return (
     <div className="shell-fallback" role="status" aria-label="Loading classroom shell">
-      <div className="fallback-spinner" />
+      <div className="loader"><span></span><span></span><span></span></div>
       <span className="fallback-text">Loading classroom...</span>
     </div>
   );

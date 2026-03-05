@@ -28,10 +28,7 @@ export default function AvatarPanel({
     <div className="avatar-panel" style={{ background: avatarLoaded ? '#333' : '' }}>
       {!avatarLoaded && !avatarError && (
         <div className="avatar-skeleton-container" role="status" aria-busy="true" aria-label="Loading avatar">
-          <div className="avatar-skeleton-silhouette">
-            <div className="avatar-skeleton-head" />
-            <div className="avatar-skeleton-body" />
-          </div>
+          <div className="loader"><span></span><span></span><span></span></div>
           <span className="avatar-skeleton-label">Loading avatar…</span>
         </div>
       )}

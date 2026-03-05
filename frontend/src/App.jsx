@@ -40,7 +40,7 @@ class ErrorBoundary extends Component {
 function PageLoader() {
   return (
     <div className="page-loader">
-      <div className="loader"></div>
+      <div className="loader"><span></span><span></span><span></span></div>
     </div>
   );
 }

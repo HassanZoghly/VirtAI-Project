@@ -16,11 +16,15 @@ import asyncio
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from loguru import logger
 
 from app.services.pipeline.conversation import ConversationPipeline
+
+if TYPE_CHECKING:
+    from app.services.llm.groq_provider import GroqLLMProvider
+    from app.services.tts.edge_tts_provider import EdgeTTSProvider
 
 
 class ConversationSession:

@@ -1,19 +1,19 @@
 /**
  * Bug Condition Exploration Test for Animation Name Resolution
- * 
+ *
  * **Validates: Requirements 1.1, 1.2, 1.3, 1.4**
- * 
+ *
  * CHECKPOINT (Task 4): After the fix is implemented, these tests should PASS
- * 
+ *
  * This test validates that the actual implementation in AvatarScene.jsx correctly handles
  * animation name mismatches using fuzzy matching.
- * 
+ *
  * GOAL: Verify the fix works correctly with the actual implementation
  */
 
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
-import { resolveAnimationName, ANIMATION_ALIASES } from './AvatarScene.jsx';
+import { resolveAnimationName } from './AvatarScene.jsx';
 
 /**
  * Simulates the playAction behavior using the actual resolveAnimationName implementation
@@ -21,12 +21,12 @@ import { resolveAnimationName, ANIMATION_ALIASES } from './AvatarScene.jsx';
 function playAction_actual(requestedName, availableClips, fallbackMap = {}) {
   // Try to resolve the requested name using the actual implementation
   let resolvedName = resolveAnimationName(requestedName, availableClips);
-  
+
   // If not resolved, try fallback
   if (!resolvedName && fallbackMap[requestedName]) {
     resolvedName = resolveAnimationName(fallbackMap[requestedName], availableClips);
   }
-  
+
   if (!resolvedName) {
     return { success: false, error: `Animation '${requestedName}' not found` };
   }
@@ -40,7 +40,7 @@ function playAction_actual(requestedName, availableClips, fallbackMap = {}) {
  */
 function isBugCondition_A(requestedName, availableClips) {
   const requested = requestedName.toLowerCase();
-  
+
   // Bug exists when:
   // 1. Requesting 'talk' or 'speaking'
   // 2. Exact name not in available clips
@@ -48,18 +48,18 @@ function isBugCondition_A(requestedName, availableClips) {
   if (!['talk', 'speaking'].includes(requested)) {
     return false;
   }
-  
+
   // Check if exact match exists
-  if (availableClips.some(clip => clip.toLowerCase() === requested)) {
+  if (availableClips.some((clip) => clip.toLowerCase() === requested)) {
     return false;
   }
-  
+
   // Check if fuzzy match exists
   const fuzzyKeywords = ['talk', 'speaking', 'speak', 'talking', 'idle_talking', 'talk_retargeted'];
-  const hasFuzzyMatch = availableClips.some(clip => 
-    fuzzyKeywords.some(keyword => clip.toLowerCase().includes(keyword))
+  const hasFuzzyMatch = availableClips.some((clip) =>
+    fuzzyKeywords.some((keyword) => clip.toLowerCase().includes(keyword))
   );
-  
+
   return hasFuzzyMatch;
 }
 
@@ -69,13 +69,13 @@ describe('Bug A: Animation Name Resolution - Preservation Tests', () => {
       const requestedName = 'idle';
       const availableClips = ['idle', 'talk', 'greeting'];
       const fallbackMap = { speaking: 'talk' };
-      
+
       // Verify this is NOT a bug condition (exact match exists)
       expect(isBugCondition_A(requestedName, availableClips)).toBe(false);
-      
+
       // Test actual implementation
       const actualResult = playAction_actual(requestedName, availableClips, fallbackMap);
-      
+
       // Should succeed with exact match
       expect(actualResult.success).toBe(true);
       expect(actualResult.clipName).toBe('idle');
@@ -85,11 +85,11 @@ describe('Bug A: Animation Name Resolution - Preservation Tests', () => {
       const requestedName = 'greeting';
       const availableClips = ['idle', 'talk', 'greeting'];
       const fallbackMap = { speaking: 'talk' };
-      
+
       expect(isBugCondition_A(requestedName, availableClips)).toBe(false);
-      
+
       const actualResult = playAction_actual(requestedName, availableClips, fallbackMap);
-      
+
       expect(actualResult.success).toBe(true);
       expect(actualResult.clipName).toBe('greeting');
     });
@@ -98,11 +98,11 @@ describe('Bug A: Animation Name Resolution - Preservation Tests', () => {
       const requestedName = 'talk';
       const availableClips = ['idle', 'talk', 'greeting'];
       const fallbackMap = { speaking: 'talk' };
-      
+
       expect(isBugCondition_A(requestedName, availableClips)).toBe(false);
-      
+
       const actualResult = playAction_actual(requestedName, availableClips, fallbackMap);
-      
+
       expect(actualResult.success).toBe(true);
       expect(actualResult.clipName).toBe('talk');
     });
@@ -111,13 +111,13 @@ describe('Bug A: Animation Name Resolution - Preservation Tests', () => {
       const requestedName = 'thinking';
       const availableClips = ['idle', 'talk', 'greeting'];
       const fallbackMap = { thinking: 'idle' };
-      
+
       // Not a bug condition because 'thinking' is not in ['talk', 'speaking']
       // and fallback 'idle' exists exactly
       expect(isBugCondition_A(requestedName, availableClips)).toBe(false);
-      
+
       const actualResult = playAction_actual(requestedName, availableClips, fallbackMap);
-      
+
       expect(actualResult.success).toBe(true);
       expect(actualResult.clipName).toBe('idle');
     });
@@ -126,10 +126,10 @@ describe('Bug A: Animation Name Resolution - Preservation Tests', () => {
       const requestedName = 'Idle';
       const availableClips = ['Idle', 'Talk', 'Greeting'];
       const fallbackMap = {};
-      
+
       // Actual implementation uses case-insensitive matching
       const actualResult = playAction_actual(requestedName, availableClips, fallbackMap);
-      
+
       expect(actualResult.success).toBe(true);
       expect(actualResult.clipName).toBe('Idle');
     });
@@ -139,7 +139,7 @@ describe('Bug A: Animation Name Resolution - Preservation Tests', () => {
     it('PBT: For all animations with exact name matches, behavior is correct', () => {
       // Generator for animation names that exist exactly in clips
       const exactMatchGen = fc.constantFrom('idle', 'talk', 'greeting', 'Idle', 'Talk', 'Greeting');
-      
+
       // Generator for clip arrays that contain the requested animation
       const clipsWithMatchGen = fc.array(
         fc.constantFrom('idle', 'talk', 'greeting', 'wave', 'thinking'),
@@ -148,25 +148,21 @@ describe('Bug A: Animation Name Resolution - Preservation Tests', () => {
 
       // Property: When exact match exists, actual implementation succeeds
       fc.assert(
-        fc.property(
-          exactMatchGen,
-          clipsWithMatchGen,
-          (requestedName, baseClips) => {
-            // Ensure the requested animation is in the clips
-            const availableClips = Array.from(new Set([requestedName, ...baseClips]));
-            const fallbackMap = { speaking: 'talk', thinking: 'idle' };
+        fc.property(exactMatchGen, clipsWithMatchGen, (requestedName, baseClips) => {
+          // Ensure the requested animation is in the clips
+          const availableClips = Array.from(new Set([requestedName, ...baseClips]));
+          const fallbackMap = { speaking: 'talk', thinking: 'idle' };
 
-            // Only test when bug condition is NOT present (exact match exists)
-            if (isBugCondition_A(requestedName, availableClips)) {
-              return true; // Skip this case
-            }
-
-            const actualResult = playAction_actual(requestedName, availableClips, fallbackMap);
-
-            // Should succeed with exact match
-            return actualResult.success === true;
+          // Only test when bug condition is NOT present (exact match exists)
+          if (isBugCondition_A(requestedName, availableClips)) {
+            return true; // Skip this case
           }
-        ),
+
+          const actualResult = playAction_actual(requestedName, availableClips, fallbackMap);
+
+          // Should succeed with exact match
+          return actualResult.success === true;
+        }),
         { numRuns: 100 } // Run 100 test cases for strong guarantees
       );
     });
@@ -174,36 +170,32 @@ describe('Bug A: Animation Name Resolution - Preservation Tests', () => {
     it('PBT: For all fallback scenarios with exact matches, behavior is correct', () => {
       // Generator for animation names that use fallback
       const fallbackNameGen = fc.constantFrom('speaking', 'thinking');
-      
+
       // Generator for clip arrays
-      const clipsGen = fc.array(
-        fc.constantFrom('idle', 'talk', 'greeting', 'wave'),
-        { minLength: 1, maxLength: 5 }
-      );
+      const clipsGen = fc.array(fc.constantFrom('idle', 'talk', 'greeting', 'wave'), {
+        minLength: 1,
+        maxLength: 5,
+      });
 
       // Property: When fallback resolves to exact match, behavior is correct
       fc.assert(
-        fc.property(
-          fallbackNameGen,
-          clipsGen,
-          (requestedName, baseClips) => {
-            const fallbackMap = { speaking: 'talk', thinking: 'idle' };
-            const fallbackName = fallbackMap[requestedName];
-            
-            // Ensure fallback animation is in clips (exact match)
-            const availableClips = Array.from(new Set([fallbackName, ...baseClips]));
+        fc.property(fallbackNameGen, clipsGen, (requestedName, baseClips) => {
+          const fallbackMap = { speaking: 'talk', thinking: 'idle' };
+          const fallbackName = fallbackMap[requestedName];
 
-            // Only test when bug condition is NOT present
-            if (isBugCondition_A(requestedName, availableClips)) {
-              return true; // Skip this case
-            }
+          // Ensure fallback animation is in clips (exact match)
+          const availableClips = Array.from(new Set([fallbackName, ...baseClips]));
 
-            const actualResult = playAction_actual(requestedName, availableClips, fallbackMap);
-
-            // Should succeed with fallback
-            return actualResult.success === true;
+          // Only test when bug condition is NOT present
+          if (isBugCondition_A(requestedName, availableClips)) {
+            return true; // Skip this case
           }
-        ),
+
+          const actualResult = playAction_actual(requestedName, availableClips, fallbackMap);
+
+          // Should succeed with fallback
+          return actualResult.success === true;
+        }),
         { numRuns: 100 }
       );
     });
@@ -211,7 +203,7 @@ describe('Bug A: Animation Name Resolution - Preservation Tests', () => {
     it('PBT: For all non-talk/speaking animations, behavior is correct', () => {
       // Generator for animations that are NOT affected by the bug
       const nonBuggyAnimGen = fc.constantFrom('idle', 'greeting', 'wave', 'thinking');
-      
+
       // Generator for clip arrays
       const clipsGen = fc.array(
         fc.constantFrom('idle', 'greeting', 'wave', 'thinking', 'jump', 'run'),
@@ -220,20 +212,16 @@ describe('Bug A: Animation Name Resolution - Preservation Tests', () => {
 
       // Property: Non-talk/speaking animations work correctly
       fc.assert(
-        fc.property(
-          nonBuggyAnimGen,
-          clipsGen,
-          (requestedName, baseClips) => {
-            // Ensure requested animation is in clips
-            const availableClips = Array.from(new Set([requestedName, ...baseClips]));
-            const fallbackMap = { speaking: 'talk', thinking: 'idle' };
+        fc.property(nonBuggyAnimGen, clipsGen, (requestedName, baseClips) => {
+          // Ensure requested animation is in clips
+          const availableClips = Array.from(new Set([requestedName, ...baseClips]));
+          const fallbackMap = { speaking: 'talk', thinking: 'idle' };
 
-            const actualResult = playAction_actual(requestedName, availableClips, fallbackMap);
+          const actualResult = playAction_actual(requestedName, availableClips, fallbackMap);
 
-            // Should succeed
-            return actualResult.success === true;
-          }
-        ),
+          // Should succeed
+          return actualResult.success === true;
+        }),
         { numRuns: 100 }
       );
     });
@@ -247,13 +235,13 @@ describe('Bug A: Animation Name Resolution - Fault Condition Exploration', () =>
       const requestedName = 'talk';
       const availableClips = ['Talk_Retargeted', 'idle', 'greeting'];
       const fallbackMap = { speaking: 'talk' };
-      
+
       // Verify this is a bug condition (would fail without fix)
       expect(isBugCondition_A(requestedName, availableClips)).toBe(true);
-      
+
       // Test actual implementation - should succeed with fuzzy matching
       const actualResult = playAction_actual(requestedName, availableClips, fallbackMap);
-      
+
       // CRITICAL: Should PASS with the fix
       expect(actualResult.success).toBe(true);
       expect(actualResult.clipName).toBe('Talk_Retargeted');
@@ -263,11 +251,11 @@ describe('Bug A: Animation Name Resolution - Fault Condition Exploration', () =>
       const requestedName = 'talk';
       const availableClips = ['TALKING', 'idle'];
       const fallbackMap = { speaking: 'talk' };
-      
+
       expect(isBugCondition_A(requestedName, availableClips)).toBe(true);
-      
+
       const actualResult = playAction_actual(requestedName, availableClips, fallbackMap);
-      
+
       // Should succeed with fuzzy matching
       expect(actualResult.success).toBe(true);
       expect(actualResult.clipName).toBe('TALKING');
@@ -277,11 +265,11 @@ describe('Bug A: Animation Name Resolution - Fault Condition Exploration', () =>
       const requestedName = 'talk';
       const availableClips = ['Speak_Animation']; // Only one clip
       const fallbackMap = { speaking: 'talk' };
-      
+
       expect(isBugCondition_A(requestedName, availableClips)).toBe(true);
-      
+
       const actualResult = playAction_actual(requestedName, availableClips, fallbackMap);
-      
+
       // Should succeed with auto-select (single clip)
       expect(actualResult.success).toBe(true);
       expect(actualResult.clipName).toBe('Speak_Animation');
@@ -291,12 +279,12 @@ describe('Bug A: Animation Name Resolution - Fault Condition Exploration', () =>
       const requestedName = 'speaking';
       const availableClips = ['Idle_Talking', 'idle', 'greeting'];
       const fallbackMap = { speaking: 'talk' };
-      
+
       // Bug condition: 'speaking' not in clips, fallback 'talk' not in clips, but fuzzy match exists
       expect(isBugCondition_A(requestedName, availableClips)).toBe(true);
-      
+
       const actualResult = playAction_actual(requestedName, availableClips, fallbackMap);
-      
+
       // Should succeed with fuzzy matching on fallback
       expect(actualResult.success).toBe(true);
       expect(actualResult.clipName).toBe('Idle_Talking');

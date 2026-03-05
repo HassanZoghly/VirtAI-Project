@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { PiCopyFill, PiCheckCircleFill } from 'react-icons/pi';
 
+/**
+ * Button that copies text to clipboard and shows a brief confirmation.
+ * @param {{ content: string }} props
+ */
 export default function CopyButton({ content }) {
   const [copied, setCopied] = useState(false);
 

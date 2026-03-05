@@ -6,6 +6,12 @@ import './App.css';
 const preloadClassroom = () => import('./pages/Classroom/Classroom.jsx');
 const Classroom = lazy(preloadClassroom);
 
+const ROUTER_FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true };
+
+/**
+ * Top-level error boundary that catches render errors and shows a fallback UI.
+ * @param {{ children: React.ReactNode }} props
+ */
 class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -51,7 +57,9 @@ function App() {
         <meta name="description" content="Interactive learning platform" />
       </Helmet>
 
-      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <a href="#main-content" className="skip-link">Skip to main content</a>
+
+      <Router future={ROUTER_FUTURE}>
         <div className="app">
           <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>

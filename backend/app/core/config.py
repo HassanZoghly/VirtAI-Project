@@ -42,7 +42,9 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = Field(default="", description="Groq API Key (optional in dev mode)")
 
     # OpenAI API (for fallback)
-    OPENAI_API_KEY: str = Field(default="", description="OpenAI API Key (optional, for ASR fallback)")
+    OPENAI_API_KEY: str = Field(
+        default="", description="OpenAI API Key (optional, for ASR fallback)"
+    )
 
     # ASR (Whisper via Groq)
     ASR_MODEL: str = "whisper-large-v3-turbo"
@@ -53,6 +55,7 @@ class Settings(BaseSettings):
     ASR_MODEL_SIZE: str = "base"  # tiny, base, small, medium, large
     ASR_DEVICE: str = "cpu"  # cpu or cuda
     ASR_COMPUTE_TYPE: str = "int8"  # int8, float16, float32
+    ASR_BEAM_SIZE: int = 5
     MAX_AUDIO_BUFFER_SIZE: int = 10485760  # 10MB in bytes
     AUDIO_CHUNK_TIMEOUT: int = 30  # seconds
 
@@ -71,6 +74,7 @@ class Settings(BaseSettings):
     TTS_RATE: str = "+0%"
     TTS_VOLUME: str = "+0%"
     TTS_PITCH: str = "+0Hz"
+    TTS_VISEME_DEFAULT_DURATION_MS: float = 60.0
 
     # WebSocket
     WS_HEARTBEAT_INTERVAL: int = 30  # seconds
@@ -80,6 +84,8 @@ class Settings(BaseSettings):
     # Session Management
     SESSION_TIMEOUT_SEC: int = 300  # 5 minutes
     SESSION_CLEANUP_INTERVAL: int = 60  # seconds
+    DEFAULT_AVATAR_ID: str = "avatar1"
+    VALID_AVATAR_IDS: list[str] = ["avatar1", "avatar2", "avatar3"]
 
     # Rate Limiting
     RATE_LIMIT_REQUESTS: int = 60

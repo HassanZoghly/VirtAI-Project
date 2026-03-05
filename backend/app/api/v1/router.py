@@ -32,9 +32,9 @@ async def websocket_endpoint(
     Supported avatar_id: avatar1, avatar2, avatar3
     """
     logger.info(f"[WS] Connection attempt | avatar={avatar_id} | client={websocket.client}")
-    
+
     # Validate avatar_id
-    valid_avatars = {"avatar1", "avatar2", "avatar3"}
+    valid_avatars = set(settings.VALID_AVATAR_IDS)
     if avatar_id not in valid_avatars:
         logger.warning(f"[WS] Invalid avatar_id: {avatar_id}")
         await websocket.close(code=4004, reason="Invalid avatar ID")
@@ -69,7 +69,9 @@ async def websocket_endpoint(
     except WebSocketDisconnect:
         logger.info(f"[WS] Client disconnected | session={session.session_id}")
     except Exception as e:
-        logger.error(f"[WS] Handler error | session={session.session_id} | error={e}", exc_info=True)
+        logger.error(
+            f"[WS] Handler error | session={session.session_id} | error={e}", exc_info=True
+        )
     finally:
         session_manager.remove_session(session.session_id)
         logger.info(f"[WS] Session cleaned up | id={session.session_id}")

@@ -60,11 +60,7 @@ from app.services.pipeline.events import PipelineEvent, PipelineEventType
 from app.services.pipeline.session_manager import Session
 from app.websocket.voice_mode_handler import VoiceModeHandler
 from app.services.asr.faster_whisper import FasterWhisperASR
-
-# Constants
-MAX_AUDIO_BUFFER_SIZE = 24 * 1024 * 1024  # 24 MB
-HEARTBEAT_INTERVAL = 30  # seconds
-HEARTBEAT_TIMEOUT = 90  # seconds
+from app.core.config import get_settings
 
 
 def validate_message(raw_message: dict) -> ChatUserMessage | ChatAbort | TTSRequest:
@@ -177,7 +173,7 @@ class WebSocketHandler:
                     message = await asyncio.wait_for(
                         self.ws.receive(), timeout=1.0  # short timeout so ping loop can run
                     )
-                    
+
                     # Handle different message types
                     if "text" in message:
                         # Text frame - route to text message handler
@@ -188,7 +184,7 @@ class WebSocketHandler:
                     else:
                         # Unknown message type
                         logger.warning(f"[WS] Unknown message type: {message}")
-                        
+
                 except asyncio.TimeoutError:
                     # No message received, continue (ping loop handles keepalive)
                     continue
@@ -201,7 +197,7 @@ class WebSocketHandler:
                         f"voice_mode_active={self._voice_mode_handler is not None} | "
                         f"pipeline_running={self._pipeline_task is not None and not self._pipeline_task.done()}"
                     )
-                    
+
                     # Clear voice mode buffer if active
                     if self._voice_mode_handler is not None:
                         buffer_size = self._voice_mode_handler.audio_pipeline.get_buffer_size()
@@ -212,7 +208,7 @@ class WebSocketHandler:
                                 f"buffer_size={buffer_size:,}B"
                             )
                         self._voice_mode_handler.audio_pipeline.clear_buffer()
-                    
+
                     break
                 except Exception as e:
                     logger.error(f"[WS] Error receiving message: {e}")
@@ -225,7 +221,7 @@ class WebSocketHandler:
     async def _heartbeat_loop(self) -> None:
         """
         Background task: send periodic pings to keep connection alive.
-        
+
         Note: This is a one-way heartbeat (server -> client).
         The client doesn't need to respond. If the connection is broken,
         the send will fail and we'll close the connection.
@@ -239,9 +235,10 @@ class WebSocketHandler:
         """
         # Initialize last_pong_time to prevent immediate timeout on connection
         self._last_pong_time = time.time()
-        
+
+        settings = get_settings()
         while self._connected:
-            await asyncio.sleep(HEARTBEAT_INTERVAL)
+            await asyncio.sleep(settings.WS_HEARTBEAT_INTERVAL)
             if not self._connected:
                 break
 
@@ -259,21 +256,22 @@ class WebSocketHandler:
     def _get_voice_mode_handler(self) -> VoiceModeHandler:
         """
         Get or create VoiceModeHandler for this session.
-        
+
         Lazy initialization of voice mode handler to avoid creating ASR service
         unless voice mode is actually used.
-        
+
         Returns:
             VoiceModeHandler instance for this session
         """
         if self._voice_mode_handler is None:
-            # Initialize ASR service (lazy loading)
+            # Initialize ASR service (lazy loading) with centralized config
+            settings = get_settings()
             asr_service = FasterWhisperASR(
-                model_size="base",
-                device="cpu",
-                compute_type="int8",
+                model_size=settings.ASR_MODEL_SIZE,
+                device=settings.ASR_DEVICE,
+                compute_type=settings.ASR_COMPUTE_TYPE,
             )
-            
+
             # Create voice mode handler
             self._voice_mode_handler = VoiceModeHandler(
                 websocket=self.ws,
@@ -281,39 +279,42 @@ class WebSocketHandler:
                 asr_service=asr_service,
                 conversation_pipeline=self.pipeline,
             )
-            
+
             logger.info(f"VoiceModeHandler created | session={self.session.session_id}")
-        
+
         return self._voice_mode_handler
 
     async def _handle_binary_frame(self, pcm_bytes: bytes) -> None:
         """Handle incoming binary frame containing raw PCM audio data.
-        
-        Binary frames are used for voice mode PCM audio streaming. The frame contains
-        raw PCM audio bytes (16-bit signed integer, little-endian, 16kHz mono) without
-        any encoding or container format.
-        
-        The is_final flag is determined by the size of the frame:
-        - Normal chunks: regular size (640-1280 bytes for 20-40ms audio)
-        - Final chunk: can be any size, but triggers processing when VAD detects silence
-        
-        Note: The is_final flag is not transmitted in the binary frame itself. Instead,
-        the frontend sends a separate control message or uses a special frame size to
-        indicate the final chunk. For now, we assume is_final=False and rely on the
-        duration-based flush mechanism.
-        
+
+        Binary frame protocol: [PCM bytes (Int16LE, 16kHz mono)] + [1-byte is_final marker]
+        The last byte is a marker: 0x01 = final (VAD detected silence), 0x00 = not final.
+        Backward compat: frames with odd byte count (after removing marker) are treated as
+        legacy frames with is_final=False.
+
         Args:
-            pcm_bytes: Raw PCM audio bytes from WebSocket binary frame
+            pcm_bytes: Raw binary frame from WebSocket (PCM + marker byte)
         """
         try:
             # Get or create voice mode handler
             voice_handler = self._get_voice_mode_handler()
-            
-            # Handle PCM audio chunk
-            # Note: is_final flag would need to be transmitted separately or via a control message
-            # For now, we rely on the duration-based flush mechanism in audio_pipeline
-            await voice_handler.handle_audio_chunk(pcm_bytes, is_final=False)
-            
+
+            # Parse is_final marker byte from the end of the frame
+            is_final = False
+            if len(pcm_bytes) >= 3:
+                marker = pcm_bytes[-1]
+                pcm_data = pcm_bytes[:-1]
+                # Int16 PCM must have even byte count
+                if len(pcm_data) % 2 == 0 and marker in (0x00, 0x01):
+                    is_final = marker == 0x01
+                else:
+                    # Legacy frame without marker byte — use full frame
+                    pcm_data = pcm_bytes
+            else:
+                pcm_data = pcm_bytes
+
+            await voice_handler.handle_audio_chunk(pcm_data, is_final=is_final)
+
         except Exception as e:
             logger.error(f"[WS] Error handling binary frame: {e}")
             await self._safe_send(
@@ -332,25 +333,27 @@ class WebSocketHandler:
             return
 
         msg_type_str = data.get("type", "")
-        
+
         # Ignore empty messages (likely keepalive or malformed)
         if not msg_type_str:
             logger.debug(f"Ignoring empty message: {raw[:100]}")
             return
-        
+
         # Check if this is a new protocol message (contains dots like "chat.user_message")
         if "." in msg_type_str:
             # Route to new protocol handler
             await self._route_validated_message(raw)
             return
-        
+
         # Handle old protocol messages
         try:
             msg_type = ClientMessageType(msg_type_str)
         except ValueError as e:
             logger.warning(f"Unknown message type: {msg_type_str} | {e}")
             await self._safe_send(
-                make_error_msg(code="INVALID_MESSAGE", message=f"Unknown message type: {msg_type_str}")
+                make_error_msg(
+                    code="INVALID_MESSAGE", message=f"Unknown message type: {msg_type_str}"
+                )
             )
             return
 
@@ -425,16 +428,16 @@ class WebSocketHandler:
     async def _handle_audio_chunk(self, data: dict, audio_buffer: AudioBuffer) -> None:
         """
         Store base64 audio chunk into buffer.
-        
+
         This method handles both legacy audio chunks (for old protocol) and
         voice mode audio chunks (for continuous ASR voice mode).
-        
+
         Voice mode chunks have 'is_final' flag and are routed to VoiceModeHandler.
         Legacy chunks are accumulated in audio_buffer for audio_end processing.
         """
         # Check if this is a voice mode chunk (has is_final flag at top level or in data)
         is_voice_mode = "is_final" in data or "is_final" in data.get("data", {})
-        
+
         if is_voice_mode:
             # Route to voice mode handler
             voice_handler = self._get_voice_mode_handler()
@@ -442,7 +445,7 @@ class WebSocketHandler:
             voice_data = data if "is_final" in data else data.get("data", {})
             await voice_handler.handle_audio_chunk(voice_data)
             return
-        
+
         # Legacy audio chunk handling (for old protocol)
         chunk_b64 = data.get("data", {}).get("chunk")
         if not chunk_b64:
@@ -459,7 +462,7 @@ class WebSocketHandler:
             return
 
         # Prevent buffer overflow
-        if audio_buffer.total_size + len(chunk_bytes) > MAX_AUDIO_BUFFER_SIZE:
+        if audio_buffer.total_size + len(chunk_bytes) > get_settings().MAX_AUDIO_BUFFER_SIZE:
             logger.warning("Audio buffer overflow, clearing")
             audio_buffer.clear()
             await self._safe_send(
@@ -549,14 +552,14 @@ class WebSocketHandler:
     async def _handle_voice_mode_stop(self, data: dict | None = None) -> None:
         """
         Handle voice_mode_stop message from client.
-        
+
         This is called when the user stops voice mode. It clears the audio buffer
         in the VoiceModeHandler to ensure no partial audio is processed.
-        
+
         Requirements: 11.1, 11.2, 11.3
         """
         logger.info(f"Voice mode stop received | session={self.session.session_id}")
-        
+
         # Clear voice mode handler's buffer if it exists
         if self._voice_mode_handler is not None:
             self._voice_mode_handler.audio_pipeline.clear_buffer()
@@ -719,8 +722,6 @@ class WebSocketHandler:
             case PipelineEventType.TTS_VISEMES:
                 raw_events = event.data.get("events", [])
                 audio_dur = event.data.get("audio_duration_ms", 0.0)
-                sent_idx = event.data.get("sentence_index", 0)
-
                 viseme_objs = [
                     VisemeEvent(
                         offset_ms=v["offset_ms"],
@@ -813,11 +814,11 @@ class WebSocketHandler:
             # Insert underscore before uppercase letters that follow lowercase letters or digits
             # This handles: ChatDelta -> Chat_Delta, TTSReady -> TTS_Ready
             snake_case = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", class_name)
-            
+
             # Insert underscore before uppercase letters that are followed by lowercase letters
             # This handles: TTSReady -> TTS_Ready (already done), HTTPSConnection -> HTTPS_Connection
             snake_case = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", snake_case)
-            
+
             # Convert to lowercase and replace underscores with dots
             message_type = snake_case.lower().replace("_", ".")
 
@@ -849,19 +850,19 @@ class WebSocketHandler:
 
     async def _cleanup(self) -> None:
         """Clean up resources on disconnect.
-        
+
         Comprehensive cleanup with logging for WebSocket disconnection (Requirement 11.1, 11.2).
         Ensures all audio buffers are cleared and resources are freed.
         """
         self._connected = False
-        
+
         # Log cleanup start with session info
         logger.info(
             f"[WS] Starting cleanup | "
             f"session={self.session.session_id} | "
             f"avatar={self.session.avatar_id}"
         )
-        
+
         # Cancel pipeline if running
         await self._cancel_pipeline()
 
@@ -878,7 +879,7 @@ class WebSocketHandler:
         if self._voice_mode_handler is not None:
             try:
                 buffer_size = self._voice_mode_handler.audio_pipeline.get_buffer_size()
-                
+
                 if buffer_size > 0:
                     logger.info(
                         f"[WS] Clearing voice mode buffer in cleanup | "
@@ -888,7 +889,7 @@ class WebSocketHandler:
             except (TypeError, AttributeError):
                 # Handle mock objects or missing attributes in tests
                 pass
-            
+
             self._voice_mode_handler.audio_pipeline.clear_buffer()
             logger.debug(f"[WS] Voice mode handler cleaned up | session={self.session.session_id}")
 

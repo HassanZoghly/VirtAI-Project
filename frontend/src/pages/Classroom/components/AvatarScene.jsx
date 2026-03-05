@@ -1,10 +1,20 @@
-import React, { Component, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Component, Suspense, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Environment, OrbitControls, useGLTF, useFBX, ContactShadows } from '@react-three/drei';
 import * as THREE from 'three';
-import { useRealismEnhancements } from '../../../hooks/useRealismEnhancements';
+import { useRealismEnhancements } from '../../../features/avatar/hooks/useRealismEnhancements';
+import { MORPH_SMOOTHING, ANIMATION_METADATA, getAnimationsByCategory, getTransitionFade, pickWeightedRandom } from '../../../features/avatar/constants';
 
-// Error boundary
+const CAMERA_CONFIG = { position: [0, 0.2, 3.6], fov: 45, near: 0.01, far: 100 };
+const GL_CONFIG = { antialias: true, alpha: true, preserveDrawingBuffer: false };
+
+/**
+ * Error boundary for the 3D avatar canvas. Shows fallback on render error.
+ * @param {object} props
+ * @param {React.ReactNode} props.children
+ * @param {React.ReactNode} [props.fallback] - Fallback UI on error
+ * @param {(error: Error) => void} [props.onError] - Error callback
+ */
 class AvatarErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -35,18 +45,27 @@ const CACHE_BUST = import.meta.env.DEV ? `?v=${Date.now()}` : '';
 const ANIM = {
   greeting: [{ fbx: `/models/animations/Greeting/Greeting.fbx${CACHE_BUST}` }],
   idle: [{ fbx: `/models/animations/Idle/Idle.fbx${CACHE_BUST}` }],
-  talk: [{ fbx: `/models/animations/Talk/Talk.fbx${CACHE_BUST}` }],
+  talk1: [{ fbx: `/models/animations/Talk/Talk1.fbx${CACHE_BUST}` }],
+  talk2: [{ fbx: `/models/animations/Talk/Talk2.fbx${CACHE_BUST}` }],
+  talk3: [{ fbx: `/models/animations/Talk/Talk3.fbx${CACHE_BUST}` }],
+  talk4: [{ fbx: `/models/animations/Talk/Talk4.fbx${CACHE_BUST}` }],
+  talk5: [{ fbx: `/models/animations/Talk/Talk5.fbx${CACHE_BUST}` }],
+  talk6: [{ fbx: `/models/animations/Talk/Talk6.fbx${CACHE_BUST}` }],
+  talk7: [{ fbx: `/models/animations/Talk/Talk7.fbx${CACHE_BUST}` }],
 };
 
 // Animation fallback map for missing animations
 const ANIMATION_FALLBACK = {
   thinking: 'idle',
-  speaking: 'talk',
+  speaking: 'talk1',
+  talk: 'talk1',
 };
 
 // Fuzzy animation name matching
 export const ANIMATION_ALIASES = {
-  talk: ['talk', 'speaking', 'speak', 'talking', 'idle_talking', 'talk_retargeted'],
+  talk: ['talk1', 'talk2', 'talk3', 'talk4', 'talk5', 'talk6', 'talk7'],
+  talk1: ['talk1'], talk2: ['talk2'], talk3: ['talk3'], talk4: ['talk4'],
+  talk5: ['talk5'], talk6: ['talk6'], talk7: ['talk7'],
   idle: ['idle', 'standing', 'neutral'],
   greeting: ['greeting', 'wave', 'hello'],
 };
@@ -75,7 +94,9 @@ export function resolveAnimationName(requestedName, availableClips) {
 
   // 3. If only one clip exists, use it (auto-select)
   if (availableClips.length === 1) {
-    console.debug(`[AvatarScene] Auto-selecting only available clip: ${availableClips[0]}`);
+    if (import.meta.env.DEV) {
+      console.debug(`[AvatarScene] Auto-selecting only available clip: ${availableClips[0]}`);
+    }
     return availableClips[0];
   }
 
@@ -83,8 +104,17 @@ export function resolveAnimationName(requestedName, availableClips) {
 }
 
 /**
- * AvatarRig - Pure 3D rendering component
- * Handles model loading, animation playback, and morph target application
+ * AvatarRig - Pure 3D rendering component.
+ * Handles model loading, animation playback, and morph target application.
+ * @param {object} props
+ * @param {string} props.modelPath - Path to GLB model file
+ * @param {string} [props.currentAnimation] - Animation name ('idle','thinking','speaking','greeting')
+ * @param {Record<string, number>} [props.morphTargets] - Viseme names → influence values (0-1)
+ * @param {{ headBob: number, chestBob: number }} [props.bodyMotion] - Subtle body animation
+ * @param {() => void} [props.onModelLoaded] - Callback when model is loaded
+ * @param {React.RefObject<HTMLAudioElement>} [props.audioRef] - Ref to audio element
+ * @param {Array<{ start: number, end: number, value: string }>} [props.mouthCues] - Lip-sync timeline
+ * @param {boolean} [props.isPlaying] - Whether audio is currently playing
  */
 const AvatarRig = React.memo(function AvatarRig({
   modelPath,
@@ -99,39 +129,45 @@ const AvatarRig = React.memo(function AvatarRig({
   const group = useRef();
   const { scene } = useGLTF(modelPath);
 
-  // Load only animations that exist
-  // Log URLs to verify correct paths
-  if (import.meta.env.DEV) {
-    console.debug('[AvatarScene] Loading animations from:');
-    console.debug('  - Greeting:', ANIM.greeting[0].fbx);
-    console.debug('  - Idle:', ANIM.idle[0].fbx);
-    console.debug('  - Talk:', ANIM.talk[0].fbx);
-  }
-
+  // Load all animation FBX files (static hook calls — must always be the same count)
   const greetingFBX = useFBX(ANIM.greeting[0].fbx);
   const idleFBX = useFBX(ANIM.idle[0].fbx);
-  const talkFBX = useFBX(ANIM.talk[0].fbx);
+  const talk1FBX = useFBX(ANIM.talk1[0].fbx);
+  const talk2FBX = useFBX(ANIM.talk2[0].fbx);
+  const talk3FBX = useFBX(ANIM.talk3[0].fbx);
+  const talk4FBX = useFBX(ANIM.talk4[0].fbx);
+  const talk5FBX = useFBX(ANIM.talk5[0].fbx);
+  const talk6FBX = useFBX(ANIM.talk6[0].fbx);
+  const talk7FBX = useFBX(ANIM.talk7[0].fbx);
+
+  const talkFBXs = useMemo(() => [
+    { name: 'talk1', fbx: talk1FBX },
+    { name: 'talk2', fbx: talk2FBX },
+    { name: 'talk3', fbx: talk3FBX },
+    { name: 'talk4', fbx: talk4FBX },
+    { name: 'talk5', fbx: talk5FBX },
+    { name: 'talk6', fbx: talk6FBX },
+    { name: 'talk7', fbx: talk7FBX },
+  ], [talk1FBX, talk2FBX, talk3FBX, talk4FBX, talk5FBX, talk6FBX, talk7FBX]);
 
   // Log loaded FBX data to verify animations are present
   useEffect(() => {
     if (import.meta.env.DEV) {
       console.debug('[AvatarScene] FBX Load Status:');
-      console.debug('  - Greeting FBX:', greetingFBX ? `✓ Loaded (${greetingFBX.animations?.length || 0} clips)` : '✗ Not loaded');
-      console.debug('  - Idle FBX:', idleFBX ? `✓ Loaded (${idleFBX.animations?.length || 0} clips)` : '✗ Not loaded');
-      console.debug('  - Talk FBX:', talkFBX ? `✓ Loaded (${talkFBX.animations?.length || 0} clips)` : '✗ Not loaded');
-
-      if (talkFBX?.animations?.[0]) {
-        console.debug('  - Talk clip name:', talkFBX.animations[0].name);
-        console.debug('  - Talk clip duration:', talkFBX.animations[0].duration.toFixed(2) + 's');
-      }
+      console.debug('  - Greeting:', greetingFBX?.animations?.length || 0, 'clips');
+      console.debug('  - Idle:', idleFBX?.animations?.length || 0, 'clips');
+      talkFBXs.forEach(({ name, fbx }) => {
+        console.debug(`  - ${name}:`, fbx?.animations?.length || 0, 'clips');
+      });
     }
-  }, [greetingFBX, idleFBX, talkFBX]);
+  }, [greetingFBX, idleFBX, talkFBXs]);
 
   const mixerRef = useRef(null);
   const actionsRef = useRef({});
   const currentActionRef = useRef(null);
   const currentActionNameRef = useRef(null); // Track current action name to prevent re-triggers
   const clipNameCacheRef = useRef({}); // Cache resolved names
+  const lastPlayedTalkRef = useRef(null); // Track last played talk variant for no-repeat
 
   // Refs for morph target meshes
   const headMeshRef = useRef(null);
@@ -157,7 +193,8 @@ const AvatarRig = React.memo(function AvatarRig({
     morphTargets,
     isPlaying,
     audioRef,
-    mouthCues
+    mouthCues,
+    currentAnimation
   );
 
   // Setup scene materials and shadows + inspect morph targets
@@ -258,37 +295,28 @@ const AvatarRig = React.memo(function AvatarRig({
 
     const g = greetingFBX?.animations?.[0];
     const i = idleFBX?.animations?.[0];
-    const t = talkFBX?.animations?.[0];
 
     if (g) {
       result.push(normalizeClip(g, 'greeting'));
-      if (import.meta.env.DEV) {
-        console.debug('[AvatarScene] ✓ Added greeting animation');
-      }
-    } else if (import.meta.env.DEV) {
-      console.warn('[AvatarScene] ✗ Greeting animation not available');
     }
-
     if (i) {
       result.push(normalizeClip(i, 'idle'));
-      if (import.meta.env.DEV) {
-        console.debug('[AvatarScene] ✓ Added idle animation');
-      }
-    } else if (import.meta.env.DEV) {
-      console.warn('[AvatarScene] ✗ Idle animation not available');
     }
 
-    if (t) {
-      result.push(normalizeClip(t, 'talk'));
-      if (import.meta.env.DEV) {
-        console.debug('[AvatarScene] ✓ Added talk animation');
+    // Add all talk variants
+    for (const { name, fbx } of talkFBXs) {
+      const clip = fbx?.animations?.[0];
+      if (clip) {
+        result.push(normalizeClip(clip, name));
       }
-    } else if (import.meta.env.DEV) {
-      console.warn('[AvatarScene] ✗ Talk animation not available - check FBX file');
+    }
+
+    if (import.meta.env.DEV) {
+      console.debug('[AvatarScene] Loaded clips:', result.map(c => c.name).join(', '));
     }
 
     return result;
-  }, [greetingFBX, idleFBX, talkFBX]);
+  }, [greetingFBX, idleFBX, talkFBXs]);
 
   // Setup animation mixer
   useEffect(() => {
@@ -326,40 +354,61 @@ const AvatarRig = React.memo(function AvatarRig({
   }, [scene, clips]);
 
   // Play animation with smooth transitions and fallback support
-  const playAction = (name, { loop = THREE.LoopRepeat, fade = 0.25 } = {}) => {
+  const playAction = (name, { loop = THREE.LoopRepeat, fade } = {}) => {
     const actions = actionsRef.current;
+    const availableClips = Object.keys(actions);
+    let resolvedName;
 
-    // Check cache first
-    let resolvedName = clipNameCacheRef.current[name];
-
-    // If not cached, resolve using fuzzy matching
-    if (!resolvedName) {
-      const availableClips = Object.keys(actions);
-      resolvedName = resolveAnimationName(name, availableClips);
-
-      if (!resolvedName && ANIMATION_FALLBACK[name]) {
-        // Try fallback
-        resolvedName = resolveAnimationName(ANIMATION_FALLBACK[name], availableClips);
+    // Weighted random selection for talk/speaking animations
+    const isTalkRequest = name === 'speaking' || name === 'talk';
+    if (isTalkRequest) {
+      const picked = pickWeightedRandom('talk', lastPlayedTalkRef.current);
+      if (picked && actions[picked]) {
+        resolvedName = picked;
       }
+    }
 
-      if (resolvedName) {
-        clipNameCacheRef.current[name] = resolvedName; // Cache it
-        if (import.meta.env.DEV) {
-          console.debug(`[AvatarScene] Resolved '${name}' → '${resolvedName}'`);
+    // Standard resolution for non-talk or if random pick failed
+    if (!resolvedName) {
+      resolvedName = clipNameCacheRef.current[name];
+
+      if (!resolvedName) {
+        resolvedName = resolveAnimationName(name, availableClips);
+
+        if (!resolvedName && ANIMATION_FALLBACK[name]) {
+          resolvedName = resolveAnimationName(ANIMATION_FALLBACK[name], availableClips);
+        }
+
+        if (resolvedName) {
+          clipNameCacheRef.current[name] = resolvedName;
+          if (import.meta.env.DEV) {
+            console.debug(`[AvatarScene] Resolved '${name}' → '${resolvedName}'`);
+          }
         }
       }
     }
 
-    // Prevent re-triggering same animation
-    if (currentActionNameRef.current === resolvedName) {
+    // For talk requests, allow re-triggering with a different variant
+    if (!isTalkRequest && currentActionNameRef.current === resolvedName) {
+      return;
+    }
+    // For talk requests, still skip if same variant was picked
+    if (isTalkRequest && currentActionNameRef.current === resolvedName) {
       return;
     }
 
     const next = actions[resolvedName];
     if (!next) {
-      console.warn(`[AvatarScene] Animation '${name}' not found (tried: ${resolvedName})`);
+      if (import.meta.env.DEV) {
+        console.warn(`[AvatarScene] Animation '${name}' not found (tried: ${resolvedName})`);
+      }
       return;
     }
+
+    // Compute cross-fade duration from transition type if not explicitly provided
+    const fromCategory = ANIMATION_METADATA[currentActionNameRef.current]?.category ?? 'idle';
+    const toCategory = ANIMATION_METADATA[resolvedName]?.category ?? (resolvedName.startsWith('talk') ? 'talk' : resolvedName);
+    const fadeDuration = fade ?? getTransitionFade(fromCategory, toCategory);
 
     next.setLoop(loop, Infinity);
     next.reset();
@@ -368,13 +417,18 @@ const AvatarRig = React.memo(function AvatarRig({
 
     const cur = currentActionRef.current;
     if (cur && cur !== next) {
-      cur.crossFadeTo(next, fade, false);
+      cur.crossFadeTo(next, fadeDuration, false);
     } else {
-      next.fadeIn(fade);
+      next.fadeIn(fadeDuration);
     }
 
     currentActionRef.current = next;
     currentActionNameRef.current = resolvedName;
+
+    // Track last talk variant for no-repeat logic
+    if (isTalkRequest) {
+      lastPlayedTalkRef.current = resolvedName;
+    }
   };
 
   // Handle animation changes
@@ -383,7 +437,7 @@ const AvatarRig = React.memo(function AvatarRig({
       return;
     }
 
-    playAction(currentAnimation, { fade: 0.25 });
+    playAction(currentAnimation);
   }, [currentAnimation, scene]);
 
   // Update animation mixer and apply enhanced morph targets with realism
@@ -404,6 +458,8 @@ const AvatarRig = React.memo(function AvatarRig({
     // Apply subtle head motion ONLY (NO spine to prevent body deformation)
     if (isPlaying && headBoneRef.current) {
       applySubtleHeadMotion(headBoneRef.current, enhancedMorphTargets, dt, headMotionStateRef.current);
+    } else if (currentAnimation === 'thinking' && headBoneRef.current) {
+      applyThinkingMotion(headBoneRef.current, dt, headMotionStateRef.current);
     } else if (headBoneRef.current) {
       // Return head to neutral when not speaking (slower for smoother transition)
       applyReturnToNeutral(headBoneRef.current, dt, headMotionStateRef.current);
@@ -430,7 +486,7 @@ function applyMorphTargetsSmooth(mesh, morphTargets) {
     return;
   }
 
-  const smoothingFactor = 0.3; // How fast to interpolate (0-1, higher = faster)
+  const smoothingFactor = MORPH_SMOOTHING;
   const resetSpeed = 0.15; // Slower reset to avoid jitter
 
   // Get all viseme indices (morph targets that start with "viseme_" or contain "jaw"/"mouth")
@@ -514,16 +570,20 @@ function applySubtleHeadMotion(headBone, morphTargets, deltaTime, state) {
   }
 
   // Calculate target rotations using continuous sine waves
-  // Very subtle pitch (up/down nod) - driven by speech + breathing
+  // Pitch (up/down nod) - driven by speech intensity + breathing
   const speechNod = mouthOpenness * 0.015; // Max ~0.86 degrees
   const breathingNod = Math.sin(state.time * 0.3) * 0.008; // Slow breathing rhythm ±0.46 degrees
   const targetPitch = speechNod + breathingNod;
 
-  // Very subtle yaw (left/right turn) - independent slow drift
-  const targetYaw = Math.sin(state.time * 0.2) * 0.012; // ±0.69 degrees
+  // Yaw (left/right turn) - drift scales slightly with speech intensity
+  const baseYaw = Math.sin(state.time * 0.2) * 0.012; // ±0.69 degrees
+  const speechYaw = mouthOpenness * Math.sin(state.time * 0.35) * 0.005; // Subtle speech-driven sway
+  const targetYaw = baseYaw + speechYaw;
 
-  // Very subtle roll (head tilt) - adds 3D realism
-  const targetRoll = Math.sin(state.time * 0.15) * 0.008; // ±0.46 degrees
+  // Roll (head tilt) - adds 3D realism, scales slightly with intensity
+  const baseRoll = Math.sin(state.time * 0.15) * 0.008; // ±0.46 degrees
+  const speechRoll = mouthOpenness * Math.sin(state.time * 0.25) * 0.003;
+  const targetRoll = baseRoll + speechRoll;
 
   // CRITICAL: Smooth interpolation using delta time for frame-rate independence
   // This ensures motion is smooth regardless of FPS
@@ -580,15 +640,52 @@ function applyReturnToNeutral(headBone, deltaTime, state) {
 }
 
 /**
+ * Apply thinking head motion — deliberate slow tilt and drift to convey pondering.
+ * Uses the idle animation clip as a base; this function overlays procedural head motion.
+ *
+ * @param {THREE.Bone} headBone - Head bone reference
+ * @param {number} deltaTime - Time since last frame
+ * @param {Object} state - Motion state object (for continuity between frames)
+ */
+function applyThinkingMotion(headBone, deltaTime, state) {
+  if (!headBone) return;
+
+  state.time += deltaTime;
+
+  // Thinking: gentle persistent head tilt + slow deliberate drift
+  // Slight downward pitch (looking slightly down, as if contemplating)
+  const thinkPitch = Math.sin(state.time * 0.15) * 0.01 + 0.012; // Slight downward bias
+  // Slower, wider yaw drift (looking side to side slowly)
+  const thinkYaw = Math.sin(state.time * 0.1) * 0.018;
+  // Subtle persistent tilt (head tilted slightly to one side)
+  const thinkRoll = Math.sin(state.time * 0.08) * 0.012 + 0.008; // Slight tilt bias
+
+  // Smooth interpolation — slower than speaking, faster than idle return
+  const smoothness = 1.0 - Math.pow(0.001, deltaTime);
+  const speed = Math.min(smoothness * 0.03, 1.0);
+
+  state.currentPitch = THREE.MathUtils.lerp(state.currentPitch, thinkPitch, speed);
+  state.currentYaw = THREE.MathUtils.lerp(state.currentYaw, thinkYaw, speed);
+  state.currentRoll = THREE.MathUtils.lerp(state.currentRoll, thinkRoll, speed);
+
+  headBone.rotation.x = THREE.MathUtils.clamp(state.currentPitch, -0.03, 0.03);
+  headBone.rotation.y = THREE.MathUtils.clamp(state.currentYaw, -0.025, 0.025);
+  headBone.rotation.z = THREE.MathUtils.clamp(state.currentRoll, -0.02, 0.02);
+}
+
+/**
  * AvatarScene - Pure rendering component for 3D avatar
  *
- * Props:
- * - modelPath: Path to GLB model file
- * - currentAnimation: Animation name ('idle', 'thinking', 'speaking', 'greeting')
- * - morphTargets: Object mapping viseme names to influence values (0-1)
- * - bodyMotion: Object with { headBob: number, chestBob: number } for subtle body animation
- * - onModelLoaded: Callback when model is loaded
- * - onError: Callback for errors
+ * @param {object} props
+ * @param {string} props.modelPath - Path to GLB model file
+ * @param {string} [props.currentAnimation='idle'] - Animation name ('idle','thinking','speaking','greeting')
+ * @param {Record<string, number>} [props.morphTargets] - Viseme names → influence values (0-1)
+ * @param {{ headBob: number, chestBob: number }} [props.bodyMotion] - Subtle body animation
+ * @param {() => void} [props.onModelLoaded] - Callback when model is loaded
+ * @param {(err: Error) => void} [props.onError] - Callback for errors
+ * @param {React.RefObject<HTMLAudioElement>} [props.audioRef] - Ref to audio element
+ * @param {Array<{ start: number, end: number, value: string }>} [props.mouthCues] - Lip-sync timeline
+ * @param {boolean} [props.isPlaying] - Whether audio is currently playing
  */
 const AvatarScene = React.memo(function AvatarScene({
   modelPath,
@@ -640,8 +737,8 @@ const AvatarScene = React.memo(function AvatarScene({
         <Canvas
           shadows
           dpr={[1, 1.5]}
-          camera={{ position: [0, 0.2, 3.6], fov: 45, near: 0.01, far: 100 }}
-          gl={{ antialias: true, alpha: true, preserveDrawingBuffer: false }}
+          camera={CAMERA_CONFIG}
+          gl={GL_CONFIG}
         >
           <ambientLight intensity={0.6} />
           <directionalLight position={[4, 6, 4]} intensity={1.0} castShadow />

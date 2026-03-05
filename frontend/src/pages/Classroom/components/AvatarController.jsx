@@ -1,21 +1,82 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import AvatarScene from './AvatarScene';
-import { useAudioDrivenLipSync } from '../../../hooks/useAudioDrivenLipSync';
+import { GREETING_DURATION_MS } from '../constants';
+import { useAudioDrivenLipSync } from '../../../features/avatar/hooks/useAudioDrivenLipSync';
 
 /**
- * AvatarController - Orchestrates avatar animations, audio playback, and lip sync
+ * useAnimationQueue — sequential animation queue with interrupt support.
  *
- * This component maps pipeline state to animation state, handles audio playback,
+ * Each queued item is `{ animation: string, durationMs?: number }`.
+ * - If `durationMs` is set the item plays for that duration then advances.
+ * - If `durationMs` is omitted (or 0) the item stays until interrupted or
+ *   the queue is flushed externally.
+ *
+ * `flush(animation)` clears the queue and immediately plays `animation`.
+ * `enqueue(items)` appends one or more items and starts processing if idle.
+ */
+function useAnimationQueue(setAnimation) {
+  const queueRef = useRef([]);
+  const timerRef = useRef(null);
+  const processingRef = useRef(false);
+
+  const processNext = useCallback(() => {
+    if (queueRef.current.length === 0) {
+      processingRef.current = false;
+      return;
+    }
+
+    processingRef.current = true;
+    const { animation, durationMs, onComplete } = queueRef.current.shift();
+    setAnimation(animation);
+
+    if (durationMs && durationMs > 0) {
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        onComplete?.();
+        processNext();
+      }, durationMs);
+    }
+    // If no duration, the item stays active until flush() or next enqueue with advance
+  }, [setAnimation]);
+
+  const enqueue = useCallback((items) => {
+    const list = Array.isArray(items) ? items : [items];
+    queueRef.current.push(...list);
+    if (!processingRef.current) {
+      processNext();
+    }
+  }, [processNext]);
+
+  const flush = useCallback((animation) => {
+    clearTimeout(timerRef.current);
+    timerRef.current = null;
+    queueRef.current = [];
+    processingRef.current = false;
+    setAnimation(animation);
+  }, [setAnimation]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => clearTimeout(timerRef.current);
+  }, []);
+
+  return { enqueue, flush };
+}
+
+/**
+ * AvatarController - Orchestrates avatar animations, audio playback, and lip sync.
+ *
+ * Maps pipeline state to animation state, handles audio playback,
  * and drives lip sync from mouthCues timeline by updating morph targets.
  *
- * Props:
- * - pipelineState: Current pipeline state ('idle', 'thinking', 'speaking', 'error')
- * - audioUrl: URL to audio file (when TTS is ready)
- * - mouthCues: Array of {start, end, value} for lip sync timeline
- * - modelPath: Path to GLB model file
- * - onModelLoaded: Callback when model is loaded
- * - onError: Callback for errors
- * - onAnimationComplete: Callback when animation completes (optional)
+ * @param {object} props
+ * @param {'idle'|'thinking'|'speaking'|'error'} [props.pipelineState='idle'] - Current pipeline state
+ * @param {string|null} [props.audioUrl] - URL to audio file (when TTS is ready)
+ * @param {Array<{ start: number, end: number, value: string }>} [props.mouthCues] - Lip-sync timeline
+ * @param {string} props.modelPath - Path to GLB model file
+ * @param {() => void} [props.onModelLoaded] - Callback when model is loaded
+ * @param {(err: Error) => void} [props.onError] - Callback for errors
+ * @param {() => void} [props.onAnimationComplete] - Callback when animation completes
  */
 export default function AvatarController({
   pipelineState = 'idle',
@@ -26,18 +87,20 @@ export default function AvatarController({
   onError,
   onAnimationComplete,
 }) {
-  const [currentAnimation, setCurrentAnimation] = useState('idle'); // Start with idle, not greeting
+  const [currentAnimation, setCurrentAnimation] = useState('idle');
   const audioRef = useRef(null);
   const hasGreetedRef = useRef(false);
-  const hasInitializedRef = useRef(false); // Track if we've initialized
+  const hasInitializedRef = useRef(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+
+  const { enqueue, flush } = useAnimationQueue(setCurrentAnimation);
 
   // Use enhanced audio-driven lip sync hook to get morph targets and body motion
   const { morphTargets, bodyMotion } = useAudioDrivenLipSync(audioRef, mouthCues, isPlayingAudio);
 
-  // Map pipeline state to animation state
+  // Map pipeline state to animation state — flushes queue on each state change
   useEffect(() => {
-    // Skip if still in greeting animation
+    // Skip if still in greeting sequence
     if (!hasGreetedRef.current) {
       return;
     }
@@ -45,7 +108,7 @@ export default function AvatarController({
     // If audio is playing, keep speaking animation regardless of pipeline state
     // This fixes the "stands still" bug where avatar stops moving before audio ends
     if (isPlayingAudio) {
-      setCurrentAnimation('speaking');
+      flush('speaking');
       return;
     }
 
@@ -56,23 +119,24 @@ export default function AvatarController({
       error: 'idle',
     };
 
-    const newAnimation = animationMap[pipelineState] || 'idle';
-    setCurrentAnimation(newAnimation);
-  }, [pipelineState, isPlayingAudio]);
+    flush(animationMap[pipelineState] || 'idle');
+  }, [pipelineState, isPlayingAudio, flush]);
 
-  // Handle model loaded - play greeting animation ONCE on first load only
+  // Handle model loaded — queue greeting → idle sequence
   const handleModelLoaded = () => {
-    // Only play greeting on the very first load
     if (!hasInitializedRef.current) {
       hasInitializedRef.current = true;
-      setCurrentAnimation('greeting');
-
-      // After greeting animation (approximately 3 seconds), switch to idle
-      setTimeout(() => {
-        hasGreetedRef.current = true;
-        setCurrentAnimation('idle');
-        onAnimationComplete?.();
-      }, 3000);
+      enqueue([
+        {
+          animation: 'greeting',
+          durationMs: GREETING_DURATION_MS,
+          onComplete: () => {
+            hasGreetedRef.current = true;
+            onAnimationComplete?.();
+          },
+        },
+        { animation: 'idle' },
+      ]);
     }
 
     onModelLoaded?.();
@@ -81,12 +145,10 @@ export default function AvatarController({
   // Handle audio playback when audioUrl is provided
   useEffect(() => {
     if (!audioUrl) {
-      // No audio, stop playing
       setIsPlayingAudio(false);
       return;
     }
 
-    // Create and play audio
     const audio = new Audio(audioUrl);
     audioRef.current = audio;
 
@@ -101,13 +163,12 @@ export default function AvatarController({
         onError?.(err);
       });
 
-    // When audio ends, return to idle
+    // When audio ends, flush to idle
     audio.onended = () => {
       setIsPlayingAudio(false);
-      setCurrentAnimation('idle');
+      flush('idle');
     };
 
-    // Cleanup
     return () => {
       if (audio) {
         audio.pause();
@@ -115,7 +176,7 @@ export default function AvatarController({
         setIsPlayingAudio(false);
       }
     };
-  }, [audioUrl, onError]);
+  }, [audioUrl, onError, flush]);
 
   return (
     <AvatarScene

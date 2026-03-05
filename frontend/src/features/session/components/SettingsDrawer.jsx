@@ -1,14 +1,5 @@
-import { useMemo, useEffect, useRef, useCallback } from 'react';
-import {
-  PiXFill,
-  PiClockFill,
-  PiTrayFill,
-  PiRobotFill,
-  PiUserCircleFill,
-  PiWifiSlashFill,
-  PiSlidersHorizontalFill,
-  PiChatCircleTextFill,
-} from 'react-icons/pi';
+import { useEffect, useRef, useCallback } from 'react';
+import { PiXFill } from 'react-icons/pi';
 import SessionList from './SessionList';
 
 /**
@@ -18,9 +9,6 @@ import SessionList from './SessionList';
  * @param {() => void} props.onClose - Close callback
  * @param {{ id: string, title: string }[]} props.sessions - All chat sessions
  * @param {string} props.currentSessionId - Active session ID
- * @param {{ messages: { role: string }[] }} props.currentSession - Active session data
- * @param {string} props.avatarName - Tutor display name
- * @param {'online'|'offline'|'checking'} props.backendStatus - Server connection status
  * @param {(id: string) => void} props.onSessionSelect - Session switch callback
  * @param {() => void} props.onNewSession - New session callback
  * @param {(id: string) => void} props.onDeleteSession - Delete session callback
@@ -31,19 +19,11 @@ export default function SettingsDrawer({
   onClose,
   sessions,
   currentSessionId,
-  currentSession,
-  avatarName,
-  backendStatus,
   onSessionSelect,
   onNewSession,
   onDeleteSession,
   onRenameClick,
 }) {
-  const userMessageCount = useMemo(
-    () => currentSession.messages.filter((m) => m.role === 'user').length,
-    [currentSession.messages],
-  );
-
   const drawerRef = useRef(null);
 
   // Escape key handler
@@ -92,10 +72,7 @@ export default function SettingsDrawer({
         onKeyDown={handleKeyDown}
       >
         <div className="drawer-header">
-          <div className="drawer-title-group">
-            <PiSlidersHorizontalFill className="drawer-title-icon" />
-            <h2 className="drawer-title" id="settings-drawer-title">Settings</h2>
-          </div>
+          <h2 className="drawer-title" id="settings-drawer-title">Settings</h2>
           <button className="drawer-close" onClick={onClose} aria-label="Close settings">
             <PiXFill />
           </button>
@@ -110,63 +87,14 @@ export default function SettingsDrawer({
             onDeleteSession={onDeleteSession}
             onRenameClick={onRenameClick}
           />
-
-          <div className="drawer-section">
-            <h3 className="drawer-section-title">
-              <PiClockFill /> Current Session
-            </h3>
-            {userMessageCount > 0 ? (
-              <div className="drawer-info-row">
-                <PiChatCircleTextFill className="drawer-info-icon" />
-                <span className="drawer-info-label">Messages</span>
-                <span className="drawer-info-value">{userMessageCount}</span>
-              </div>
-            ) : (
-              <div className="empty-state">
-                <PiTrayFill />
-                <p>No messages yet</p>
-              </div>
-            )}
-          </div>
         </div>
 
         <div className="drawer-footer">
-          <div className="drawer-section">
-            <h3 className="drawer-section-title">
-              <PiRobotFill /> Tutor
-            </h3>
-            <div className="drawer-info-row">
-              <PiUserCircleFill className="drawer-info-icon" />
-              <span className="drawer-info-label">Active tutor</span>
-              <span className="drawer-info-value">{avatarName}</span>
-            </div>
-            <div className="drawer-info-row">
-              <PiWifiSlashFill
-                className="drawer-info-icon"
-                style={{
-                  color: backendStatus === 'offline' ? '#ef4444' : 'var(--success)',
-                }}
-              />
-              <span className="drawer-info-label">Server</span>
-              <span
-                className="drawer-info-value"
-                style={{
-                  color:
-                    backendStatus === 'offline'
-                      ? '#ef4444'
-                      : backendStatus === 'checking'
-                        ? 'var(--warning)'
-                        : 'var(--success)',
-                }}
-              >
-                {backendStatus === 'offline'
-                  ? 'Offline'
-                  : backendStatus === 'checking'
-                    ? 'Checking…'
-                    : 'Online'}
-              </span>
-            </div>
-          </div>
+          <img
+            src="/assets/logo.svg"
+            alt="VirtAI Avatar Chat"
+            className="drawer-brand-logo"
+          />
         </div>
       </div>
     </div>

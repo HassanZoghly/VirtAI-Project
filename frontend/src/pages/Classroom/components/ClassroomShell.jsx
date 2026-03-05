@@ -195,9 +195,6 @@ export default function ClassroomShell() {
         onClose={closeSettings}
         sessions={session.sessions}
         currentSessionId={session.currentSessionId}
-        currentSession={session.currentSession}
-        avatarName={avatarName}
-        backendStatus={connectionState}
         onSessionSelect={session.switchSession}
         onNewSession={session.createNewSession}
         onDeleteSession={session.deleteSession}

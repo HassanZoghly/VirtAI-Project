@@ -151,6 +151,7 @@
   align-items: center;
   gap: 0.75rem;
   z-index: 100;
+  transition: background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
 }
 
 .status-dot {
@@ -159,6 +160,7 @@
   border-radius: 50%;
   background: var(--success, #4caf50);
   animation: pulse 2s ease-in-out infinite;
+  transition: background 0.3s ease;
 }
 
 @keyframes pulse {
@@ -177,21 +179,37 @@
   color: var(--text-primary, #fff);
   font-weight: 500;
   font-size: 0.95rem;
+  transition: color 0.3s ease;
 }
 
-/* Connecting */
-.avatar-status-badge.connecting {
+/* Reconnecting */
+.avatar-status-badge.reconnecting {
   background: linear-gradient(135deg, rgba(255, 152, 0, 0.12) 0%, rgba(255, 152, 0, 0.08) 100%);
   border-color: rgba(255, 152, 0, 0.35);
 }
 
-.avatar-status-badge.connecting .status-text {
+.avatar-status-badge.reconnecting .status-text {
   color: var(--warning, #ff9800);
 }
 
-.status-dot-connecting {
+.status-dot-reconnecting {
   background: var(--warning, #ff9800);
-  animation: pulse 1s ease-in-out infinite;
+  animation: pulse 0.8s ease-in-out infinite;
+}
+
+/* Initializing */
+.avatar-status-badge.initializing {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.12) 0%, rgba(14, 165, 233, 0.08) 100%);
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.avatar-status-badge.initializing .status-text {
+  color: #38bdf8;
+}
+
+.status-dot-initializing {
+  background: #38bdf8;
+  animation: pulse 1.2s ease-in-out infinite;
 }
 
 /* Offline */

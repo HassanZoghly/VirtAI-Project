@@ -37,6 +37,7 @@ interface VoiceModeState {
  * WebSocket client interface (subset needed for voice mode)
  */
 interface WSClient {
+    connectionState?: string;
     isConnected: boolean;
     send: (message: any) => void;
     onMessage: (type: string, handler: (data: any) => void) => () => void;
@@ -485,22 +486,38 @@ export function useVoiceMode(
      * - 11.5: Display reconnection status in UI
      */
     useEffect(() => {
+        const connState = wsClient.connectionState;
+
         // If WebSocket disconnects while listening, stop voice mode
         if (!wsClient.isConnected && micIsListening) {
             if (import.meta.env.DEV) {
                 console.warn('[VoiceMode] WebSocket disconnected, stopping voice mode');
             }
             stopListening();
+
+            const errorMsg = connState === 'reconnecting'
+                ? 'Reconnecting to server\u2026'
+                : 'Connection lost';
+
             setState(prev => ({
                 ...prev,
                 isListening: false,
-                error: 'Connection lost. Reconnecting...',
+                error: errorMsg,
                 errorCode: 'WEBSOCKET_DISCONNECTED',
-                canRetry: true,
+                canRetry: connState !== 'reconnecting',
             }));
         }
 
-        // Clear disconnection error when reconnected
+        // Update error message while reconnecting
+        if (connState === 'reconnecting' && state.errorCode === 'WEBSOCKET_DISCONNECTED') {
+            setState(prev => ({
+                ...prev,
+                error: 'Reconnecting to server\u2026',
+                canRetry: false,
+            }));
+        }
+
+        // Clear disconnection error when fully online
         if (wsClient.isConnected && state.errorCode === 'WEBSOCKET_DISCONNECTED') {
             if (import.meta.env.DEV) {
                 console.log('[VoiceMode] WebSocket reconnected, clearing error');
@@ -512,7 +529,7 @@ export function useVoiceMode(
                 canRetry: false,
             }));
         }
-    }, [wsClient.isConnected, micIsListening, stopListening, state.errorCode]);
+    }, [wsClient.isConnected, wsClient.connectionState, micIsListening, stopListening, state.errorCode]);
 
     /**
      * Cleanup on unmount

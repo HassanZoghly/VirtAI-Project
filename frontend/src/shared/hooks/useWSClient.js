@@ -1,30 +1,47 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 /**
- * WebSocket client hook with automatic reconnection and message queue
+ * Connection states for the WebSocket lifecycle.
  *
- * Features:
- * - Automatic reconnection with exponential backoff (1s, 2s, 4s, 8s, 16s, 30s max)
- * - Message queue for offline messages (sent when reconnected)
- * - Message type validation in development mode
- * - Type-based message handler registration
+ *   offline       – no socket, no reconnect scheduled (initial or gave-up)
+ *   reconnecting  – a reconnect timer is ticking / socket is being created
+ *   initializing  – TCP handshake done (onopen), waiting for first server message
+ *   online        – fully connected and ready
+ */
+export const ConnectionState = Object.freeze({
+  OFFLINE: 'offline',
+  RECONNECTING: 'reconnecting',
+  INITIALIZING: 'initializing',
+  ONLINE: 'online',
+});
+
+/**
+ * Linear backoff: 1 s → 2 s → 3 s → … → 10 s max.
+ */
+const backoffDelay = (attempt) => Math.min((attempt + 1) * 1000, 10_000);
+
+/**
+ * WebSocket client hook with automatic reconnection and connection-state machine.
  *
  * @param {string} url - WebSocket server URL
- * @returns {Object} - { isConnected, send, onMessage, disconnect }
+ * @returns {{ connectionState: string, isConnected: boolean, send: Function, onMessage: Function, disconnect: Function }}
  */
 function useWSClient(url) {
-  const [isConnected, setIsConnected] = useState(false);
+  const [connectionState, setConnectionState] = useState(ConnectionState.OFFLINE);
 
-  // Use refs to avoid stale closures
+  // Derived boolean kept for backward compat
+  const isConnected = connectionState === ConnectionState.ONLINE;
+
   const messageQueue = useRef([]);
   const reconnectAttempts = useRef(0);
   const handlers = useRef({});
   const reconnectTimeoutRef = useRef(null);
   const wsRef = useRef(null);
-  const isIntentionalCloseRef = useRef(false); // Track intentional closes
-  const isConnectingRef = useRef(false); // Prevent multiple simultaneous connections
-  const lastErrorTimeRef = useRef(0); // Throttle error logging
-  const mountIdRef = useRef(Math.random()); // Unique ID per mount to detect stale connections
+  const isIntentionalCloseRef = useRef(false);
+  const isConnectingRef = useRef(false);
+  const lastErrorTimeRef = useRef(0);
+  const mountIdRef = useRef(Math.random());
+  const initTimerRef = useRef(null); // timer for initializing→online transition
 
   const connect = useCallback(() => {
     // STRICT CONNECTION GUARD: Never create new WS if one exists in CONNECTING/OPEN
@@ -51,45 +68,52 @@ function useWSClient(url) {
 
     isConnectingRef.current = true;
     const currentMountId = mountIdRef.current;
-
-    // Generate unique instance ID for this connection
     const instanceId = Math.random().toString(36).substring(7);
+
+    // Only show "reconnecting" if this is a retry (not the very first connect)
+    if (reconnectAttempts.current > 0) {
+      setConnectionState(ConnectionState.RECONNECTING);
+    }
 
     try {
       const socket = new WebSocket(url);
       wsRef.current = socket;
-      socket._mountId = currentMountId; // Tag socket with mount ID
-      socket._instanceId = instanceId; // Tag socket with instance ID
-      isIntentionalCloseRef.current = false; // Reset intentional close flag
+      socket._mountId = currentMountId;
+      socket._instanceId = instanceId;
+      isIntentionalCloseRef.current = false;
 
       if (import.meta.env.DEV) {
         console.debug('[WS] Creating new WebSocket, state: CONNECTING');
       }
 
       socket.onopen = () => {
-        // Ignore if this socket is from a stale instance
         if (socket._instanceId !== instanceId) {
-          if (import.meta.env.DEV) {
-            console.debug('[WS] Ignoring onopen from stale instance');
-          }
+          socket.close();
+          return;
+        }
+        if (socket._mountId !== mountIdRef.current) {
           socket.close();
           return;
         }
 
-        // Ignore if this socket is from a stale mount
-        if (socket._mountId !== mountIdRef.current) {
-          if (import.meta.env.DEV) {
-            console.debug('[WS] Ignoring onopen from stale mount');
-          }
-          socket.close();
-          return;
-        }
+        isConnectingRef.current = false;
 
         if (import.meta.env.DEV) {
-          console.debug('[WS] State transition: CONNECTING → OPEN');
+          console.debug('[WS] State transition: → INITIALIZING');
         }
-        isConnectingRef.current = false;
-        setIsConnected(true);
+
+        // Enter brief "initializing" phase so the UI can show a handshake state
+        setConnectionState(ConnectionState.INITIALIZING);
+
+        // Transition to ONLINE after a short delay (lets the server send 'ready')
+        // If we receive a 'ready' message earlier, we promote immediately.
+        initTimerRef.current = setTimeout(() => {
+          initTimerRef.current = null;
+          setConnectionState((prev) =>
+            prev === ConnectionState.INITIALIZING ? ConnectionState.ONLINE : prev
+          );
+        }, 800);
+
         reconnectAttempts.current = 0;
 
         if (import.meta.env.DEV) {
@@ -97,17 +121,12 @@ function useWSClient(url) {
         }
 
         // Flush message queue
-        if (messageQueue.current.length > 0) {
-          if (import.meta.env.DEV) {
-            console.debug(`[WS] Flushing ${messageQueue.current.length} queued messages`);
-          }
-          while (messageQueue.current.length > 0) {
-            const msg = messageQueue.current.shift();
-            try {
-              socket.send(JSON.stringify(msg));
-            } catch (err) {
-              console.error('[WS] Failed to send queued message:', err);
-            }
+        while (messageQueue.current.length > 0) {
+          const msg = messageQueue.current.shift();
+          try {
+            socket.send(JSON.stringify(msg));
+          } catch (err) {
+            console.error('[WS] Failed to send queued message:', err);
           }
         }
       };
@@ -116,7 +135,6 @@ function useWSClient(url) {
         try {
           const message = JSON.parse(event.data);
 
-          // Validate message type
           if (!message.type) {
             if (import.meta.env.DEV) {
               console.warn('[WS] Invalid message: missing type field', message);
@@ -124,16 +142,27 @@ function useWSClient(url) {
             return;
           }
 
-          // Silently ignore heartbeat and connection messages
-          const ignorableTypes = ['ready', 'pong'];
-          if (ignorableTypes.includes(message.type)) {
+          // 'ready' / 'pong' are control messages — use 'ready' to promote to ONLINE early
+          if (message.type === 'ready') {
+            if (initTimerRef.current) {
+              clearTimeout(initTimerRef.current);
+              initTimerRef.current = null;
+            }
+            setConnectionState(ConnectionState.ONLINE);
             if (import.meta.env.DEV) {
-              console.debug(`[WS] Received ${message.type} message`);
+              console.debug('[WS] Received ready — promoted to ONLINE');
             }
             return;
           }
 
-          // Call registered handlers for this message type
+          if (message.type === 'pong') {
+            if (import.meta.env.DEV) {
+              console.debug('[WS] Received pong');
+            }
+            return;
+          }
+
+          // Dispatch to registered handlers
           const typeHandlers = handlers.current[message.type];
           if (typeHandlers && typeHandlers.size > 0) {
             const data = message.data || message;
@@ -146,10 +175,9 @@ function useWSClient(url) {
         }
       };
 
-      socket.onerror = (error) => {
+      socket.onerror = () => {
         const state = socket.readyState;
 
-        // CRITICAL: Suppress ALL errors during intentional close (StrictMode cleanup)
         if (isIntentionalCloseRef.current) {
           if (import.meta.env.DEV) {
             console.debug(
@@ -167,13 +195,10 @@ function useWSClient(url) {
           );
         }
 
-        // Throttle error logging (max once per 10 seconds to prevent spam)
         const now = Date.now();
-        const shouldLog = now - lastErrorTimeRef.current > 10000;
-
-        if (shouldLog) {
+        if (now - lastErrorTimeRef.current > 10000) {
           if (import.meta.env.DEV) {
-            console.warn('[WS] ⚠️ Backend offline - will retry automatically');
+            console.warn('[WS] ⚠️ Backend offline — will retry automatically');
             console.info(
               '[WS] 💡 Start backend: cd backend && python -m uvicorn app.main:app --reload'
             );
@@ -183,78 +208,62 @@ function useWSClient(url) {
       };
 
       socket.onclose = (event) => {
-        // Ignore if this socket is from a stale instance
-        if (socket._instanceId !== instanceId) {
-          if (import.meta.env.DEV) {
-            console.debug('[WS] Ignoring onclose from stale instance');
-          }
-          return;
-        }
-
-        // Ignore if this socket is from a stale mount
-        if (socket._mountId !== mountIdRef.current) {
-          if (import.meta.env.DEV) {
-            console.debug('[WS] Ignoring onclose from stale mount');
-          }
-          return;
-        }
+        if (socket._instanceId !== instanceId) return;
+        if (socket._mountId !== mountIdRef.current) return;
 
         const wasIntentional = isIntentionalCloseRef.current;
 
         if (import.meta.env.DEV) {
           console.debug(
-            `[WS] State transition: → CLOSED (code: ${event.code}, reason: "${event.reason || 'none'}", intentional: ${wasIntentional})`
+            `[WS] → CLOSED (code: ${event.code}, reason: "${event.reason || 'none'}", intentional: ${wasIntentional})`
           );
         }
 
         isConnectingRef.current = false;
-        setIsConnected(false);
         wsRef.current = null;
 
-        // Don't reconnect if this was an intentional close
+        // Clear initializing timer if still running
+        if (initTimerRef.current) {
+          clearTimeout(initTimerRef.current);
+          initTimerRef.current = null;
+        }
+
         if (wasIntentional) {
-          if (import.meta.env.DEV) {
-            console.debug('[WS] Intentional close, not reconnecting');
-          }
+          setConnectionState(ConnectionState.OFFLINE);
           return;
         }
 
-        // Only reconnect on abnormal close (not 1000 = normal, not 1001 = going away)
+        // Normal close — don't reconnect
         if (event.code === 1000 || event.code === 1001) {
-          if (import.meta.env.DEV) {
-            console.debug('[WS] Normal close, not reconnecting');
-          }
+          setConnectionState(ConnectionState.OFFLINE);
           return;
         }
 
-        // Exponential backoff reconnection capped at 5 seconds (not 30s)
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 5000);
+        // Abnormal close — schedule reconnect with linear backoff
+        const delay = backoffDelay(reconnectAttempts.current);
         reconnectAttempts.current += 1;
 
         if (import.meta.env.DEV) {
-          console.debug(
-            `[WS] Abnormal close, reconnecting in ${delay}ms (attempt ${reconnectAttempts.current})`
-          );
+          console.debug(`[WS] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current})`);
         }
 
-        // Clear any existing reconnect timeout
+        setConnectionState(ConnectionState.RECONNECTING);
+
         if (reconnectTimeoutRef.current) {
           clearTimeout(reconnectTimeoutRef.current);
         }
-
-        // Schedule reconnection
         reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectTimeoutRef.current = null;
           connect();
         }, delay);
       };
     } catch (err) {
       isConnectingRef.current = false;
 
-      // Throttle error logging (max once per 10 seconds)
       const now = Date.now();
       if (now - lastErrorTimeRef.current > 10000) {
         if (import.meta.env.DEV) {
-          console.warn('[WS] ⚠️ Backend offline - will retry automatically');
+          console.warn('[WS] ⚠️ Backend offline — will retry automatically');
           console.info(
             '[WS] 💡 Start backend: cd backend && python -m uvicorn app.main:app --reload'
           );
@@ -262,15 +271,16 @@ function useWSClient(url) {
         lastErrorTimeRef.current = now;
       }
 
-      // Retry connection with backoff
-      const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
+      const delay = backoffDelay(reconnectAttempts.current);
       reconnectAttempts.current += 1;
+
+      setConnectionState(ConnectionState.RECONNECTING);
 
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
-
       reconnectTimeoutRef.current = setTimeout(() => {
+        reconnectTimeoutRef.current = null;
         connect();
       }, delay);
     }
@@ -278,27 +288,26 @@ function useWSClient(url) {
 
   // Initialize connection on mount
   useEffect(() => {
-    // Generate new mount ID for this mount
     mountIdRef.current = Math.random();
-
     connect();
 
-    // Cleanup on unmount
     return () => {
       if (import.meta.env.DEV) {
         console.debug('[WS] Cleanup: marking intentional close');
       }
 
-      isIntentionalCloseRef.current = true; // Mark as intentional close FIRST
-      isConnectingRef.current = false; // Reset connecting flag
+      isIntentionalCloseRef.current = true;
+      isConnectingRef.current = false;
 
-      // Clear reconnect timeout
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
       }
+      if (initTimerRef.current) {
+        clearTimeout(initTimerRef.current);
+        initTimerRef.current = null;
+      }
 
-      // Detach handlers and close socket
       if (wsRef.current) {
         const socket = wsRef.current;
         const state = socket.readyState;
@@ -310,19 +319,14 @@ function useWSClient(url) {
           );
         }
 
-        // Detach all handlers BEFORE closing to prevent events
         socket.onopen = null;
         socket.onmessage = null;
         socket.onerror = null;
         socket.onclose = null;
 
-        // Only close if OPEN or CLOSING (NOT CONNECTING)
-        // This prevents "closed before established" browser error
         if (state === WebSocket.OPEN || state === WebSocket.CLOSING) {
           socket.close(1000, 'Component unmount');
         }
-        // For CONNECTING state, just detach handlers (no close)
-        // This prevents the browser error during React StrictMode cleanup
 
         wsRef.current = null;
       }
@@ -330,60 +334,30 @@ function useWSClient(url) {
   }, [connect]);
 
   /**
-   * Send a message through WebSocket
-   * If disconnected, message is queued for later delivery.
-   * Binary data (ArrayBuffer, Blob, TypedArray) is sent directly as a binary frame.
-   *
-   * @param {Object|ArrayBuffer|Blob} message - Message object or binary data to send
+   * Send a message through WebSocket.
+   * JSON messages are queued when offline; binary data is dropped (time-sensitive).
    */
   const send = useCallback(
     (message) => {
-      if (isConnected && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      const isBinary =
+        message instanceof ArrayBuffer || message instanceof Blob || ArrayBuffer.isView(message);
+
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         try {
-          // Send binary data directly without JSON serialization
-          if (
-            message instanceof ArrayBuffer ||
-            message instanceof Blob ||
-            ArrayBuffer.isView(message)
-          ) {
-            wsRef.current.send(message);
-          } else {
-            wsRef.current.send(JSON.stringify(message));
-          }
+          wsRef.current.send(isBinary ? message : JSON.stringify(message));
         } catch (err) {
           console.error('[WS] Failed to send message:', err);
-          // Queue message if send fails (only queue JSON messages)
-          if (
-            !(
-              message instanceof ArrayBuffer ||
-              message instanceof Blob ||
-              ArrayBuffer.isView(message)
-            )
-          ) {
-            messageQueue.current.push(message);
-          }
+          if (!isBinary) messageQueue.current.push(message);
         }
-      } else {
-        // Queue JSON messages for later (binary data is time-sensitive, drop it)
-        if (
-          !(
-            message instanceof ArrayBuffer ||
-            message instanceof Blob ||
-            ArrayBuffer.isView(message)
-          )
-        ) {
-          messageQueue.current.push(message);
-        }
+      } else if (!isBinary) {
+        messageQueue.current.push(message);
       }
     },
-    [isConnected]
+    [] // no dependency on isConnected — uses wsRef.current.readyState directly
   );
 
   /**
-   * Register a message handler for a specific message type
-   *
-   * @param {string} type - Message type to handle
-   * @param {Function} handler - Handler function (receives message.data)
+   * Register a handler for a specific message type. Returns an unsubscribe function.
    */
   const onMessage = useCallback((type, handler) => {
     if (!handlers.current[type]) {
@@ -391,41 +365,40 @@ function useWSClient(url) {
     }
     handlers.current[type].add(handler);
 
-    // Return cleanup function
     return () => {
       const set = handlers.current[type];
       if (set) {
         set.delete(handler);
-        if (set.size === 0) {
-          delete handlers.current[type];
-        }
+        if (set.size === 0) delete handlers.current[type];
       }
     };
   }, []);
 
   /**
-   * Manually disconnect WebSocket
-   * Prevents automatic reconnection
+   * Manually disconnect. Prevents automatic reconnection.
    */
   const disconnect = useCallback(() => {
-    isIntentionalCloseRef.current = true; // Mark as intentional
+    isIntentionalCloseRef.current = true;
 
-    // Clear reconnect timeout to prevent reconnection
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
+    if (initTimerRef.current) {
+      clearTimeout(initTimerRef.current);
+      initTimerRef.current = null;
+    }
 
-    // Close WebSocket only if OPEN
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.close();
       wsRef.current = null;
     }
 
-    setIsConnected(false);
+    setConnectionState(ConnectionState.OFFLINE);
   }, []);
 
   return {
+    connectionState,
     isConnected,
     send,
     onMessage,

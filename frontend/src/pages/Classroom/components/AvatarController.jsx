@@ -3,6 +3,9 @@ import AvatarScene from './AvatarScene';
 import { GREETING_DURATION_MS } from '../constants';
 import { useAudioDrivenLipSync } from '../../../features/avatar/hooks/useAudioDrivenLipSync';
 
+/** Mandatory silence between consecutive spoken responses (ms). */
+const INTER_RESPONSE_PAUSE_MS = 2500;
+
 /**
  * useAnimationQueue — sequential animation queue with interrupt support.
  *
@@ -93,6 +96,13 @@ export default function AvatarController({
   const hasInitializedRef = useRef(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
 
+  // --- Inter-response pause state ---
+  // Decoupled from the prop so incoming URLs can be queued during the pause.
+  const [currentPlayUrl, setCurrentPlayUrl] = useState(null);
+  const isPausingRef = useRef(false);   // true while the 2.5 s gap is active
+  const pauseTimerRef = useRef(null);
+  const pendingAudioUrlRef = useRef(null); // URL queued during a pause
+
   const { enqueue, flush } = useAnimationQueue(setCurrentAnimation);
 
   // Use enhanced audio-driven lip sync hook to get morph targets and body motion
@@ -142,14 +152,63 @@ export default function AvatarController({
     onModelLoaded?.();
   };
 
-  // Handle audio playback when audioUrl is provided
+  // --- Stage 1: sync the incoming audioUrl prop into internal play state ---
+  // When a new URL arrives during the post-speech pause, it is queued instead
+  // of played immediately. Interruptions (new URL while audio is playing) are
+  // forwarded directly so the avatar reacts without delay.
   useEffect(() => {
     if (!audioUrl) {
+      // Stop everything and clear any pending state
+      setCurrentPlayUrl(null);
+      clearTimeout(pauseTimerRef.current);
+      pauseTimerRef.current = null;
+      isPausingRef.current = false;
+      pendingAudioUrlRef.current = null;
+      return;
+    }
+
+    if (isPausingRef.current) {
+      // Avatar just finished speaking — hold the URL until the pause expires
+      pendingAudioUrlRef.current = audioUrl;
+      return () => {
+        pendingAudioUrlRef.current = null;
+      };
+    }
+
+    setCurrentPlayUrl(audioUrl);
+  }, [audioUrl]);
+
+  // --- Stage 2: begin the mandatory 2.5 s silence after speech ends ---
+  const beginPostSpeechPause = useCallback(() => {
+    isPausingRef.current = true;
+    flush('idle'); // return to natural idle while waiting
+
+    clearTimeout(pauseTimerRef.current);
+    pauseTimerRef.current = setTimeout(() => {
+      isPausingRef.current = false;
+      pauseTimerRef.current = null;
+
+      const pending = pendingAudioUrlRef.current;
+      if (pending) {
+        pendingAudioUrlRef.current = null;
+        setCurrentPlayUrl(pending); // triggers Stage 3 to play the queued response
+      }
+    }, INTER_RESPONSE_PAUSE_MS);
+  }, [flush]);
+
+  // Cleanup pause timer on unmount
+  useEffect(() => {
+    return () => clearTimeout(pauseTimerRef.current);
+  }, []);
+
+  // --- Stage 3: actual audio playback (driven by currentPlayUrl, not the prop) ---
+  useEffect(() => {
+    if (!currentPlayUrl) {
       setIsPlayingAudio(false);
       return;
     }
 
-    const audio = new Audio(audioUrl);
+    const audio = new Audio(currentPlayUrl);
     audioRef.current = audio;
 
     audio
@@ -163,20 +222,19 @@ export default function AvatarController({
         onError?.(err);
       });
 
-    // When audio ends, flush to idle
+    // When speech finishes, start the inter-response pause instead of going
+    // idle immediately — the pause itself transitions to idle via flush().
     audio.onended = () => {
       setIsPlayingAudio(false);
-      flush('idle');
+      beginPostSpeechPause();
     };
 
     return () => {
-      if (audio) {
-        audio.pause();
-        audio.src = '';
-        setIsPlayingAudio(false);
-      }
+      audio.pause();
+      audio.src = '';
+      setIsPlayingAudio(false);
     };
-  }, [audioUrl, onError, flush]);
+  }, [currentPlayUrl, beginPostSpeechPause, onError]);
 
   return (
     <AvatarScene

@@ -3,7 +3,7 @@ import { PiGearFill, PiWifiSlashFill } from 'react-icons/pi';
 import { SCROLL_STICK_THRESHOLD_PX } from '../constants';
 import { getAvatarById } from '../../../data/avatars';
 import Toast from '../../../shared/utils/toast';
-import useWSClient from '../../../shared/hooks/useWSClient';
+import useWSClient, { ConnectionState } from '../../../shared/hooks/useWSClient';
 import useConversationReducer from '../../../shared/hooks/useConversationReducer';
 import useSessionManager from '../../../features/session/hooks/useSessionManager';
 import SettingsDrawer from '../../../features/session/components/SettingsDrawer';
@@ -17,7 +17,7 @@ const AVATAR_MODEL_PATH = '/models/avatar1.glb';
 
 export default function ClassroomShell() {
   const WS_URL = 'ws://localhost:8000/api/v1/ws/avatar1';
-  const { isConnected, send, onMessage } = useWSClient(WS_URL);
+  const { connectionState, isConnected, send, onMessage } = useWSClient(WS_URL);
   const [conversationState, dispatch] = useConversationReducer();
   const session = useSessionManager();
 
@@ -26,7 +26,7 @@ export default function ClassroomShell() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [avatarLoaded, setAvatarLoaded] = useState(false);
-  const [backendStatus, setBackendStatus] = useState('checking');
+
   const [avatarError, setAvatarError] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState('');
 
@@ -96,9 +96,7 @@ export default function ClassroomShell() {
     return () => unsubs.forEach((fn) => fn?.());
   }, [onMessage, dispatch, session.addAssistantMessage, session.addUserMessage, send]);
 
-  useEffect(() => {
-    setBackendStatus(isConnected ? 'online' : 'offline');
-  }, [isConnected]);
+
 
   const avatarData = useMemo(() => {
     try {
@@ -175,14 +173,20 @@ export default function ClassroomShell() {
   );
 
   const avatarName = avatarData?.name || 'AI Tutor';
-  const statusBadgeClass =
-    backendStatus === 'offline' ? 'offline' : backendStatus === 'checking' ? 'connecting' : 'online';
-  const statusLabel =
-    backendStatus === 'offline'
-      ? `${avatarName} — Offline`
-      : backendStatus === 'checking'
-        ? 'Connecting…'
-        : `${avatarName} Online`;
+
+  const statusBadgeClass = {
+    [ConnectionState.OFFLINE]: 'offline',
+    [ConnectionState.RECONNECTING]: 'reconnecting',
+    [ConnectionState.INITIALIZING]: 'initializing',
+    [ConnectionState.ONLINE]: 'online',
+  }[connectionState] || 'offline';
+
+  const statusLabel = {
+    [ConnectionState.OFFLINE]: `${avatarName} — Offline`,
+    [ConnectionState.RECONNECTING]: 'Reconnecting…',
+    [ConnectionState.INITIALIZING]: 'Starting up…',
+    [ConnectionState.ONLINE]: `${avatarName} Online`,
+  }[connectionState] || `${avatarName} — Offline`;
 
   return (
     <div className="classroom-shell">
@@ -193,7 +197,7 @@ export default function ClassroomShell() {
         currentSessionId={session.currentSessionId}
         currentSession={session.currentSession}
         avatarName={avatarName}
-        backendStatus={backendStatus}
+        backendStatus={connectionState}
         onSessionSelect={session.switchSession}
         onNewSession={session.createNewSession}
         onDeleteSession={session.deleteSession}
@@ -210,11 +214,17 @@ export default function ClassroomShell() {
       </button>
 
       <div className={`avatar-status-badge ${statusBadgeClass}`} role="status" aria-live="polite">
-        {backendStatus === 'offline' ? (
+        {connectionState === ConnectionState.OFFLINE ? (
           <PiWifiSlashFill className="status-icon-offline" />
         ) : (
           <span
-            className={`status-dot${backendStatus === 'checking' ? ' status-dot-connecting' : ''}`}
+            className={`status-dot${
+              connectionState === ConnectionState.RECONNECTING
+                ? ' status-dot-reconnecting'
+                : connectionState === ConnectionState.INITIALIZING
+                  ? ' status-dot-initializing'
+                  : ''
+            }`}
           />
         )}
         <span className="status-text">{statusLabel}</span>
@@ -251,8 +261,8 @@ export default function ClassroomShell() {
             onSend={handleSendMessage}
             onKeyDown={onKeyDown}
             textareaRef={textareaRef}
-            backendStatus={backendStatus}
-            wsClient={{ isConnected, send, onMessage }}
+            backendStatus={connectionState}
+            wsClient={{ connectionState, isConnected, send, onMessage }}
             pipelineState={conversationState.pipelineState}
           />
         </div>

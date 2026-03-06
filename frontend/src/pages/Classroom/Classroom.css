@@ -23,8 +23,6 @@
   gap: 1rem;
 }
 
-
-
 .fallback-text {
   color: var(--text-secondary, #b0b0b0);
   font-size: var(--text-md, 1rem);
@@ -87,7 +85,6 @@
 }
 
 @keyframes pulse-opacity {
-
   0%,
   100% {
     opacity: 0.5;
@@ -151,7 +148,10 @@
   align-items: center;
   gap: 0.75rem;
   z-index: 100;
-  transition: background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
+  transition:
+    background 0.4s ease,
+    border-color 0.4s ease,
+    box-shadow 0.4s ease;
 }
 
 .status-dot {
@@ -164,7 +164,6 @@
 }
 
 @keyframes pulse {
-
   0%,
   100% {
     opacity: 1;
@@ -221,7 +220,6 @@
 }
 
 @keyframes offlinePulse {
-
   0%,
   100% {
     box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
@@ -305,8 +303,6 @@
   opacity: 0.55;
   margin-bottom: 0.5rem;
 }
-
-
 
 /* Messages */
 .chat-message-wrapper {
@@ -421,7 +417,6 @@
 }
 
 @keyframes typingBounce {
-
   0%,
   60%,
   100% {
@@ -544,9 +539,11 @@
   height: 40px;
   border-radius: 50%;
   margin-bottom: 4px;
-  background: linear-gradient(135deg,
-      var(--accent-secondary, #d4af37) 0%,
-      var(--accent-primary, #f0c852) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--accent-secondary, #d4af37) 0%,
+    var(--accent-primary, #f0c852) 100%
+  );
   border: none;
   color: #141414;
   display: grid;
@@ -924,7 +921,6 @@
   .welcome-icon {
     font-size: 2.5rem;
   }
-
 
   .message-bubble {
     max-width: 85%;
@@ -1362,9 +1358,11 @@
 }
 
 .modal-btn.confirm {
-  background: linear-gradient(135deg,
-      var(--accent-secondary, #d4af37) 0%,
-      var(--accent-primary, #f0c852) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--accent-secondary, #d4af37) 0%,
+    var(--accent-primary, #f0c852) 100%
+  );
   color: #141414;
   font-weight: 700;
   box-shadow: 0 4px 14px 0 rgba(240, 200, 82, 0.3);
@@ -1448,29 +1446,8 @@
   }
 }
 
-/* Skip-to-content link */
-.skip-link {
-  position: absolute;
-  top: -100%;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--accent-primary, #f0c852);
-  color: var(--primary-bg, #121212);
-  padding: 0.75rem 1.5rem;
-  border-radius: 0 0 8px 8px;
-  font-weight: 600;
-  z-index: 10000;
-  text-decoration: none;
-  transition: top var(--transition-fast, 0.2s) var(--ease-smooth, ease);
-}
-
-.skip-link:focus {
-  top: 0;
-}
-
 /* Motion accessibility */
 @media (prefers-reduced-motion: reduce) {
-
   .status-dot,
   .avatar-status-badge.offline,
   .drawer-content,
@@ -1508,7 +1485,6 @@
 }
 
 @keyframes blink {
-
   0%,
   50% {
     opacity: 1;

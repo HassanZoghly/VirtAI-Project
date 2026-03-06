@@ -1,6 +1,6 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { lazy, Suspense, useEffect, Component } from 'react';
-import { HelmetProvider, Helmet } from 'react-helmet-async';
+import { Component, lazy, Suspense, useEffect } from 'react';
+import { Helmet, HelmetProvider } from 'react-helmet-async';
+import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import './App.css';
 
 const preloadClassroom = () => import('./pages/Classroom/Classroom.jsx');
@@ -40,7 +40,11 @@ class ErrorBoundary extends Component {
 function PageLoader() {
   return (
     <div className="page-loader">
-      <div className="loader"><span></span><span></span><span></span></div>
+      <div className="loader">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
     </div>
   );
 }
@@ -56,8 +60,6 @@ function App() {
         <title>Classroom App</title>
         <meta name="description" content="Interactive learning platform" />
       </Helmet>
-
-      <a href="#main-content" className="skip-link">Skip to main content</a>
 
       <Router future={ROUTER_FUTURE}>
         <div className="app">

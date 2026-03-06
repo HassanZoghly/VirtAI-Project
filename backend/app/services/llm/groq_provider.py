@@ -79,14 +79,23 @@ class GroqLLMProvider(BaseLLMProvider):
     def _extract_usage(self, chunk) -> dict | None:
         """Extracts token usage from the final streaming chunk."""
         try:
-            usage = getattr(chunk, "x_groq", None)
-            if usage and hasattr(usage, "usage"):
-                u = usage.usage
-                return {
-                    "prompt_tokens": getattr(u, "prompt_tokens", 0),
-                    "completion_tokens": getattr(u, "completion_tokens", 0),
-                    "total_tokens": getattr(u, "total_tokens", 0),
-                }
+            u = None
+            # Legacy path: chunk.x_groq.usage
+            x_groq = getattr(chunk, "x_groq", None)
+            if x_groq and hasattr(x_groq, "usage"):
+                u = x_groq.usage
+            # Current SDK path: chunk.usage directly
+            if u is None:
+                raw = getattr(chunk, "usage", None)
+                if raw is not None:
+                    u = raw
+            if u is None:
+                return None
+            return {
+                "prompt_tokens": getattr(u, "prompt_tokens", 0),
+                "completion_tokens": getattr(u, "completion_tokens", 0),
+                "total_tokens": getattr(u, "total_tokens", 0),
+            }
         except Exception:
             pass
         return None
@@ -123,6 +132,7 @@ class GroqLLMProvider(BaseLLMProvider):
         usage: dict | None = None
         start_time = time.perf_counter()
         token_count = 0
+        sentence_count = 0
         logger.info(
             f"LLM stream start | "
             f"model={self.model} | "
@@ -166,6 +176,7 @@ class GroqLLMProvider(BaseLLMProvider):
                 # Feed into sentence splitter
                 sentence = splitter.feed(token)
                 if sentence:
+                    sentence_count += 1
                     logger.debug(f"Sentence ready | len={len(sentence)} | '{sentence[:40]}...'")
 
                     # Optional callback
@@ -181,6 +192,7 @@ class GroqLLMProvider(BaseLLMProvider):
         # ── Flush remaining buffer ────────────────────────────────────────────
         remainder = splitter.flush()
         if remainder:
+            sentence_count += 1
             logger.debug(f"Flushing remainder | len={len(remainder)} | '{remainder[:40]}'")
             if on_sentence:
                 on_sentence(remainder)
@@ -193,7 +205,7 @@ class GroqLLMProvider(BaseLLMProvider):
             f"LLM stream done | "
             f"tokens={token_count} | "
             f"elapsed={elapsed_ms:.0f}ms | "
-            f"sentences={len(full_text)}"
+            f"sentences={sentence_count}"
         )
         yield LLMChunk(token="", is_done=True)
 

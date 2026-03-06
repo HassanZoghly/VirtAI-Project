@@ -11,13 +11,22 @@ from __future__ import annotations
 
 import io
 import time
+import wave
 
+import numpy as np
 from groq import AsyncGroq
 from loguru import logger
 
 from app.core.config import get_settings
 from app.core.errors import ASRException
-from app.services.asr.base import ASRResult, ASRSegment, BaseASRProvider, WordTimestamp
+from app.services.asr.base import (
+    ASRResult,
+    ASRSegment,
+    BaseASRProvider,
+    StreamingASRResult,
+    StreamingASRService,
+    WordTimestamp,
+)
 
 settings = get_settings()
 
@@ -40,7 +49,7 @@ def validate_audio_size(audio_bytes: bytes) -> None:
         )
 
 
-class GroqWhisperASR(BaseASRProvider):
+class GroqWhisperASR(BaseASRProvider, StreamingASRService):
     """
     ASR using Groq's Whisper API.
 
@@ -261,6 +270,38 @@ class GroqWhisperASR(BaseASRProvider):
         combined = b"".join(audio_chunks)
         logger.debug(f"Joining {len(audio_chunks)} chunks → " f"{len(combined):,} bytes total")
         return await self.transcribe(combined, audio_format, language)
+
+    async def transcribe_stream(
+        self,
+        audio_data: np.ndarray,
+        sample_rate: int = 16000,
+    ) -> StreamingASRResult:
+        """
+        Streaming ASR: accepts float32 numpy audio, converts to WAV,
+        and transcribes via Groq Whisper API.
+
+        Args:
+            audio_data: float32 numpy array in [-1.0, 1.0]
+            sample_rate: sample rate in Hz (default 16000)
+        """
+        # Convert float32 [-1,1] → int16 PCM
+        pcm_int16 = (audio_data * 32767).clip(-32768, 32767).astype(np.int16)
+
+        # Write WAV into memory buffer
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(pcm_int16.tobytes())
+        wav_bytes = buf.getvalue()
+
+        result = await self.transcribe(wav_bytes, audio_format="wav")
+        return StreamingASRResult(
+            transcript=result.transcript,
+            confidence=result.confidence,
+            language=result.language,
+        )
 
     async def is_available(self) -> bool:
         """

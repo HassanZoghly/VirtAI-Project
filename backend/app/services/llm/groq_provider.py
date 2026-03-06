@@ -16,6 +16,7 @@ from collections.abc import AsyncGenerator, Callable
 from groq import AsyncGroq
 from loguru import logger
 
+from app.core.config import get_settings
 from app.core.errors import LLMException
 from app.services.llm.base import (
     BaseLLMProvider,
@@ -53,13 +54,15 @@ class GroqLLMProvider(BaseLLMProvider):
             model: Model identifier (e.g., "llama-3.3-70b-versatile")
             max_tokens: Maximum tokens to generate
             temperature: Sampling temperature (0.0 to 2.0)
-            api_key: Groq API key (required)
+            api_key: Groq API key (optional, falls back to settings.GROQ_API_KEY)
 
         Raises:
-            ValueError: If api_key is not provided
+            ValueError: If api_key is not provided and not in settings
         """
+        settings = get_settings()
+        api_key = api_key or settings.GROQ_API_KEY
         if not api_key:
-            raise ValueError("api_key is required for GroqLLMProvider")
+            raise ValueError("api_key is required for GroqLLMProvider. Set GROQ_API_KEY in .env")
 
         self.model = model
         self.max_tokens = max_tokens

@@ -51,11 +51,6 @@ class Settings(BaseSettings):
     ASR_LANGUAGE: str = "en"
     ASR_RESPONSE_FORMAT: str = "verbose_json"  # for timestamps
 
-    # ASR (faster-whisper for streaming)
-    ASR_MODEL_SIZE: str = "base"  # tiny, base, small, medium, large
-    ASR_DEVICE: str = "cpu"  # cpu or cuda
-    ASR_COMPUTE_TYPE: str = "int8"  # int8, float16, float32
-    ASR_BEAM_SIZE: int = 5
     MAX_AUDIO_BUFFER_SIZE: int = 10485760  # 10MB in bytes
     AUDIO_CHUNK_TIMEOUT: int = 30  # seconds
 

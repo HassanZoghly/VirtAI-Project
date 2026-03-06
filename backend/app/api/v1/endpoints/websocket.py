@@ -59,7 +59,7 @@ from app.schemas.ws_messages import (
 from app.services.pipeline.events import PipelineEvent, PipelineEventType
 from app.services.pipeline.session_manager import Session
 from app.websocket.voice_mode_handler import VoiceModeHandler
-from app.services.asr.faster_whisper import FasterWhisperASR
+from app.services.asr.groq_whisper import GroqWhisperASR
 from app.core.config import get_settings
 
 
@@ -264,13 +264,8 @@ class WebSocketHandler:
             VoiceModeHandler instance for this session
         """
         if self._voice_mode_handler is None:
-            # Initialize ASR service (lazy loading) with centralized config
-            settings = get_settings()
-            asr_service = FasterWhisperASR(
-                model_size=settings.ASR_MODEL_SIZE,
-                device=settings.ASR_DEVICE,
-                compute_type=settings.ASR_COMPUTE_TYPE,
-            )
+            # Initialize ASR service (lazy loading)
+            asr_service = GroqWhisperASR()
 
             # Create voice mode handler
             self._voice_mode_handler = VoiceModeHandler(

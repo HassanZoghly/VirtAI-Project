@@ -3,11 +3,11 @@ import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
 
 import CircuitLines from '@/shared/ui/CircuitLines';
+import AIPipelineVisualizer from './AIPipelineVisualizer';
 import DemoPreview from './DemoPreview';
 import FeaturesSection from './FeaturesSection';
 import Footer from './Footer';
 import HeroSection from './HeroSection';
-import HowItWorks from './HowItWorks';
 import SplashScreen from './SplashScreen';
 import StatsSection from './StatsSection';
 import TechStackSection from './TechStackSection';
@@ -46,7 +46,7 @@ export default function OverviewPage() {
 
         <HeroSection onCTA={handleCTA} />
         <FeaturesSection />
-        <HowItWorks />
+        <AIPipelineVisualizer />
         <TechStackSection />
         <StatsSection />
         <DemoPreview />

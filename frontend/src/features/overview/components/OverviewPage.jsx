@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
 
-import CircuitLines from '@/shared/ui/CircuitLines';
 import AIPipelineVisualizer from './AIPipelineVisualizer';
+import CircuitBoardBackground from './CircuitBoardBackground';
 import DemoPreview from './DemoPreview';
 import FeaturesSection from './FeaturesSection';
 import Footer from './Footer';
@@ -42,7 +42,7 @@ export default function OverviewPage() {
           transition: 'opacity 0.6s ease',
         }}
       >
-        <CircuitLines />
+        <CircuitBoardBackground />
 
         <HeroSection onCTA={handleCTA} />
         <FeaturesSection />

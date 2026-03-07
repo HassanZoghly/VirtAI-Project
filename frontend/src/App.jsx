@@ -1,11 +1,12 @@
 import { Component, lazy, Suspense, useEffect } from 'react';
 import { Helmet, HelmetProvider } from 'react-helmet-async';
-import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
+import { Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import './App.css';
 
 const preloadClassroom = () => import('./pages/Classroom/Classroom.jsx');
 const Classroom = lazy(preloadClassroom);
 const Overview = lazy(() => import('@/features/overview/components/OverviewPage'));
+const NotFound = lazy(() => import('./pages/NotFound/NotFound.jsx'));
 
 const ROUTER_FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true };
 
@@ -69,7 +70,7 @@ function App() {
               <Routes>
                 <Route path="/" element={<Overview />} />
                 <Route path="/classroom" element={<Classroom />} />
-                <Route path="*" element={<Navigate to="/classroom" replace />} />
+                <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
           </ErrorBoundary>

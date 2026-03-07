@@ -8,6 +8,7 @@ import DemoPreview from './DemoPreview';
 import FeaturesSection from './FeaturesSection';
 import Footer from './Footer';
 import HeroSection from './HeroSection';
+import Navbar from './Navbar';
 import SplashScreen from './SplashScreen';
 import StatsSection from './StatsSection';
 import TechStackSection from './TechStackSection';
@@ -43,6 +44,7 @@ export default function OverviewPage() {
         }}
       >
         <CircuitBoardBackground />
+        <Navbar />
 
         <HeroSection onCTA={handleCTA} />
         <FeaturesSection />

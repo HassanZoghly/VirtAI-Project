@@ -4,7 +4,7 @@ import features from '../data/features';
 
 export default function FeaturesSection() {
   return (
-    <section className="relative mx-auto max-w-6xl px-6 py-28">
+    <section id="features" className="relative mx-auto max-w-6xl px-6 py-28">
       <motion.div
         className="mb-14 text-center"
         initial={{ opacity: 0, y: 20 }}

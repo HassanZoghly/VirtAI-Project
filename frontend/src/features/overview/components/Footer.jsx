@@ -3,7 +3,7 @@ import team from '../data/team';
 
 export default function Footer() {
   return (
-    <footer className="border-t border-white/10 bg-dark px-6 py-20">
+    <footer id="team" className="border-t border-white/10 bg-dark px-6 py-20">
       <div className="mx-auto max-w-5xl">
         <motion.h3
           className="mb-12 text-center text-3xl font-bold text-offwhite sm:text-4xl"

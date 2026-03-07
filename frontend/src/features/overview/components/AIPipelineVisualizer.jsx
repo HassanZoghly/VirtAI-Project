@@ -164,6 +164,8 @@ export default function AIPipelineVisualizer() {
       setScrollProgress(scrollDeltaRef.current / MAX_SCROLL);
       if (scrollDeltaRef.current >= MAX_SCROLL) {
         unlock();
+      } else if (scrollDeltaRef.current <= 0) {
+        unlock();
       }
     }
 
@@ -215,6 +217,7 @@ export default function AIPipelineVisualizer() {
 
   return (
     <section
+      id="workflow"
       ref={containerRef}
       className="relative flex h-screen w-full select-none flex-col items-center justify-center overflow-hidden bg-dark px-6"
     >

@@ -3,7 +3,7 @@ import techStack from '../data/techStack';
 
 export default function TechStackSection() {
   return (
-    <section className="relative mx-auto max-w-5xl px-6 py-28">
+    <section id="tech-stack" className="relative mx-auto max-w-5xl px-6 py-28">
       <motion.h3
         className="mb-14 text-center text-4xl font-bold text-offwhite sm:text-5xl"
         initial={{ opacity: 0, y: 20 }}

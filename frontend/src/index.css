@@ -1,3 +1,12 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-dark: #1a1a1a;
+  --color-crimson: #6d001a;
+  --color-gold: #b5ac8a;
+  --color-offwhite: #f5f1ec;
+}
+
 :root {
   /* Fonts */
   --font-body: 'Google Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
@@ -30,6 +39,12 @@
   --success: #4caf50;
   --warning: #ff9800;
   --error: #f44336;
+
+  /* Overview palette */
+  --color-dark: #1a1a1a;
+  --color-crimson: #6d001a;
+  --color-gold: #b5ac8a;
+  --color-offwhite: #f5f1ec;
 
   /* Transitions */
   --transition-fast: 0.2s;

@@ -5,6 +5,7 @@ import './App.css';
 
 const preloadClassroom = () => import('./pages/Classroom/Classroom.jsx');
 const Classroom = lazy(preloadClassroom);
+const Overview = lazy(() => import('@/features/overview/components/OverviewPage'));
 
 const ROUTER_FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true };
 
@@ -66,7 +67,7 @@ function App() {
           <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
               <Routes>
-                <Route path="/" element={<Navigate to="/classroom" replace />} />
+                <Route path="/" element={<Overview />} />
                 <Route path="/classroom" element={<Classroom />} />
                 <Route path="*" element={<Navigate to="/classroom" replace />} />
               </Routes>

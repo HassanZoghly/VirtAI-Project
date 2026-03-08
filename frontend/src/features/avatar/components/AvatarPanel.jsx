@@ -1,6 +1,8 @@
 import { lazy, Suspense } from 'react';
 
-const AvatarController = lazy(() => import('../../../pages/Classroom/components/AvatarController.jsx'));
+const AvatarController = lazy(
+  () => import('../../../pages/Classroom/components/AvatarController.jsx')
+);
 
 /**
  * Avatar viewport panel with loading indicator and lazy-loaded AvatarController.
@@ -12,7 +14,8 @@ const AvatarController = lazy(() => import('../../../pages/Classroom/components/
  * @param {string|null} props.audioUrl - TTS audio URL when speaking
  * @param {{ start: number, end: number, value: number }[]} props.mouthCues - Lip sync timeline
  * @param {() => void} props.onModelLoaded - Model loaded callback
- * @param {(error: Error) => void} props.onError - Error callback
+ * @param {(error: Error) => void} props.onError
+ * @param {object|null} props.emotionData - Emotion data from AI response - Error callback
  */
 export default function AvatarPanel({
   modelPath,
@@ -23,12 +26,22 @@ export default function AvatarPanel({
   mouthCues,
   onModelLoaded,
   onError,
+  emotionData,
 }) {
   return (
     <div className="avatar-panel" style={{ background: avatarLoaded ? '#333' : '' }}>
       {!avatarLoaded && !avatarError && (
-        <div className="avatar-skeleton-container" role="status" aria-busy="true" aria-label="Loading avatar">
-          <div className="loader"><span></span><span></span><span></span></div>
+        <div
+          className="avatar-skeleton-container"
+          role="status"
+          aria-busy="true"
+          aria-label="Loading avatar"
+        >
+          <div className="loader">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
           <span className="avatar-skeleton-label">Loading avatar…</span>
         </div>
       )}
@@ -42,6 +55,7 @@ export default function AvatarPanel({
             mouthCues={mouthCues}
             onModelLoaded={onModelLoaded}
             onError={onError}
+            emotionData={emotionData}
           />
         </Suspense>
       </div>

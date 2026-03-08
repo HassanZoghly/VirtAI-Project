@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import AvatarScene from './AvatarScene';
-import { GREETING_DURATION_MS } from '../constants';
 import { useAudioDrivenLipSync } from '../../../features/avatar/hooks/useAudioDrivenLipSync';
+import { GREETING_DURATION_MS } from '../constants';
+import AvatarScene from './AvatarScene';
 
 /** Mandatory silence between consecutive spoken responses (ms). */
 const INTER_RESPONSE_PAUSE_MS = 2500;
@@ -42,21 +42,27 @@ function useAnimationQueue(setAnimation) {
     // If no duration, the item stays active until flush() or next enqueue with advance
   }, [setAnimation]);
 
-  const enqueue = useCallback((items) => {
-    const list = Array.isArray(items) ? items : [items];
-    queueRef.current.push(...list);
-    if (!processingRef.current) {
-      processNext();
-    }
-  }, [processNext]);
+  const enqueue = useCallback(
+    (items) => {
+      const list = Array.isArray(items) ? items : [items];
+      queueRef.current.push(...list);
+      if (!processingRef.current) {
+        processNext();
+      }
+    },
+    [processNext]
+  );
 
-  const flush = useCallback((animation) => {
-    clearTimeout(timerRef.current);
-    timerRef.current = null;
-    queueRef.current = [];
-    processingRef.current = false;
-    setAnimation(animation);
-  }, [setAnimation]);
+  const flush = useCallback(
+    (animation) => {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+      queueRef.current = [];
+      processingRef.current = false;
+      setAnimation(animation);
+    },
+    [setAnimation]
+  );
 
   // Cleanup on unmount
   useEffect(() => {
@@ -89,6 +95,7 @@ export default function AvatarController({
   onModelLoaded,
   onError,
   onAnimationComplete,
+  emotionData,
 }) {
   const [currentAnimation, setCurrentAnimation] = useState('idle');
   const audioRef = useRef(null);
@@ -99,7 +106,7 @@ export default function AvatarController({
   // --- Inter-response pause state ---
   // Decoupled from the prop so incoming URLs can be queued during the pause.
   const [currentPlayUrl, setCurrentPlayUrl] = useState(null);
-  const isPausingRef = useRef(false);   // true while the 2.5 s gap is active
+  const isPausingRef = useRef(false); // true while the 2.5 s gap is active
   const pauseTimerRef = useRef(null);
   const pendingAudioUrlRef = useRef(null); // URL queued during a pause
 
@@ -247,6 +254,7 @@ export default function AvatarController({
       audioRef={audioRef}
       mouthCues={mouthCues}
       isPlaying={isPlayingAudio}
+      emotionData={emotionData}
     />
   );
 }

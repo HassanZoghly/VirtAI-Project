@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * useAudioDrivenLipSync - Enhanced lip sync with audio amplitude fallback
@@ -152,25 +152,24 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
         const activeCue = findActiveCue(mouthCues, currentTime);
 
         if (activeCue) {
-          // Use cue's viseme with full influence, add subtle amplitude layer
-          const baseInfluence = 0.9; // Slightly less than 1.0 to allow amplitude blend
-          const amplitudeLayer = smoothAmplitude * 0.1; // 10% amplitude contribution
+          // Scale viseme influence by audio amplitude so quiet speech = small mouth
+          const amplitudeScale = 0.25 + smoothAmplitude * 0.75; // range [0.25, 1.0]
 
           setMorphTargets({
-            [activeCue.value]: Math.min(baseInfluence + amplitudeLayer, 1.0),
+            [activeCue.value]: Math.min(amplitudeScale, 1.0),
           });
         } else {
-          // Between cues: use amplitude-driven mouth
+          // Between cues: use amplitude-driven mouth (quieter)
           setMorphTargets({
-            viseme_aa: smoothAmplitude * 0.6, // Jaw open
-            viseme_O: smoothAmplitude * 0.3, // Round lips
+            viseme_aa: smoothAmplitude * 0.45,
+            viseme_O: smoothAmplitude * 0.2,
           });
         }
       } else {
         // MODE 2: Pure amplitude-driven lip sync (fallback when no mouthCues)
-        const jawOpen = smoothAmplitude * 0.7; // Primary jaw movement
-        const lipRound = smoothAmplitude * 0.3; // Secondary lip rounding
-        const lipWide = smoothAmplitude * 0.2; // Tertiary lip widening
+        const jawOpen = smoothAmplitude * 0.55; // Primary jaw movement
+        const lipRound = smoothAmplitude * 0.25; // Secondary lip rounding
+        const lipWide = smoothAmplitude * 0.15; // Tertiary lip widening
 
         setMorphTargets({
           viseme_aa: Math.min(jawOpen, 1.0),

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 
 /**
@@ -36,11 +36,6 @@ export function useRealismEnhancements(
   // Refs for morph target meshes
   const headMeshRef = useRef(null);
 
-  // Blink state
-  const nextBlinkTimeRef = useRef(0);
-  const blinkDurationRef = useRef(0);
-  const isBlinkingRef = useRef(false);
-
   // Head bob state
   const headBobPhaseRef = useRef(0);
 
@@ -52,7 +47,9 @@ export function useRealismEnhancements(
 
   // Find bones and meshes on scene load
   useEffect(() => {
-    if (!scene) return;
+    if (!scene) {
+      return;
+    }
 
     scene.traverse((o) => {
       // Find head bone
@@ -143,60 +140,11 @@ export function useRealismEnhancements(
       }
 
       if (maxVowelInfluence > 0) {
-        // Add subtle jaw open coupling
-        enhanced.jawOpen = Math.min((enhanced.jawOpen || 0) + maxVowelInfluence * 0.3, 1.0);
+        // Add subtle jaw open coupling (reduced to prevent exaggerated mouth opening)
+        enhanced.jawOpen = Math.min((enhanced.jawOpen || 0) + maxVowelInfluence * 0.12, 1.0);
       }
 
-      // 3. SUBTLE RANDOM BLINKS
-      if (headMeshRef.current && headMeshRef.current.morphTargetDictionary) {
-        const blinkKeys = Object.keys(headMeshRef.current.morphTargetDictionary).filter(
-          (k) => k.toLowerCase().includes('eyeblink') || k.toLowerCase().includes('blink')
-        );
-
-        if (blinkKeys.length > 0) {
-          // Schedule next blink — slower during thinking for a deliberate, pensive look
-          if (now >= nextBlinkTimeRef.current && !isBlinkingRef.current) {
-            isBlinkingRef.current = true;
-            const isThinking = currentAnimation === 'thinking';
-            blinkDurationRef.current = isThinking
-              ? 120 + Math.random() * 60 // 120-180ms (slower blinks when thinking)
-              : 80 + Math.random() * 40; // 80-120ms (normal)
-            const blinkInterval = isThinking
-              ? 3500 + Math.random() * 4000 // 3.5-7.5s between blinks (less frequent)
-              : 2000 + Math.random() * 4000; // 2-6s between blinks (normal)
-            nextBlinkTimeRef.current = now + blinkDurationRef.current + blinkInterval;
-          }
-
-          // Apply blink
-          if (isBlinkingRef.current) {
-            const blinkProgress =
-              (now -
-                (nextBlinkTimeRef.current -
-                  blinkDurationRef.current -
-                  2000 -
-                  Math.random() * 3000)) /
-              blinkDurationRef.current;
-
-            if (blinkProgress >= 1) {
-              isBlinkingRef.current = false;
-              // Reset blink morphs
-              for (const key of blinkKeys) {
-                enhanced[key] = 0;
-              }
-            } else {
-              // Blink curve: quick close, slower open
-              const blinkValue =
-                blinkProgress < 0.3
-                  ? blinkProgress / 0.3 // Close quickly
-                  : 1 - (blinkProgress - 0.3) / 0.7; // Open slowly
-
-              for (const key of blinkKeys) {
-                enhanced[key] = Math.min(blinkValue, 1.0);
-              }
-            }
-          }
-        }
-      }
+      // 3. BLINKS — handled entirely by AvatarFaceController (removed duplicate system)
 
       // 4. TINY HEAD BOB (Head bone only, never Spine) - DISABLED to prevent ugly motion
       // The head motion is now handled entirely by applySubtleHeadMotion in AvatarScene.jsx
@@ -257,7 +205,9 @@ export function useRealismEnhancements(
  * Find the active mouth cue at current time
  */
 function findActiveCue(mouthCues, currentTime) {
-  if (!mouthCues || mouthCues.length === 0) return null;
+  if (!mouthCues || mouthCues.length === 0) {
+    return null;
+  }
 
   for (const cue of mouthCues) {
     if (currentTime >= cue.start && currentTime < cue.end) {
@@ -271,7 +221,9 @@ function findActiveCue(mouthCues, currentTime) {
  * Find the next mouth cue after current time
  */
 function findNextCue(mouthCues, currentTime) {
-  if (!mouthCues || mouthCues.length === 0) return null;
+  if (!mouthCues || mouthCues.length === 0) {
+    return null;
+  }
 
   for (const cue of mouthCues) {
     if (cue.start > currentTime) {

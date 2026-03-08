@@ -7,6 +7,24 @@ from __future__ import annotations
 
 from app.services.llm.base import ConversationHistory
 
+# ── Emotion Instructions (appended to every avatar prompt) ────────────────────
+EMOTION_INSTRUCTIONS = """
+
+EMOTION TAGGING (mandatory):
+Prefix EVERY response with exactly one emotion tag: [emotion:NAME]
+Choose the most fitting emotion from this list:
+neutral, happy, sad, surprised, angry, thinking, confused, empathetic,
+excited, concerned, reassuring, proud, disappointed, sarcastic, grateful, curious.
+
+Rules:
+- The tag MUST be the very first characters of your response.
+- Use exactly the format [emotion:name] — lowercase, no spaces.
+- Pick the emotion that best matches the TONE of your reply, not the topic.
+- Default to [emotion:neutral] when unsure.
+- Do NOT mention or explain the tag to the user; it is metadata only.
+
+Example: [emotion:happy] Great job! That's the correct answer."""
+
 # ── Avatar Personalities ──────────────────────────────────────────────────────
 AVATAR_PROMPTS: dict[str, str] = {
     "avatar1": """You are an AI educational assistant named "Dr. Omar".
@@ -50,10 +68,10 @@ def get_system_prompt(avatar_id: str | None = None) -> str:
     """
     Returns the system prompt for the given avatar ID.
     Falls back to default if avatar_id is not found.
+    Emotion instructions are appended automatically.
     """
-    if not avatar_id:
-        return DEFAULT_PROMPT
-    return AVATAR_PROMPTS.get(avatar_id, DEFAULT_PROMPT)
+    base = AVATAR_PROMPTS.get(avatar_id, DEFAULT_PROMPT) if avatar_id else DEFAULT_PROMPT
+    return base + EMOTION_INSTRUCTIONS
 
 
 def build_conversation(

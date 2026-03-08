@@ -29,6 +29,7 @@ export default function ClassroomShell() {
 
   const [avatarError, setAvatarError] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState('');
+  const [emotionData, setEmotionData] = useState(null);
 
   const messagesEndRef = useRef(null);
   const chatScrollRef = useRef(null);
@@ -67,6 +68,7 @@ export default function ClassroomShell() {
       onMessage('chat.final', (d) => {
         dispatch({ type: 'CHAT_FINAL', payload: d });
         session.addAssistantMessage(`${d.message_id}-assistant`, d.text);
+        if (d.emotion) setEmotionData({ emotion: d.emotion, timestamp: Date.now() });
       }),
       onMessage('pipeline.state', (d) => dispatch({ type: 'PIPELINE_STATE', payload: d })),
       onMessage('tts.ready', (d) => setAudioUrl(d.audio.url)),
@@ -237,6 +239,7 @@ export default function ClassroomShell() {
           mouthCues={mouthCues}
           onModelLoaded={handleAvatarLoaded}
           onError={handleAvatarError}
+          emotionData={emotionData}
         />
 
         <div className="chat-panel" key={session.currentSessionId}>

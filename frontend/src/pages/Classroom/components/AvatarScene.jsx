@@ -1,9 +1,15 @@
-import React, { Component, Suspense, useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { ContactShadows, Environment, OrbitControls, useFBX, useGLTF } from '@react-three/drei';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { Environment, OrbitControls, useGLTF, useFBX, ContactShadows } from '@react-three/drei';
+import React, { Component, Suspense, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
+import { AvatarFaceController } from '../../../features/avatar/AvatarFaceController';
+import {
+  ANIMATION_METADATA,
+  getTransitionFade,
+  MORPH_SMOOTHING,
+  pickWeightedRandom,
+} from '../../../features/avatar/constants';
 import { useRealismEnhancements } from '../../../features/avatar/hooks/useRealismEnhancements';
-import { MORPH_SMOOTHING, ANIMATION_METADATA, getAnimationsByCategory, getTransitionFade, pickWeightedRandom } from '../../../features/avatar/constants';
 
 const CAMERA_CONFIG = { position: [0, 0.2, 3.6], fov: 45, near: 0.01, far: 100 };
 const GL_CONFIG = { antialias: true, alpha: true, preserveDrawingBuffer: false };
@@ -64,8 +70,13 @@ const ANIMATION_FALLBACK = {
 // Fuzzy animation name matching
 export const ANIMATION_ALIASES = {
   talk: ['talk1', 'talk2', 'talk3', 'talk4', 'talk5', 'talk6', 'talk7'],
-  talk1: ['talk1'], talk2: ['talk2'], talk3: ['talk3'], talk4: ['talk4'],
-  talk5: ['talk5'], talk6: ['talk6'], talk7: ['talk7'],
+  talk1: ['talk1'],
+  talk2: ['talk2'],
+  talk3: ['talk3'],
+  talk4: ['talk4'],
+  talk5: ['talk5'],
+  talk6: ['talk6'],
+  talk7: ['talk7'],
   idle: ['idle', 'standing', 'neutral'],
   greeting: ['greeting', 'wave', 'hello'],
 };
@@ -80,16 +91,18 @@ export function resolveAnimationName(requestedName, availableClips) {
   const requested = requestedName.toLowerCase();
 
   // 1. Exact match (case-insensitive)
-  const exactMatch = availableClips.find(clip => clip.toLowerCase() === requested);
-  if (exactMatch) return exactMatch;
+  const exactMatch = availableClips.find((clip) => clip.toLowerCase() === requested);
+  if (exactMatch) {
+    return exactMatch;
+  }
 
   // 2. Check aliases
   const aliases = ANIMATION_ALIASES[requested] || [requested];
   for (const alias of aliases) {
-    const match = availableClips.find(clip =>
-      clip.toLowerCase().includes(alias.toLowerCase())
-    );
-    if (match) return match;
+    const match = availableClips.find((clip) => clip.toLowerCase().includes(alias.toLowerCase()));
+    if (match) {
+      return match;
+    }
   }
 
   // 3. If only one clip exists, use it (auto-select)
@@ -125,6 +138,7 @@ const AvatarRig = React.memo(function AvatarRig({
   audioRef,
   mouthCues,
   isPlaying,
+  emotionData,
 }) {
   const group = useRef();
   const { scene } = useGLTF(modelPath);
@@ -140,15 +154,18 @@ const AvatarRig = React.memo(function AvatarRig({
   const talk6FBX = useFBX(ANIM.talk6[0].fbx);
   const talk7FBX = useFBX(ANIM.talk7[0].fbx);
 
-  const talkFBXs = useMemo(() => [
-    { name: 'talk1', fbx: talk1FBX },
-    { name: 'talk2', fbx: talk2FBX },
-    { name: 'talk3', fbx: talk3FBX },
-    { name: 'talk4', fbx: talk4FBX },
-    { name: 'talk5', fbx: talk5FBX },
-    { name: 'talk6', fbx: talk6FBX },
-    { name: 'talk7', fbx: talk7FBX },
-  ], [talk1FBX, talk2FBX, talk3FBX, talk4FBX, talk5FBX, talk6FBX, talk7FBX]);
+  const talkFBXs = useMemo(
+    () => [
+      { name: 'talk1', fbx: talk1FBX },
+      { name: 'talk2', fbx: talk2FBX },
+      { name: 'talk3', fbx: talk3FBX },
+      { name: 'talk4', fbx: talk4FBX },
+      { name: 'talk5', fbx: talk5FBX },
+      { name: 'talk6', fbx: talk6FBX },
+      { name: 'talk7', fbx: talk7FBX },
+    ],
+    [talk1FBX, talk2FBX, talk3FBX, talk4FBX, talk5FBX, talk6FBX, talk7FBX]
+  );
 
   // Log loaded FBX data to verify animations are present
   useEffect(() => {
@@ -186,6 +203,10 @@ const AvatarRig = React.memo(function AvatarRig({
     currentYaw: 0,
     currentRoll: 0,
   });
+
+  // Face controller for blink, idle, emotion, speaking
+  const faceControllerRef = useRef(null);
+  const allMorphMeshesRef = useRef([]);
 
   // Use realism enhancements
   const enhancedMorphTargets = useRealismEnhancements(
@@ -232,14 +253,22 @@ const AvatarRig = React.memo(function AvatarRig({
           const morphKeys = Object.keys(o.morphTargetDictionary);
 
           if (import.meta.env.DEV) {
-            console.debug(`[AvatarScene] Mesh "${o.name}" has ${morphKeys.length} morph targets:`, morphKeys);
+            console.debug(
+              `[AvatarScene] Mesh "${o.name}" has ${morphKeys.length} morph targets:`,
+              morphKeys
+            );
           }
 
           // Check if this mesh should be excluded (body/outfit/hair/eyes)
-          const isExcluded = excludedMeshNames.some(excluded => meshName.includes(excluded));
+          const isExcluded = excludedMeshNames.some((excluded) => meshName.includes(excluded));
 
           // Check if this mesh has viseme morph targets
-          const hasVisemes = morphKeys.some(key => key.toLowerCase().startsWith('viseme_') || key.toLowerCase().includes('jaw') || key.toLowerCase().includes('mouth'));
+          const hasVisemes = morphKeys.some(
+            (key) =>
+              key.toLowerCase().startsWith('viseme_') ||
+              key.toLowerCase().includes('jaw') ||
+              key.toLowerCase().includes('mouth')
+          );
 
           if (hasVisemes && !isExcluded) {
             // This is a mouth mesh (Head or Teeth)
@@ -257,7 +286,9 @@ const AvatarRig = React.memo(function AvatarRig({
               }
             }
           } else if (isExcluded && import.meta.env.DEV) {
-            console.debug(`[AvatarScene] ✗ EXCLUDED mesh from lip sync: "${o.name}" (body/outfit/hair/eyes)`);
+            console.debug(
+              `[AvatarScene] ✗ EXCLUDED mesh from lip sync: "${o.name}" (body/outfit/hair/eyes)`
+            );
           }
         }
       }
@@ -280,6 +311,21 @@ const AvatarRig = React.memo(function AvatarRig({
     if (mouthMeshes.length === 0 && import.meta.env.DEV) {
       console.warn('[AvatarScene] ⚠️ No mouth meshes found with viseme morph targets!');
     }
+
+    // Collect ALL meshes with morph targets for face controller
+    const allMorphMeshes = [];
+    scene.traverse((child) => {
+      if ((child.isMesh || child.isSkinnedMesh) && child.morphTargetDictionary) {
+        allMorphMeshes.push(child);
+      }
+    });
+    allMorphMeshesRef.current = allMorphMeshes;
+
+    // Initialize face controller
+    if (!faceControllerRef.current) {
+      faceControllerRef.current = new AvatarFaceController();
+    }
+    faceControllerRef.current.initializeMeshes(allMorphMeshes);
 
     onModelLoaded?.();
   }, [scene, onModelLoaded]);
@@ -312,7 +358,7 @@ const AvatarRig = React.memo(function AvatarRig({
     }
 
     if (import.meta.env.DEV) {
-      console.debug('[AvatarScene] Loaded clips:', result.map(c => c.name).join(', '));
+      console.debug('[AvatarScene] Loaded clips:', result.map((c) => c.name).join(', '));
     }
 
     return result;
@@ -338,8 +384,9 @@ const AvatarRig = React.memo(function AvatarRig({
 
     // Log available clips for debugging
     if (import.meta.env.DEV) {
-      console.debug('[AvatarScene] Available animation clips:',
-        clips.map(c => `${c.name} (${c.duration.toFixed(2)}s)`).join(', ')
+      console.debug(
+        '[AvatarScene] Available animation clips:',
+        clips.map((c) => `${c.name} (${c.duration.toFixed(2)}s)`).join(', ')
       );
     }
 
@@ -407,7 +454,9 @@ const AvatarRig = React.memo(function AvatarRig({
 
     // Compute cross-fade duration from transition type if not explicitly provided
     const fromCategory = ANIMATION_METADATA[currentActionNameRef.current]?.category ?? 'idle';
-    const toCategory = ANIMATION_METADATA[resolvedName]?.category ?? (resolvedName.startsWith('talk') ? 'talk' : resolvedName);
+    const toCategory =
+      ANIMATION_METADATA[resolvedName]?.category ??
+      (resolvedName.startsWith('talk') ? 'talk' : resolvedName);
     const fadeDuration = fade ?? getTransitionFade(fromCategory, toCategory);
 
     next.setLoop(loop, Infinity);
@@ -440,6 +489,29 @@ const AvatarRig = React.memo(function AvatarRig({
     playAction(currentAnimation);
   }, [currentAnimation, scene]);
 
+  // Apply emotion data from AI response to face controller
+  useEffect(() => {
+    if (faceControllerRef.current && emotionData) {
+      faceControllerRef.current.applyAIResponse(emotionData);
+    }
+  }, [emotionData]);
+
+  // Sync speaking state with face controller
+  useEffect(() => {
+    if (faceControllerRef.current) {
+      faceControllerRef.current.setSpeaking(!!isPlaying);
+    }
+  }, [isPlaying]);
+
+  // Cleanup face controller timers on unmount
+  useEffect(() => {
+    return () => {
+      if (faceControllerRef.current) {
+        faceControllerRef.current.dispose();
+      }
+    };
+  }, []);
+
   // Update animation mixer and apply enhanced morph targets with realism
   useFrame((_, dt) => {
     // Update animation mixer
@@ -447,7 +519,41 @@ const AvatarRig = React.memo(function AvatarRig({
       mixerRef.current.update(dt);
     }
 
-    // Apply ENHANCED morph targets (with coarticulation, jaw coupling, etc.)
+    // Compute face animation targets (blink, idle, emotion, speaking)
+    let faceMorphs = {};
+    if (faceControllerRef.current) {
+      faceMorphs = faceControllerRef.current.update(dt);
+    }
+
+    // Apply face morphs directly to ALL morph meshes
+    for (const mesh of allMorphMeshesRef.current) {
+      if (!mesh.morphTargetDictionary || !mesh.morphTargetInfluences) {
+        continue;
+      }
+      const dict = mesh.morphTargetDictionary;
+      const infl = mesh.morphTargetInfluences;
+      for (const [name, value] of Object.entries(faceMorphs)) {
+        if (name in dict) {
+          const idx = dict[name];
+          const clamped = Math.max(0, Math.min(1, value));
+          // Blink morphs: write directly — AvatarFaceController already handles easing
+          const isBlink = name === 'eyeBlinkLeft' || name === 'eyeBlinkRight';
+          if (isBlink) {
+            infl[idx] = clamped;
+          } else {
+            // For mouth/jaw/viseme targets, take max of lip-sync and emotion to avoid fighting
+            const isVisemeRelated = name.startsWith('viseme_') || name === 'jawOpen';
+            if (isVisemeRelated) {
+              infl[idx] = Math.max(infl[idx], clamped);
+            } else {
+              infl[idx] = THREE.MathUtils.lerp(infl[idx], clamped, Math.min(dt * 10, 1));
+            }
+          }
+        }
+      }
+    }
+
+    // Apply ENHANCED morph targets — lip-sync (with coarticulation, jaw coupling, etc.)
     if (headMeshRef.current && headMeshRef.current.morphTargetInfluences) {
       applyMorphTargetsSmooth(headMeshRef.current, enhancedMorphTargets);
     }
@@ -457,7 +563,12 @@ const AvatarRig = React.memo(function AvatarRig({
 
     // Apply subtle head motion ONLY (NO spine to prevent body deformation)
     if (isPlaying && headBoneRef.current) {
-      applySubtleHeadMotion(headBoneRef.current, enhancedMorphTargets, dt, headMotionStateRef.current);
+      applySubtleHeadMotion(
+        headBoneRef.current,
+        enhancedMorphTargets,
+        dt,
+        headMotionStateRef.current
+      );
     } else if (currentAnimation === 'thinking' && headBoneRef.current) {
       applyThinkingMotion(headBoneRef.current, dt, headMotionStateRef.current);
     } else if (headBoneRef.current) {
@@ -477,7 +588,7 @@ const AvatarRig = React.memo(function AvatarRig({
  * Apply morph target influences to a mesh with smooth interpolation
  * CRITICAL: This version resets ALL visemes to 0 smoothly to avoid "stuck" expressions
  * and prevents accumulation by clamping all values to [0, 1]
- * 
+ *
  * @param {THREE.Mesh} mesh - The mesh with morph targets (MUST be Head or Teeth only)
  * @param {Object} morphTargets - Object mapping viseme names to influence values (0-1)
  */
@@ -493,7 +604,11 @@ function applyMorphTargetsSmooth(mesh, morphTargets) {
   const visemeIndices = [];
   for (const [name, index] of Object.entries(mesh.morphTargetDictionary)) {
     const nameLower = name.toLowerCase();
-    if (nameLower.startsWith('viseme_') || nameLower.includes('jaw') || nameLower.includes('mouth')) {
+    if (
+      nameLower.startsWith('viseme_') ||
+      nameLower.includes('jaw') ||
+      nameLower.includes('mouth')
+    ) {
       visemeIndices.push(index);
     }
   }
@@ -548,14 +663,16 @@ function applyMorphTargetsSmooth(mesh, morphTargets) {
  * Apply subtle head motion ONLY (NO spine to prevent body deformation)
  * Creates natural head nodding during speech driven by mouth openness
  * SMOOTH CONTINUOUS MOTION - No cuts or snaps!
- * 
+ *
  * @param {THREE.Bone} headBone - Head bone reference
  * @param {Object} morphTargets - Current morph targets (to derive motion from mouth openness)
  * @param {number} deltaTime - Time since last frame (for smooth animation)
  * @param {Object} state - Motion state object (for continuity between frames)
  */
 function applySubtleHeadMotion(headBone, morphTargets, deltaTime, state) {
-  if (!headBone) return;
+  if (!headBone) {
+    return;
+  }
 
   // Update time continuously (no jumps!)
   state.time += deltaTime;
@@ -605,13 +722,15 @@ function applySubtleHeadMotion(headBone, morphTargets, deltaTime, state) {
 
 /**
  * Return head to neutral position smoothly when not speaking
- * 
+ *
  * @param {THREE.Bone} headBone - Head bone reference
  * @param {number} deltaTime - Time since last frame
  * @param {Object} state - Motion state object
  */
 function applyReturnToNeutral(headBone, deltaTime, state) {
-  if (!headBone) return;
+  if (!headBone) {
+    return;
+  }
 
   // Continue time for smooth transition
   state.time += deltaTime;
@@ -648,7 +767,9 @@ function applyReturnToNeutral(headBone, deltaTime, state) {
  * @param {Object} state - Motion state object (for continuity between frames)
  */
 function applyThinkingMotion(headBone, deltaTime, state) {
-  if (!headBone) return;
+  if (!headBone) {
+    return;
+  }
 
   state.time += deltaTime;
 
@@ -697,6 +818,7 @@ const AvatarScene = React.memo(function AvatarScene({
   audioRef,
   mouthCues,
   isPlaying,
+  emotionData,
 }) {
   const loadStartRef = useRef(0);
 
@@ -734,12 +856,7 @@ const AvatarScene = React.memo(function AvatarScene({
       onError={onError}
     >
       <div style={{ width: '100%', height: '100%' }}>
-        <Canvas
-          shadows
-          dpr={[1, 1.5]}
-          camera={CAMERA_CONFIG}
-          gl={GL_CONFIG}
-        >
+        <Canvas shadows dpr={[1, 1.5]} camera={CAMERA_CONFIG} gl={GL_CONFIG}>
           <ambientLight intensity={0.6} />
           <directionalLight position={[4, 6, 4]} intensity={1.0} castShadow />
           <directionalLight position={[-4, 5, -3]} intensity={0.35} />
@@ -758,6 +875,7 @@ const AvatarScene = React.memo(function AvatarScene({
                 audioRef={audioRef}
                 mouthCues={mouthCues}
                 isPlaying={isPlaying}
+                emotionData={emotionData}
               />
             </AvatarErrorBoundary>
           </Suspense>

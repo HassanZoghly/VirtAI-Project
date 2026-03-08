@@ -13,6 +13,7 @@ Architecture:
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from collections.abc import AsyncGenerator
 from typing import Optional
@@ -28,6 +29,26 @@ from app.services.llm.prompt_builder import build_conversation
 from app.services.pipeline.events import PipelineEvent, PipelineEventType, ev
 from app.services.tts.edge_tts_provider import EdgeTTSProvider
 from app.services.tts.tts_utils import audio_to_base64, clean_text_for_tts
+
+_EMOTION_RE = re.compile(r"^\[emotion:(\w+)]\s*")
+_VALID_EMOTIONS = {
+    "neutral",
+    "happy",
+    "sad",
+    "surprised",
+    "angry",
+    "thinking",
+    "confused",
+    "empathetic",
+    "excited",
+    "concerned",
+    "reassuring",
+    "proud",
+    "disappointed",
+    "sarcastic",
+    "grateful",
+    "curious",
+}
 
 # Sentinel to signal the TTS worker that LLM is done
 _LLM_DONE_SENTINEL = None
@@ -326,6 +347,15 @@ class ConversationPipeline:
             # Build full response
             full_response = "".join(full_response_parts).strip()
 
+            # Parse emotion tag from LLM response
+            emotion: str | None = None
+            emotion_match = _EMOTION_RE.match(full_response)
+            if emotion_match:
+                detected = emotion_match.group(1).lower()
+                if detected in _VALID_EMOTIONS:
+                    emotion = detected
+                full_response = _EMOTION_RE.sub("", full_response).strip()
+
             if not full_response:
                 await send_callback(
                     make_error(
@@ -340,7 +370,12 @@ class ConversationPipeline:
 
             # Emit final response
             await send_callback(
-                make_chat_final(session_id=session_id, message_id=message_id, text=full_response)
+                make_chat_final(
+                    session_id=session_id,
+                    message_id=message_id,
+                    text=full_response,
+                    emotion=emotion,
+                )
             )
 
             # Save assistant response to history

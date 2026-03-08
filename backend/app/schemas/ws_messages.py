@@ -152,6 +152,7 @@ class ChatFinal(BaseModel):
     session_id: str = Field(..., description="Session UUID")
     message_id: str = Field(..., description="Message UUID")
     text: str = Field(..., description="Complete response text")
+    emotion: Optional[str] = Field(None, description="Detected emotion from AI response")
 
 
 class PipelineState(BaseModel):
@@ -260,9 +261,11 @@ def make_chat_delta(session_id: str, message_id: str, delta: str) -> ChatDelta:
     return ChatDelta(session_id=session_id, message_id=message_id, delta=delta)
 
 
-def make_chat_final(session_id: str, message_id: str, text: str) -> ChatFinal:
+def make_chat_final(
+    session_id: str, message_id: str, text: str, emotion: Optional[str] = None
+) -> ChatFinal:
     """Create a ChatFinal message."""
-    return ChatFinal(session_id=session_id, message_id=message_id, text=text)
+    return ChatFinal(session_id=session_id, message_id=message_id, text=text, emotion=emotion)
 
 
 def make_pipeline_state(

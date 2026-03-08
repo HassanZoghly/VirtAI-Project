@@ -1,22 +1,26 @@
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PiGearFill, PiWifiSlashFill } from 'react-icons/pi';
-import { SCROLL_STICK_THRESHOLD_PX } from '../constants';
-import { getAvatarById } from '../../../data/avatars';
-import Toast from '../../../shared/utils/toast';
-import useWSClient, { ConnectionState } from '../../../shared/hooks/useWSClient';
-import useConversationReducer from '../../../shared/hooks/useConversationReducer';
-import useSessionManager from '../../../features/session/hooks/useSessionManager';
-import SettingsDrawer from '../../../features/session/components/SettingsDrawer';
-import RenameModal from '../../../features/session/components/RenameModal';
-import MessageList from '../../../features/chat/components/MessageList';
-import ChatInput from '../../../features/chat/components/ChatInput';
+import { getAvatarById, getAvatarModelPath } from '../../../data/avatars';
 import AvatarPanel from '../../../features/avatar/components/AvatarPanel';
+import ChatInput from '../../../features/chat/components/ChatInput';
+import MessageList from '../../../features/chat/components/MessageList';
+import RenameModal from '../../../features/session/components/RenameModal';
+import SettingsDrawer from '../../../features/session/components/SettingsDrawer';
+import useSessionManager from '../../../features/session/hooks/useSessionManager';
+import { loadSetup } from '../../../features/setup/services/setupStorage';
+import useConversationReducer from '../../../shared/hooks/useConversationReducer';
+import useWSClient, { ConnectionState } from '../../../shared/hooks/useWSClient';
+import Toast from '../../../shared/utils/toast';
+import { SCROLL_STICK_THRESHOLD_PX } from '../constants';
 
 const toast = new Toast('tr');
-const AVATAR_MODEL_PATH = '/models/avatar1.glb';
 
 export default function ClassroomShell() {
-  const WS_URL = 'ws://localhost:8000/api/v1/ws/avatar1';
+  const setupConfig = useMemo(() => loadSetup(), []);
+  const activeAvatarId = setupConfig?.avatarId || 'omar';
+  const avatarModelPath = getAvatarModelPath(activeAvatarId);
+  const wsAvatarId = avatarModelPath.split('/').pop().replace('.glb', '');
+  const WS_URL = `ws://localhost:8000/api/v1/ws/${wsAvatarId}`;
   const { connectionState, isConnected, send, onMessage } = useWSClient(WS_URL);
   const [conversationState, dispatch] = useConversationReducer();
   const session = useSessionManager();
@@ -68,7 +72,9 @@ export default function ClassroomShell() {
       onMessage('chat.final', (d) => {
         dispatch({ type: 'CHAT_FINAL', payload: d });
         session.addAssistantMessage(`${d.message_id}-assistant`, d.text);
-        if (d.emotion) setEmotionData({ emotion: d.emotion, timestamp: Date.now() });
+        if (d.emotion) {
+          setEmotionData({ emotion: d.emotion, timestamp: Date.now() });
+        }
       }),
       onMessage('pipeline.state', (d) => dispatch({ type: 'PIPELINE_STATE', payload: d })),
       onMessage('tts.ready', (d) => setAudioUrl(d.audio.url)),
@@ -86,7 +92,7 @@ export default function ClassroomShell() {
             dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
             session.addUserMessage(
               { id: message_id, role: 'user', content: text, timestamp: Date.now() },
-              text,
+              text
             );
             send({ type: 'chat.user_message', data: { message_id, text } });
           }
@@ -98,18 +104,7 @@ export default function ClassroomShell() {
     return () => unsubs.forEach((fn) => fn?.());
   }, [onMessage, dispatch, session.addAssistantMessage, session.addUserMessage, send]);
 
-
-
-  const avatarData = useMemo(() => {
-    try {
-      const saved = localStorage.getItem('virtai-settings');
-      if (!saved) return null;
-      const settings = JSON.parse(saved);
-      return settings?.character ? getAvatarById(settings.character) : null;
-    } catch {
-      return null;
-    }
-  }, []);
+  const avatarData = useMemo(() => getAvatarById(activeAvatarId), [activeAvatarId]);
 
   const handleAvatarError = useCallback(() => setAvatarError(true), []);
   const handleAvatarLoaded = useCallback(() => setAvatarLoaded(true), []);
@@ -119,7 +114,8 @@ export default function ClassroomShell() {
   const handleChatScroll = useCallback(() => {
     const el = chatScrollRef.current;
     if (!el) return;
-    shouldStickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight <= SCROLL_STICK_THRESHOLD_PX;
+    shouldStickToBottom.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight <= SCROLL_STICK_THRESHOLD_PX;
   }, []);
 
   useEffect(() => {
@@ -130,12 +126,11 @@ export default function ClassroomShell() {
   const handleSendMessage = useCallback(() => {
     const text = inputValue.trim();
     if (!text) return;
-
     const message_id = crypto.randomUUID();
     dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
     session.addUserMessage(
       { id: message_id, role: 'user', content: text, timestamp: Date.now() },
-      text,
+      text
     );
     send({ type: 'chat.user_message', data: { message_id, text } });
 
@@ -154,14 +149,14 @@ export default function ClassroomShell() {
       dispatch({ type: 'USER_MESSAGE', payload: { message_id, text: trimmed } });
       session.addUserMessage(
         { id: message_id, role: 'user', content: trimmed, timestamp: Date.now() },
-        trimmed,
+        trimmed
       );
       send({ type: 'chat.user_message', data: { message_id, text: trimmed } });
       if (!isConnected) {
         toast.show('warning', 'Offline', 'Message queued. Will send when connected.', 3000);
       }
     },
-    [isConnected, send, dispatch, session.addUserMessage],
+    [isConnected, send, dispatch, session.addUserMessage]
   );
 
   const onKeyDown = useCallback(
@@ -171,24 +166,26 @@ export default function ClassroomShell() {
         handleSendMessage();
       }
     },
-    [handleSendMessage],
+    [handleSendMessage]
   );
 
   const avatarName = avatarData?.name || 'AI Tutor';
 
-  const statusBadgeClass = {
-    [ConnectionState.OFFLINE]: 'offline',
-    [ConnectionState.RECONNECTING]: 'reconnecting',
-    [ConnectionState.INITIALIZING]: 'initializing',
-    [ConnectionState.ONLINE]: 'online',
-  }[connectionState] || 'offline';
+  const statusBadgeClass =
+    {
+      [ConnectionState.OFFLINE]: 'offline',
+      [ConnectionState.RECONNECTING]: 'reconnecting',
+      [ConnectionState.INITIALIZING]: 'initializing',
+      [ConnectionState.ONLINE]: 'online',
+    }[connectionState] || 'offline';
 
-  const statusLabel = {
-    [ConnectionState.OFFLINE]: `${avatarName} — Offline`,
-    [ConnectionState.RECONNECTING]: 'Reconnecting…',
-    [ConnectionState.INITIALIZING]: 'Starting up…',
-    [ConnectionState.ONLINE]: `${avatarName} Online`,
-  }[connectionState] || `${avatarName} — Offline`;
+  const statusLabel =
+    {
+      [ConnectionState.OFFLINE]: `${avatarName} — Offline`,
+      [ConnectionState.RECONNECTING]: 'Reconnecting…',
+      [ConnectionState.INITIALIZING]: 'Starting up…',
+      [ConnectionState.ONLINE]: `${avatarName} Online`,
+    }[connectionState] || `${avatarName} — Offline`;
 
   return (
     <div className="classroom-shell">
@@ -231,7 +228,7 @@ export default function ClassroomShell() {
 
       <div className="split-container" id="main-content">
         <AvatarPanel
-          modelPath={AVATAR_MODEL_PATH}
+          modelPath={avatarModelPath}
           avatarLoaded={avatarLoaded}
           avatarError={avatarError}
           pipelineState={conversationState.pipelineState}

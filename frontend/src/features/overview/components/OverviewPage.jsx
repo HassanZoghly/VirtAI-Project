@@ -21,7 +21,7 @@ export default function OverviewPage() {
     window.scrollTo(0, 0);
   }, []);
 
-  const handleCTA = () => navigate('/classroom');
+  const handleCTA = () => navigate('/setup');
 
   return (
     <>

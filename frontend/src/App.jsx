@@ -4,7 +4,9 @@ import { Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import './App.css';
 
 const preloadClassroom = () => import('./pages/Classroom/Classroom.jsx');
+const preloadSetup = () => import('./pages/Setup/Setup.jsx');
 const Classroom = lazy(preloadClassroom);
+const Setup = lazy(preloadSetup);
 const Overview = lazy(() => import('@/features/overview/components/OverviewPage'));
 const NotFound = lazy(() => import('./pages/NotFound/NotFound.jsx'));
 
@@ -53,6 +55,7 @@ function PageLoader() {
 
 function App() {
   useEffect(() => {
+    preloadSetup();
     preloadClassroom();
   }, []);
 
@@ -69,6 +72,7 @@ function App() {
             <Suspense fallback={<PageLoader />}>
               <Routes>
                 <Route path="/" element={<Overview />} />
+                <Route path="/setup" element={<Setup />} />
                 <Route path="/classroom" element={<Classroom />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

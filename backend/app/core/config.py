@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     )
 
     # ASR (Whisper via Groq)
-    ASR_MODEL: str = "whisper-large-v3-turbo"
+    ASR_MODEL: str = "whisper-large-v3"
     ASR_LANGUAGE: str = "en"
     ASR_RESPONSE_FORMAT: str = "verbose_json"  # for timestamps
 

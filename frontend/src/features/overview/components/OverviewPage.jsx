@@ -10,7 +10,6 @@ import Footer from './Footer';
 import HeroSection from './HeroSection';
 import Navbar from './Navbar';
 import SplashScreen from './SplashScreen';
-import StatsSection from './StatsSection';
 import TechStackSection from './TechStackSection';
 
 export default function OverviewPage() {
@@ -50,7 +49,6 @@ export default function OverviewPage() {
         <FeaturesSection />
         <AIPipelineVisualizer />
         <TechStackSection />
-        <StatsSection />
         <DemoPreview />
         <Footer />
       </div>

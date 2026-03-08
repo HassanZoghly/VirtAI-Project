@@ -18,9 +18,10 @@ const toast = new Toast('tr');
 export default function ClassroomShell() {
   const setupConfig = useMemo(() => loadSetup(), []);
   const activeAvatarId = setupConfig?.avatarId || 'omar';
+  const activeVoiceId = setupConfig?.voiceId || 'en-US-AriaNeural';
   const avatarModelPath = getAvatarModelPath(activeAvatarId);
   const wsAvatarId = avatarModelPath.split('/').pop().replace('.glb', '');
-  const WS_URL = `ws://localhost:8000/api/v1/ws/${wsAvatarId}`;
+  const WS_URL = `ws://localhost:8000/api/v1/ws/${wsAvatarId}?voice=${encodeURIComponent(activeVoiceId)}`;
   const { connectionState, isConnected, send, onMessage } = useWSClient(WS_URL);
   const [conversationState, dispatch] = useConversationReducer();
   const session = useSessionManager();
@@ -113,19 +114,25 @@ export default function ClassroomShell() {
 
   const handleChatScroll = useCallback(() => {
     const el = chatScrollRef.current;
-    if (!el) return;
+    if (!el) {
+      return;
+    }
     shouldStickToBottom.current =
       el.scrollHeight - el.scrollTop - el.clientHeight <= SCROLL_STICK_THRESHOLD_PX;
   }, []);
 
   useEffect(() => {
-    if (!shouldStickToBottom.current) return;
+    if (!shouldStickToBottom.current) {
+      return;
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [session.currentSession.messages, conversationState.currentMessage, interimTranscript]);
 
   const handleSendMessage = useCallback(() => {
     const text = inputValue.trim();
-    if (!text) return;
+    if (!text) {
+      return;
+    }
     const message_id = crypto.randomUUID();
     dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
     session.addUserMessage(
@@ -135,7 +142,9 @@ export default function ClassroomShell() {
     send({ type: 'chat.user_message', data: { message_id, text } });
 
     setInputValue('');
-    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
     if (!isConnected) {
       toast.show('warning', 'Offline', 'Message queued. Will send when connected.', 3000);
     }
@@ -144,7 +153,9 @@ export default function ClassroomShell() {
   const handleSendText = useCallback(
     (text) => {
       const trimmed = text.trim();
-      if (!trimmed) return;
+      if (!trimmed) {
+        return;
+      }
       const message_id = crypto.randomUUID();
       dispatch({ type: 'USER_MESSAGE', payload: { message_id, text: trimmed } });
       session.addUserMessage(

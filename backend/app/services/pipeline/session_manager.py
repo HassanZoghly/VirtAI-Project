@@ -152,6 +152,7 @@ class SessionManager:
         self,
         session_id: str | None = None,
         avatar_id: str = "avatar1",
+        voice_id: str | None = None,
         on_cleanup: Optional[Callable[[], None]] = None,
         llm_service: Optional[GroqLLMProvider] = None,
         tts_service: Optional[EdgeTTSProvider] = None,
@@ -192,10 +193,19 @@ class SessionManager:
         session.on_cleanup = on_cleanup
         self._sessions[sid] = session
 
+        # Apply per-session voice if provided
+        if voice_id:
+            try:
+                session.pipeline._tts.voice = voice_id
+                logger.info(f"Session TTS voice set | id={sid} | voice={voice_id}")
+            except Exception as e:
+                logger.warning(f"Failed to set TTS voice: {e}")
+
         logger.info(
             f"Session created | "
             f"id={sid} | "
             f"avatar={avatar_id} | "
+            f"voice={voice_id or 'default'} | "
             f"total_active={len(self._sessions)}"
         )
         return session

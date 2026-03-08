@@ -2,7 +2,7 @@
 API v1 Router - registers all endpoints.
 """
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 from loguru import logger
 
 from app.api.v1.dependencies import get_session_manager
@@ -24,14 +24,18 @@ router.include_router(audio_router)
 async def websocket_endpoint(
     websocket: WebSocket,
     avatar_id: str,
+    voice: str = Query(default=""),
     session_manager=Depends(get_session_manager),
 ):
     """
     WebSocket endpoint for real-time communication.
-    URL: ws://localhost:8000/api/v1/ws/{avatar_id}
+    URL: ws://localhost:8000/api/v1/ws/{avatar_id}?voice=en-US-AriaNeural
     Supported avatar_id: avatar1, avatar2, avatar3
     """
-    logger.info(f"[WS] Connection attempt | avatar={avatar_id} | client={websocket.client}")
+    voice_id = voice or settings.TTS_VOICE
+    logger.info(
+        f"[WS] Connection attempt | avatar={avatar_id} | voice={voice_id} | client={websocket.client}"
+    )
 
     # Validate avatar_id
     valid_avatars = set(settings.VALID_AVATAR_IDS)
@@ -50,8 +54,10 @@ async def websocket_endpoint(
 
     # Create session (async)
     try:
-        session = await session_manager.create_session(avatar_id=avatar_id)
-        logger.info(f"[WS] Session created | session_id={session.session_id} | avatar={avatar_id}")
+        session = await session_manager.create_session(avatar_id=avatar_id, voice_id=voice_id)
+        logger.info(
+            f"[WS] Session created | session_id={session.session_id} | avatar={avatar_id} | voice={voice_id}"
+        )
     except Exception as e:
         logger.error(f"[WS] Failed to create session: {e}")
         try:

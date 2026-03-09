@@ -76,6 +76,38 @@ class ServiceUnavailableException(AvatarBaseException):
         )
 
 
+class AuthenticationException(AvatarBaseException):
+    """Raised when authentication fails (invalid credentials, expired token)."""
+
+    def __init__(
+        self,
+        message: str = "Authentication failed",
+        details: dict | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            code="AUTHENTICATION_ERROR",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            details=details,
+        )
+
+
+class AuthorizationException(AvatarBaseException):
+    """Raised when the user lacks permission for the requested action."""
+
+    def __init__(
+        self,
+        message: str = "Insufficient permissions",
+        details: dict | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            code="AUTHORIZATION_ERROR",
+            status_code=status.HTTP_403_FORBIDDEN,
+            details=details,
+        )
+
+
 class WebSocketException(Exception):
     """Custom WebSocket exception"""
 

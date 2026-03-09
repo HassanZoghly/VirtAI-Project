@@ -7,6 +7,7 @@ from loguru import logger
 
 from app.api.v1.dependencies import get_session_manager
 from app.api.v1.endpoints.audio import router as audio_router
+from app.api.v1.endpoints.auth import router as auth_router
 from app.api.v1.endpoints.health import router as health_router
 from app.api.v1.endpoints.websocket import WebSocketHandler
 from app.core.config import get_settings
@@ -18,6 +19,7 @@ router = APIRouter(prefix="/api/v1")
 # HTTP Endpoints
 router.include_router(health_router)
 router.include_router(audio_router)
+router.include_router(auth_router, prefix="/auth", tags=["auth"])
 
 
 @router.websocket("/ws/{avatar_id}")

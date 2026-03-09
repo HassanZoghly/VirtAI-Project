@@ -7,8 +7,10 @@ Refactored to use proper dependency injection instead of singleton pattern.
 from typing import Annotated
 
 from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
+from app.core.database import get_db
 from app.services.pipeline.session_manager import SessionManager
 
 # Application-scoped SessionManager instance
@@ -48,3 +50,4 @@ def get_session_manager() -> SessionManager:
 # Type alias for dependency injection
 SessionManagerDep = Annotated[SessionManager, Depends(get_session_manager)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
+DbDep = Annotated[AsyncSession, Depends(get_db)]

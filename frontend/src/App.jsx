@@ -3,12 +3,17 @@ import { Helmet, HelmetProvider } from 'react-helmet-async';
 import { Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import './App.css';
 
+import { useRestoreSession } from '@/features/auth/hooks/useAuth';
+import ProtectedRoute from '@/shared/components/ProtectedRoute';
+
 const preloadClassroom = () => import('./pages/Classroom/Classroom.jsx');
 const preloadSetup = () => import('./pages/Setup/Setup.jsx');
 const Classroom = lazy(preloadClassroom);
 const Setup = lazy(preloadSetup);
 const Overview = lazy(() => import('@/features/overview/components/OverviewPage'));
 const NotFound = lazy(() => import('./pages/NotFound/NotFound.jsx'));
+const AuthPage = lazy(() => import('@/features/auth/components/AuthPage'));
+const AuthCallbackHandler = lazy(() => import('@/features/auth/components/AuthCallbackHandler'));
 
 const ROUTER_FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true };
 
@@ -54,7 +59,10 @@ function PageLoader() {
 }
 
 function App() {
+  const { restore } = useRestoreSession();
+
   useEffect(() => {
+    restore();
     preloadSetup();
     preloadClassroom();
   }, []);
@@ -72,8 +80,24 @@ function App() {
             <Suspense fallback={<PageLoader />}>
               <Routes>
                 <Route path="/" element={<Overview />} />
-                <Route path="/setup" element={<Setup />} />
-                <Route path="/classroom" element={<Classroom />} />
+                <Route path="/auth" element={<AuthPage />} />
+                <Route path="/auth/callback" element={<AuthCallbackHandler />} />
+                <Route
+                  path="/setup"
+                  element={
+                    <ProtectedRoute>
+                      <Setup />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/classroom"
+                  element={
+                    <ProtectedRoute>
+                      <Classroom />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

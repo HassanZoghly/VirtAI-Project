@@ -96,6 +96,23 @@ class Settings(BaseSettings):
     AUDIO_MAX_DURATION_SEC: int = 30
     AUDIO_SAMPLE_RATE: int = 16000
 
+    # Database
+    DATABASE_PATH: str = "backend/.data/virtai.db"
+
+    # Auth / JWT
+    JWT_SECRET_KEY: str = Field(
+        default="change-me-in-production-use-a-long-random-string",
+        description="Secret key for JWT signing",
+    )
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # Google OAuth
+    GOOGLE_CLIENT_ID: str = Field(default="", description="Google OAuth client ID")
+    GOOGLE_CLIENT_SECRET: str = Field(default="", description="Google OAuth client secret")
+    GOOGLE_REDIRECT_URI: str = "http://localhost:3000/auth/callback"
+
     @property
     def cors_origins(self) -> list[str]:
         if self.ENVIRONMENT == "development":

@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RPM Avatar – Facial Animation Demo</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family:
+          'Segoe UI',
+          system-ui,
+          -apple-system,
+          sans-serif;
+      }
+      #canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+
+      /* Loading overlay */
+      #loading {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #1a1a2e;
+        color: #e0e0e0;
+        z-index: 1000;
+        transition: opacity 0.5s;
+      }
+      #loading.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .spinner {
+        width: 48px;
+        height: 48px;
+        border: 4px solid rgba(255, 255, 255, 0.15);
+        border-top-color: #7c5cbf;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        margin-bottom: 16px;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* UI Panel */
+      #panel {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        width: 280px;
+        background: rgba(26, 26, 46, 0.88);
+        backdrop-filter: blur(12px);
+        border-radius: 14px;
+        padding: 18px;
+        color: #e0e0e0;
+        font-size: 13px;
+        z-index: 100;
+        user-select: none;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+      }
+      #panel h3 {
+        font-size: 14px;
+        margin-bottom: 12px;
+        color: #c4b5fd;
+        letter-spacing: 0.5px;
+      }
+
+      .section-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #9ca3af;
+        margin: 12px 0 6px;
+      }
+
+      .emotion-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+      }
+      .emotion-btn {
+        padding: 7px 4px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.06);
+        color: #d1d5db;
+        cursor: pointer;
+        font-size: 12px;
+        text-align: center;
+        transition: all 0.2s;
+      }
+      .emotion-btn:hover {
+        background: rgba(124, 92, 191, 0.3);
+        border-color: #7c5cbf;
+      }
+      .emotion-btn.active {
+        background: rgba(124, 92, 191, 0.5);
+        border-color: #a78bfa;
+        color: #fff;
+      }
+
+      .slider-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 4px;
+      }
+      .slider-row label {
+        flex: 0 0 70px;
+        font-size: 12px;
+      }
+      .slider-row input[type='range'] {
+        flex: 1;
+        accent-color: #7c5cbf;
+        height: 4px;
+      }
+      .slider-row .val {
+        width: 32px;
+        text-align: right;
+        font-size: 11px;
+        color: #9ca3af;
+      }
+
+      .toggle-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 6px;
+      }
+      .toggle-row input[type='checkbox'] {
+        accent-color: #7c5cbf;
+        width: 15px;
+        height: 15px;
+      }
+      .toggle-row label {
+        font-size: 12px;
+        cursor: pointer;
+      }
+    </style>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://esm.sh/three@0.160.0",
+          "three/addons/": "https://esm.sh/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <!-- Loading overlay -->
+    <div id="loading">
+      <div class="spinner"></div>
+      <div>Loading avatar…</div>
+    </div>
+
+    <!-- Three.js canvas -->
+    <canvas id="canvas"></canvas>
+
+    <!-- Control Panel -->
+    <div id="panel">
+      <h3>Facial Animation</h3>
+
+      <div class="section-label">Emotion</div>
+      <div class="emotion-grid">
+        <button class="emotion-btn active" data-emotion="neutral">Neutral</button>
+        <button class="emotion-btn" data-emotion="happy">Happy</button>
+        <button class="emotion-btn" data-emotion="sad">Sad</button>
+        <button class="emotion-btn" data-emotion="surprised">Surprised</button>
+        <button class="emotion-btn" data-emotion="angry">Angry</button>
+        <button class="emotion-btn" data-emotion="thinking">Thinking</button>
+      </div>
+
+      <div class="section-label">Intensity</div>
+      <div class="slider-row">
+        <label>Strength</label>
+        <input type="range" id="intensitySlider" min="0" max="1" step="0.01" value="1" />
+        <span class="val" id="intensityVal">1.00</span>
+      </div>
+
+      <div class="section-label">Toggles</div>
+      <div class="toggle-row">
+        <input type="checkbox" id="blinkToggle" checked />
+        <label for="blinkToggle">Eye Blink</label>
+      </div>
+      <div class="toggle-row">
+        <input type="checkbox" id="idleToggle" checked />
+        <label for="idleToggle">Idle Expressions</label>
+      </div>
+    </div>
+
+    <script type="module">
+      import * as THREE from 'three';
+      import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+      import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+      // ─── Constants ──────────────────────────────────────────────
+      const AVATAR_URL =
+        'https://models.readyplayer.me/69859ff305b43df7aaf4ee2c.glb?morphTargets=ARKit,Oculus%20Visemes,EyeBlinkLeft,EyeBlinkRight';
+
+      const EMOTION_PRESETS = {
+        neutral: {},
+        happy: {
+          mouthSmileLeft: 0.7,
+          mouthSmileRight: 0.7,
+          eyeSquintLeft: 0.3,
+          eyeSquintRight: 0.3,
+          cheekSquintLeft: 0.4,
+          cheekSquintRight: 0.4,
+        },
+        sad: {
+          mouthFrownLeft: 0.6,
+          mouthFrownRight: 0.6,
+          browInnerUp: 0.7,
+          mouthPressLeft: 0.3,
+          mouthPressRight: 0.3,
+        },
+        surprised: {
+          eyeWideLeft: 0.8,
+          eyeWideRight: 0.8,
+          browInnerUp: 0.6,
+          jawOpen: 0.3,
+          mouthFunnel: 0.2,
+        },
+        angry: {
+          browDownLeft: 0.7,
+          browDownRight: 0.7,
+          eyeSquintLeft: 0.5,
+          eyeSquintRight: 0.5,
+          mouthShrugUpper: 0.4,
+          noseSneerLeft: 0.5,
+          noseSneerRight: 0.5,
+        },
+        thinking: {
+          browDownLeft: 0.1,
+          browInnerUp: 0.4,
+          eyeLookUpLeft: 0.5,
+          eyeLookUpRight: 0.5,
+          mouthLeft: 0.3,
+          mouthPressLeft: 0.3,
+          mouthPressRight: 0.3,
+        },
+      };
+
+      // ─── Blink States ───────────────────────────────────────────
+      const BLINK_IDLE = 0;
+      const BLINK_CLOSING = 1;
+      const BLINK_HOLD = 2;
+      const BLINK_OPENING = 3;
+
+      const BLINK_CLOSE_DUR = 0.08; // 80ms
+      const BLINK_HOLD_DUR = 0.05; // 50ms
+      const BLINK_OPEN_DUR = 0.12; // 120ms
+      const BLINK_MIN_INTERVAL = 8; // seconds
+      const BLINK_MAX_INTERVAL = 12;
+      const DOUBLE_BLINK_CHANCE = 0.2;
+
+      // ─── Easing ─────────────────────────────────────────────────
+      function easeInOutCubic(t) {
+        return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      }
+      function easeIn(t) {
+        return t * t;
+      }
+      function easeOut(t) {
+        return 1 - (1 - t) * (1 - t);
+      }
+
+      // ─── Layered Sine Generator ────────────────────────────────
+      function layeredSine(time, frequencies, amplitudes, phases) {
+        let sum = 0;
+        for (let i = 0; i < frequencies.length; i++) {
+          sum += amplitudes[i] * (Math.sin(time * frequencies[i] + (phases[i] || 0)) * 0.5 + 0.5);
+        }
+        return sum;
+      }
+
+      // ─── AnimationManager ──────────────────────────────────────
+      class AnimationManager {
+        constructor(morphMeshes) {
+          this.meshes = morphMeshes;
+          this.blinkEnabled = true;
+          this.idleEnabled = true;
+          this.elapsedTime = 0;
+
+          // Blink state
+          this.blinkState = BLINK_IDLE;
+          this.blinkTimer = 0;
+          this.blinkProgress = 0;
+          this.blinkValue = 0;
+          this.nextBlinkIn = this._randomBlinkInterval();
+          this.isDoubleBlink = false;
+          this.doubleBlinkQueued = false;
+
+          // Emotion state
+          this.currentEmotion = 'neutral';
+          this.emotionIntensity = 1.0;
+          this.emotionValues = {}; // current static emotion morph values
+          this.transitioning = false;
+          this.transitionFrom = {}; // snapshot of morph values at transition start
+          this.transitionTo = {}; // target morph values
+          this.transitionElapsed = 0;
+          this.transitionDuration = 0.8;
+
+          // Idle channel configs — each has unique frequencies/amplitudes/phases
+          this.idleChannels = {
+            browInnerUp: {
+              freqs: [0.37, 0.83, 1.47],
+              amps: [0.07, 0.05, 0.03],
+              phases: [0, 1.2, 3.7],
+              range: 0.15,
+            },
+            browDownLeft: {
+              freqs: [0.29, 0.71, 1.31],
+              amps: [0.06, 0.05, 0.04],
+              phases: [0.5, 2.1, 4.3],
+              range: 0.15,
+            },
+            browDownRight: {
+              freqs: [0.31, 0.73, 1.29],
+              amps: [0.06, 0.05, 0.04],
+              phases: [0.8, 2.4, 4.1],
+              range: 0.15,
+            },
+            mouthSmileLeft: {
+              freqs: [0.23, 0.61, 1.13],
+              amps: [0.05, 0.03, 0.02],
+              phases: [1.1, 3.3, 5.2],
+              range: 0.1,
+            },
+            mouthSmileRight: {
+              freqs: [0.25, 0.59, 1.17],
+              amps: [0.05, 0.03, 0.02],
+              phases: [1.3, 3.1, 5.5],
+              range: 0.1,
+            },
+            jawOpen: {
+              freqs: [0.19, 0.47, 0.97],
+              amps: [0.015, 0.01, 0.005],
+              phases: [0.7, 2.8, 4.9],
+              range: 0.03,
+            },
+            eyeSquintLeft: {
+              freqs: [0.27, 0.67, 1.21],
+              amps: [0.04, 0.025, 0.015],
+              phases: [1.5, 3.6, 5.8],
+              range: 0.08,
+            },
+            eyeSquintRight: {
+              freqs: [0.28, 0.69, 1.19],
+              amps: [0.04, 0.025, 0.015],
+              phases: [1.7, 3.4, 6.0],
+              range: 0.08,
+            },
+            noseSneerLeft: {
+              freqs: [0.07, 0.19, 0.41],
+              amps: [0.02, 0.01, 0.01],
+              phases: [2.0, 4.5, 6.3],
+              range: 0.04,
+            },
+            noseSneerRight: {
+              freqs: [0.08, 0.21, 0.43],
+              amps: [0.02, 0.01, 0.01],
+              phases: [2.2, 4.7, 6.1],
+              range: 0.04,
+            },
+          };
+        }
+
+        _randomBlinkInterval() {
+          return BLINK_MIN_INTERVAL + Math.random() * (BLINK_MAX_INTERVAL - BLINK_MIN_INTERVAL);
+        }
+
+        // ── Blink System ─────────────────────────────────────────
+        _updateBlink(dt) {
+          if (!this.blinkEnabled) {
+            this.blinkValue = 0;
+            return;
+          }
+
+          switch (this.blinkState) {
+            case BLINK_IDLE:
+              this.nextBlinkIn -= dt;
+              if (this.nextBlinkIn <= 0) {
+                this.blinkState = BLINK_CLOSING;
+                this.blinkTimer = 0;
+                this.doubleBlinkQueued = Math.random() < DOUBLE_BLINK_CHANCE;
+              }
+              this.blinkValue = 0;
+              break;
+
+            case BLINK_CLOSING:
+              this.blinkTimer += dt;
+              if (this.blinkTimer >= BLINK_CLOSE_DUR) {
+                this.blinkState = BLINK_HOLD;
+                this.blinkTimer = 0;
+                this.blinkValue = 1;
+              } else {
+                this.blinkValue = easeIn(this.blinkTimer / BLINK_CLOSE_DUR);
+              }
+              break;
+
+            case BLINK_HOLD:
+              this.blinkTimer += dt;
+              this.blinkValue = 1;
+              if (this.blinkTimer >= BLINK_HOLD_DUR) {
+                this.blinkState = BLINK_OPENING;
+                this.blinkTimer = 0;
+              }
+              break;
+
+            case BLINK_OPENING:
+              this.blinkTimer += dt;
+              if (this.blinkTimer >= BLINK_OPEN_DUR) {
+                this.blinkValue = 0;
+                // Check for double-blink
+                if (this.doubleBlinkQueued && !this.isDoubleBlink) {
+                  this.isDoubleBlink = true;
+                  this.blinkState = BLINK_CLOSING;
+                  this.blinkTimer = 0;
+                } else {
+                  this.blinkState = BLINK_IDLE;
+                  this.blinkTimer = 0;
+                  this.isDoubleBlink = false;
+                  this.doubleBlinkQueued = false;
+                  this.nextBlinkIn = this._randomBlinkInterval();
+                }
+              } else {
+                this.blinkValue = 1 - easeOut(this.blinkTimer / BLINK_OPEN_DUR);
+              }
+              break;
+          }
+        }
+
+        // ── Idle Micro-Expressions ───────────────────────────────
+        _computeIdle() {
+          const values = {};
+          if (!this.idleEnabled) return values;
+
+          const idleMult = this.currentEmotion !== 'neutral' ? 0.5 : 1.0;
+
+          for (const [name, cfg] of Object.entries(this.idleChannels)) {
+            const raw = layeredSine(this.elapsedTime, cfg.freqs, cfg.amps, cfg.phases);
+            values[name] = ((raw * cfg.range) / cfg.amps.reduce((a, b) => a + b, 0)) * idleMult;
+          }
+          return values;
+        }
+
+        // ── Emotion System ───────────────────────────────────────
+        setEmotion(name, intensity = 1.0, duration = 0.8) {
+          if (!EMOTION_PRESETS[name]) return;
+
+          // Snapshot current effective emotion values as "from"
+          this.transitionFrom = { ...this.emotionValues };
+          this.currentEmotion = name;
+          this.emotionIntensity = intensity;
+
+          // Compute "to" values
+          this.transitionTo = {};
+          const preset = EMOTION_PRESETS[name];
+          for (const [key, val] of Object.entries(preset)) {
+            this.transitionTo[key] = val * intensity;
+          }
+
+          // Ensure any morph targets in "from" that aren't in "to" transition to 0
+          for (const key of Object.keys(this.transitionFrom)) {
+            if (!(key in this.transitionTo)) {
+              this.transitionTo[key] = 0;
+            }
+          }
+          // Ensure any morph targets in "to" that aren't in "from" start from current or 0
+          for (const key of Object.keys(this.transitionTo)) {
+            if (!(key in this.transitionFrom)) {
+              this.transitionFrom[key] = 0;
+            }
+          }
+
+          this.transitionElapsed = 0;
+          this.transitionDuration = duration;
+          this.transitioning = true;
+        }
+
+        _updateEmotion(dt) {
+          if (!this.transitioning) return;
+
+          this.transitionElapsed += dt;
+          const t = Math.min(this.transitionElapsed / this.transitionDuration, 1);
+          const eased = easeInOutCubic(t);
+
+          const merged = {};
+          const allKeys = new Set([
+            ...Object.keys(this.transitionFrom),
+            ...Object.keys(this.transitionTo),
+          ]);
+          for (const key of allKeys) {
+            const from = this.transitionFrom[key] || 0;
+            const to = this.transitionTo[key] || 0;
+            merged[key] = from + (to - from) * eased;
+          }
+          this.emotionValues = merged;
+
+          if (t >= 1) {
+            this.transitioning = false;
+            // Clean up zero values
+            for (const key of Object.keys(this.emotionValues)) {
+              if (Math.abs(this.emotionValues[key]) < 0.001) {
+                delete this.emotionValues[key];
+              }
+            }
+          }
+        }
+
+        // ── Main update ──────────────────────────────────────────
+        update(dt) {
+          this.elapsedTime += dt;
+
+          // Update subsystems
+          this._updateBlink(dt);
+          this._updateEmotion(dt);
+          const idleValues = this._computeIdle();
+
+          // Merge all channels: idle + emotion + blink
+          const final = {};
+
+          // Start with idle
+          for (const [key, val] of Object.entries(idleValues)) {
+            final[key] = val;
+          }
+
+          // Add emotion
+          for (const [key, val] of Object.entries(this.emotionValues)) {
+            final[key] = (final[key] || 0) + val;
+          }
+
+          // Add blink
+          if (this.blinkEnabled && this.blinkValue > 0) {
+            final['eyeBlinkLeft'] = (final['eyeBlinkLeft'] || 0) + this.blinkValue;
+            final['eyeBlinkRight'] = (final['eyeBlinkRight'] || 0) + this.blinkValue;
+          }
+
+          // Apply to all meshes — clamp to [0, 1]
+          for (const mesh of this.meshes) {
+            const dict = mesh.morphTargetDictionary;
+            const influences = mesh.morphTargetInfluences;
+            if (!dict || !influences) continue;
+
+            // First, smoothly reset morph targets not in final to 0
+            for (const name in dict) {
+              const idx = dict[name];
+              if (!(name in final)) {
+                if (influences[idx] > 0.001) {
+                  influences[idx] = THREE.MathUtils.lerp(influences[idx], 0, Math.min(dt * 8, 1));
+                } else {
+                  influences[idx] = 0;
+                }
+              }
+            }
+
+            // Apply final values
+            for (const [name, value] of Object.entries(final)) {
+              if (name in dict) {
+                const idx = dict[name];
+                const clamped = Math.max(0, Math.min(1, value));
+                // Smooth application
+                influences[idx] = THREE.MathUtils.lerp(
+                  influences[idx],
+                  clamped,
+                  Math.min(dt * 12, 1)
+                );
+              }
+            }
+          }
+        }
+      }
+
+      // ─── Scene Setup ───────────────────────────────────────────
+      const canvas = document.getElementById('canvas');
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.0;
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x1a1a2e);
+
+      const camera = new THREE.PerspectiveCamera(
+        30,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        100
+      );
+      camera.position.set(0, 1.55, 0.7);
+
+      const controls = new OrbitControls(camera, canvas);
+      controls.target.set(0, 1.55, 0);
+      controls.enablePan = false;
+      controls.minDistance = 0.4;
+      controls.maxDistance = 1.5;
+      controls.minPolarAngle = Math.PI * 0.3;
+      controls.maxPolarAngle = Math.PI * 0.65;
+      controls.minAzimuthAngle = -Math.PI * 0.3;
+      controls.maxAzimuthAngle = Math.PI * 0.3;
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.update();
+
+      // ─── Lighting (3-point studio) ─────────────────────────────
+      // Key light — warm, upper right
+      const keyLight = new THREE.DirectionalLight(0xfff0e0, 2.2);
+      keyLight.position.set(1.5, 2.5, 2);
+      scene.add(keyLight);
+
+      // Fill light — cool, left side
+      const fillLight = new THREE.DirectionalLight(0xe0e8ff, 0.9);
+      fillLight.position.set(-2, 1.5, 1);
+      scene.add(fillLight);
+
+      // Rim light — behind, slightly above
+      const rimLight = new THREE.DirectionalLight(0xffffff, 1.5);
+      rimLight.position.set(0, 2, -2);
+      scene.add(rimLight);
+
+      // Ambient
+      const ambientLight = new THREE.AmbientLight(0x404060, 0.6);
+      scene.add(ambientLight);
+
+      // ─── Load Avatar ───────────────────────────────────────────
+      const loader = new GLTFLoader();
+      let animationManager = null;
+
+      loader.load(
+        AVATAR_URL,
+        (gltf) => {
+          const model = gltf.scene;
+          scene.add(model);
+
+          // Collect all meshes with morph targets
+          const morphMeshes = [];
+          const allMorphNames = new Set();
+
+          model.traverse((child) => {
+            if ((child.isMesh || child.isSkinnedMesh) && child.morphTargetDictionary) {
+              morphMeshes.push(child);
+              for (const name of Object.keys(child.morphTargetDictionary)) {
+                allMorphNames.add(name);
+              }
+            }
+          });
+
+          console.log(`Found ${morphMeshes.length} mesh(es) with morph targets`);
+          console.log('Morph targets:', [...allMorphNames].sort().join(', '));
+
+          // Create animation manager
+          animationManager = new AnimationManager(morphMeshes);
+
+          // Hide loading
+          document.getElementById('loading').classList.add('hidden');
+        },
+        (progress) => {
+          if (progress.total > 0) {
+            const pct = Math.round((progress.loaded / progress.total) * 100);
+            document.querySelector('#loading div:last-child').textContent =
+              `Loading avatar… ${pct}%`;
+          }
+        },
+        (error) => {
+          console.error('Failed to load avatar:', error);
+          document.querySelector('#loading div:last-child').textContent = 'Failed to load avatar.';
+        }
+      );
+
+      // ─── Animation Loop ────────────────────────────────────────
+      const clock = new THREE.Clock();
+
+      function animate() {
+        requestAnimationFrame(animate);
+        const dt = clock.getDelta();
+
+        if (animationManager) {
+          animationManager.update(dt);
+        }
+
+        controls.update();
+        renderer.render(scene, camera);
+      }
+      animate();
+
+      // ─── Resize Handler ────────────────────────────────────────
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      // ─── UI Wiring ─────────────────────────────────────────────
+      // Emotion buttons
+      const emotionBtns = document.querySelectorAll('.emotion-btn');
+      emotionBtns.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const emotion = btn.dataset.emotion;
+          if (!animationManager) return;
+
+          // Update active state
+          emotionBtns.forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+
+          const intensity = parseFloat(document.getElementById('intensitySlider').value);
+          animationManager.setEmotion(emotion, intensity);
+        });
+      });
+
+      // Intensity slider
+      const intensitySlider = document.getElementById('intensitySlider');
+      const intensityVal = document.getElementById('intensityVal');
+      intensitySlider.addEventListener('input', () => {
+        const val = parseFloat(intensitySlider.value);
+        intensityVal.textContent = val.toFixed(2);
+        if (animationManager && animationManager.currentEmotion !== 'neutral') {
+          animationManager.setEmotion(animationManager.currentEmotion, val);
+        }
+      });
+
+      // Blink toggle
+      document.getElementById('blinkToggle').addEventListener('change', (e) => {
+        if (animationManager) animationManager.blinkEnabled = e.target.checked;
+      });
+
+      // Idle toggle
+      document.getElementById('idleToggle').addEventListener('change', (e) => {
+        if (animationManager) animationManager.idleEnabled = e.target.checked;
+      });
+    </script>
+  </body>
+</html>

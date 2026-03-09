@@ -1,6 +1,16 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-dark: #1a1a1a;
+  --color-crimson: #6d001a;
+  --color-gold: #b5ac8a;
+  --color-offwhite: #f5f1ec;
+}
+
 :root {
-  --font-body: "Google Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  --font-display: "Space Grotesk", var(--font-body);
+  /* Fonts */
+  --font-body: 'Google Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-display: 'Space Grotesk', var(--font-body);
 
   /* Type scale */
   --text-sm: 0.875rem;
@@ -10,14 +20,14 @@
   --h2: 1.5rem;
   --h1: 2rem;
 
-  /* Dark theme */
+  /* Colors - Dark theme (default) */
   --primary-bg: #121212;
   --secondary-bg: #1a1a1a;
   --card-bg: #1e1e1e;
   --modal-bg: #252525;
 
-  --accent: #f0c852;
-  --accent-2: #d4af37;
+  --accent-primary: #f0c852;
+  --accent-secondary: #d4af37;
   --accent-soft: rgba(212, 175, 55, 0.1);
 
   --text-primary: #ffffff;
@@ -30,40 +40,79 @@
   --warning: #ff9800;
   --error: #f44336;
 
+  /* Overview palette */
+  --color-dark: #1a1a1a;
+  --color-crimson: #6d001a;
+  --color-gold: #b5ac8a;
+  --color-offwhite: #f5f1ec;
+
+  /* Transitions */
   --transition-fast: 0.2s;
   --transition-normal: 0.3s;
   --transition-slow: 0.5s;
   --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+  /* Spacing (4px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
 }
 
+/* Light theme support (optional) */
+@media (prefers-color-scheme: light) {
+  :root {
+    --primary-bg: #ffffff;
+    --secondary-bg: #f5f5f5;
+    --card-bg: #f0f0f0;
+    --modal-bg: #e0e0e0;
+    --text-primary: #121212;
+    --text-secondary: #333333;
+    --text-muted: #666666;
+    --border-color: #cccccc;
+    --accent-primary: #d4a017;
+    --accent-secondary: #b8860b;
+  }
+}
 
-/* ── Prevent flash of unstyled/white background ── */
-html, body {
-  background-color: #121212;
+/* Prevent flash */
+html,
+body {
+  background-color: var(--primary-bg);
   min-height: 100%;
   margin: 0;
   padding: 0;
 }
 
-/* App root */
 #root {
   min-height: 100vh;
 }
 
-/* ── Custom scrollbar ── */
-/* Firefox */
+/* Custom scrollbar */
 * {
-  cursor: inherit;
   scrollbar-width: thin;
-  scrollbar-color: var(--accent-2) var(--secondary-bg);
+  scrollbar-color: var(--accent-secondary) var(--secondary-bg);
 }
 
-/* Webkit */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--secondary-bg); }
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--secondary-bg);
+}
+
 ::-webkit-scrollbar-thumb {
-  background: var(--accent-2);
+  background: var(--accent-secondary);
   border-radius: 99px;
 }
-::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-primary);
+}

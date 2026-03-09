@@ -1,417 +1,287 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-    PiGearFill,
-    PiXFill,
-    PiClockFill,
-    PiTrayFill,
-    PiPaperclipFill,
-    PiMicrophoneFill,
-    PiPaperPlaneTiltFill,
-    PiRobotFill,
-    PiUserCircleFill,
-    PiWifiSlashFill,
-    PiWarningCircleFill,
-    PiChatTeardropTextFill,
-    PiSlidersHorizontalFill,
-    PiChatCircleTextFill,
-    PiArrowRightFill,
-    PiSignOutFill,
-} from "react-icons/pi";
-import { getAvatarById } from "../../../data/avatars";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PiGearFill, PiWifiSlashFill } from 'react-icons/pi';
+import { getAvatarById, getAvatarModelPath } from '../../../data/avatars';
+import AvatarPanel from '../../../features/avatar/components/AvatarPanel';
+import ChatInput from '../../../features/chat/components/ChatInput';
+import MessageList from '../../../features/chat/components/MessageList';
+import RenameModal from '../../../features/session/components/RenameModal';
+import SettingsDrawer from '../../../features/session/components/SettingsDrawer';
+import useSessionManager from '../../../features/session/hooks/useSessionManager';
+import { loadSetup } from '../../../features/setup/services/setupStorage';
+import useConversationReducer from '../../../shared/hooks/useConversationReducer';
+import useWSClient, { ConnectionState } from '../../../shared/hooks/useWSClient';
+import Toast from '../../../shared/utils/toast';
+import { SCROLL_STICK_THRESHOLD_PX } from '../constants';
 
-
-const AvatarScene = lazy(() => import("./AvatarScene.jsx"));
-
-const HEALTH_URL      = "/api/health";
-const HEALTH_INTERVAL = 15_000;
-
-// ── Avatar loading progress bar ─────────────────────
-function AvatarProgressBar({ done, onBarGone }) {
-    const [progress, setProgress] = useState(0);
-    const [hidden,   setHidden]   = useState(false);
-    const tickRef  = useRef(null);
-
-    // Ramp quickly to ~88%, then decelerate (eased approach)
-    useEffect(() => {
-        tickRef.current = setInterval(() => {
-            setProgress((p) => {
-                if (p >= 88) return p;
-                return p + (88 - p) * 0.072;
-            });
-        }, 70);
-        return () => clearInterval(tickRef.current);
-    }, []);
-
-    // When the 3D scene signals ready → fill to 100%, fade out, THEN reveal avatar
-    useEffect(() => {
-        if (!done) return;
-        clearInterval(tickRef.current);
-        setProgress(100);
-        const t = setTimeout(() => {
-            onBarGone?.();   // ← avatar becomes visible only now
-            setHidden(true);
-        }, 600);             // matches CSS opacity transition
-        return () => clearTimeout(t);
-    }, [done, onBarGone]);
-
-    if (hidden) return null;
-
-    return (
-        <div className={`avatar-progress-bar${done ? " done" : ""}`}>
-            <div className="avatar-progress-bar__track">
-                <div
-                    className="avatar-progress-bar__fill"
-                    style={{ width: `${progress}%` }}
-                />
-            </div>
-        </div>
-    );
-}
+const toast = new Toast('tr');
 
 export default function ClassroomShell() {
-    const navigate = useNavigate();
+  const setupConfig = useMemo(() => loadSetup(), []);
+  const activeAvatarId = setupConfig?.avatarId || 'omar';
+  const activeVoiceId = setupConfig?.voiceId || 'en-US-AriaNeural';
+  const avatarModelPath = getAvatarModelPath(activeAvatarId);
+  const wsAvatarId = avatarModelPath.split('/').pop().replace('.glb', '');
+  const WS_URL = `ws://localhost:8000/api/v1/ws/${wsAvatarId}?voice=${encodeURIComponent(activeVoiceId)}`;
+  const { connectionState, isConnected, send, onMessage } = useWSClient(WS_URL);
+  const [conversationState, dispatch] = useConversationReducer();
+  const session = useSessionManager();
 
-    // ── Core state ─────────────────────────────────────
-    const [messages,       setMessages]       = useState([]);
-    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [inputValue,     setInputValue]     = useState("");
-    const [avatarData,     setAvatarData]     = useState(null);
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [mouthCues, setMouthCues] = useState([]);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [inputValue, setInputValue] = useState('');
+  const [avatarLoaded, setAvatarLoaded] = useState(false);
 
-    // ── Avatar loading ───────────────────────────────────
-    const [avatarLoaded,  setAvatarLoaded]  = useState(false);
-    const [avatarVisible, setAvatarVisible] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
+  const [interimTranscript, setInterimTranscript] = useState('');
+  const [emotionData, setEmotionData] = useState(null);
 
-    // ── Backend status ──────────────────────────────────
-    const [backendStatus,  setBackendStatus]  = useState("checking");
-    const [offlineWarning, setOfflineWarning] = useState(false);
+  const messagesEndRef = useRef(null);
+  const chatScrollRef = useRef(null);
+  const shouldStickToBottom = useRef(true);
+  const textareaRef = useRef(null);
+  const scrollPositionsRef = useRef(new Map());
+  const prevSessionIdRef = useRef(session.currentSessionId);
 
-    // ── Refs ────────────────────────────────────────────
-    const messagesEndRef      = useRef(null);
-    const chatScrollRef       = useRef(null);
-    const shouldStickToBottom = useRef(true);
-    const offlineTimerRef     = useRef(null);
-
-    // ── Load avatar from settings ───────────────────────
-    useEffect(() => {
-        try {
-            const saved = localStorage.getItem("virtai-settings");
-            if (!saved) return;
-            const settings = JSON.parse(saved);
-            if (settings?.character) setAvatarData(getAvatarById(settings.character) || null);
-        } catch { /* ignore parse errors */ }
-    }, []);
-
-    // ── Backend health check (ping every 15 s) ──────────
-    useEffect(() => {
-        const check = async () => {
-            try {
-                const res = await fetch(HEALTH_URL, { signal: AbortSignal.timeout(3000) });
-                setBackendStatus(res.ok ? "online" : "offline");
-            } catch {
-                setBackendStatus("offline");
-            }
-        };
-        check();
-        const id = setInterval(check, HEALTH_INTERVAL);
-        return () => clearInterval(id);
-    }, []);
-
-    // ── Auto-scroll ─────────────────────────────────────
-    const handleChatScroll = () => {
-        const el = chatScrollRef.current;
-        if (!el) return;
-        shouldStickToBottom.current =
-            el.scrollHeight - el.scrollTop - el.clientHeight <= 120;
-    };
-
-    useEffect(() => {
-        if (!shouldStickToBottom.current) return;
-        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
-    }, [messages]);
-
-    // ── Offline toast ───────────────────────────────────
-    const showOfflineWarning = useCallback(() => {
-        setOfflineWarning(true);
-        clearTimeout(offlineTimerRef.current);
-        offlineTimerRef.current = setTimeout(() => setOfflineWarning(false), 4000);
-    }, []);
-
-    // ── Send message ────────────────────────────────────
-    const canSend = inputValue.trim().length > 0;
-
-    const handleSendMessage = () => {
-        const text = inputValue.trim();
-        if (!text) return;
-
-        if (backendStatus === "offline") {
-            showOfflineWarning();
-            return;
+  // Save / restore scroll position on session switch
+  useEffect(() => {
+    const prevId = prevSessionIdRef.current;
+    const nextId = session.currentSessionId;
+    if (prevId !== nextId) {
+      // Save scroll position of outgoing session
+      if (chatScrollRef.current) {
+        scrollPositionsRef.current.set(prevId, chatScrollRef.current.scrollTop);
+      }
+      // Restore scroll position of incoming session (next tick after render)
+      requestAnimationFrame(() => {
+        const saved = scrollPositionsRef.current.get(nextId);
+        if (chatScrollRef.current && saved != null) {
+          chatScrollRef.current.scrollTop = saved;
+          shouldStickToBottom.current = false;
+        } else {
+          shouldStickToBottom.current = true;
         }
+      });
+      prevSessionIdRef.current = nextId;
+    }
+  }, [session.currentSessionId]);
 
-        setMessages((prev) => [
-            ...prev,
-            {
-                id: Date.now(),
-                role: "user",
-                content: text,
-                timestamp: new Date().toISOString(),
-            },
-        ]);
-        setInputValue("");
-    };
-
-    const onKeyDown = (e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            handleSendMessage();
+  // WebSocket message subscriptions
+  useEffect(() => {
+    const unsubs = [
+      onMessage('chat.delta', (d) => dispatch({ type: 'CHAT_DELTA', payload: d })),
+      onMessage('chat.final', (d) => {
+        dispatch({ type: 'CHAT_FINAL', payload: d });
+        session.addAssistantMessage(`${d.message_id}-assistant`, d.text);
+        if (d.emotion) {
+          setEmotionData({ emotion: d.emotion, timestamp: Date.now() });
         }
-    };
+      }),
+      onMessage('pipeline.state', (d) => dispatch({ type: 'PIPELINE_STATE', payload: d })),
+      onMessage('tts.ready', (d) => setAudioUrl(d.audio.url)),
+      onMessage('visemes.ready', (d) => setMouthCues(d.mouthCues)),
+      onMessage('error', (d) => {
+        dispatch({ type: 'ERROR', payload: d });
+        toast.show('error', 'Error', d.message || 'An error occurred', 5000);
+      }),
+      onMessage('transcript', (d) => {
+        if (d.is_final) {
+          setInterimTranscript('');
+          if (d.text?.trim()) {
+            const text = d.text.trim();
+            const message_id = crypto.randomUUID();
+            dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
+            session.addUserMessage(
+              { id: message_id, role: 'user', content: text, timestamp: Date.now() },
+              text
+            );
+            send({ type: 'chat.user_message', data: { message_id, text } });
+          }
+        } else {
+          setInterimTranscript(d.text || '');
+        }
+      }),
+    ];
+    return () => unsubs.forEach((fn) => fn?.());
+  }, [onMessage, dispatch, session.addAssistantMessage, session.addUserMessage, send]);
 
-    // ── Derived UI ──────────────────────────────────────
-    const avatarName = avatarData?.name || "AI Tutor";
+  const avatarData = useMemo(() => getAvatarById(activeAvatarId), [activeAvatarId]);
 
-    const statusBadgeClass =
-        backendStatus === "offline"   ? "offline"
-        : backendStatus === "checking" ? "connecting"
-        : "online";
+  const handleAvatarError = useCallback(() => setAvatarError(true), []);
+  const handleAvatarLoaded = useCallback(() => setAvatarLoaded(true), []);
+  const openSettings = useCallback(() => setIsSettingsOpen(true), []);
+  const closeSettings = useCallback(() => setIsSettingsOpen(false), []);
 
-    const statusLabel =
-        backendStatus === "offline"   ? `${avatarName} — Offline`
-        : backendStatus === "checking" ? "Connecting…"
-        : `${avatarName} Online`;
+  const handleChatScroll = useCallback(() => {
+    const el = chatScrollRef.current;
+    if (!el) {
+      return;
+    }
+    shouldStickToBottom.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight <= SCROLL_STICK_THRESHOLD_PX;
+  }, []);
 
-    // ── Render ──────────────────────────────────────────
-    return (
-        <div className="classroom-shell">
+  useEffect(() => {
+    if (!shouldStickToBottom.current) {
+      return;
+    }
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [session.currentSession.messages, conversationState.currentMessage, interimTranscript]);
 
-            {/* Settings Drawer */}
-            {isSettingsOpen && (
-                <div className="settings-drawer open">
-                    <div className="drawer-overlay" onClick={() => setIsSettingsOpen(false)} />
-                    <div className="drawer-content">
-
-                        {/* Header */}
-                        <div className="drawer-header">
-                            <div className="drawer-title-group">
-                                <PiSlidersHorizontalFill className="drawer-title-icon" />
-                                <h2 className="drawer-title">Settings</h2>
-                            </div>
-                            <button
-                                className="drawer-close"
-                                onClick={() => setIsSettingsOpen(false)}
-                                aria-label="Close settings"
-                            >
-                                <PiXFill />
-                            </button>
-                        </div>
-
-                        {/* ── Scrollable body: conversations ── */}
-                        <div className="drawer-body">
-
-                            {/* Session — Chat History */}
-                            <div className="drawer-section">
-                                <h3 className="drawer-section-title">
-                                    <PiClockFill /> Session
-                                </h3>
-
-                                {messages.filter((m) => m.role === "user").length > 0 ? (
-                                    <div className="drawer-info-row">
-                                        <PiChatCircleTextFill className="drawer-info-icon" />
-                                        <span className="drawer-info-label">Messages</span>
-                                        <span className="drawer-info-value">
-                                            {messages.filter((m) => m.role === "user").length}
-                                        </span>
-                                    </div>
-                                ) : (
-                                    <div className="empty-state">
-                                        <PiTrayFill />
-                                        <p>No messages yet</p>
-                                    </div>
-                                )}
-                            </div>
-
-                        </div>
-
-                        {/* ── Pinned footer: Tutor + Navigation ── */}
-                        <div className="drawer-footer">
-
-                            {/* Avatar info */}
-                            <div className="drawer-section">
-                                <h3 className="drawer-section-title">
-                                    <PiRobotFill /> Tutor
-                                </h3>
-                                <div className="drawer-info-row">
-                                    <PiUserCircleFill className="drawer-info-icon" />
-                                    <span className="drawer-info-label">Active tutor</span>
-                                    <span className="drawer-info-value">{avatarName}</span>
-                                </div>
-                                <div className="drawer-info-row">
-                                    <PiWifiSlashFill
-                                        className="drawer-info-icon"
-                                        style={{ color: backendStatus === "offline" ? "#ef4444" : "var(--success)" }}
-                                    />
-                                    <span className="drawer-info-label">Server</span>
-                                    <span
-                                        className="drawer-info-value"
-                                        style={{ color: backendStatus === "offline" ? "#ef4444" : backendStatus === "checking" ? "var(--warning)" : "var(--success)" }}
-                                    >
-                                        {backendStatus === "offline" ? "Offline" : backendStatus === "checking" ? "Checking…" : "Online"}
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* Navigation */}
-                            <div className="drawer-section">
-                                <h3 className="drawer-section-title">
-                                    <PiArrowRightFill /> Navigation
-                                </h3>
-                                <button className="back-to-overview-btn" onClick={() => navigate("/")}>
-                                    <PiSignOutFill />
-                                    <span>Exit to Overview</span>
-                                </button>
-                            </div>
-
-                        </div>
-
-                    </div>
-                </div>
-            )}
-
-            {/* Settings button */}
-            <button
-                className="avatar-settings-btn"
-                onClick={() => setIsSettingsOpen(true)}
-                title="Settings"
-            >
-                <PiGearFill />
-            </button>
-
-            {/* Status badge */}
-            <div className={`avatar-status-badge ${statusBadgeClass}`}>
-                {backendStatus === "offline"
-                    ? <PiWifiSlashFill className="status-icon-offline" />
-                    : <span className={`status-dot${backendStatus === "checking" ? " status-dot-connecting" : ""}`} />
-                }
-                <span className="status-text">{statusLabel}</span>
-            </div>
-
-            {/* Offline warning toast */}
-            {offlineWarning && (
-                <div className="offline-toast" role="alert">
-                    <PiWarningCircleFill className="toast-icon" />
-                    <span>Server is offline — your message could not be sent.</span>
-                </div>
-            )}
-
-            {/* Split Screen */}
-            <div className="split-container">
-
-                {/* Left: Avatar 3D */}
-                <div className="avatar-panel">
-
-                    {/* Canvas renders silently behind the bar; revealed only after bar is gone */}
-                    <div className={`avatar-canvas-wrapper${avatarVisible ? " visible" : ""}`}>
-                        <Suspense fallback={null}>
-                            <AvatarScene
-                                avatarData={avatarData}
-                                onAvatarLoaded={() => setAvatarLoaded(true)}
-                            />
-                        </Suspense>
-                    </div>
-
-                    {/* Full-panel dark overlay + centered progress bar */}
-                    <AvatarProgressBar
-                        done={avatarLoaded}
-                        onBarGone={() => setAvatarVisible(true)}
-                    />
-                </div>
-
-                {/* Right: Chat */}
-                <div className="chat-panel">
-                    <div
-                        className="chat-messages"
-                        ref={chatScrollRef}
-                        onScroll={handleChatScroll}
-                    >
-                        {messages.length === 0 ? (
-                            <div className="welcome-state">
-                                <PiChatTeardropTextFill className="welcome-icon" />
-                                <h2 className="welcome-title">Start a conversation</h2>
-                                <p className="welcome-subtitle">
-                                    Ask {avatarName} anything to begin your lesson.
-                                </p>
-                            </div>
-                        ) : (
-                            <div className="chat-stream">
-                                {messages.map((msg) => {
-                                    const isUser = msg.role === "user";
-                                    return (
-                                        <div
-                                            key={msg.id}
-                                            className={`chat-message-wrapper ${
-                                                isUser ? "user-message-wrapper" : "ai-message-wrapper"
-                                            }`}
-                                        >
-                                            <div className={`chat-message ${
-                                                isUser ? "user-message" : "ai-message"
-                                            }`}>
-                                                {!isUser && (
-                                                    <div className="message-avatar">
-                                                        <PiRobotFill />
-                                                    </div>
-                                                )}
-                                                <div className="message-bubble">{msg.content}</div>
-                                                {isUser && (
-                                                    <div className="message-avatar">
-                                                        <PiUserCircleFill />
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                                <div ref={messagesEndRef} />
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Input bar */}
-                    <div className="chat-input-bar">
-                        <button className="input-icon-btn" title="Attach file" type="button" disabled>
-                            <PiPaperclipFill />
-                        </button>
-                        <button className="input-icon-btn" title="Voice input" type="button" disabled>
-                            <PiMicrophoneFill />
-                        </button>
-
-                        <input
-                            type="text"
-                            className="chat-input"
-                            placeholder={
-                                backendStatus === "offline"
-                                    ? "Server offline — cannot send messages"
-                                    : "Type a message…"
-                            }
-                            value={inputValue}
-                            onChange={(e) => setInputValue(e.target.value)}
-                            onKeyDown={onKeyDown}
-                        />
-
-                        <button
-                            className="send-btn"
-                            onClick={handleSendMessage}
-                            title="Send message"
-                            type="button"
-                            disabled={!canSend}
-                            style={{ opacity: canSend ? 1 : 0.5 }}
-                        >
-                            <PiPaperPlaneTiltFill />
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
+  const handleSendMessage = useCallback(() => {
+    const text = inputValue.trim();
+    if (!text) {
+      return;
+    }
+    const message_id = crypto.randomUUID();
+    dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
+    session.addUserMessage(
+      { id: message_id, role: 'user', content: text, timestamp: Date.now() },
+      text
     );
-}
+    send({ type: 'chat.user_message', data: { message_id, text } });
 
+    setInputValue('');
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+    if (!isConnected) {
+      toast.show('warning', 'Offline', 'Message queued. Will send when connected.', 3000);
+    }
+  }, [inputValue, isConnected, send, dispatch, session.addUserMessage]);
+
+  const handleSendText = useCallback(
+    (text) => {
+      const trimmed = text.trim();
+      if (!trimmed) {
+        return;
+      }
+      const message_id = crypto.randomUUID();
+      dispatch({ type: 'USER_MESSAGE', payload: { message_id, text: trimmed } });
+      session.addUserMessage(
+        { id: message_id, role: 'user', content: trimmed, timestamp: Date.now() },
+        trimmed
+      );
+      send({ type: 'chat.user_message', data: { message_id, text: trimmed } });
+      if (!isConnected) {
+        toast.show('warning', 'Offline', 'Message queued. Will send when connected.', 3000);
+      }
+    },
+    [isConnected, send, dispatch, session.addUserMessage]
+  );
+
+  const onKeyDown = useCallback(
+    (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSendMessage();
+      }
+    },
+    [handleSendMessage]
+  );
+
+  const avatarName = avatarData?.name || 'AI Tutor';
+
+  const statusBadgeClass =
+    {
+      [ConnectionState.OFFLINE]: 'offline',
+      [ConnectionState.RECONNECTING]: 'reconnecting',
+      [ConnectionState.INITIALIZING]: 'initializing',
+      [ConnectionState.ONLINE]: 'online',
+    }[connectionState] || 'offline';
+
+  const statusLabel =
+    {
+      [ConnectionState.OFFLINE]: `${avatarName} — Offline`,
+      [ConnectionState.RECONNECTING]: 'Reconnecting…',
+      [ConnectionState.INITIALIZING]: 'Starting up…',
+      [ConnectionState.ONLINE]: `${avatarName} Online`,
+    }[connectionState] || `${avatarName} — Offline`;
+
+  return (
+    <div className="classroom-shell">
+      <SettingsDrawer
+        isOpen={isSettingsOpen}
+        onClose={closeSettings}
+        sessions={session.sessions}
+        currentSessionId={session.currentSessionId}
+        onSessionSelect={session.switchSession}
+        onNewSession={session.createNewSession}
+        onDeleteSession={session.deleteSession}
+        onRenameClick={session.openRenameModal}
+      />
+
+      <button
+        className="avatar-settings-btn"
+        onClick={openSettings}
+        title="Settings"
+        aria-label="Open settings"
+      >
+        <PiGearFill />
+      </button>
+
+      <div className={`avatar-status-badge ${statusBadgeClass}`} role="status" aria-live="polite">
+        {connectionState === ConnectionState.OFFLINE ? (
+          <PiWifiSlashFill className="status-icon-offline" />
+        ) : (
+          <span
+            className={`status-dot${
+              connectionState === ConnectionState.RECONNECTING
+                ? ' status-dot-reconnecting'
+                : connectionState === ConnectionState.INITIALIZING
+                  ? ' status-dot-initializing'
+                  : ''
+            }`}
+          />
+        )}
+        <span className="status-text">{statusLabel}</span>
+      </div>
+
+      <div className="split-container" id="main-content">
+        <AvatarPanel
+          modelPath={avatarModelPath}
+          avatarLoaded={avatarLoaded}
+          avatarError={avatarError}
+          pipelineState={conversationState.pipelineState}
+          audioUrl={audioUrl}
+          mouthCues={mouthCues}
+          onModelLoaded={handleAvatarLoaded}
+          onError={handleAvatarError}
+          emotionData={emotionData}
+        />
+
+        <div className="chat-panel" key={session.currentSessionId}>
+          <MessageList
+            messages={session.currentSession.messages}
+            currentMessage={conversationState.currentMessage}
+            interimTranscript={interimTranscript}
+            error={conversationState.error}
+            avatarName={avatarName}
+            chatScrollRef={chatScrollRef}
+            messagesEndRef={messagesEndRef}
+            onScroll={handleChatScroll}
+            pipelineState={conversationState.pipelineState}
+            onSendText={handleSendText}
+          />
+          <ChatInput
+            inputValue={inputValue}
+            onInputChange={setInputValue}
+            onSend={handleSendMessage}
+            onKeyDown={onKeyDown}
+            textareaRef={textareaRef}
+            backendStatus={connectionState}
+            wsClient={{ connectionState, isConnected, send, onMessage }}
+            pipelineState={conversationState.pipelineState}
+          />
+        </div>
+      </div>
+
+      <RenameModal
+        isOpen={session.isRenameModalOpen}
+        sessionTitle={session.sessionToRename?.title || ''}
+        onConfirm={session.handleRenameConfirm}
+        onCancel={session.handleRenameCancel}
+      />
+    </div>
+  );
+}

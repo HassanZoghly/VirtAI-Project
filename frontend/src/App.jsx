@@ -1,62 +1,86 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import { lazy, Suspense } from "react";
-import "./App.css";
+import { Component, lazy, Suspense, useEffect } from 'react';
+import { Helmet, HelmetProvider } from 'react-helmet-async';
+import { Route, BrowserRouter as Router, Routes } from 'react-router-dom';
+import './App.css';
 
-// Record the exact moment the JS bundle first executes.
-// Used to guarantee spinner is visible for ≥ 1 s on every hard refresh.
-const APP_START = performance.now();
+const preloadClassroom = () => import('./pages/Classroom/Classroom.jsx');
+const preloadSetup = () => import('./pages/Setup/Setup.jsx');
+const Classroom = lazy(preloadClassroom);
+const Setup = lazy(preloadSetup);
+const Overview = lazy(() => import('@/features/overview/components/OverviewPage'));
+const NotFound = lazy(() => import('./pages/NotFound/NotFound.jsx'));
+
+const ROUTER_FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true };
 
 /**
- * Wraps a dynamic import so that it resolves in at most:
- *   max(actualLoadTime, 1000ms − timeAlreadySpentLoading)
- * On subsequent in-session navigations the chunk is cached and the
- * remaining budget is 0, so no artificial delay is added.
+ * Top-level error boundary that catches render errors and shows a fallback UI.
+ * @param {{ children: React.ReactNode }} props
  */
-const minDelay = (fn) => () =>
-  Promise.all([
-    fn(),
-    new Promise((r) =>
-      setTimeout(r, Math.max(0, 1000 - (performance.now() - APP_START)))
-    ),
-  ]).then(([mod]) => mod);
-
-// Lazy pages (code-splitting) — each guaranteed ≥ 1 s on first load
-const Overview  = lazy(minDelay(() => import("./pages/Overview/Overview.jsx")));
-const Setup     = lazy(minDelay(() => import("./pages/Setup/Setup.jsx")));
-const Classroom = lazy(minDelay(() => import("./pages/Classroom/Classroom.jsx")));
-const NotFound  = lazy(minDelay(() => import("./pages/NotFound/NotFound.jsx")));
-
-function PageFallback() {
-  return (
-    <div className="page-loading" role="status" aria-live="polite">
-      <div className="loading-ring" aria-hidden="true">
-        <div /><div /><div /><div />
-      </div>
-      <span className="loading-text">Loading…</span>
-    </div>
-  );
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="error-fallback" role="alert">
+          <h2>Something went wrong</h2>
+          <p>Please refresh the page or try again later.</p>
+          <button onClick={() => window.location.reload()}>Refresh</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
-function AppRoutes() {
+function PageLoader() {
   return (
-    <div className="app">
-      <Suspense fallback={<PageFallback />}>
-        <Routes>
-          <Route path="/"          element={<Overview />}  />
-          <Route path="/setup"     element={<Setup />}     />
-          <Route path="/classroom" element={<Classroom />} />
-          <Route path="*"          element={<NotFound />}  />
-        </Routes>
-      </Suspense>
+    <div className="page-loader">
+      <div className="loader">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
     </div>
   );
 }
 
 function App() {
+  useEffect(() => {
+    preloadSetup();
+    preloadClassroom();
+  }, []);
+
   return (
-      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <AppRoutes />
+    <HelmetProvider>
+      <Helmet>
+        <title>Classroom App</title>
+        <meta name="description" content="Interactive learning platform" />
+      </Helmet>
+
+      <Router future={ROUTER_FUTURE}>
+        <div className="app">
+          <ErrorBoundary>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/" element={<Overview />} />
+                <Route path="/setup" element={<Setup />} />
+                <Route path="/classroom" element={<Classroom />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
+        </div>
       </Router>
+    </HelmetProvider>
   );
 }
 

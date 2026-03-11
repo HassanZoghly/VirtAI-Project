@@ -1116,6 +1116,7 @@
 
 .toast.success {
   background: rgba(22, 163, 74, 0.95);
+  color: #121212;
 }
 
 .toast.error {
@@ -1124,10 +1125,12 @@
 
 .toast.warning {
   background: rgba(245, 158, 11, 0.95);
+  color: #121212;
 }
 
 .toast.info {
   background: rgba(59, 130, 246, 0.95);
+  color: #121212;
 }
 
 .toast-icon {

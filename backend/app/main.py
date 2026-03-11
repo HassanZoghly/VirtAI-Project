@@ -11,17 +11,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from app.api.v1.dependencies import init_session_manager
-from app.api.v1.router import router as api_v1_router
-from app.core.config import get_settings
-from app.core.database import init_db
-from app.core.errors import (
+from app.presentation.http.v1.dependencies import init_session_manager
+from app.presentation.http.v1.router import router as api_v1_router
+from app.shared.config import get_settings
+from app.shared.database import init_db
+from app.shared.errors import (
     AvatarBaseException,
     avatar_exception_handler,
     generic_exception_handler,
 )
-from app.core.logging import setup_logging
-from app.services.pipeline.session_manager import SessionManager
+from app.shared.logging import setup_logging
+from app.services.pipeline.session_manager import SessionManager  # canonical: stays in services/
 
 settings = get_settings()
 
@@ -58,8 +58,8 @@ async def lifespan(app: FastAPI):
             raise ValueError("GROQ_API_KEY is required in production mode")
 
     # Create service factories that use centralized settings
-    from app.services.llm.groq_provider import GroqLLMProvider
-    from app.services.tts.edge_tts_provider import EdgeTTSProvider
+    from app.infrastructure.llm.groq_provider import GroqLLMProvider
+    from app.infrastructure.tts.edge_tts_provider import EdgeTTSProvider
 
     def create_llm_service() -> GroqLLMProvider:
         """Factory function to create LLM service with centralized settings."""

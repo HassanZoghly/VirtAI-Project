@@ -23,8 +23,8 @@ from loguru import logger
 from app.services.pipeline.conversation import ConversationPipeline
 
 if TYPE_CHECKING:
-    from app.services.llm.groq_provider import GroqLLMProvider
-    from app.services.tts.edge_tts_provider import EdgeTTSProvider
+    from app.infrastructure.llm.groq_provider import GroqLLMProvider
+    from app.infrastructure.tts.edge_tts_provider import EdgeTTSProvider
 
 
 class ConversationSession:

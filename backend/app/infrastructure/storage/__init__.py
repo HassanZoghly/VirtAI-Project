@@ -1,0 +1,1 @@
+from app.infrastructure.storage.local_audio import LocalAudioStorage  # noqa: F401

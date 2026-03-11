@@ -16,7 +16,7 @@ import pytest
 from pydub import AudioSegment
 from pydub.generators import Sine
 
-from app.core.config import get_settings
+from app.shared.config import get_settings
 from app.services.asr.groq_whisper import GroqWhisperASR
 
 

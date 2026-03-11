@@ -20,15 +20,14 @@ from typing import Optional
 
 from loguru import logger
 
-from app.core.errors import ASRException, LLMException, TTSException
+from app.shared.errors import ASRException, LLMException, TTSException
 from app.schemas.audio import AudioBuffer
-from app.services.asr.groq_whisper import GroqWhisperASR
-from app.services.llm.base import ConversationHistory
-from app.services.llm.groq_provider import GroqLLMProvider
-from app.services.llm.prompt_builder import build_conversation
-from app.services.pipeline.events import PipelineEvent, PipelineEventType, ev
-from app.services.tts.edge_tts_provider import EdgeTTSProvider
-from app.services.tts.tts_utils import audio_to_base64, clean_text_for_tts
+from app.infrastructure.asr.groq_whisper import GroqWhisperASR
+from app.domain.chat.entities import ConversationHistory, PipelineEvent, PipelineEventType, ev
+from app.infrastructure.llm.groq_provider import GroqLLMProvider
+from app.domain.chat.policies import build_conversation
+from app.infrastructure.tts.edge_tts_provider import EdgeTTSProvider
+from app.infrastructure.tts.tts_utils import audio_to_base64, clean_text_for_tts
 
 _EMOTION_RE = re.compile(r"^\[emotion:(\w+)]\s*")
 _VALID_EMOTIONS = {

@@ -1,0 +1,563 @@
+"""
+Voice turn use case — orchestrates the full ASR → LLM → TTS pipeline.
+
+Canonical location for ConversationPipeline (port-typed).
+All dependencies are injected via domain port interfaces.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import base64
+import re
+import time
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Optional
+
+from loguru import logger
+
+from app.domain.chat.entities import (
+    ConversationHistory,
+    LLMChunk,
+    PipelineEvent,
+    PipelineEventType,
+    ev,
+)
+from app.domain.chat.policies import build_conversation
+from app.domain.chat.ports import BaseLLMProvider
+from app.domain.voice.entities import TTSChunk
+from app.domain.voice.ports import BaseTTSProvider, StreamingASRService
+from app.shared.errors import ASRException, LLMException, TTSException
+
+if TYPE_CHECKING:
+    from app.schemas.audio import AudioBuffer
+
+_EMOTION_RE = re.compile(r"^\[emotion:(\w+)]\s*")
+_VALID_EMOTIONS = {
+    "neutral",
+    "happy",
+    "sad",
+    "surprised",
+    "angry",
+    "thinking",
+    "confused",
+    "empathetic",
+    "excited",
+    "concerned",
+    "reassuring",
+    "proud",
+    "disappointed",
+    "sarcastic",
+    "grateful",
+    "curious",
+}
+_LLM_DONE_SENTINEL = None
+
+
+# ── TTS sentence processor ───────────────────────────────────────────────────
+
+
+class TTSProcessor:
+    """Processes a single sentence through TTS, emitting viseme + audio events."""
+
+    def __init__(self, tts: BaseTTSProvider, event_queue: asyncio.Queue, sentence_index: int):
+        self.tts = tts
+        self.event_queue = event_queue
+        self.sentence_index = sentence_index
+        self.viseme_events: list[dict] = []
+        self.audio_chunks: list[str] = []
+        self.chunk_index = 0
+
+    async def process(self, sentence: str) -> None:
+        async for tts_chunk in self.tts.synthesize_streaming(sentence):
+            if tts_chunk.viseme is not None:
+                self.viseme_events.append(
+                    {
+                        "offset_ms": tts_chunk.viseme.offset_ms,
+                        "viseme_id": tts_chunk.viseme.viseme_id,
+                        "duration_ms": tts_chunk.viseme.duration_ms,
+                    }
+                )
+            elif tts_chunk.audio_data is not None:
+                b64_audio = base64.b64encode(tts_chunk.audio_data).decode("utf-8")
+                self.audio_chunks.append(b64_audio)
+                if self.chunk_index == 0 and self.viseme_events:
+                    await self.event_queue.put(
+                        ev(
+                            PipelineEventType.TTS_VISEMES,
+                            sentence_index=self.sentence_index,
+                            events=self.viseme_events,
+                            audio_duration_ms=self._estimate_duration(),
+                        )
+                    )
+                await self.event_queue.put(
+                    ev(
+                        PipelineEventType.TTS_AUDIO,
+                        audio=b64_audio,
+                        chunk_index=self.chunk_index,
+                        sentence_index=self.sentence_index,
+                    )
+                )
+                self.chunk_index += 1
+            elif tts_chunk.is_done:
+                if self.viseme_events and self.chunk_index == 0:
+                    await self.event_queue.put(
+                        ev(
+                            PipelineEventType.TTS_VISEMES,
+                            sentence_index=self.sentence_index,
+                            events=self.viseme_events,
+                            audio_duration_ms=0.0,
+                        )
+                    )
+                break
+
+    def _estimate_duration(self) -> float:
+        total_bytes = sum(len(base64.b64decode(c)) for c in self.audio_chunks)
+        return (total_bytes / 3000.0) * 1000
+
+
+# ── Main pipeline ─────────────────────────────────────────────────────────────
+
+
+class ConversationPipeline:
+    """
+    Manages the full conversation pipeline for one WebSocket session.
+
+    All adapter dependencies are injected as domain port interfaces.
+    No concrete infrastructure is referenced — that wiring happens
+    at the composition root (main.py / dependencies.py).
+    """
+
+    def __init__(
+        self,
+        asr: StreamingASRService,
+        llm: BaseLLMProvider,
+        tts: BaseTTSProvider,
+        avatar_id: str = "avatar1",
+        max_sentence_queue_size: int = 5,
+    ):
+        self._asr = asr
+        self._llm = llm
+        self._tts = tts
+        self.avatar_id = avatar_id
+        self._history: ConversationHistory = build_conversation(avatar_id)
+        self._aborted: bool = False
+        self._current_llm_task: Optional[asyncio.Task] = None
+        self._current_tts_task: Optional[asyncio.Task] = None
+        self._current_message_id: Optional[str] = None
+        self._max_sentence_queue_size = max_sentence_queue_size
+        logger.info(f"ConversationPipeline created | avatar={avatar_id}")
+
+    # ── Public API ────────────────────────────────────────────────────────────
+
+    async def process_audio(
+        self,
+        audio_buffer: AudioBuffer,
+        session_id: Optional[str] = None,
+    ) -> AsyncGenerator[PipelineEvent, None]:
+        """Full pipeline: Audio → ASR → LLM → TTS."""
+        self._aborted = False
+        async for event in self._run_pipeline(
+            audio_buffer=audio_buffer,
+            text_input=None,
+            session_id=session_id,
+        ):
+            yield event
+
+    async def process_text(
+        self,
+        text: str,
+        session_id: Optional[str] = None,
+    ) -> AsyncGenerator[PipelineEvent, None]:
+        """Shortcut pipeline: Text → LLM → TTS (skips ASR)."""
+        self._aborted = False
+        async for event in self._run_pipeline(
+            audio_buffer=None,
+            text_input=text,
+            session_id=session_id,
+        ):
+            yield event
+
+    async def process_message(
+        self,
+        message_id: str,
+        text: str,
+        session_id: str,
+        send_callback: callable,
+    ) -> None:
+        """
+        Process user message through LLM → TTS → Visemes pipeline.
+
+        Uses late imports for schemas/ws_messages and viseme generator
+        to avoid circular imports and keep this module presentation-free.
+        """
+        from app.schemas.ws_messages import (
+            make_chat_delta,
+            make_chat_final,
+            make_error,
+            make_pipeline_state,
+            make_tts_ready,
+            make_visemes_ready,
+        )
+        from app.infrastructure.tts.viseme_generator import VisemeGenerator
+
+        self._aborted = False
+        self._current_message_id = message_id
+
+        try:
+            if not text.strip():
+                await send_callback(
+                    make_error(
+                        code="EMPTY_INPUT",
+                        message="Empty text input",
+                        session_id=session_id,
+                        message_id=message_id,
+                    )
+                )
+                return
+
+            self._history.add_user_message(text)
+            await send_callback(make_pipeline_state(session_id, "thinking"))
+
+            if self._aborted:
+                await send_callback(make_pipeline_state(session_id, "idle"))
+                return
+
+            # Stream LLM tokens
+            full_response_parts: list[str] = []
+            try:
+                async for chunk in self._llm.stream(self._history):
+                    if self._aborted:
+                        break
+                    if chunk.token:
+                        full_response_parts.append(chunk.token)
+                        await send_callback(
+                            make_chat_delta(
+                                session_id=session_id,
+                                message_id=message_id,
+                                delta=chunk.token,
+                            )
+                        )
+                    if chunk.is_done:
+                        break
+            except LLMException as e:
+                logger.error(f"LLM error: {e}")
+                await send_callback(
+                    make_error(
+                        code="LLM_ERROR",
+                        message=str(e),
+                        session_id=session_id,
+                        message_id=message_id,
+                    )
+                )
+                await send_callback(make_pipeline_state(session_id, "idle"))
+                return
+
+            if self._aborted:
+                await send_callback(make_pipeline_state(session_id, "idle"))
+                return
+
+            full_response = "".join(full_response_parts).strip()
+
+            # Parse emotion tag
+            emotion: str | None = None
+            emotion_match = _EMOTION_RE.match(full_response)
+            if emotion_match:
+                detected = emotion_match.group(1).lower()
+                if detected in _VALID_EMOTIONS:
+                    emotion = detected
+                full_response = _EMOTION_RE.sub("", full_response).strip()
+
+            if not full_response:
+                await send_callback(
+                    make_error(
+                        code="EMPTY_RESPONSE",
+                        message="LLM returned empty response",
+                        session_id=session_id,
+                        message_id=message_id,
+                    )
+                )
+                await send_callback(make_pipeline_state(session_id, "idle"))
+                return
+
+            await send_callback(
+                make_chat_final(
+                    session_id=session_id,
+                    message_id=message_id,
+                    text=full_response,
+                    emotion=emotion,
+                )
+            )
+            self._history.add_assistant_message(full_response)
+
+            if self._aborted:
+                await send_callback(make_pipeline_state(session_id, "idle"))
+                return
+
+            # TTS
+            await send_callback(make_pipeline_state(session_id, "speaking"))
+            try:
+                tts_result = await self._tts.generate(
+                    text=full_response,
+                    session_id=session_id,
+                    message_id=message_id,
+                )
+            except TTSException as e:
+                logger.error(f"TTS error: {e}")
+                await send_callback(
+                    make_error(
+                        code="TTS_ERROR",
+                        message=str(e),
+                        session_id=session_id,
+                        message_id=message_id,
+                    )
+                )
+                await send_callback(make_pipeline_state(session_id, "idle"))
+                return
+
+            if self._aborted:
+                await send_callback(make_pipeline_state(session_id, "idle"))
+                return
+
+            # Visemes
+            viseme_generator = VisemeGenerator()
+            mouth_cues = await viseme_generator.generate_from_audio(
+                audio_path=tts_result.file_path,
+                text=full_response,
+                session_id=session_id,
+                message_id=message_id,
+            )
+
+            if self._aborted:
+                await send_callback(make_pipeline_state(session_id, "idle"))
+                return
+
+            audio_url = f"/api/v1/audio/{session_id}/{message_id}.mp3"
+            await send_callback(
+                make_tts_ready(
+                    session_id=session_id,
+                    message_id=message_id,
+                    audio_url=audio_url,
+                    duration_ms=int(tts_result.audio_duration_ms),
+                )
+            )
+            await send_callback(
+                make_visemes_ready(
+                    session_id=session_id,
+                    message_id=message_id,
+                    mouth_cues=mouth_cues,
+                )
+            )
+
+        except Exception as e:
+            logger.error(f"Pipeline error: {e}")
+            await send_callback(
+                make_error(
+                    code="PIPELINE_ERROR",
+                    message=str(e),
+                    session_id=session_id,
+                    message_id=message_id,
+                )
+            )
+        finally:
+            await send_callback(make_pipeline_state(session_id, "idle"))
+            self._current_message_id = None
+            logger.info(f"Pipeline complete | session={session_id} | message={message_id}")
+
+    def abort(self) -> None:
+        """Signal the pipeline to stop and cancel running tasks."""
+        self._aborted = True
+        if self._current_llm_task and not self._current_llm_task.done():
+            self._current_llm_task.cancel()
+        if self._current_tts_task and not self._current_tts_task.done():
+            self._current_tts_task.cancel()
+        logger.info("Pipeline abort requested")
+
+    def reset_history(self) -> None:
+        self._history.clear()
+        logger.info("Conversation history cleared")
+
+    def change_avatar(self, avatar_id: str) -> None:
+        self._history = build_conversation(avatar_id)
+        self.avatar_id = avatar_id
+        logger.info(f"Avatar changed to {avatar_id}")
+
+    @property
+    def history_length(self) -> int:
+        return self._history.message_count
+
+    # ── Private orchestration ─────────────────────────────────────────────────
+
+    async def _run_pipeline(
+        self,
+        audio_buffer: Optional[AudioBuffer],
+        text_input: Optional[str],
+        session_id: Optional[str] = None,
+    ) -> AsyncGenerator[PipelineEvent, None]:
+        start = time.perf_counter()
+        user_text: Optional[str] = None
+
+        # ASR step
+        if audio_buffer is not None:
+            yield ev(PipelineEventType.PROCESSING)
+            try:
+                user_text = await self._run_asr(audio_buffer)
+                yield ev(PipelineEventType.TRANSCRIPT, text=user_text)
+            except ASRException as e:
+                logger.error(f"ASR failed: {e}")
+                yield ev(PipelineEventType.ERROR, code="ASR_ERROR", message=str(e))
+                yield ev(PipelineEventType.IDLE)
+                return
+
+        if text_input is not None:
+            user_text = text_input.strip()
+
+        if not user_text:
+            yield ev(PipelineEventType.ERROR, code="EMPTY_INPUT", message="No input")
+            yield ev(PipelineEventType.IDLE)
+            return
+
+        self._history.add_user_message(user_text)
+        yield ev(PipelineEventType.THINKING)
+
+        # Concurrent LLM + TTS
+        sentence_queue: asyncio.Queue[Optional[str]] = asyncio.Queue(
+            maxsize=self._max_sentence_queue_size,
+        )
+        event_queue: asyncio.Queue[PipelineEvent] = asyncio.Queue()
+        collected_events: list[PipelineEvent] = []
+
+        try:
+            self._current_llm_task = asyncio.create_task(
+                self._llm_worker(sentence_queue, event_queue, session_id),
+            )
+            self._current_tts_task = asyncio.create_task(
+                self._tts_worker(sentence_queue, event_queue, session_id),
+            )
+            await asyncio.gather(self._current_llm_task, self._current_tts_task)
+        except asyncio.CancelledError:
+            for t in (self._current_llm_task, self._current_tts_task):
+                if t and not t.done():
+                    t.cancel()
+            yield ev(PipelineEventType.ABORT)
+            yield ev(PipelineEventType.IDLE)
+            return
+        except Exception as e:
+            logger.error(f"Pipeline error: {e}")
+            yield ev(PipelineEventType.ERROR, code="PIPELINE_ERROR", message=str(e))
+            yield ev(PipelineEventType.IDLE)
+            return
+
+        # Drain event queue
+        while not event_queue.empty():
+            evt = event_queue.get_nowait()
+            evt.session_id = session_id
+            collected_events.append(evt)
+
+        for evt in collected_events:
+            yield evt
+
+        # Save assistant response
+        full_response = "".join(
+            e.data.get("token", "")
+            for e in collected_events
+            if e.type == PipelineEventType.LLM_TOKEN
+        )
+        if full_response.strip():
+            self._history.add_assistant_message(full_response.strip())
+
+        elapsed = time.perf_counter() - start
+        logger.info(f"Pipeline done | {elapsed:.2f}s | session={session_id}")
+        yield ev(PipelineEventType.IDLE)
+
+    async def _run_asr(self, audio_buffer: AudioBuffer) -> str:
+        logger.info(
+            f"ASR start | chunks={len(audio_buffer.chunks)} | size={audio_buffer.total_size}"
+        )
+        result = await self._asr.transcribe_stream(audio_buffer.chunks)
+        logger.info(f"ASR result | text='{result.transcript[:60]}'")
+        return result.transcript
+
+    async def _llm_worker(
+        self,
+        sentence_queue: asyncio.Queue,
+        event_queue: asyncio.Queue,
+        session_id: Optional[str] = None,
+    ) -> None:
+        logger.info(f"LLM worker started | session={session_id}")
+        try:
+            async for chunk in self._llm.stream(self._history):
+                if self._aborted:
+                    break
+                if chunk.token:
+                    await event_queue.put(ev(PipelineEventType.LLM_TOKEN, token=chunk.token))
+                if chunk.sentence:
+                    clean = _clean_text_for_tts(chunk.sentence)
+                    if clean:
+                        await sentence_queue.put(clean)
+                if chunk.is_done:
+                    break
+        except LLMException as e:
+            await event_queue.put(ev(PipelineEventType.ERROR, code="LLM_ERROR", message=str(e)))
+        except asyncio.CancelledError:
+            logger.info(f"LLM worker cancelled | session={session_id}")
+            raise
+        finally:
+            try:
+                await sentence_queue.put(_LLM_DONE_SENTINEL)
+            except asyncio.CancelledError:
+                pass
+            await event_queue.put(ev(PipelineEventType.LLM_DONE))
+
+    async def _tts_worker(
+        self,
+        sentence_queue: asyncio.Queue,
+        event_queue: asyncio.Queue,
+        session_id: Optional[str] = None,
+    ) -> None:
+        logger.info(f"TTS worker started | session={session_id}")
+        sentence_index = 0
+        try:
+            while True:
+                if self._aborted:
+                    break
+                sentence = await sentence_queue.get()
+                if sentence is _LLM_DONE_SENTINEL:
+                    break
+                sentence_index += 1
+                await event_queue.put(ev(PipelineEventType.SPEAKING))
+                try:
+                    processor = TTSProcessor(self._tts, event_queue, sentence_index)
+                    await processor.process(sentence)
+                except TTSException as e:
+                    logger.error(f"TTS error on sentence {sentence_index}: {e}")
+                    await event_queue.put(
+                        ev(
+                            PipelineEventType.ERROR,
+                            code="TTS_ERROR",
+                            message=str(e),
+                            sentence_index=sentence_index,
+                        )
+                    )
+                    continue
+                except asyncio.CancelledError:
+                    raise
+        except asyncio.CancelledError:
+            logger.info(f"TTS worker cancelled | session={session_id}")
+            raise
+        finally:
+            await event_queue.put(ev(PipelineEventType.TTS_DONE))
+
+
+# ── Private helpers ───────────────────────────────────────────────────────────
+
+
+def _clean_text_for_tts(text: str) -> str:
+    """Minimal TTS text cleanup (no infrastructure dependency)."""
+    import re as _re
+
+    text = _re.sub(r"\*{1,3}(.+?)\*{1,3}", r"\1", text)
+    text = _re.sub(r"`{1,3}[^`]*`{1,3}", "", text)
+    text = _re.sub(r"http[s]?://\S+", "", text)
+    text = _re.sub(r"\s+", " ", text).strip()
+    return text

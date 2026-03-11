@@ -32,7 +32,7 @@ export default function DemoPreview() {
 
         {/* Screenshot */}
         <img
-          src="/assets/demo.webp"
+          src="/assets/images/demo.webp"
           alt="VirtAI classroom demo"
           width={896}
           height={504}

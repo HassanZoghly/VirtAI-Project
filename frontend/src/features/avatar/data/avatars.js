@@ -2,7 +2,7 @@ export const avatarImages = {
   omar: {
     id: 'omar',
     name: 'Dr. Omar',
-    image: '/assets/avatar/avatar1.webp',
+    image: '/assets/avatars/avatar1.webp',
     modelPath: '/models/avatar1.glb',
     description: 'Friendly and approachable tutor',
     gender: 'male',
@@ -10,7 +10,7 @@ export const avatarImages = {
   mariam: {
     id: 'mariam',
     name: 'Dr. Mariam',
-    image: '/assets/avatar/avatar2.webp',
+    image: '/assets/avatars/avatar2.webp',
     modelPath: '/models/avatar2.glb',
     description: 'Professional and experienced educator',
     gender: 'female',
@@ -18,7 +18,7 @@ export const avatarImages = {
   khaled: {
     id: 'khaled',
     name: 'Dr. Khaled',
-    image: '/assets/avatar/avatar3.webp',
+    image: '/assets/avatars/avatar3.webp',
     modelPath: '/models/avatar3.glb',
     description: 'Expert in advanced topics',
     gender: 'male',

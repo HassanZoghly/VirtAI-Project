@@ -31,7 +31,7 @@ export default function SplashScreen({ onComplete }) {
 
           {/* logo */}
           <motion.img
-            src="/assets/logo.svg"
+            src="/assets/icons/logo.svg"
             alt="VirtAI logo"
             className="relative h-160 w-160 drop-shadow-[0_0_60px_rgba(109,0,26,0.6)]"
             initial={{ opacity: 0, scale: 0.5 }}

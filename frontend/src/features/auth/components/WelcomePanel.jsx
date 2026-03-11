@@ -53,7 +53,7 @@ export default function WelcomePanel() {
       <div className="relative z-10 flex max-w-md flex-col items-center px-12 text-center">
         {/* Logo */}
         <img
-          src="/assets/profile.svg"
+          src="/assets/icons/profile.svg"
           alt="VirtAI"
           width={80}
           height={80}

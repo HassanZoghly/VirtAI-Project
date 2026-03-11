@@ -37,7 +37,7 @@ export default function HeroSection({ onCTA }) {
 
       {/* hero image */}
       <motion.img
-        src="/assets/image.webp"
+        src="/assets/images/image.webp"
         alt="VirtAI classroom preview"
         className="relative z-10 mt-16 w-full max-w-4xl rounded-2xl border border-white/10 shadow-2xl"
         initial={{ opacity: 0, y: 40 }}

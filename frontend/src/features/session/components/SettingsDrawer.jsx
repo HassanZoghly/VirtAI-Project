@@ -103,7 +103,7 @@ export default function SettingsDrawer({
 
         <div className="drawer-footer">
           <img
-            src="/assets/logo.svg"
+            src="/assets/icons/logo.svg"
             alt="VirtAI Avatar Chat"
             width={120}
             height={32}

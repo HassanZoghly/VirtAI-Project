@@ -1,5 +1,5 @@
+import { howItWorks as steps } from '@/features/overview';
 import { motion } from 'motion/react';
-import steps from '../data/howItWorks';
 
 export default function HowItWorks() {
   return (

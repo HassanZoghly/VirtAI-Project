@@ -52,7 +52,14 @@ export default function WelcomePanel() {
       {/* Content */}
       <div className="relative z-10 flex max-w-md flex-col items-center px-12 text-center">
         {/* Logo */}
-        <img src="/assets/profile.svg" alt="VirtAI" className="mb-4 h-20 w-auto" />
+        <img
+          src="/assets/profile.svg"
+          alt="VirtAI"
+          width={80}
+          height={80}
+          className="mb-4 h-20 w-auto"
+          decoding="async"
+        />
 
         {/* Tagline */}
         <motion.p

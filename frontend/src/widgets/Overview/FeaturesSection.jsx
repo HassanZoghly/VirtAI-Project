@@ -1,6 +1,6 @@
+import { features } from '@/features/overview';
 import CardHoverEffect from '@/shared/ui/CardHoverEffect';
 import { motion } from 'motion/react';
-import features from '../data/features';
 
 export default function FeaturesSection() {
   return (

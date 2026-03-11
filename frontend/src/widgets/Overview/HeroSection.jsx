@@ -7,14 +7,14 @@ export default function HeroSection({ onCTA }) {
       {/* radial gradient backdrop */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(109,0,26,0.15)_0%,transparent_70%)]" />
 
-      <motion.h2
+      <motion.h1
         className="relative z-10 mt-16 max-w-3xl text-5xl font-extrabold leading-tight text-offwhite sm:text-6xl lg:text-7xl"
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8 }}
       >
         Your AI Teaching <span className="text-crimson">Assistant</span>
-      </motion.h2>
+      </motion.h1>
 
       <motion.p
         className="relative z-10 mt-6 max-w-xl text-lg text-offwhite/60"

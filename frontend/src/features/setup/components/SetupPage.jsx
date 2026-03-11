@@ -5,8 +5,8 @@ import { FiCheck, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { HiOutlineSparkles, HiOutlineSpeakerWave, HiOutlineUser } from 'react-icons/hi2';
 import { useNavigate } from 'react-router-dom';
 
-import CircuitBoardBackground from '@/features/overview/components/CircuitBoardBackground';
 import { cn } from '@/shared/utils/cn';
+import CircuitBoardBackground from '@/widgets/Overview/CircuitBoardBackground';
 import AllSetTab from './AllSetTab';
 import AvatarPreview from './AvatarPreview';
 import AvatarTab from './AvatarTab';

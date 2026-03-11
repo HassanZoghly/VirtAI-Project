@@ -1,27 +1,37 @@
 import { memo, useMemo, useState } from 'react';
 import {
-  PiChatsFill,
-  PiPlusCircleFill,
   PiChatCircleTextFill,
+  PiChatsFill,
+  PiMagnifyingGlassFill,
   PiPencilFill,
+  PiPlusCircleFill,
   PiTrashFill,
   PiTrayFill,
-  PiMagnifyingGlassFill,
 } from 'react-icons/pi';
 
 /** Format a timestamp to a short relative / absolute label. */
 function formatTime(ts) {
-  if (!ts) return '';
+  if (!ts) {
+    return '';
+  }
   const d = new Date(ts);
   const now = new Date();
   const diffMs = now - d;
   const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1) return 'Just now';
-  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffMin < 1) {
+    return 'Just now';
+  }
+  if (diffMin < 60) {
+    return `${diffMin}m ago`;
+  }
   const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return `${diffH}h ago`;
+  if (diffH < 24) {
+    return `${diffH}h ago`;
+  }
   const diffD = Math.floor(diffH / 24);
-  if (diffD < 7) return `${diffD}d ago`;
+  if (diffD < 7) {
+    return `${diffD}d ago`;
+  }
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
@@ -50,7 +60,9 @@ const SessionList = memo(function SessionList({
   const showSearch = sessions.length >= 10;
 
   const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return sessions;
+    if (!searchQuery.trim()) {
+      return sessions;
+    }
     const q = searchQuery.toLowerCase();
     return sessions.filter((s) => (s.title || '').toLowerCase().includes(q));
   }, [sessions, searchQuery]);
@@ -67,7 +79,9 @@ const SessionList = memo(function SessionList({
 
   // Reset confirmation when clicking elsewhere
   const handleWrapperClick = () => {
-    if (confirmDeleteId) setConfirmDeleteId(null);
+    if (confirmDeleteId) {
+      setConfirmDeleteId(null);
+    }
   };
 
   return (
@@ -112,6 +126,7 @@ const SessionList = memo(function SessionList({
               <button
                 className={`session-item ${session.id === currentSessionId ? 'active' : ''}`}
                 onClick={() => onSessionSelect(session.id)}
+                aria-label={`Open chat: ${session.title || 'New chat'}`}
               >
                 <PiChatCircleTextFill className="session-icon" />
                 <div className="session-info">

@@ -1,17 +1,15 @@
+import { AvatarPanel } from '@/features/avatar';
+import { getAvatarById, getAvatarModelPath } from '@/features/avatar/data/avatars';
+import { ChatInput, MessageList } from '@/features/chat';
+import { RenameModal, SettingsDrawer, useSessionManager } from '@/features/session';
+import { loadSetup } from '@/features/setup';
+import useConversationReducer from '@/shared/hooks/useConversationReducer';
+import useWSClient, { ConnectionState } from '@/shared/hooks/useWSClient';
+import Toast from '@/shared/utils/toast';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Helmet } from 'react-helmet-async';
 import { PiGearFill, PiWifiSlashFill } from 'react-icons/pi';
-import { getAvatarById, getAvatarModelPath } from '../../../data/avatars';
-import AvatarPanel from '../../../features/avatar/components/AvatarPanel';
-import ChatInput from '../../../features/chat/components/ChatInput';
-import MessageList from '../../../features/chat/components/MessageList';
-import RenameModal from '../../../features/session/components/RenameModal';
-import SettingsDrawer from '../../../features/session/components/SettingsDrawer';
-import useSessionManager from '../../../features/session/hooks/useSessionManager';
-import { loadSetup } from '../../../features/setup/services/setupStorage';
-import useConversationReducer from '../../../shared/hooks/useConversationReducer';
-import useWSClient, { ConnectionState } from '../../../shared/hooks/useWSClient';
-import Toast from '../../../shared/utils/toast';
-import { SCROLL_STICK_THRESHOLD_PX } from '../constants';
+import { SCROLL_STICK_THRESHOLD_PX } from './constants';
 
 const toast = new Toast('tr');
 
@@ -199,89 +197,94 @@ export default function ClassroomShell() {
     }[connectionState] || `${avatarName} — Offline`;
 
   return (
-    <div className="classroom-shell">
-      <SettingsDrawer
-        isOpen={isSettingsOpen}
-        onClose={closeSettings}
-        sessions={session.sessions}
-        currentSessionId={session.currentSessionId}
-        onSessionSelect={session.switchSession}
-        onNewSession={session.createNewSession}
-        onDeleteSession={session.deleteSession}
-        onRenameClick={session.openRenameModal}
-      />
-
-      <button
-        className="avatar-settings-btn"
-        onClick={openSettings}
-        title="Settings"
-        aria-label="Open settings"
-      >
-        <PiGearFill />
-      </button>
-
-      <div className={`avatar-status-badge ${statusBadgeClass}`} role="status" aria-live="polite">
-        {connectionState === ConnectionState.OFFLINE ? (
-          <PiWifiSlashFill className="status-icon-offline" />
-        ) : (
-          <span
-            className={`status-dot${
-              connectionState === ConnectionState.RECONNECTING
-                ? ' status-dot-reconnecting'
-                : connectionState === ConnectionState.INITIALIZING
-                  ? ' status-dot-initializing'
-                  : ''
-            }`}
-          />
-        )}
-        <span className="status-text">{statusLabel}</span>
-      </div>
-
-      <div className="split-container" id="main-content">
-        <AvatarPanel
-          modelPath={avatarModelPath}
-          avatarLoaded={avatarLoaded}
-          avatarError={avatarError}
-          pipelineState={conversationState.pipelineState}
-          audioUrl={audioUrl}
-          mouthCues={mouthCues}
-          onModelLoaded={handleAvatarLoaded}
-          onError={handleAvatarError}
-          emotionData={emotionData}
+    <>
+      <Helmet>
+        <title>{avatarName} — VirtAI Classroom</title>
+      </Helmet>
+      <div className="classroom-shell">
+        <SettingsDrawer
+          isOpen={isSettingsOpen}
+          onClose={closeSettings}
+          sessions={session.sessions}
+          currentSessionId={session.currentSessionId}
+          onSessionSelect={session.switchSession}
+          onNewSession={session.createNewSession}
+          onDeleteSession={session.deleteSession}
+          onRenameClick={session.openRenameModal}
         />
 
-        <div className="chat-panel" key={session.currentSessionId}>
-          <MessageList
-            messages={session.currentSession.messages}
-            currentMessage={conversationState.currentMessage}
-            interimTranscript={interimTranscript}
-            error={conversationState.error}
-            avatarName={avatarName}
-            chatScrollRef={chatScrollRef}
-            messagesEndRef={messagesEndRef}
-            onScroll={handleChatScroll}
-            pipelineState={conversationState.pipelineState}
-            onSendText={handleSendText}
-          />
-          <ChatInput
-            inputValue={inputValue}
-            onInputChange={setInputValue}
-            onSend={handleSendMessage}
-            onKeyDown={onKeyDown}
-            textareaRef={textareaRef}
-            backendStatus={connectionState}
-            wsClient={{ connectionState, isConnected, send, onMessage }}
-            pipelineState={conversationState.pipelineState}
-          />
-        </div>
-      </div>
+        <button
+          className="avatar-settings-btn"
+          onClick={openSettings}
+          title="Settings"
+          aria-label="Open settings"
+        >
+          <PiGearFill />
+        </button>
 
-      <RenameModal
-        isOpen={session.isRenameModalOpen}
-        sessionTitle={session.sessionToRename?.title || ''}
-        onConfirm={session.handleRenameConfirm}
-        onCancel={session.handleRenameCancel}
-      />
-    </div>
+        <div className={`avatar-status-badge ${statusBadgeClass}`} role="status" aria-live="polite">
+          {connectionState === ConnectionState.OFFLINE ? (
+            <PiWifiSlashFill className="status-icon-offline" />
+          ) : (
+            <span
+              className={`status-dot${
+                connectionState === ConnectionState.RECONNECTING
+                  ? ' status-dot-reconnecting'
+                  : connectionState === ConnectionState.INITIALIZING
+                    ? ' status-dot-initializing'
+                    : ''
+              }`}
+            />
+          )}
+          <span className="status-text">{statusLabel}</span>
+        </div>
+
+        <div className="split-container" id="main-content">
+          <AvatarPanel
+            modelPath={avatarModelPath}
+            avatarLoaded={avatarLoaded}
+            avatarError={avatarError}
+            pipelineState={conversationState.pipelineState}
+            audioUrl={audioUrl}
+            mouthCues={mouthCues}
+            onModelLoaded={handleAvatarLoaded}
+            onError={handleAvatarError}
+            emotionData={emotionData}
+          />
+
+          <div className="chat-panel" key={session.currentSessionId}>
+            <MessageList
+              messages={session.currentSession.messages}
+              currentMessage={conversationState.currentMessage}
+              interimTranscript={interimTranscript}
+              error={conversationState.error}
+              avatarName={avatarName}
+              chatScrollRef={chatScrollRef}
+              messagesEndRef={messagesEndRef}
+              onScroll={handleChatScroll}
+              pipelineState={conversationState.pipelineState}
+              onSendText={handleSendText}
+            />
+            <ChatInput
+              inputValue={inputValue}
+              onInputChange={setInputValue}
+              onSend={handleSendMessage}
+              onKeyDown={onKeyDown}
+              textareaRef={textareaRef}
+              backendStatus={connectionState}
+              wsClient={{ connectionState, isConnected, send, onMessage }}
+              pipelineState={conversationState.pipelineState}
+            />
+          </div>
+        </div>
+
+        <RenameModal
+          isOpen={session.isRenameModalOpen}
+          sessionTitle={session.sessionToRename?.title || ''}
+          onConfirm={session.handleRenameConfirm}
+          onCancel={session.handleRenameCancel}
+        />
+      </div>
+    </>
   );
 }

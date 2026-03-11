@@ -1,19 +1,10 @@
-import { Component, lazy, Suspense, useEffect } from 'react';
+import { Component, Suspense, useEffect } from 'react';
 import { Helmet, HelmetProvider } from 'react-helmet-async';
-import { Route, BrowserRouter as Router, Routes } from 'react-router-dom';
+import { BrowserRouter as Router } from 'react-router-dom';
 import './App.css';
 
 import { useRestoreSession } from '@/features/auth/hooks/useAuth';
-import ProtectedRoute from '@/shared/components/ProtectedRoute';
-
-const preloadClassroom = () => import('./pages/Classroom/Classroom.jsx');
-const preloadSetup = () => import('./pages/Setup/Setup.jsx');
-const Classroom = lazy(preloadClassroom);
-const Setup = lazy(preloadSetup);
-const Overview = lazy(() => import('@/features/overview/components/OverviewPage'));
-const NotFound = lazy(() => import('./pages/NotFound/NotFound.jsx'));
-const AuthPage = lazy(() => import('@/features/auth/components/AuthPage'));
-const AuthCallbackHandler = lazy(() => import('@/features/auth/components/AuthCallbackHandler'));
+import AppRoutes, { preloadClassroom, preloadSetup } from './routes';
 
 const ROUTER_FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true };
 
@@ -78,28 +69,7 @@ function App() {
         <div className="app">
           <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
-              <Routes>
-                <Route path="/" element={<Overview />} />
-                <Route path="/auth" element={<AuthPage />} />
-                <Route path="/auth/callback" element={<AuthCallbackHandler />} />
-                <Route
-                  path="/setup"
-                  element={
-                    <ProtectedRoute>
-                      <Setup />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/classroom"
-                  element={
-                    <ProtectedRoute>
-                      <Classroom />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
+              <AppRoutes />
             </Suspense>
           </ErrorBoundary>
         </div>

@@ -2,15 +2,15 @@ import { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
 
-import AIPipelineVisualizer from './AIPipelineVisualizer';
-import CircuitBoardBackground from './CircuitBoardBackground';
-import DemoPreview from './DemoPreview';
-import FeaturesSection from './FeaturesSection';
-import Footer from './Footer';
-import HeroSection from './HeroSection';
-import Navbar from './Navbar';
-import SplashScreen from './SplashScreen';
-import TechStackSection from './TechStackSection';
+import AIPipelineVisualizer from '@/widgets/Overview/AIPipelineVisualizer';
+import CircuitBoardBackground from '@/widgets/Overview/CircuitBoardBackground';
+import DemoPreview from '@/widgets/Overview/DemoPreview';
+import FeaturesSection from '@/widgets/Overview/FeaturesSection';
+import Footer from '@/widgets/Overview/Footer';
+import HeroSection from '@/widgets/Overview/HeroSection';
+import Navbar from '@/widgets/Overview/Navbar';
+import SplashScreen from '@/widgets/Overview/SplashScreen';
+import TechStackSection from '@/widgets/Overview/TechStackSection';
 
 export default function OverviewPage() {
   const [splashDone, setSplashDone] = useState(false);
@@ -42,14 +42,22 @@ export default function OverviewPage() {
           transition: 'opacity 0.6s ease',
         }}
       >
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:rounded-md focus:bg-gold focus:px-4 focus:py-2 focus:text-dark focus:outline-none"
+        >
+          Skip to content
+        </a>
         <CircuitBoardBackground />
         <Navbar />
 
-        <HeroSection onCTA={handleCTA} />
-        <FeaturesSection />
-        <AIPipelineVisualizer />
-        <TechStackSection />
-        <DemoPreview />
+        <main id="main-content">
+          <HeroSection onCTA={handleCTA} />
+          <FeaturesSection />
+          <AIPipelineVisualizer />
+          <TechStackSection />
+          <DemoPreview />
+        </main>
         <Footer />
       </div>
     </>

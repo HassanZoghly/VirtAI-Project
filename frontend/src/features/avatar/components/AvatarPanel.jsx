@@ -1,8 +1,6 @@
 import { lazy, Suspense } from 'react';
 
-const AvatarController = lazy(
-  () => import('../../../pages/Classroom/components/AvatarController.jsx')
-);
+const AvatarController = lazy(() => import('./AvatarController.jsx'));
 
 /**
  * Avatar viewport panel with loading indicator and lazy-loaded AvatarController.

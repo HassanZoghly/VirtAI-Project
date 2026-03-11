@@ -34,8 +34,11 @@ export default function DemoPreview() {
         <img
           src="/assets/demo.webp"
           alt="VirtAI classroom demo"
+          width={896}
+          height={504}
           className="block w-full"
           loading="lazy"
+          decoding="async"
         />
       </motion.div>
     </section>

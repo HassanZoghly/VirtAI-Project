@@ -2,14 +2,14 @@ import { ContactShadows, Environment, OrbitControls, useFBX, useGLTF } from '@re
 import { Canvas, useFrame } from '@react-three/fiber';
 import React, { Component, Suspense, useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { AvatarFaceController } from '../../../features/avatar/AvatarFaceController';
+import { AvatarFaceController } from '../AvatarFaceController';
 import {
   ANIMATION_METADATA,
   getTransitionFade,
   MORPH_SMOOTHING,
   pickWeightedRandom,
-} from '../../../features/avatar/constants';
-import { useRealismEnhancements } from '../../../features/avatar/hooks/useRealismEnhancements';
+} from '../constants';
+import { useRealismEnhancements } from '../hooks/useRealismEnhancements';
 
 const CAMERA_CONFIG = { position: [0, 0.2, 3.6], fov: 45, near: 0.01, far: 100 };
 const GL_CONFIG = { antialias: true, alpha: true, preserveDrawingBuffer: false };

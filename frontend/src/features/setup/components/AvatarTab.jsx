@@ -1,4 +1,4 @@
-import { avatarImages } from '@/data/avatars';
+import { avatarImages } from '@/features/avatar/data/avatars';
 import { AnimatePresence, motion } from 'motion/react';
 import { FiCheck } from 'react-icons/fi';
 
@@ -37,7 +37,11 @@ export default function AvatarTab({ selected, onSelect }) {
                 className="avatar-card-img"
                 src={avatar.image}
                 alt={avatar.name}
+                width={200}
+                height={200}
                 draggable={false}
+                loading="lazy"
+                decoding="async"
               />
               <span className="avatar-card-name">{avatar.name}</span>
               <span className="avatar-card-desc">{avatar.description}</span>

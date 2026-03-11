@@ -1,5 +1,5 @@
+import { techStack } from '@/features/overview';
 import { motion } from 'motion/react';
-import techStack from '../data/techStack';
 
 export default function TechStackSection() {
   return (

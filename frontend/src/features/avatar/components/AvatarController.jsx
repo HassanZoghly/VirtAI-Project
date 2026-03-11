@@ -1,6 +1,6 @@
+import { GREETING_DURATION_MS } from '@/widgets/Classroom/constants';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useAudioDrivenLipSync } from '../../../features/avatar/hooks/useAudioDrivenLipSync';
-import { GREETING_DURATION_MS } from '../constants';
+import { useAudioDrivenLipSync } from '../hooks/useAudioDrivenLipSync';
 import AvatarScene from './AvatarScene';
 
 /** Mandatory silence between consecutive spoken responses (ms). */

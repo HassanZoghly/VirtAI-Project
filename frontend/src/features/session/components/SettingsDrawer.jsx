@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { PiXFill } from 'react-icons/pi';
 import SessionList from './SessionList';
 
@@ -28,9 +28,13 @@ export default function SettingsDrawer({
 
   // Escape key handler
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      return;
+    }
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+      }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
@@ -38,13 +42,19 @@ export default function SettingsDrawer({
 
   // Focus trap
   const handleKeyDown = useCallback((e) => {
-    if (e.key !== 'Tab') return;
+    if (e.key !== 'Tab') {
+      return;
+    }
     const drawer = drawerRef.current;
-    if (!drawer) return;
+    if (!drawer) {
+      return;
+    }
     const focusable = drawer.querySelectorAll(
-      'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])',
+      'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])'
     );
-    if (focusable.length === 0) return;
+    if (focusable.length === 0) {
+      return;
+    }
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
     if (e.shiftKey && document.activeElement === first) {
@@ -72,7 +82,9 @@ export default function SettingsDrawer({
         onKeyDown={handleKeyDown}
       >
         <div className="drawer-header">
-          <h2 className="drawer-title" id="settings-drawer-title">Settings</h2>
+          <h2 className="drawer-title" id="settings-drawer-title">
+            Settings
+          </h2>
           <button className="drawer-close" onClick={onClose} aria-label="Close settings">
             <PiXFill />
           </button>
@@ -93,7 +105,11 @@ export default function SettingsDrawer({
           <img
             src="/assets/logo.svg"
             alt="VirtAI Avatar Chat"
+            width={120}
+            height={32}
             className="drawer-brand-logo"
+            loading="lazy"
+            decoding="async"
           />
         </div>
       </div>

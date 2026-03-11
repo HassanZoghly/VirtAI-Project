@@ -1,5 +1,5 @@
+import { team } from '@/features/overview';
 import { motion } from 'motion/react';
-import team from '../data/team';
 
 export default function Footer() {
   return (
@@ -31,8 +31,11 @@ export default function Footer() {
               <img
                 src={member.avatar}
                 alt={member.name}
+                width={80}
+                height={80}
                 className="h-20 w-20 rounded-full border-2 border-white/10 object-cover transition-all duration-300 group-hover:border-gold group-hover:shadow-[0_0_20px_rgba(181,172,138,0.3)]"
                 loading="lazy"
+                decoding="async"
               />
               <span className="text-sm font-medium text-offwhite/80 transition-colors group-hover:text-gold">
                 {member.name}

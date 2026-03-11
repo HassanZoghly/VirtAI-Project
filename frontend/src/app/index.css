@@ -12,13 +12,13 @@
   --font-body: 'Google Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   --font-display: 'Space Grotesk', var(--font-body);
 
-  /* Type scale */
+  /* Type scale — responsive with clamp() */
   --text-sm: 0.875rem;
   --text-md: 1rem;
-  --text-lg: 1.125rem;
-  --h3: 1.25rem;
-  --h2: 1.5rem;
-  --h1: 2rem;
+  --text-lg: clamp(1rem, 0.5vw + 0.9rem, 1.125rem);
+  --h3: clamp(1.125rem, 0.5vw + 1rem, 1.25rem);
+  --h2: clamp(1.25rem, 1vw + 1rem, 1.5rem);
+  --h1: clamp(1.5rem, 2vw + 1rem, 2rem);
 
   /* Colors - Dark theme (default) */
   --primary-bg: #121212;
@@ -32,7 +32,7 @@
 
   --text-primary: #ffffff;
   --text-secondary: #b0b0b0;
-  --text-muted: #808080;
+  --text-muted: #8c8c8c;
 
   --border-color: #333333;
 
@@ -115,4 +115,23 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--accent-primary);
+}
+
+/* Global focus-visible ring for keyboard navigation */
+:focus-visible {
+  outline: 2px solid var(--accent-primary, #f0c852);
+  outline-offset: 2px;
+}
+
+/* Utility: screen-reader only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }

@@ -16,7 +16,7 @@ export default function HowItWorks() {
 
       <div className="relative">
         {/* Vertical connector line */}
-        <div className="absolute left-6 top-0 bottom-0 w-px bg-gradient-to-b from-crimson/40 via-gold/30 to-transparent sm:left-1/2 sm:-translate-x-px" />
+        <div className="absolute left-6 top-0 bottom-0 w-px bg-linear-to-b from-crimson/40 via-gold/30 to-transparent sm:left-1/2 sm:-translate-x-px" />
 
         <div className="flex flex-col gap-12">
           {steps.map((s, i) => {

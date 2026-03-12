@@ -1,17 +1,87 @@
-frontend/node_modules
-frontend/package-lock.json
-.vscode/
+# ═══════════════════════════════════════════
+#  Python
+# ═══════════════════════════════════════════
 __pycache__/
+*.py[cod]
+*.pyd
+*.egg
+*.egg-info/
+.eggs/
+
+# ═══════════════════════════════════════════
+#  Virtual Environment
+# ═══════════════════════════════════════════
+venv/
+.venv/
+env/
+
+# ═══════════════════════════════════════════
+#  Environment & Secrets
+# ═══════════════════════════════════════════
+.env
+.env.*
+!.env.example
+
+# ═══════════════════════════════════════════
+#  Testing
+# ═══════════════════════════════════════════
+.pytest_cache/
+.hypothesis/
+.coverage
+htmlcov/
+coverage.xml
+__tests__/
+
+# ═══════════════════════════════════════════
+#  Linting & Type Checking
+# ═══════════════════════════════════════════
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+
+# ═══════════════════════════════════════════
+#  Runtime Data & Database
+# ═══════════════════════════════════════════
+.data/
+*.db
+*.sqlite3
+processing/
+
+# ═══════════════════════════════════════════
+#  Logs
+# ═══════════════════════════════════════════
 logs/
 *.log
-*.pyc
-*.pyo
-*.pyd
-.env
-.data/
-.coverage
+
+# ═══════════════════════════════════════════
+#  Build & Distribution
+# ═══════════════════════════════════════════
 dist/
-__tests__
-processing/
-.hypothesis
+build/
+*.whl
+
+# ═══════════════════════════════════════════
+#  Frontend (Node.js)
+# ═══════════════════════════════════════════
+frontend/node_modules/
+frontend/package-lock.json
+frontend/dist/
+frontend/.next/
+frontend/.nuxt/
+
+# ═══════════════════════════════════════════
+#  IDE & Editor
+# ═══════════════════════════════════════════
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .kiro/
+
+# ═══════════════════════════════════════════
+#  OS Files
+# ═══════════════════════════════════════════
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -26,16 +26,30 @@
     <link rel="icon" type="image/png" sizes="512x512" href="/assets/icons/icon-512.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/assets/icons/apple-touch-icon.png" />
 
-    <!-- Fonts: Pack 1 (Google Sans + Space Grotesk) -->
+    <!-- Fonts: non-render-blocking via media="print" swap trick -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Google+Sans:opsz,wght@18..144,300;18..144,400;18..144,500;18..144,600;18..144,700&family=Space+Grotesk:wght@400;500;600;700&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media = 'all'"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Google+Sans:opsz,wght@18..144,300;18..144,400;18..144,500;18..144,600;18..144,700&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
 
-    <!-- Prefetch default avatar model for faster Classroom load -->
-    <link rel="prefetch" href="/models/avatar1.glb" as="fetch" crossorigin />
+    <!-- Preload LCP hero image -->
+    <link
+      rel="preload"
+      href="/assets/images/image.webp"
+      as="image"
+      type="image/webp"
+      fetchpriority="high"
+    />
 
     <!-- Social sharing (Open Graph) -->
     <meta property="og:type" content="website" />
@@ -46,7 +60,7 @@
       property="og:description"
       content="Talk to VirtAI using your voice and get intelligent spoken responses powered by AI."
     />
-    <meta property="og:image" content="/assets/images/image.webp" />
+    <meta property="og:image" content="https://virtai.app/assets/images/image.webp" />
 
     <!-- Social sharing (Twitter) -->
     <meta name="twitter:card" content="summary_large_image" />
@@ -55,7 +69,7 @@
       name="twitter:description"
       content="AI-powered voice assistant for speech, chat, and responses."
     />
-    <meta name="twitter:image" content="/assets/images/image.webp" />
+    <meta name="twitter:image" content="https://virtai.app/assets/images/image.webp" />
 
     <!-- Misc -->
     <meta name="referrer" content="strict-origin-when-cross-origin" />

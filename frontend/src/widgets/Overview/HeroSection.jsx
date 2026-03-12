@@ -17,7 +17,7 @@ export default function HeroSection({ onCTA }) {
       </motion.h1>
 
       <motion.p
-        className="relative z-10 mt-6 max-w-xl text-lg text-offwhite/60"
+        className="relative z-10 mt-6 max-w-xl text-lg text-offwhite/80"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, delay: 0.25 }}
@@ -40,6 +40,10 @@ export default function HeroSection({ onCTA }) {
         src="/assets/images/image.webp"
         alt="VirtAI classroom preview"
         className="relative z-10 mt-16 w-full max-w-4xl rounded-2xl border border-white/10 shadow-2xl"
+        fetchpriority="high"
+        width={896}
+        height={504}
+        loading="eager"
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 1, delay: 0.7 }}

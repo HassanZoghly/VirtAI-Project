@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 export default function TechStackSection() {
   return (
     <section id="tech-stack" className="relative mx-auto max-w-5xl px-6 py-28">
-      <motion.h3
+      <motion.h2
         className="mb-14 text-center text-4xl font-bold text-offwhite sm:text-5xl"
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -12,7 +12,7 @@ export default function TechStackSection() {
         transition={{ duration: 0.6 }}
       >
         Tech <span className="text-gold">Stack</span>
-      </motion.h3>
+      </motion.h2>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
         {techStack.map((t, i) => {

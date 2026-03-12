@@ -12,10 +12,10 @@ export default function FeaturesSection() {
         viewport={{ once: true, amount: 0.3 }}
         transition={{ duration: 0.6 }}
       >
-        <h3 className="text-4xl font-bold text-offwhite sm:text-5xl">
+        <h2 className="text-4xl font-bold text-offwhite sm:text-5xl">
           Core <span className="text-gold">Features</span>
-        </h3>
-        <p className="mx-auto mt-4 max-w-lg text-offwhite/50">
+        </h2>
+        <p className="mx-auto mt-4 max-w-lg text-offwhite/70">
           Everything you need for an immersive AI-powered learning experience.
         </p>
       </motion.div>

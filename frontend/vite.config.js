@@ -22,4 +22,15 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          three: ['three', '@react-three/fiber', '@react-three/drei'],
+          icons: ['react-icons'],
+          motion: ['motion'],
+        },
+      },
+    },
+  },
 });

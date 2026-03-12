@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 export default function HowItWorks() {
   return (
     <section className="relative mx-auto max-w-5xl px-6 py-28">
-      <motion.h3
+      <motion.h2
         className="mb-16 text-center text-4xl font-bold text-offwhite sm:text-5xl"
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -12,7 +12,7 @@ export default function HowItWorks() {
         transition={{ duration: 0.6 }}
       >
         How It <span className="text-crimson">Works</span>
-      </motion.h3>
+      </motion.h2>
 
       <div className="relative">
         {/* Vertical connector line */}
@@ -44,7 +44,7 @@ export default function HowItWorks() {
                   }`}
                 >
                   <h4 className="text-lg font-semibold text-offwhite">{s.label}</h4>
-                  <p className="mt-1 text-sm text-offwhite/50">{s.description}</p>
+                  <p className="mt-1 text-sm text-offwhite/70">{s.description}</p>
                 </div>
               </motion.div>
             );

@@ -149,7 +149,7 @@ def create_app() -> FastAPI:
     )
 
     # ── Error Handlers ────────────────────────────────────────────────────────
-    app.add_exception_handler(AvatarBaseException, avatar_exception_handler)
+    app.add_exception_handler(AvatarBaseException, avatar_exception_handler) # type: ignore
     app.add_exception_handler(Exception, generic_exception_handler)
 
     # ── Routers ───────────────────────────────────────────────────────────────

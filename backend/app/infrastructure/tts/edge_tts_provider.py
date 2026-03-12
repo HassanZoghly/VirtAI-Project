@@ -1,6 +1,7 @@
 import asyncio
 import re
 from collections.abc import AsyncGenerator
+from pathlib import Path
 from typing import Optional
 
 import edge_tts
@@ -169,8 +170,6 @@ class EdgeTTSProvider(BaseTTSProvider):
         Raises:
             TTSException: If synthesis fails or file storage fails
         """
-        from pathlib import Path
-
         if not text.strip():
             raise TTSException("Empty text provided")
 
@@ -188,7 +187,9 @@ class EdgeTTSProvider(BaseTTSProvider):
         result = await self.synthesize(text)
 
         # Create storage directory
-        storage_base = Path("backend/.data/sessions")
+        from app.shared.config import get_settings
+
+        storage_base = Path(get_settings().AUDIO_STORAGE_PATH)
         session_dir = storage_base / session_id
         session_dir.mkdir(parents=True, exist_ok=True)
 
@@ -499,82 +500,3 @@ class EdgeTTSProvider(BaseTTSProvider):
             "pitch": {"min": "-50Hz", "max": "+50Hz", "default": self.pitch},
             "volume": {"min": "-50%", "max": "+50%", "default": self.volume},
         }
-
-    async def generate(
-        self,
-        text: str,
-        session_id: str,
-        message_id: str,
-    ) -> TTSResult:
-        """
-        Generate audio and store at backend/.data/sessions/{session_id}/{message_id}.mp3
-
-        Args:
-            text: Text to synthesize
-            session_id: Session identifier
-            message_id: Message identifier
-
-        Returns:
-            TTSResult with file_path and duration_ms populated
-
-        Raises:
-            TTSException: If synthesis fails or file storage fails
-        """
-        from pathlib import Path
-
-        if not text.strip():
-            raise TTSException("Empty text provided")
-
-        # Validate session_id and message_id to prevent path traversal
-        if not self._is_safe_path_component(session_id):
-            raise TTSException(f"Invalid session_id: {session_id}")
-        if not self._is_safe_path_component(message_id):
-            raise TTSException(f"Invalid message_id: {message_id}")
-
-        logger.info(
-            f"TTS generate | session={session_id} | message={message_id} | text_len={len(text)}"
-        )
-
-        # Synthesize audio
-        result = await self.synthesize(text)
-
-        # Create storage directory
-        storage_base = Path("backend/.data/sessions")
-        session_dir = storage_base / session_id
-        session_dir.mkdir(parents=True, exist_ok=True)
-
-        # Store audio file
-        audio_file_path = session_dir / f"{message_id}.mp3"
-        try:
-            audio_file_path.write_bytes(result.audio_bytes)
-            logger.success(
-                f"Audio saved | path={audio_file_path} | size={len(result.audio_bytes):,}B"
-            )
-        except Exception as e:
-            logger.error(f"Failed to save audio file: {e}")
-            raise TTSException(f"Failed to save audio: {e!s}")
-
-        # Update result with file path (relative to backend directory)
-        result.file_path = str(audio_file_path)
-
-        return result
-
-    def _is_safe_path_component(self, component: str) -> bool:
-        """
-        Validate that a path component is safe (no path traversal)
-
-        Args:
-            component: Path component to validate
-
-        Returns:
-            True if safe, False otherwise
-        """
-        if not component:
-            return False
-        # Check for path traversal attempts
-        if ".." in component or "/" in component or "\\" in component:
-            return False
-        # Check for valid characters (alphanumeric, dash, underscore)
-        if not re.match(r"^[a-zA-Z0-9_-]+$", component):
-            return False
-        return True

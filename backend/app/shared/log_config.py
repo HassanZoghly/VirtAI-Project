@@ -1,9 +1,16 @@
 import sys
 from pathlib import Path
 
-from loguru import logger
+from loguru import Record, logger
 
 from app.shared.config import get_settings
+
+
+def _redact_secrets(record: Record) -> None:
+    """Redact sensitive API keys from log messages in-place."""
+    settings = get_settings()
+    if settings.GROQ_API_KEY and settings.GROQ_API_KEY in record["message"]:
+        record["message"] = record["message"].replace(settings.GROQ_API_KEY, "[REDACTED]")
 
 
 def setup_logging() -> None:
@@ -67,13 +74,7 @@ def setup_logging() -> None:
             enqueue=True,
         )
 
-    logger.configure(
-        patcher=lambda record: (
-            record["message"].replace(settings.GROQ_API_KEY, "[REDACTED]")
-            if settings.GROQ_API_KEY in record["message"]
-            else record
-        )
-    )
+    logger.configure(patcher=_redact_secrets)
 
     logger.info(f"[*] Logging initialized | ENV: {settings.ENVIRONMENT}")
     logger.debug(f"Debug mode: {settings.DEBUG}")

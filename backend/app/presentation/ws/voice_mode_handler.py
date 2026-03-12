@@ -330,7 +330,7 @@ class VoiceModeHandler:
 
             # Transcribe audio using ASR service (now accepts numpy array directly)
             result = await self.asr_service.transcribe_stream(
-                audio_data=audio_data, sample_rate=16000
+                audio_chunks=audio_data
             )
 
             logger.info(

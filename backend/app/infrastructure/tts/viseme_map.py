@@ -5,9 +5,6 @@ This module provides mappings between different phoneme/viseme systems and Ready
 
 1. Microsoft/Edge TTS Viseme IDs → RPM Morph Targets
    Source: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/how-to-speech-synthesis-viseme
-   
-2. Rhubarb Lip Sync Letters (A-H, X) → RPM Morph Targets
-   Source: https://github.com/DanielSWolf/rhubarb-lip-sync
 
 The Frontend uses the morphTargetName to apply visemes to the GLB model's blend shapes.
 """
@@ -166,42 +163,3 @@ def phonemes_to_viseme_ids(phonemes: list[str]) -> list[int]:
     Useful for debugging or fallback.
     """
     return [phoneme_to_viseme(p) for p in phonemes]
-
-
-# ── Rhubarb Lip Sync Mapping ─────────────────────────────────────────────────
-# Maps Rhubarb phoneme letters (A-H, X) to Ready Player Me viseme names
-# Rhubarb Lip Sync: https://github.com/DanielSWolf/rhubarb-lip-sync
-
-RHUBARB_TO_RPM: dict[str, str] = {
-    "A": "viseme_aa",  # Relaxed mouth (open vowels like "father")
-    "B": "viseme_PP",  # Lips together (bilabial consonants: p, b, m)
-    "C": "viseme_E",  # Wide mouth (front vowels like "bed")
-    "D": "viseme_aa",  # Relaxed mouth (similar to A, neutral position)
-    "E": "viseme_O",  # Rounded lips (back vowels like "boat")
-    "F": "viseme_FF",  # Teeth on lower lip (labiodental: f, v)
-    "G": "viseme_kk",  # Back of tongue raised (velar consonants: k, g)
-    "H": "viseme_CH",  # Tongue up (palatal consonants: ch, sh, j)
-    "X": "viseme_sil",  # Silence (closed mouth, no sound)
-}
-
-
-def rhubarb_to_rpm_viseme(letter: str) -> str:
-    """
-    Maps a Rhubarb phoneme letter to a Ready Player Me viseme name.
-
-    Args:
-        letter: Rhubarb phoneme letter (A-H, X)
-
-    Returns:
-        RPM viseme name (e.g., "viseme_aa", "viseme_PP")
-        Returns "viseme_sil" (silence) if letter is not recognized
-
-    Example:
-        >>> rhubarb_to_rpm_viseme("A")
-        'viseme_aa'
-        >>> rhubarb_to_rpm_viseme("B")
-        'viseme_PP'
-        >>> rhubarb_to_rpm_viseme("X")
-        'viseme_sil'
-    """
-    return RHUBARB_TO_RPM.get(letter.upper(), "viseme_sil")

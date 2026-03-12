@@ -1,9 +1,13 @@
 import json
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal, Union
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Absolute path to the backend/ directory (parent of app/)
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 class Settings(BaseSettings):
@@ -84,7 +88,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_CONNECTIONS_PER_IP: int = 5
 
     # Storage
-    AUDIO_STORAGE_PATH: str = "backend/.data/sessions"
+    AUDIO_STORAGE_PATH: str = str(BASE_DIR / ".data" / "sessions")
     AUDIO_FILE_TTL_HOURS: int = 24
 
     # Audio
@@ -92,7 +96,7 @@ class Settings(BaseSettings):
     AUDIO_SAMPLE_RATE: int = 16000
 
     # Database
-    DATABASE_PATH: str = "backend/.data/virtai.db"
+    DATABASE_PATH: str = str(BASE_DIR / ".data" / "virtai.db")
 
     # Auth / JWT
     JWT_SECRET_KEY: str = Field(

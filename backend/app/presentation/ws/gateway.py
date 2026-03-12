@@ -31,6 +31,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import re
 import time
 from typing import Optional
 
@@ -814,7 +815,6 @@ class WebSocketHandler:
 
             # Convert CamelCase to snake_case with dots
             # Handle consecutive capitals correctly (TTS -> tts, not t.t.s)
-            import re
 
             # Insert underscore before uppercase letters that follow lowercase letters or digits
             # This handles: ChatDelta -> Chat_Delta, TTSReady -> TTS_Ready

@@ -38,7 +38,7 @@ async def handle_message(
     message_id: str,
     text: str,
     session_id: str,
-    send_callback: callable,
+    send_callback: callable, # type: ignore
 ) -> None:
     """
     Process user message through LLM → TTS → Visemes with callback-based delivery.

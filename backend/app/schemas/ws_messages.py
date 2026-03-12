@@ -203,7 +203,7 @@ class MouthCue(BaseModel):
 
     start: float = Field(..., ge=0, description="Start time in seconds")
     end: float = Field(..., ge=0, description="End time in seconds")
-    value: str = Field(..., description="Viseme name (e.g., 'viseme_aa') or Rhubarb letter")
+    value: str = Field(..., description="Viseme name (e.g., 'viseme_aa')")
 
     @field_validator("end")
     @classmethod

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
  * useAudioDrivenLipSync - Enhanced lip sync with audio amplitude fallback
  *
  * This hook provides robust lip sync that works in two modes:
- * 1. When mouthCues exist: Use precise viseme timeline from Rhubarb
+ * 1. When mouthCues exist: Use precise viseme timeline
  * 2. When mouthCues are missing/empty: Drive mouth with audio amplitude analysis
  *
  * Features:

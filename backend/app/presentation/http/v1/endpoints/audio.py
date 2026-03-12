@@ -13,10 +13,11 @@ from fastapi import Path as PathParam
 from fastapi.responses import FileResponse
 from loguru import logger
 
+from app.shared.config import get_settings
+
 router = APIRouter()
 
-# Storage base path (relative to backend directory)
-AUDIO_STORAGE_PATH = Path("backend/.data/sessions")
+AUDIO_STORAGE_PATH = Path(get_settings().AUDIO_STORAGE_PATH)
 
 
 def is_safe_path_component(component: str) -> bool:

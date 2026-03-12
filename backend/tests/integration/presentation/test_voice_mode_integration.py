@@ -24,8 +24,8 @@ async def test_websocket_routes_voice_mode_audio_chunks():
     Validates Requirements 11.1, 11.2, 3.1, 3.2
     """
     # Arrange
-    from app.api.v1.endpoints.websocket import WebSocketHandler
-    from app.services.pipeline.session_manager import Session
+    from app.presentation.ws.gateway import WebSocketHandler
+    from app.application.chat.session_manager import Session
 
     session_id = str(uuid.uuid4())
 
@@ -82,8 +82,8 @@ async def test_websocket_handles_voice_mode_stop():
     Validates Requirements 11.2, 11.3
     """
     # Arrange
-    from app.api.v1.endpoints.websocket import WebSocketHandler
-    from app.services.pipeline.session_manager import Session
+    from app.presentation.ws.gateway import WebSocketHandler
+    from app.application.chat.session_manager import Session
 
     session_id = str(uuid.uuid4())
 
@@ -134,8 +134,8 @@ async def test_websocket_cleanup_clears_voice_mode_buffer():
     Validates Requirements 11.1, 11.2, 12.4
     """
     # Arrange
-    from app.api.v1.endpoints.websocket import WebSocketHandler
-    from app.services.pipeline.session_manager import Session
+    from app.presentation.ws.gateway import WebSocketHandler
+    from app.application.chat.session_manager import Session
 
     session_id = str(uuid.uuid4())
 
@@ -181,8 +181,8 @@ async def test_websocket_routes_legacy_audio_chunks():
     This ensures backward compatibility with the old protocol.
     """
     # Arrange
-    from app.api.v1.endpoints.websocket import WebSocketHandler
-    from app.services.pipeline.session_manager import Session
+    from app.presentation.ws.gateway import WebSocketHandler
+    from app.application.chat.session_manager import Session
 
     session_id = str(uuid.uuid4())
 

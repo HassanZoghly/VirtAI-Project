@@ -21,9 +21,9 @@ from app.schemas.ws_messages import (
     TTSReady,
     VisemesReady,
 )
-from app.services.llm.base import LLMChunk
-from app.services.pipeline.conversation import ConversationPipeline
-from app.services.tts.base import TTSResult
+from app.domain.chat.entities import LLMChunk
+from app.application.voice.handle_voice_turn import ConversationPipeline
+from app.domain.voice.entities import TTSResult
 
 
 class TestProcessMessage:
@@ -76,7 +76,7 @@ class TestProcessMessage:
 
         # Act
         with patch(
-            "app.services.tts.viseme_generator.VisemeGenerator", return_value=mock_viseme_gen
+            "app.infrastructure.tts.viseme_generator.VisemeGenerator", return_value=mock_viseme_gen
         ):
             await pipeline.process_message(
                 message_id=message_id,

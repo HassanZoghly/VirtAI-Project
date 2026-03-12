@@ -13,8 +13,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.api.v1.endpoints.websocket import WebSocketHandler
-from app.services.pipeline.session_manager import Session
+from app.presentation.ws.gateway import WebSocketHandler
+from app.application.chat.session_manager import Session
 
 
 def _make_handler():

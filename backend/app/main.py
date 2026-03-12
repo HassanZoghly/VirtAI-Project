@@ -14,14 +14,14 @@ from loguru import logger
 from app.presentation.http.v1.dependencies import init_session_manager
 from app.presentation.http.v1.router import router as api_v1_router
 from app.shared.config import get_settings
-from app.shared.database import init_db
+from app.infrastructure.db.database import init_db
 from app.shared.errors import (
     AvatarBaseException,
     avatar_exception_handler,
     generic_exception_handler,
 )
-from app.shared.logging import setup_logging
-from app.services.pipeline.session_manager import SessionManager  # canonical: stays in services/
+from app.shared.log_config import setup_logging
+from app.application.chat.session_manager import SessionManager
 
 settings = get_settings()
 
@@ -58,8 +58,13 @@ async def lifespan(app: FastAPI):
             raise ValueError("GROQ_API_KEY is required in production mode")
 
     # Create service factories that use centralized settings
+    from app.infrastructure.asr.groq_whisper import GroqWhisperASR
     from app.infrastructure.llm.groq_provider import GroqLLMProvider
     from app.infrastructure.tts.edge_tts_provider import EdgeTTSProvider
+
+    def create_asr_service() -> GroqWhisperASR:
+        """Factory function to create ASR service."""
+        return GroqWhisperASR()
 
     def create_llm_service() -> GroqLLMProvider:
         """Factory function to create LLM service with centralized settings."""
@@ -85,6 +90,7 @@ async def lifespan(app: FastAPI):
     session_manager = SessionManager(
         session_timeout_sec=settings.SESSION_TIMEOUT_SEC,
         session_cleanup_interval=settings.SESSION_CLEANUP_INTERVAL,
+        asr_service_factory=create_asr_service,
         llm_service_factory=create_llm_service,
         tts_service_factory=create_tts_service,
     )

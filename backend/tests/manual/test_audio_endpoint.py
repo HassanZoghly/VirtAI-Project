@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services.tts.edge_tts_provider import EdgeTTSProvider
+from app.infrastructure.tts.edge_tts_provider import EdgeTTSProvider
 
 
 async def test_audio_endpoint_integration():

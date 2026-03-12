@@ -14,7 +14,7 @@ from pathlib import Path
 # Add backend to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.services.tts.edge_tts_provider import EdgeTTSProvider
+from app.infrastructure.tts.edge_tts_provider import EdgeTTSProvider
 
 
 async def example_audio_workflow():

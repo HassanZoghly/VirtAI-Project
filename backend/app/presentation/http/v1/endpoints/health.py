@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app.presentation.http.v1.dependencies import get_session_manager
 from app.shared.config import get_settings
-from app.services.pipeline.session_manager import SessionManager
+from app.application.chat.session_manager import SessionManager
 
 router = APIRouter(prefix="/health", tags=["health"])
 settings = get_settings()

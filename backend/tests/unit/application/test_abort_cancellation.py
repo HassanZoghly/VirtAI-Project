@@ -13,9 +13,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.services.pipeline.conversation import ConversationPipeline
-from app.services.pipeline.events import PipelineEventType
-from app.services.pipeline.session_manager import SessionManager
+from app.application.voice.handle_voice_turn import ConversationPipeline
+from app.domain.chat.entities import PipelineEventType
+from app.application.chat.session_manager import SessionManager
 
 
 class TestSessionManagerAbort:

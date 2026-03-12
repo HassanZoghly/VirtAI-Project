@@ -7,7 +7,7 @@ and conversion to float32 numpy arrays for ASR input.
 import pytest
 import numpy as np
 import time
-from app.services.audio_pipeline import (
+from app.infrastructure.asr.audio_pipeline import (
     AudioPipeline,
     pcm_bytes_to_float32,
     BufferOverflowError,

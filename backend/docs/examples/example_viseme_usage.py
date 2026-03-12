@@ -7,8 +7,8 @@ import asyncio
 import json
 from pathlib import Path
 
-from app.services.tts.edge_tts_provider import EdgeTTSProvider
-from app.services.tts.viseme_generator import VisemeGenerator
+from app.infrastructure.tts.edge_tts_provider import EdgeTTSProvider
+from app.infrastructure.tts.viseme_generator import VisemeGenerator
 
 
 async def example_complete_flow():

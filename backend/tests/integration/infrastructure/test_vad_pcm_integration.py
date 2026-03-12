@@ -16,7 +16,7 @@ import time
 import numpy as np
 import pytest
 
-from app.services.audio_pipeline import AudioPipeline, BufferTimeoutError
+from app.infrastructure.asr.audio_pipeline import AudioPipeline, BufferTimeoutError
 
 
 def generate_pcm_audio(duration_ms: int, frequency: int = 440, sample_rate: int = 16000) -> bytes:
@@ -333,7 +333,7 @@ async def test_vad_preserves_buffer_limits():
     
     Validates Requirements: 3.1, 3.2
     """
-    from app.services.audio_pipeline import BufferOverflowError
+    from app.infrastructure.asr.audio_pipeline import BufferOverflowError
     
     # Create pipeline with small buffer limit
     pipeline = AudioPipeline(max_buffer_size=5000)

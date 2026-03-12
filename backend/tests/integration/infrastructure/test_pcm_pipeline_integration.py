@@ -99,7 +99,7 @@ async def test_end_to_end_pcm_pipeline_with_synthesized_audio():
     
     Validates Requirements: 2.1, 2.2, 2.3, 2.4, 2.5
     """
-    from app.services.audio_pipeline import AudioPipeline, pcm_bytes_to_float32
+    from app.infrastructure.asr.audio_pipeline import AudioPipeline, pcm_bytes_to_float32
     
     # Generate synthesized audio (440Hz sine wave, 1 second)
     pcm_audio = generate_pcm_audio(duration_ms=1000, frequency=440)
@@ -149,7 +149,7 @@ async def test_end_to_end_pcm_pipeline_with_silence():
     
     Validates Requirements: 2.3, 2.4, 2.5
     """
-    from app.services.audio_pipeline import AudioPipeline
+    from app.infrastructure.asr.audio_pipeline import AudioPipeline
     
     # Generate silence (1 second)
     silence = generate_silence(duration_ms=1000)
@@ -186,7 +186,7 @@ async def test_end_to_end_pcm_pipeline_with_multiple_chunks():
     
     Validates Requirements: 2.3, 2.4
     """
-    from app.services.audio_pipeline import AudioPipeline
+    from app.infrastructure.asr.audio_pipeline import AudioPipeline
     
     # Generate audio with different chunk sizes
     chunk1 = generate_pcm_audio(duration_ms=50)   # 50ms
@@ -226,7 +226,7 @@ async def test_pcm_conversion_accuracy():
     
     Validates Requirements: 2.4
     """
-    from app.services.audio_pipeline import pcm_bytes_to_float32
+    from app.infrastructure.asr.audio_pipeline import pcm_bytes_to_float32
     
     # Test known values
     # Int16 max (32767) should convert to ~1.0
@@ -260,7 +260,7 @@ async def test_pcm_pipeline_buffer_concatenation():
     
     Validates Requirements: 2.3, 2.4
     """
-    from app.services.audio_pipeline import AudioPipeline
+    from app.infrastructure.asr.audio_pipeline import AudioPipeline
     
     # Create audio pipeline
     pipeline = AudioPipeline()
@@ -299,7 +299,7 @@ async def test_pcm_pipeline_with_websocket_simulation():
     
     Validates Requirements: 2.2, 2.3, 2.4
     """
-    from app.services.audio_pipeline import AudioPipeline
+    from app.infrastructure.asr.audio_pipeline import AudioPipeline
     
     # Generate audio
     pcm_audio = generate_pcm_audio(duration_ms=500)
@@ -337,7 +337,7 @@ async def test_pcm_pipeline_error_handling():
     
     Validates Requirements: 2.3, 2.4
     """
-    from app.services.audio_pipeline import AudioPipeline, pcm_bytes_to_float32
+    from app.infrastructure.asr.audio_pipeline import AudioPipeline, pcm_bytes_to_float32
     
     # Test empty PCM bytes
     with pytest.raises(ValueError, match="pcm_bytes cannot be empty"):
@@ -360,7 +360,7 @@ async def test_pcm_pipeline_recovery_after_error():
     
     Validates Requirements: 2.3, 3.4
     """
-    from app.services.audio_pipeline import AudioPipeline, BufferOverflowError
+    from app.infrastructure.asr.audio_pipeline import AudioPipeline, BufferOverflowError
     
     # Create pipeline with small buffer limit
     pipeline = AudioPipeline(max_buffer_size=1000)
@@ -393,7 +393,7 @@ async def test_pcm_pipeline_preserves_audio_quality():
     
     Validates Requirements: 2.4
     """
-    from app.services.audio_pipeline import pcm_bytes_to_float32
+    from app.infrastructure.asr.audio_pipeline import pcm_bytes_to_float32
     
     # Generate known sine wave
     duration_ms = 1000

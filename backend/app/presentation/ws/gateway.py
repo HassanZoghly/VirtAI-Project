@@ -59,7 +59,7 @@ from app.schemas.ws_messages import (
     make_visemes_msg,
 )
 from app.domain.chat.entities import PipelineEvent, PipelineEventType
-from app.services.pipeline.session_manager import Session
+from app.application.chat.session_manager import Session
 from app.presentation.ws.voice_mode_handler import VoiceModeHandler
 from app.infrastructure.asr.groq_whisper import GroqWhisperASR
 from app.shared.config import get_settings

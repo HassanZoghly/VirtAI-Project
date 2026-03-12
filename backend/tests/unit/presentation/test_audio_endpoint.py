@@ -101,7 +101,7 @@ class TestAudioEndpoint:
         """Test that path resolution prevents escaping storage directory"""
         # Even if validation is bypassed, path resolution should catch it
         # This is the critical security layer
-        from app.api.v1.endpoints.audio import is_safe_path_component
+        from app.presentation.http.v1.endpoints.audio import is_safe_path_component
 
         # Test various malicious inputs
         assert not is_safe_path_component("../etc")

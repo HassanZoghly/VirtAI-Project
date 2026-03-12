@@ -10,7 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.config import get_settings
-from app.shared.database import get_db
+from app.infrastructure.db.database import get_db
 from app.shared.security import (
     create_access_token,
     create_refresh_token,

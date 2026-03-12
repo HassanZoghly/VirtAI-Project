@@ -19,7 +19,7 @@ import time
 import pytest
 from hypothesis import given, strategies as st, settings, assume, HealthCheck
 
-from app.services.audio_pipeline import (
+from app.infrastructure.asr.audio_pipeline import (
     AudioPipeline,
     BufferOverflowError,
 )

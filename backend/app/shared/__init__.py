@@ -1,1 +1,1 @@
-"""Shared cross-cutting concerns — config, errors, logging, security, database."""
+"""Shared cross-cutting concerns — config, errors, log_config, security."""

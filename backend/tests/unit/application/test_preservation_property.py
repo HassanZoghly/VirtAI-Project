@@ -20,12 +20,12 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from hypothesis import given, strategies as st, settings, HealthCheck
 
-from app.services.audio_pipeline import (
+from app.infrastructure.asr.audio_pipeline import (
     AudioPipeline,
     BufferOverflowError,
     ChunkSizeError,
 )
-from app.websocket.voice_mode_handler import VoiceModeHandler
+from app.presentation.ws.voice_mode_handler import VoiceModeHandler
 
 
 # Strategy for generating valid PCM audio chunks

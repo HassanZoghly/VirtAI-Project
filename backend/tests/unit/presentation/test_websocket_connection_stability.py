@@ -49,9 +49,9 @@ async def test_websocket_connection_stability_scoped():
     import uuid
     
     # Import here to avoid module-level import issues
-    with patch('app.services.tts.tts_utils.AudioSegment'):
-        from app.api.v1.endpoints.websocket import WebSocketHandler
-        from app.services.pipeline.session_manager import Session
+    with patch('app.infrastructure.tts.tts_utils.AudioSegment'):
+        from app.presentation.ws.gateway import WebSocketHandler
+        from app.application.chat.session_manager import Session
 
         session_id = str(uuid.uuid4())
         
@@ -157,9 +157,9 @@ async def test_websocket_connection_remains_open_60_seconds():
     import uuid
     
     # Import here to avoid module-level import issues
-    with patch('app.services.tts.tts_utils.AudioSegment'):
-        from app.api.v1.endpoints.websocket import WebSocketHandler
-        from app.services.pipeline.session_manager import Session
+    with patch('app.infrastructure.tts.tts_utils.AudioSegment'):
+        from app.presentation.ws.gateway import WebSocketHandler
+        from app.application.chat.session_manager import Session
 
         session_id = str(uuid.uuid4())
         
@@ -273,9 +273,9 @@ async def test_websocket_heartbeat_initialization():
     import uuid
     
     # Import here to avoid module-level import issues
-    with patch('app.services.tts.tts_utils.AudioSegment'):
-        from app.api.v1.endpoints.websocket import WebSocketHandler
-        from app.services.pipeline.session_manager import Session
+    with patch('app.infrastructure.tts.tts_utils.AudioSegment'):
+        from app.presentation.ws.gateway import WebSocketHandler
+        from app.application.chat.session_manager import Session
 
         session_id = str(uuid.uuid4())
         

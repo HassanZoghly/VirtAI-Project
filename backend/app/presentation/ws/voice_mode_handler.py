@@ -27,7 +27,7 @@ from app.domain.voice.ports import StreamingASRService
 
 if TYPE_CHECKING:
     from fastapi import WebSocket
-    from app.services.pipeline.conversation import ConversationPipeline
+    from app.application.voice.handle_voice_turn import ConversationPipeline
 
 
 class RateLimitError(Exception):

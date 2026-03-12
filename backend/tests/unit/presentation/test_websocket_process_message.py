@@ -20,8 +20,8 @@ async def test_websocket_handler_calls_process_message():
     # Arrange
     import uuid
 
-    from app.api.v1.endpoints.websocket import WebSocketHandler
-    from app.services.pipeline.session_manager import Session
+    from app.presentation.ws.gateway import WebSocketHandler
+    from app.application.chat.session_manager import Session
 
     # Generate valid UUIDs
     session_id = str(uuid.uuid4())
@@ -82,9 +82,9 @@ async def test_send_protocol_message_formats_correctly():
     Test that _send_protocol_message correctly formats Pydantic models.
     """
     # Arrange
-    from app.api.v1.endpoints.websocket import WebSocketHandler
+    from app.presentation.ws.gateway import WebSocketHandler
     from app.schemas.ws_messages import ChatDelta, PipelineState
-    from app.services.pipeline.session_manager import Session
+    from app.application.chat.session_manager import Session
 
     # Mock WebSocket
     mock_ws = MagicMock()

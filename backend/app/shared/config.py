@@ -41,11 +41,6 @@ class Settings(BaseSettings):
     # Groq API
     GROQ_API_KEY: str = Field(default="", description="Groq API Key (optional in dev mode)")
 
-    # OpenAI API (for fallback)
-    OPENAI_API_KEY: str = Field(
-        default="", description="OpenAI API Key (optional, for ASR fallback)"
-    )
-
     # ASR (Whisper via Groq)
     ASR_MODEL: str = "whisper-large-v3"
     ASR_LANGUAGE: str = "en"
@@ -65,7 +60,7 @@ class Settings(BaseSettings):
     )
 
     # TTS (Edge TTS)
-    TTS_VOICE: str = "en-US-AriaNeural"
+    TTS_VOICE: str = "en-US-GuyNeural"
     TTS_RATE: str = "+0%"
     TTS_VOLUME: str = "+0%"
     TTS_PITCH: str = "+0Hz"

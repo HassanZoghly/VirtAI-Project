@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 from typing import List, Tuple
 
-from app.services.audio_pipeline import AudioPipeline, pcm_bytes_to_float32
+from app.infrastructure.asr.audio_pipeline import AudioPipeline, pcm_bytes_to_float32
 
 
 def generate_pcm_audio(duration_ms: int, frequency: int = 440, sample_rate: int = 16000) -> bytes:

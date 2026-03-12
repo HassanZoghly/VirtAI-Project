@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.services.audio_pipeline import (
+from app.infrastructure.asr.audio_pipeline import (
     AudioPipeline,
     BufferOverflowError,
     BufferTimeoutError,

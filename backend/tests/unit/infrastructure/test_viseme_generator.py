@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.services.tts.viseme_generator import VisemeGenerator
+from app.infrastructure.tts.viseme_generator import VisemeGenerator
 
 
 class TestVisemeGenerator:

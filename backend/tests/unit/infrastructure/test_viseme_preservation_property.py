@@ -33,7 +33,7 @@ import pytest
 from hypothesis import given, strategies as st, settings, HealthCheck
 
 from app.schemas.ws_messages import MouthCue
-from app.services.tts.viseme_generator import VisemeGenerator
+from app.infrastructure.tts.viseme_generator import VisemeGenerator
 
 
 def create_test_audio_file() -> str:

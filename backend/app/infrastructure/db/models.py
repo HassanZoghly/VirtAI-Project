@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.shared.database import Base
+from app.infrastructure.db.database import Base
 
 
 class User(Base):

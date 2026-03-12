@@ -10,8 +10,8 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.config import Settings, get_settings
-from app.shared.database import get_db
-from app.services.pipeline.session_manager import SessionManager
+from app.infrastructure.db.database import get_db
+from app.application.chat.session_manager import SessionManager
 
 # Application-scoped SessionManager instance
 # This will be initialized in main.py lifespan and stored in app.state

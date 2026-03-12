@@ -11,7 +11,6 @@ export default function VoiceTab({
   onPlay,
   onStop,
   isPlaying,
-  audioRef,
 }) {
   const filteredVoices = avatarGender ? voices.filter((v) => v.gender === avatarGender) : voices;
   const [playingId, setPlayingId] = useState(null);

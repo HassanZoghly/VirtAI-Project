@@ -263,7 +263,6 @@ export default function ClassroomShell() {
               messagesEndRef={messagesEndRef}
               onScroll={handleChatScroll}
               pipelineState={conversationState.pipelineState}
-              onSendText={handleSendText}
             />
             <ChatInput
               inputValue={inputValue}

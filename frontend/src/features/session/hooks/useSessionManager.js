@@ -10,7 +10,9 @@ function createSession(title = 'New chat') {
 export default function useSessionManager() {
   const [sessions, setSessions] = useState(() => {
     const saved = loadFromStorage();
-    if (saved && saved.length > 0) return saved;
+    if (saved && saved.length > 0) {
+      return saved;
+    }
     return [createSession()];
   });
 

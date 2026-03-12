@@ -1,4 +1,4 @@
-import { PiChatTeardropTextFill, PiLightbulbFilament, PiRobotFill, PiUserCircleFill, PiWarningCircleFill } from 'react-icons/pi';
+import { PiLightbulbFilament, PiRobotFill, PiUserCircleFill, PiWarningCircleFill } from 'react-icons/pi';
 import MessageBubble from './MessageBubble';
 
 /**
@@ -25,7 +25,6 @@ export default function MessageList({
   messagesEndRef,
   onScroll,
   pipelineState,
-  onSendText,
 }) {
   return (
     <div className="chat-messages" ref={chatScrollRef} onScroll={onScroll} role="log" aria-label="Chat messages">

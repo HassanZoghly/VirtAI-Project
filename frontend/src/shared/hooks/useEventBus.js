@@ -16,14 +16,18 @@ import { useEffect, useRef } from 'react';
 const listeners = new Map();
 
 function on(event, handler) {
-  if (!listeners.has(event)) listeners.set(event, new Set());
+  if (!listeners.has(event)) {
+    listeners.set(event, new Set());
+  }
   listeners.get(event).add(handler);
   return () => listeners.get(event)?.delete(handler);
 }
 
 function emit(event, data) {
   const set = listeners.get(event);
-  if (!set) return;
+  if (!set) {
+    return;
+  }
   set.forEach((handler) => handler(data));
 }
 

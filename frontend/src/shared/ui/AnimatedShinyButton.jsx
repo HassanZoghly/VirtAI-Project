@@ -17,7 +17,7 @@ export default function AnimatedShinyButton({ children, className, onClick, ...p
     >
       {/* animated shine sweep */}
       <span
-        className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent
+        className="pointer-events-none absolute inset-0 -translate-x-full bg-linear-to-r from-transparent via-white/20 to-transparent
           transition-transform duration-700 ease-in-out group-hover:translate-x-full"
       />
       <span className="relative z-10 flex items-center gap-2">{children}</span>

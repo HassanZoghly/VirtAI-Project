@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 /**
@@ -208,8 +209,12 @@ function useWSClient(url) {
       };
 
       socket.onclose = (event) => {
-        if (socket._instanceId !== instanceId) return;
-        if (socket._mountId !== mountIdRef.current) return;
+        if (socket._instanceId !== instanceId) {
+          return;
+        }
+        if (socket._mountId !== mountIdRef.current) {
+          return;
+        }
 
         const wasIntentional = isIntentionalCloseRef.current;
 
@@ -347,7 +352,9 @@ function useWSClient(url) {
           wsRef.current.send(isBinary ? message : JSON.stringify(message));
         } catch (err) {
           console.error('[WS] Failed to send message:', err);
-          if (!isBinary) messageQueue.current.push(message);
+          if (!isBinary) {
+            messageQueue.current.push(message);
+          }
         }
       } else if (!isBinary) {
         messageQueue.current.push(message);
@@ -369,7 +376,9 @@ function useWSClient(url) {
       const set = handlers.current[type];
       if (set) {
         set.delete(handler);
-        if (set.size === 0) delete handlers.current[type];
+        if (set.size === 0) {
+          delete handlers.current[type];
+        }
       }
     };
   }, []);

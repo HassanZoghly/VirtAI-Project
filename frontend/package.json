@@ -1,61 +1,66 @@
 {
-    "name": "virtai-react",
-    "description": "VirtAI - Virtual AI Assistant for Speech & Chat (React)",
-    "version": "1.0.0",
-    "private": true,
-    "type": "module",
-    "scripts": {
-        "dev": "vite",
-        "build": "vite build",
-        "preview": "vite preview",
-        "test": "vitest --run",
-        "test:watch": "vitest",
-        "lint": "eslint src --ext .js,.jsx",
-        "lint:fix": "eslint src --ext .js,.jsx --fix",
-        "format": "prettier --write \"src/**/*.{js,jsx,json,css}\"",
-        "format:check": "prettier --check \"src/**/*.{js,jsx,json,css}\""
-    },
-    "dependencies": {
-        "@hookform/resolvers": "^5.2.2",
-        "@react-three/drei": "^9.105.6",
-        "@react-three/fiber": "^8.16.8",
-        "axios": "^1.13.6",
-        "clsx": "^2.1.1",
-        "lottie-react": "^2.4.1",
-        "motion": "^12.35.0",
-        "react": "^18.3.1",
-        "react-dom": "^18.3.1",
-        "react-helmet-async": "^2.0.5",
-        "react-hook-form": "^7.71.2",
-        "react-icons": "^5.3.0",
-        "react-router-dom": "^6.26.2",
-        "tailwind-merge": "^3.5.0",
-        "three": "0.160.0",
-        "zod": "^4.3.6",
-        "zustand": "^5.0.11"
-    },
-    "overrides": {
-        "three": "0.160.0",
-        "stats-gl": {
-            "three": "0.160.0"
-        }
-    },
-    "devDependencies": {
-        "@tailwindcss/vite": "^4.2.1",
-        "@testing-library/jest-dom": "^6.9.1",
-        "@testing-library/react": "^16.3.2",
-        "@vitejs/plugin-react": "^4.2.1",
-        "eslint": "^8.57.0",
-        "eslint-plugin-react": "^7.33.2",
-        "eslint-plugin-react-hooks": "^4.6.0",
-        "fast-check": "^4.5.3",
-        "happy-dom": "^20.7.0",
-        "prettier": "^3.2.5",
-        "tailwindcss": "^4.2.1",
-        "vite": "^7.3.1",
-        "vitest": "^4.0.18"
-    },
-    "engines": {
-        "node": ">=18.18"
+  "name": "virtai-react",
+  "description": "VirtAI - Virtual AI Assistant for Speech & Chat (React)",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest --run",
+    "test:watch": "vitest",
+    "lint": "eslint src --ext .js,.jsx,.ts,.tsx",
+    "lint:fix": "eslint src --ext .js,.jsx,.ts,.tsx --fix",
+    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,json,css}\"",
+    "format:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx,json,css}\""
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
+    "@react-three/drei": "^9.105.6",
+    "@react-three/fiber": "^8.16.8",
+    "axios": "^1.13.6",
+    "clsx": "^2.1.1",
+    "lottie-react": "^2.4.1",
+    "motion": "^12.35.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-helmet-async": "^2.0.5",
+    "react-hook-form": "^7.71.2",
+    "react-icons": "^5.3.0",
+    "react-router-dom": "^6.26.2",
+    "tailwind-merge": "^3.5.0",
+    "three": "0.160.0",
+    "zod": "^4.3.6",
+    "zustand": "^5.0.11"
+  },
+  "overrides": {
+    "three": "0.160.0",
+    "stats-gl": {
+      "three": "0.160.0"
     }
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@typescript-eslint/eslint-plugin": "^8.57.0",
+    "@typescript-eslint/parser": "^8.57.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react": "^7.33.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "fast-check": "^4.5.3",
+    "happy-dom": "^20.7.0",
+    "prettier": "^3.2.5",
+    "tailwindcss": "^4.2.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vitest": "^4.0.18"
+  },
+  "engines": {
+    "node": ">=18.18"
+  }
 }

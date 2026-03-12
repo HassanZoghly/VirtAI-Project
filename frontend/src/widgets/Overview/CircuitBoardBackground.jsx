@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef } from 'react';
 
 /* ── colour constants ─────────────────────────────────────── */
 const TRACK_COLOR = 'rgba(109, 0, 26, 0.08)';
-const JUNCTION_BASE = 'rgba(181, 172, 138, 0.15)';
 const PULSE_PALETTE = [
   { hex: '#B5AC8A', r: 181, g: 172, b: 138, weight: 0.6 },
   { hex: '#6D001A', r: 109, g: 0, b: 26, weight: 0.25 },

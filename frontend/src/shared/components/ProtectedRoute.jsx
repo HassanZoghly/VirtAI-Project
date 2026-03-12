@@ -8,8 +8,8 @@ export default function ProtectedRoute({ children }) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[var(--primary-bg)]">
-        <div className="w-10 h-10 border-4 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin" />
+      <div className="flex items-center justify-center h-screen bg-(--primary-bg)">
+        <div className="w-10 h-10 border-4 border-(--accent-primary) border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }

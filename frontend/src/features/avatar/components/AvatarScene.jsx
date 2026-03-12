@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { ContactShadows, Environment, OrbitControls, useFBX, useGLTF } from '@react-three/drei';
 import { Canvas, useFrame } from '@react-three/fiber';
 import React, { Component, Suspense, useEffect, useMemo, useRef } from 'react';
@@ -133,7 +134,6 @@ const AvatarRig = React.memo(function AvatarRig({
   modelPath,
   currentAnimation,
   morphTargets = {},
-  bodyMotion = { headBob: 0, chestBob: 0 },
   onModelLoaded,
   audioRef,
   mouthCues,
@@ -812,7 +812,6 @@ const AvatarScene = React.memo(function AvatarScene({
   modelPath,
   currentAnimation = 'idle',
   morphTargets = {},
-  bodyMotion = { headBob: 0, chestBob: 0 },
   onModelLoaded,
   onError,
   audioRef,
@@ -870,7 +869,6 @@ const AvatarScene = React.memo(function AvatarScene({
                 modelPath={modelPath}
                 currentAnimation={currentAnimation}
                 morphTargets={morphTargets}
-                bodyMotion={bodyMotion}
                 onModelLoaded={handleModelReady}
                 audioRef={audioRef}
                 mouthCues={mouthCues}

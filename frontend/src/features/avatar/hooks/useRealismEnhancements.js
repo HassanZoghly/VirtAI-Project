@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 
@@ -35,9 +36,6 @@ export function useRealismEnhancements(
 
   // Refs for morph target meshes
   const headMeshRef = useRef(null);
-
-  // Head bob state
-  const headBobPhaseRef = useRef(0);
 
   // Eye look-at state
   const eyeLookPhaseRef = useRef(0);
@@ -102,7 +100,6 @@ export function useRealismEnhancements(
   // Main enhancement loop
   useEffect(() => {
     const updateEnhancements = () => {
-      const now = performance.now();
       const enhanced = { ...baseMorphTargets };
 
       // 1. COARTICULATION: Blend between current and next viseme near boundaries
@@ -111,8 +108,6 @@ export function useRealismEnhancements(
         const activeCue = findActiveCue(mouthCues, currentTime);
 
         if (activeCue) {
-          const timeInCue = currentTime - activeCue.start;
-          const cueDuration = activeCue.end - activeCue.start;
           const timeUntilEnd = activeCue.end - currentTime;
 
           // Blend with next viseme in last 80ms

@@ -27,10 +27,10 @@ export default function AuthCallbackHandler() {
       <Helmet>
         <title>Signing in… — VirtAI</title>
       </Helmet>
-      <div className="flex flex-col items-center justify-center h-screen bg-[var(--primary-bg)]">
-        <div className="w-12 h-12 border-4 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin" />
+      <div className="flex flex-col items-center justify-center h-screen bg-(--primary-bg)">
+        <div className="w-12 h-12 border-4 border-(--accent-primary) border-t-transparent rounded-full animate-spin" />
         {isLoading && (
-          <p className="mt-4 text-[var(--text-secondary)] text-sm">Completing sign-in…</p>
+          <p className="mt-4 text-(--text-secondary) text-sm">Completing sign-in…</p>
         )}
       </div>
     </>

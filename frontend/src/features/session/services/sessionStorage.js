@@ -7,7 +7,9 @@ const STORAGE_KEY = 'virtai-sessions';
 export function loadFromStorage() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw === null) return null;
+    if (raw === null) {
+      return null;
+    }
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : null;
   } catch {

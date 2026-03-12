@@ -56,7 +56,7 @@ function App() {
     restore();
     preloadSetup();
     preloadClassroom();
-  }, []);
+  }, [restore]);
 
   return (
     <HelmetProvider>

@@ -1,10 +1,10 @@
 /**
  * Circular Buffer for Audio Chunks
- * 
+ *
  * Implements a fixed-size circular buffer to minimize memory allocations
  * during continuous audio processing. Reuses buffer slots instead of
  * creating new arrays.
- * 
+ *
  * Requirements: 14.1, 14.2
  */
 
@@ -29,7 +29,7 @@ interface BufferSlot {
 
 /**
  * Circular buffer for efficient audio chunk storage
- * 
+ *
  * Uses a fixed-size ring buffer to avoid repeated allocations.
  * When the buffer is full, oldest chunks are overwritten.
  */
@@ -43,14 +43,22 @@ export class CircularAudioBuffer {
 
     /**
      * Create a new circular audio buffer
-     * 
+     *
      * @param capacity - Maximum number of chunks to store
      * @param maxChunkSize - Maximum size of each audio chunk (samples)
      */
     constructor(capacity: number = 100, maxChunkSize: number = 16000) {
+        if (!Number.isInteger(capacity) || capacity <= 0) {
+            throw new Error(`[CircularBuffer] capacity must be a positive integer. Received: ${capacity}`);
+        }
+
+        if (!Number.isInteger(maxChunkSize) || maxChunkSize <= 0) {
+            throw new Error(`[CircularBuffer] maxChunkSize must be a positive integer. Received: ${maxChunkSize}`);
+        }
+
         this.capacity = capacity;
         this.maxChunkSize = maxChunkSize;
-        this.buffer = new Array(capacity);
+        this.buffer = new Array<BufferSlot>(capacity);
         this.writeIndex = 0;
         this.readIndex = 0;
         this.size = 0;
@@ -67,11 +75,24 @@ export class CircularAudioBuffer {
     }
 
     /**
+     * Safely get a buffer slot
+     */
+    private getSlot(index: number): BufferSlot {
+        const slot = this.buffer[index];
+
+        if (!slot) {
+            throw new Error(`[CircularBuffer] Buffer slot at index ${index} is not initialized`);
+        }
+
+        return slot;
+    }
+
+    /**
      * Add an audio chunk to the buffer
-     * 
+     *
      * Copies the audio data into a pre-allocated buffer slot.
      * If the buffer is full, overwrites the oldest chunk.
-     * 
+     *
      * @param audioData - Audio samples to store
      * @param timestamp - Timestamp of the chunk
      * @param isFinal - Whether this is the final chunk
@@ -85,7 +106,7 @@ export class CircularAudioBuffer {
         }
 
         // Get the current write slot
-        const slot = this.buffer[this.writeIndex];
+        const slot = this.getSlot(this.writeIndex);
 
         // Copy audio data into pre-allocated buffer (avoid allocation)
         slot.data.set(audioData);
@@ -109,7 +130,7 @@ export class CircularAudioBuffer {
 
     /**
      * Read the next audio chunk from the buffer
-     * 
+     *
      * @returns Audio chunk or null if buffer is empty
      */
     read(): AudioChunk | null {
@@ -117,7 +138,7 @@ export class CircularAudioBuffer {
             return null;
         }
 
-        const slot = this.buffer[this.readIndex];
+        const slot = this.getSlot(this.readIndex);
 
         // Create a copy to return (slice to actual data length)
         const chunk: AudioChunk = {
@@ -135,7 +156,7 @@ export class CircularAudioBuffer {
 
     /**
      * Peek at the next chunk without removing it
-     * 
+     *
      * @returns Audio chunk or null if buffer is empty
      */
     peek(): AudioChunk | null {
@@ -143,7 +164,7 @@ export class CircularAudioBuffer {
             return null;
         }
 
-        const slot = this.buffer[this.readIndex];
+        const slot = this.getSlot(this.readIndex);
         return {
             data: slot.data.slice(0, slot.dataLength),
             timestamp: slot.timestamp,
@@ -153,7 +174,7 @@ export class CircularAudioBuffer {
 
     /**
      * Get all chunks in the buffer without removing them
-     * 
+     *
      * @returns Array of audio chunks in order
      */
     peekAll(): AudioChunk[] {
@@ -161,7 +182,7 @@ export class CircularAudioBuffer {
         let index = this.readIndex;
 
         for (let i = 0; i < this.size; i++) {
-            const slot = this.buffer[index];
+            const slot = this.getSlot(index);
             chunks.push({
                 data: slot.data.slice(0, slot.dataLength),
                 timestamp: slot.timestamp,
@@ -177,6 +198,12 @@ export class CircularAudioBuffer {
      * Clear all chunks from the buffer
      */
     clear(): void {
+        for (const slot of this.buffer) {
+            slot.dataLength = 0;
+            slot.timestamp = 0;
+            slot.isFinal = false;
+        }
+
         this.readIndex = 0;
         this.writeIndex = 0;
         this.size = 0;

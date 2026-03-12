@@ -18,9 +18,13 @@ export default function RenameModal({ isOpen, sessionTitle, onConfirm, onCancel 
 
   // Escape key handler
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      return;
+    }
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') onCancel();
+      if (e.key === 'Escape') {
+        onCancel();
+      }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
@@ -28,13 +32,19 @@ export default function RenameModal({ isOpen, sessionTitle, onConfirm, onCancel 
 
   // Focus trap
   const handleKeyDown = useCallback((e) => {
-    if (e.key !== 'Tab') return;
+    if (e.key !== 'Tab') {
+      return;
+    }
     const modal = modalRef.current;
-    if (!modal) return;
+    if (!modal) {
+      return;
+    }
     const focusable = modal.querySelectorAll(
       'input, button, [tabindex]:not([tabindex="-1"])',
     );
-    if (focusable.length === 0) return;
+    if (focusable.length === 0) {
+      return;
+    }
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
     if (e.shiftKey && document.activeElement === first) {

@@ -8,7 +8,7 @@ export default function GoogleAuthButton({ label = 'Continue with Google' }) {
       type="button"
       onClick={startGoogleAuth}
       disabled={isLoading}
-      className="flex w-full items-center justify-center gap-3 rounded-lg border border-[var(--border-color)] bg-white/5 px-4 py-2.5 text-sm font-medium text-[var(--text-primary)] transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+      className="flex w-full items-center justify-center gap-3 rounded-lg border border-(--border-color) bg-white/5 px-4 py-2.5 text-sm font-medium text-(--text-primary) transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {isLoading ? (
         <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white" />

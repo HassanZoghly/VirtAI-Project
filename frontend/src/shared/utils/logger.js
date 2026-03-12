@@ -1,3 +1,5 @@
+/* eslint-disable no-console */
+
 /**
  * Dev-only logger — all methods are no-ops in production builds.
  * console.error is intentionally excluded; use it directly for real errors.

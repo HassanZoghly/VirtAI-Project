@@ -113,7 +113,7 @@ export default function AvatarController({
   const { enqueue, flush } = useAnimationQueue(setCurrentAnimation);
 
   // Use enhanced audio-driven lip sync hook to get morph targets and body motion
-  const { morphTargets, bodyMotion } = useAudioDrivenLipSync(audioRef, mouthCues, isPlayingAudio);
+  const { morphTargets } = useAudioDrivenLipSync(audioRef, mouthCues, isPlayingAudio);
 
   // Map pipeline state to animation state — flushes queue on each state change
   useEffect(() => {
@@ -248,7 +248,6 @@ export default function AvatarController({
       modelPath={modelPath}
       currentAnimation={currentAnimation}
       morphTargets={morphTargets}
-      bodyMotion={bodyMotion}
       onModelLoaded={handleModelLoaded}
       onError={onError}
       audioRef={audioRef}

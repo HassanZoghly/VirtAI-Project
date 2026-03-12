@@ -5,6 +5,7 @@ import { FiCheck, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { HiOutlineSparkles, HiOutlineSpeakerWave, HiOutlineUser } from 'react-icons/hi2';
 import { useNavigate } from 'react-router-dom';
 
+import '@/pages/Setup/Setup.css';
 import { cn } from '@/shared/utils/cn';
 import CircuitBoardBackground from '@/widgets/Overview/CircuitBoardBackground';
 import AllSetTab from './AllSetTab';
@@ -109,7 +110,7 @@ export default function SetupPage() {
   };
 
   return (
-    <>
+    <div className="setup-page">
       <Helmet>
         <title>Setup — VirtAI</title>
       </Helmet>
@@ -212,7 +213,6 @@ export default function SetupPage() {
                       onPlay={playPreview}
                       onStop={stopAudio}
                       isPlaying={isPlaying}
-                      audioRef={audioRef}
                     />
                   )}
                   {activeTab === 2 && <AllSetTab avatar={selectedAvatar} voice={selectedVoice} />}
@@ -252,6 +252,6 @@ export default function SetupPage() {
           </div>
         </div>
       </motion.div>
-    </>
+    </div>
   );
 }

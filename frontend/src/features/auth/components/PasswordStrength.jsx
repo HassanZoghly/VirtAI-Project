@@ -40,8 +40,8 @@ export default function PasswordStrength({ password = '' }) {
         ))}
       </div>
 
-      <p className="text-xs text-[var(--text-secondary)]">
-        Strength: <span className="font-medium text-[var(--text-primary)]">{config.label}</span>
+      <p className="text-xs text-(--text-secondary)">
+        Strength: <span className="font-medium text-(--text-primary)">{config.label}</span>
       </p>
 
       {/* Rule checklist */}
@@ -53,7 +53,7 @@ export default function PasswordStrength({ password = '' }) {
               key={i}
               className={cn(
                 'flex items-center gap-1.5 text-xs transition-colors',
-                ok ? 'text-green-400' : 'text-[var(--text-muted)]'
+                ok ? 'text-green-400' : 'text-(--text-muted)'
               )}
             >
               {ok ? (

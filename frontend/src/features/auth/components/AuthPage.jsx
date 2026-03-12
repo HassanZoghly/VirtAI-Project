@@ -15,7 +15,7 @@ export default function AuthPage() {
       <Helmet>
         <title>Sign In — VirtAI</title>
       </Helmet>
-      <div className="grid min-h-screen bg-[var(--primary-bg)] lg:grid-cols-2">
+      <div className="grid min-h-screen bg-(--primary-bg) lg:grid-cols-2">
         {/* Left — branding panel (hidden on mobile via WelcomePanel's own classes) */}
         <WelcomePanel />
 

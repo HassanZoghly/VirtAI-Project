@@ -146,7 +146,7 @@ def merge_viseme_lists(viseme_lists: list[list[VisemeEvent]]) -> list[VisemeEven
     return merged
 
 
-def estimate_tts_cost(text: str) -> dict[str, int]:
+def estimate_tts_cost(text: str) -> dict[str, int | float]:
     """
     Estimate TTS cost based on text length
     Returns character count and estimated duration

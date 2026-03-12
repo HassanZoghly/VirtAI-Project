@@ -28,7 +28,7 @@ class ChatMessage:
     role: MessageRole
     content: str
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, str]:
         return {
             "role": self.role.value,
             "content": self.content,
@@ -79,7 +79,7 @@ class ConversationHistory:
     def add_assistant_message(self, content: str) -> None:
         self._messages.append(ChatMessage(role=MessageRole.ASSISTANT, content=content))
 
-    def get_messages(self) -> list[dict]:
+    def get_messages(self) -> list[dict[str, str]]:
         """Returns messages formatted for the API"""
         system = ChatMessage(role=MessageRole.SYSTEM, content=self.system_prompt)
         return [system.to_dict()] + [m.to_dict() for m in self._messages]

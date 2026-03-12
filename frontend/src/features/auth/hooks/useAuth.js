@@ -9,7 +9,7 @@ import {
 } from '@/features/auth/services/authApi';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import Toast from '@/shared/utils/toast';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const toast = new Toast();
@@ -107,17 +107,24 @@ export function useRestoreSession() {
   const setLoading = useAuthStore((s) => s.setLoading);
   const logout = useAuthStore((s) => s.logout);
 
-  const restore = async () => {
+  const restore = useCallback(async () => {
     setLoading(true);
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 8000)
+    );
     try {
-      const { access_token } = await refreshAccessToken();
-      useAuthStore.getState().setAuth(useAuthStore.getState().user, access_token);
-      const user = await getMe();
+      const { access_token } = await Promise.race([refreshAccessToken(), timeout]);
+      const user = await Promise.race([getMe(), timeout]);
       setAuth(user, access_token);
     } catch {
-      logout();
+      // Guard against wiping auth that handleCallback() may have already set
+      if (!useAuthStore.getState().isAuthenticated) {
+        logout();
+      } else {
+        setLoading(false);
+      }
     }
-  };
+  }, [setAuth, setLoading, logout]);
 
   return { restore };
 }

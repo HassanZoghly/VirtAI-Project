@@ -2,7 +2,7 @@ import asyncio
 import re
 from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import edge_tts
 from edge_tts import Communicate
@@ -64,7 +64,7 @@ class EdgeTTSProvider(BaseTTSProvider):
         """Edge TTS gives offset in 100-nanosecond units → milliseconds"""
         return offset_100ns / 10_000.0
 
-    def _parse_viseme_event(self, event: dict) -> Optional[VisemeEvent]:
+    def _parse_viseme_event(self, event: dict | Any) -> Optional[VisemeEvent]:
         """
         Convert edge_tts viseme event to VisemeEvent object
         edge_tts event format:
@@ -86,7 +86,7 @@ class EdgeTTSProvider(BaseTTSProvider):
             logger.warning(f"Failed to parse viseme event: {event} | {e}")
             return None
 
-    def _parse_word_boundary(self, event: dict) -> Optional[WordBoundary]:
+    def _parse_word_boundary(self, event: dict | Any) -> Optional[WordBoundary]:
         """
         Convert edge_tts word boundary event to WordBoundary object
         edge_tts word boundary format:

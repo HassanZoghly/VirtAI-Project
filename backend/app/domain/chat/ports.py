@@ -27,7 +27,7 @@ class BaseLLMProvider(ABC):
         Yields LLMChunk for each token.
         When a full sentence is detected → sets chunk.sentence.
         """
-        ...
+        yield  # pragma: no cover
 
     @abstractmethod
     async def complete(

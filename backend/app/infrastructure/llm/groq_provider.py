@@ -140,7 +140,7 @@ class GroqLLMProvider(BaseLLMProvider):
         try:
             groq_stream = await self._client.chat.completions.create(
                 model=self.model,
-                messages=messages,
+                messages=messages,  # type: ignore[arg-type]
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
                 stream=True,
@@ -220,7 +220,7 @@ class GroqLLMProvider(BaseLLMProvider):
         try:
             response = await self._client.chat.completions.create(
                 model=self.model,
-                messages=messages,
+                messages=messages,  # type: ignore[arg-type]
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
                 stream=False,

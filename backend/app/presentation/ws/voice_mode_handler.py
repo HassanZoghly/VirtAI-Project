@@ -329,9 +329,7 @@ class VoiceModeHandler:
             audio_data = self.audio_pipeline.get_audio_for_asr()
 
             # Transcribe audio using ASR service (now accepts numpy array directly)
-            result = await self.asr_service.transcribe_stream(
-                audio_chunks=audio_data
-            )
+            result = await self.asr_service.transcribe_stream(audio_chunks=audio_data)
 
             logger.info(
                 f"Transcription complete | "
@@ -385,14 +383,15 @@ class VoiceModeHandler:
             }
 
             # Include error details if it's an ASRException with details (Requirement 13.5)
-            if hasattr(e, "details") and e.details:
-                error_message["details"] = e.details
+            exc_details = getattr(e, "details", None)
+            if exc_details:
+                error_message["details"] = exc_details
 
                 # If it's a format conversion error, provide supported formats
-                if "supported_formats" in e.details:
+                if "supported_formats" in exc_details:
                     error_message["message"] = (
                         f"Audio format not supported. Supported formats: "
-                        f"{', '.join(e.details['supported_formats'])}"
+                        f"{', '.join(exc_details['supported_formats'])}"
                     )
             else:
                 # For generic exceptions, include error type and message

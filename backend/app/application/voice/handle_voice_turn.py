@@ -11,7 +11,7 @@ import asyncio
 import base64
 import re
 import time
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from typing import TYPE_CHECKING, Optional
 
 from loguru import logger
@@ -130,15 +130,15 @@ class ConversationPipeline:
 
     def __init__(
         self,
-        asr: StreamingASRService,
-        llm: BaseLLMProvider,
-        tts: BaseTTSProvider,
+        asr: Optional[StreamingASRService] = None,
+        llm: Optional[BaseLLMProvider] = None,
+        tts: Optional[BaseTTSProvider] = None,
         avatar_id: str = "avatar1",
         max_sentence_queue_size: int = 5,
     ):
-        self._asr = asr
-        self._llm = llm
-        self._tts = tts
+        self._asr: Optional[StreamingASRService] = asr
+        self._llm: Optional[BaseLLMProvider] = llm
+        self._tts: Optional[BaseTTSProvider] = tts
         self.avatar_id = avatar_id
         self._history: ConversationHistory = build_conversation(avatar_id)
         self._aborted: bool = False
@@ -183,7 +183,7 @@ class ConversationPipeline:
         message_id: str,
         text: str,
         session_id: str,
-        send_callback: callable,
+        send_callback: Callable,
     ) -> None:
         """
         Process user message through LLM → TTS → Visemes pipeline.
@@ -225,6 +225,8 @@ class ConversationPipeline:
 
             # Stream LLM tokens
             full_response_parts: list[str] = []
+            if not self._llm:
+                raise LLMException("LLM service not configured")
             try:
                 async for chunk in self._llm.stream(self._history):
                     if self._aborted:
@@ -296,6 +298,8 @@ class ConversationPipeline:
 
             # TTS
             await send_callback(make_pipeline_state(session_id, "speaking"))
+            if not self._tts:
+                raise TTSException("TTS service not configured")
             try:
                 tts_result = await self._tts.generate(
                     text=full_response,
@@ -322,7 +326,7 @@ class ConversationPipeline:
             # Visemes
             viseme_generator = VisemeGenerator()
             mouth_cues = await viseme_generator.generate_from_audio(
-                audio_path=tts_result.file_path,
+                audio_path=tts_result.file_path or "",
                 text=full_response,
                 session_id=session_id,
                 message_id=message_id,
@@ -474,6 +478,8 @@ class ConversationPipeline:
         logger.info(
             f"ASR start | chunks={len(audio_buffer.chunks)} | size={audio_buffer.total_size}"
         )
+        if not self._asr:
+            raise ASRException("ASR service not configured")
         result = await self._asr.transcribe_stream(audio_buffer.chunks)
         logger.info(f"ASR result | text='{result.transcript[:60]}'")
         return result.transcript
@@ -485,6 +491,11 @@ class ConversationPipeline:
         session_id: Optional[str] = None,
     ) -> None:
         logger.info(f"LLM worker started | session={session_id}")
+        if not self._llm:
+            await event_queue.put(
+                ev(PipelineEventType.ERROR, code="LLM_ERROR", message="LLM service not configured")
+            )
+            return
         try:
             async for chunk in self._llm.stream(self._history):
                 if self._aborted:
@@ -526,6 +537,15 @@ class ConversationPipeline:
                     break
                 sentence_index += 1
                 await event_queue.put(ev(PipelineEventType.SPEAKING))
+                if not self._tts:
+                    await event_queue.put(
+                        ev(
+                            PipelineEventType.ERROR,
+                            code="TTS_ERROR",
+                            message="TTS service not configured",
+                        )
+                    )
+                    break
                 try:
                     processor = TTSProcessor(self._tts, event_queue, sentence_index)
                     await processor.process(sentence)

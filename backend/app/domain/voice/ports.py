@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
+from typing import Any
 
 from app.domain.voice.entities import (
     ASRResult,
@@ -51,7 +52,7 @@ class StreamingASRService(ABC):
 
     @abstractmethod
     async def transcribe_stream(
-        self, audio_chunks: list[bytes], audio_format: str = "webm"
+        self, audio_chunks: list[bytes] | Any, audio_format: str = "webm"
     ) -> StreamingASRResult:
         """
         Transcribe accumulated audio chunks from streaming input.
@@ -75,11 +76,21 @@ class BaseTTSProvider(ABC):
         ...
 
     @abstractmethod
-    async def synthesize_streaming(
+    def synthesize_streaming(
         self,
         text: str,
     ) -> AsyncGenerator[TTSChunk, None]:
         """Streaming synthesis — sends audio chunks + visemes as available."""
+        ...
+
+    @abstractmethod
+    async def generate(
+        self,
+        text: str,
+        session_id: str,
+        message_id: str,
+    ) -> TTSResult:
+        """Generate audio, store to disk, and return result with file path."""
         ...
 
     @abstractmethod
@@ -88,7 +99,7 @@ class BaseTTSProvider(ABC):
         ...
 
     @abstractmethod
-    async def get_voice_settings(self, voice_name: str) -> dict[str, any]:
+    async def get_voice_settings(self, voice_name: str) -> dict[str, Any]:
         """Get available settings for a specific voice."""
         ...
 

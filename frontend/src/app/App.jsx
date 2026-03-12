@@ -53,7 +53,9 @@ function App() {
   const { restore } = useRestoreSession();
 
   useEffect(() => {
-    restore();
+    if (!window.location.pathname.startsWith('/auth/callback')) {
+      restore();
+    }
     preloadSetup();
     preloadClassroom();
   }, [restore]);

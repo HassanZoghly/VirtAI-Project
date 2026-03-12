@@ -4,6 +4,7 @@ Async SQLAlchemy database engine and session factory.
 Uses SQLite + aiosqlite for zero-config local development.
 """
 
+from collections.abc import AsyncGenerator
 from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -33,7 +34,7 @@ async def init_db() -> None:
         await conn.run_sync(Base.metadata.create_all)
 
 
-async def get_db() -> AsyncSession:  # type: ignore[misc]
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency – yields a DB session per request."""
     async with async_session_factory() as session:
         yield session

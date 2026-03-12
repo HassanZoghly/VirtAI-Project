@@ -141,9 +141,9 @@ class SessionManager:
         session.on_cleanup = on_cleanup
         self._sessions[sid] = session
 
-        if voice_id:
+        if voice_id and hasattr(session.pipeline._tts, "voice"):
             try:
-                session.pipeline._tts.voice = voice_id
+                session.pipeline._tts.voice = voice_id  # type: ignore[union-attr]
                 logger.info(f"Session TTS voice set | id={sid} | voice={voice_id}")
             except Exception as e:
                 logger.warning(f"Failed to set TTS voice: {e}")

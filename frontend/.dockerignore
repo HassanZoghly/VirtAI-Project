@@ -1,0 +1,19 @@
+# Dependencies (reinstalled inside container)
+node_modules/
+
+# Build output
+dist/
+.next/
+.nuxt/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore

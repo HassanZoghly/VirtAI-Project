@@ -1,8 +1,10 @@
-# AI Avatar Chat - Backend
+# **AI Avatar Chat - Backend**
 
 FastAPI backend providing WebSocket-based streaming chat with LLM integration, TTS audio generation, and viseme timeline generation for 3D avatar lip synchronization.
 
-## Features
+<div style="width: 100%; height: 30px; background: linear-gradient(to right, rgb(235, 238, 212), rgb(235, 238, 212));"></div>
+
+## **Features**
 
 - **Real-time WebSocket Communication**: Bidirectional streaming with heartbeat monitoring
 - **LLM Integration**: Streaming chat responses via Groq API (Llama 3.3 70B)
@@ -12,13 +14,17 @@ FastAPI backend providing WebSocket-based streaming chat with LLM integration, T
 - **Rate Limiting**: Protection against abuse with per-session and per-IP limits
 - **Robust Error Handling**: Comprehensive error messages and graceful degradation
 
-## Prerequisites
+<div style="width: 100%; height: 30px; background: linear-gradient(to right, rgb(235, 238, 212), rgb(235, 238, 212));"></div>
+
+## **Prerequisites**
 
 - Python 3.11 or higher
 - Groq API key (get one at [console.groq.com](https://console.groq.com/keys))
 - Windows, macOS, or Linux
 
-## Quick Start
+<div style="width: 100%; height: 30px; background: linear-gradient(to right, rgb(235, 238, 212), rgb(235, 238, 212));"></div>
+
+## **Quick Start**
 
 ### 1. Clone and Navigate
 
@@ -89,7 +95,9 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 The server will start at `http://localhost:8000`
 
-## Environment Variables
+<div style="width: 100%; height: 30px; background: linear-gradient(to right, rgb(235, 238, 212), rgb(235, 238, 212));"></div>
+
+## **Environment Variables**
 
 All configuration is managed through environment variables. See `.env.example` for a complete reference with descriptions.
 
@@ -171,7 +179,9 @@ See [Microsoft Voice Gallery](https://speech.microsoft.com/portal/voicegallery) 
 |----------|---------|-------------|
 | `ALLOWED_ORIGINS` | `["http://localhost:3000", "http://localhost:5173"]` | Allowed frontend origins (JSON array) |
 
-## API Endpoints
+<div style="width: 100%; height: 30px; background: linear-gradient(to right, rgb(235, 238, 212), rgb(235, 238, 212));"></div>
+
+## **API Endpoints**
 
 ### HTTP Endpoints
 
@@ -249,9 +259,9 @@ Real-time bidirectional communication for chat, audio, and viseme data.
 const ws = new WebSocket('ws://localhost:8000/api/v1/ws/avatar1');
 ```
 
-See [PROTOCOL.md](docs/PROTOCOL.md) for complete WebSocket protocol documentation.
+<div style="width: 100%; height: 30px; background: linear-gradient(to right, rgb(235, 238, 212), rgb(235, 238, 212));"></div>
 
-## WebSocket Protocol Overview
+## **WebSocket Protocol Overview**
 
 ### Client → Server Messages
 
@@ -368,7 +378,9 @@ States: `idle`, `thinking`, `speaking`, `error`
 
 Error codes: `INVALID_MESSAGE`, `PIPELINE_ERROR`, `SESSION_ERROR`, `TIMEOUT`
 
-## Project Structure
+<div style="width: 100%; height: 30px; background: linear-gradient(to right, rgb(235, 238, 212), rgb(235, 238, 212));"></div>
+
+## **Project Structure**
 
 ```
 backend/
@@ -413,49 +425,9 @@ backend/
 └── README.md                         # This file
 ```
 
-## Development
+<div style="width: 100%; height: 30px; background: linear-gradient(to right, rgb(235, 238, 212), rgb(235, 238, 212));"></div>
 
-### Running Tests
-
-```bash
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=app --cov-report=html
-
-# Run specific test file
-pytest tests/test_websocket.py
-
-# Run with verbose output
-pytest -v
-```
-
-### Code Quality
-
-The project uses several tools for code quality:
-
-**Linting** (Ruff):
-```bash
-ruff check app/
-```
-
-**Formatting** (Black):
-```bash
-black app/
-```
-
-**Type Checking** (MyPy):
-```bash
-mypy app/
-```
-
-**Run all checks**:
-```bash
-ruff check app/ && black --check app/ && mypy app/
-```
-
-### Logging
+## **Logging**
 
 Logs are written to:
 - Console (stdout) with colored output
@@ -470,7 +442,9 @@ Log levels:
 
 Configure log level via `DEBUG` environment variable.
 
-## Troubleshooting
+<div style="width: 100%; height: 30px; background: linear-gradient(to right, rgb(235, 238, 212), rgb(235, 238, 212));"></div>
+
+## **Troubleshooting**
 
 ### Connection Issues
 
@@ -514,7 +488,9 @@ Configure log level via `DEBUG` environment variable.
 - Check for session leaks with health endpoint
 - Restart server to clear memory
 
-## Production Deployment
+<div style="width: 100%; height: 30px; background: linear-gradient(to right, rgb(235, 238, 212), rgb(235, 238, 212));"></div>
+
+## **Production Deployment**
 
 ### Security Checklist
 
@@ -538,27 +514,4 @@ SESSION_TIMEOUT_SEC=300
 RATE_LIMIT_MESSAGES_PER_MINUTE=30
 RATE_LIMIT_CONNECTIONS_PER_IP=3
 ```
-
-### Running with Gunicorn
-
-For production, use Gunicorn with Uvicorn workers:
-
-```bash
-gunicorn app.main:app \
-  --workers 4 \
-  --worker-class uvicorn.workers.UvicornWorker \
-  --bind 0.0.0.0:8000 \
-  --access-logfile logs/access.log \
-  --error-logfile logs/error.log
-```
-
-## License
-
-[Your License Here]
-
-## Support
-
-For issues and questions:
-- Check the [troubleshooting section](#troubleshooting)
-- Review logs in `logs/app.log`
-- See [PROTOCOL.md](docs/PROTOCOL.md) for WebSocket protocol details
+<div style="width: 100%; height: 30px; background: linear-gradient(to right, rgb(235, 238, 212), rgb(235, 238, 212));"></div>

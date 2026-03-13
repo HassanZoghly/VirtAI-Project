@@ -1,0 +1,55 @@
+# ═══════════════════════════════════════════════════════════════════
+#  VirtAI — Docker Compose
+#  Start everything: docker compose up --build
+#  Stop everything:  docker compose down
+# ═══════════════════════════════════════════════════════════════════
+
+services:
+  # ── Backend (FastAPI) ───────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: virtai-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      - backend-data:/app/.data
+    networks:
+      - virtai-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Frontend (React + Vite) ────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: virtai-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_TARGET=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - virtai-network
+    restart: unless-stopped
+
+# ── Volumes ──────────────────────────────────────────────────────
+volumes:
+  backend-data:
+    driver: local
+
+# ── Networks ─────────────────────────────────────────────────────
+networks:
+  virtai-network:
+    driver: bridge

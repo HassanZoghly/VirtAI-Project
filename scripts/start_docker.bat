@@ -26,41 +26,41 @@ echo  [OK] Docker is installed.
 
 REM -- Step 2: Check if Docker daemon is running ---------------
 docker info >nul 2>&1
-if %ERRORLEVEL% neq 0 (
-    echo  [WARN] Docker is not running. Attempting to start Docker Desktop...
-
-    REM Try to start Docker Desktop
-    start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe" 2>nul
-    if %ERRORLEVEL% neq 0 (
-        start "" "%ProgramFiles%\Docker\Docker\Docker Desktop.exe" 2>nul
-    )
-
-    REM Wait for Docker to become available (up to 60 seconds)
-    echo          Waiting for Docker to start...
-    set TIMEOUT=60
-    set ELAPSED=0
-
-    :WAIT_LOOP
-    docker info >nul 2>&1
-    if %ERRORLEVEL% equ 0 goto DOCKER_READY
-
-    timeout /t 2 /nobreak >nul
-    set /a ELAPSED+=2
-    if %ELAPSED% geq %TIMEOUT% (
-        echo  [ERROR] Docker did not start within %TIMEOUT% seconds.
-        echo          Please start Docker Desktop manually and try again.
-        pause
-        exit /b 1
-    )
-    echo          Waiting... (%ELAPSED%s / %TIMEOUT%s)
-    goto WAIT_LOOP
-
-    :DOCKER_READY
-    echo  [OK] Docker is now running.
-) else (
+if %ERRORLEVEL% equ 0 (
     echo  [OK] Docker is already running.
+    goto START_PROJECT
 )
 
+echo  [WARN] Docker is not running. Attempting to start Docker Desktop...
+
+start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe" 2>nul
+if %ERRORLEVEL% neq 0 (
+    start "" "%ProgramFiles%\Docker\Docker\Docker Desktop.exe" 2>nul
+)
+
+echo          Waiting for Docker to start...
+set TIMEOUT=60
+set ELAPSED=0
+
+:WAIT_LOOP
+docker info >nul 2>&1
+if %ERRORLEVEL% equ 0 goto DOCKER_READY
+
+timeout /t 2 /nobreak >nul
+set /a ELAPSED+=2
+if %ELAPSED% geq %TIMEOUT% (
+    echo  [ERROR] Docker did not start within %TIMEOUT% seconds.
+    echo          Please start Docker Desktop manually and try again.
+    pause
+    exit /b 1
+)
+echo          Waiting... %ELAPSED%s / %TIMEOUT%s
+goto WAIT_LOOP
+
+:DOCKER_READY
+echo  [OK] Docker is now running.
+
+:START_PROJECT
 REM -- Step 3: Start the project -------------------------------
 echo.
 echo  Starting VirtAI...

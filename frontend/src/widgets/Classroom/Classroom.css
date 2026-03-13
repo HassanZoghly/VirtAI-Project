@@ -365,14 +365,15 @@
 
 /* AI messages: rounded except bottom-left */
 .ai-message .message-bubble {
-  border-radius: 4px 20px 20px 20px;
+  border-radius: 15px;
 }
 
 /* User messages: right-aligned, accent tint, rounded except bottom-right */
 .user-message .message-bubble {
-  background: rgba(212, 175, 55, 0.08);
-  border-color: rgba(240, 200, 82, 0.55);
-  border-radius: 20px 20px 4px 20px;
+    background: linear-gradient(135deg, #b8961f, #d4af37);
+    color: #1a1a1a;
+    border: 1px solid rgba(240, 200, 82, 0.55);
+    border-radius: 15px;
 }
 
 /* Entrance animation */
@@ -1116,7 +1117,7 @@
 
 .toast.success {
   background: rgba(22, 163, 74, 0.95);
-  color: #121212;
+  color: #fff;
 }
 
 .toast.error {
@@ -1125,12 +1126,12 @@
 
 .toast.warning {
   background: rgba(245, 158, 11, 0.95);
-  color: #121212;
+  color: #fff;
 }
 
 .toast.info {
   background: rgba(59, 130, 246, 0.95);
-  color: #121212;
+  color: #fff;
 }
 
 .toast-icon {

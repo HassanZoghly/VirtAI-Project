@@ -18,7 +18,7 @@ FastAPI backend providing WebSocket-based streaming chat with LLM integration, T
 
 ## **Prerequisites**
 
-- Python 3.11 or higher
+- Python 3.10 or higher
 - Groq API key (get one at [console.groq.com](https://console.groq.com/keys))
 - Windows, macOS, or Linux
 
@@ -55,12 +55,12 @@ source venv/bin/activate
 ### 3. Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+pip install .
 ```
 
 For development (includes testing and linting tools):
 ```bash
-pip install -r requirements-dev.txt
+pip install ".[dev]"
 ```
 
 ### 4. Configure Environment
@@ -385,44 +385,49 @@ Error codes: `INVALID_MESSAGE`, `PIPELINE_ERROR`, `SESSION_ERROR`, `TIMEOUT`
 ```
 backend/
 ├── app/
-│   ├── api/
-│   │   └── v1/
-│   │       ├── endpoints/
-│   │       │   ├── websocket.py      # WebSocket handler
-│   │       │   ├── audio.py          # Audio file serving
-│   │       │   └── health.py         # Health checks
-│   │       ├── dependencies.py       # Dependency injection
-│   │       └── router.py             # API router
-│   ├── core/
-│   │   ├── config.py                 # Configuration management
-│   │   ├── errors.py                 # Custom exceptions
-│   │   └── logging.py                # Logging setup
-│   ├── schemas/
-│   │   ├── ws_messages.py            # WebSocket message schemas
-│   │   └── audio.py                  # Audio data schemas
-│   ├── services/
-│   │   ├── asr/
-│   │   │   └── groq_whisper.py       # Speech recognition
-│   │   ├── llm/
-│   │   │   └── groq_provider.py      # LLM service
-│   │   ├── tts/
-│   │   │   ├── edge_tts_provider.py  # TTS service
-│   │   │   ├── viseme_generator.py   # Viseme generation
-│   │   │   └── viseme_map.py         # Phoneme mapping
-│   │   └── pipeline/
-│   │       ├── session_manager.py    # Session lifecycle
-│   │       ├── conversation.py       # Pipeline orchestration
-│   │       └── events.py             # Event bus
-│   └── main.py                       # Application entry point
+│   ├── domain/                        # Business entities & port interfaces
+│   │   ├── chat/                      # Chat entities (history, LLM types)
+│   │   ├── voice/                     # Voice entities (ASR, TTS, visemes)
+│   │   └── user/                      # User entities
+│   ├── application/                   # Use cases & orchestration
+│   │   ├── chat/                      # Session management
+│   │   │   └── session_manager.py     # Session lifecycle
+│   │   └── voice/                     # Conversation pipeline
+│   │       └── handle_voice_turn.py   # ASR → LLM → TTS pipeline
+│   ├── infrastructure/                # External service adapters
+│   │   ├── asr/                       # Groq Whisper ASR
+│   │   │   └── groq_whisper.py        # Speech recognition
+│   │   ├── llm/                       # Groq LLM provider
+│   │   │   ├── groq_provider.py       # LLM streaming service
+│   │   │   └── sentence_splitter.py   # Sentence boundary detection
+│   │   ├── tts/                       # Edge TTS provider
+│   │   │   └── edge_tts_provider.py   # TTS + viseme generation
+│   │   ├── auth/                      # Auth service (JWT, Google OAuth)
+│   │   ├── db/                        # SQLAlchemy + SQLite
+│   │   └── storage/                   # Audio file storage
+│   ├── presentation/                  # API layer
+│   │   ├── http/v1/                   # REST endpoints
+│   │   │   ├── router.py              # API router + WS endpoint
+│   │   │   ├── dependencies.py        # Dependency injection
+│   │   │   └── endpoints/             # HTTP handlers
+│   │   │       ├── health.py          # Health checks
+│   │   │       ├── audio.py           # Audio file serving
+│   │   │       └── auth.py            # Auth endpoints
+│   │   └── ws/                        # WebSocket layer
+│   │       └── gateway.py             # WebSocket handler
+│   ├── shared/                        # Cross-cutting concerns
+│   │   ├── config.py                  # Configuration (pydantic-settings)
+│   │   ├── errors.py                  # Custom exceptions
+│   │   └── log_config.py              # Loguru setup
+│   ├── schemas/                       # Message schemas
+│   └── main.py                        # Application entry point
 ├── .data/
-│   └── sessions/                     # Generated audio files
-├── tests/                            # Test suite
-├── .env                              # Environment variables (create from .env.example)
-├── .env.example                      # Example configuration
-├── requirements.txt                  # Production dependencies
-├── requirements-dev.txt              # Development dependencies
-├── pyproject.toml                    # Tool configuration
-└── README.md                         # This file
+│   └── sessions/                      # Generated audio files
+├── .env                               # Environment variables (create from .env.example)
+├── .env.example                       # Example configuration
+├── pyproject.toml                     # Dependencies & tool configuration
+├── Dockerfile                         # Docker image definition
+└── README.md                          # This file
 ```
 
 <div style="width: 100%; height: 30px; background: linear-gradient(to right, rgb(235, 238, 212), rgb(235, 238, 212));"></div>

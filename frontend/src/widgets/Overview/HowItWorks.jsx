@@ -33,13 +33,26 @@ function getCardClasses(phase, isCurrent) {
   return 'border-white/10 bg-dark/55 text-offwhite/66';
 }
 
+function getStageSignal(step, phase) {
+  if (phase === 'completed' || phase === 'output') {
+    return `OUT: ${step.output}`;
+  }
+  if (phase === 'processing') {
+    return `PROC: ${step.processing}`;
+  }
+  if (phase === 'receiving') {
+    return `IN: ${step.input}`;
+  }
+  return 'Waiting for upstream handoff';
+}
+
 export default function HowItWorks() {
   const [activeIndex, setActiveIndex] = useState(0);
-  const [phaseIndex, setPhaseIndex] = useState(1);
+  const [phaseIndex, setPhaseIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const markersRef = useRef([]);
   const activeRef = useRef(0);
-  const phaseRef = useRef(1);
+  const phaseRef = useRef(0);
   const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
@@ -72,7 +85,7 @@ export default function HowItWorks() {
         const nextIndex = Number(visible[0].target.getAttribute('data-step-index'));
         if (!Number.isNaN(nextIndex)) {
           setActiveIndex(nextIndex);
-          setPhaseIndex(1);
+          setPhaseIndex(0);
         }
       },
       {
@@ -120,16 +133,17 @@ export default function HowItWorks() {
     [activeIndex, phaseIndex]
   );
   const activeStep = steps[activeIndex] ?? steps[0];
+  const nextStep = steps[activeIndex + 1];
 
   return (
     <section id="how-it-works" className="relative mx-auto max-w-5xl px-6 py-16 lg:py-18">
       <header className="sticky top-18 z-30 mb-4 rounded-2xl border border-white/10 bg-dark/82 px-5 py-4 shadow-[0_18px_42px_rgba(0,0,0,0.26)] backdrop-blur-md">
         <motion.h2
           className="text-3xl font-bold tracking-tight text-offwhite sm:text-4xl"
-          initial={{ opacity: 0, y: 12 }}
-          whileInView={{ opacity: 1, y: 0 }}
+          initial={prefersReducedMotion ? false : { opacity: 0, y: 12 }}
+          whileInView={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.6 }}
-          transition={{ duration: 0.35 }}
+          transition={{ duration: prefersReducedMotion ? 0 : 0.35 }}
         >
           How It Works
         </motion.h2>
@@ -161,7 +175,7 @@ export default function HowItWorks() {
             onClick={() => {
               setIsPlaying(false);
               setActiveIndex(0);
-              setPhaseIndex(1);
+              setPhaseIndex(0);
             }}
             className="rounded-md border border-white/20 px-3 py-1.5 text-xs font-semibold text-offwhite/82 transition-colors hover:bg-white/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offwhite/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark"
           >
@@ -177,6 +191,37 @@ export default function HowItWorks() {
           {`Current stage ${activeStep.label}. State ${STATE_LABEL[activePhase]}.`}
         </p>
       </header>
+
+      <motion.article
+        key={`${activeStep.step}-${activePhase}`}
+        className="mb-3 rounded-xl border border-white/10 bg-dark/72 px-4 py-4"
+        initial={prefersReducedMotion ? false : { opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: prefersReducedMotion ? 0 : 0.2, ease: 'easeOut' }}
+      >
+        <p className="text-[11px] font-semibold tracking-[0.16em] text-gold/86">
+          STEP {activeStep.step}
+        </p>
+        <h3 className="mt-1 text-base font-semibold text-offwhite sm:text-lg">
+          {activeStep.label}
+        </h3>
+        <p className="mt-1 text-sm text-offwhite/76">{activeStep.description}</p>
+        <div className="mt-3 space-y-1 text-xs text-offwhite/74">
+          <p>
+            <span className="font-semibold text-offwhite/86">IN:</span> {activeStep.input}
+          </p>
+          <p>
+            <span className="font-semibold text-offwhite/86">PROC:</span> {activeStep.processing}
+          </p>
+          <p>
+            <span className="font-semibold text-gold/90">OUT:</span> {activeStep.output}
+          </p>
+          <p>
+            <span className="font-semibold text-crimson/88">HANDOFF:</span>{' '}
+            {nextStep ? `Passing output to ${nextStep.label}` : 'Final delivery complete.'}
+          </p>
+        </div>
+      </motion.article>
 
       <ol className="space-y-2" aria-label="How it works pipeline stages">
         {steps.map((step, index) => {
@@ -217,8 +262,13 @@ export default function HowItWorks() {
                     className={`absolute inset-x-0 top-0 w-px ${
                       connectorFilled ? 'bg-gold' : 'bg-transparent'
                     }`}
-                    animate={{ height: connectorFilled ? '100%' : '0%' }}
-                    transition={{ duration: 0.35, ease: 'easeInOut' }}
+                    animate={
+                      prefersReducedMotion ? undefined : { height: connectorFilled ? '100%' : '0%' }
+                    }
+                    style={
+                      prefersReducedMotion ? { height: connectorFilled ? '100%' : '0%' } : undefined
+                    }
+                    transition={{ duration: prefersReducedMotion ? 0 : 0.35, ease: 'easeInOut' }}
                   />
                   {isFlowing && !prefersReducedMotion ? (
                     <motion.span
@@ -236,11 +286,13 @@ export default function HowItWorks() {
                   stagePhase,
                   isCurrent
                 )}`}
-                initial={{ opacity: 0.8, y: 6 }}
-                whileInView={{ opacity: 1, y: 0 }}
+                initial={prefersReducedMotion ? false : { opacity: 0.8, y: 6 }}
+                whileInView={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.4 }}
-                animate={isCurrent ? { scale: 1.01 } : { scale: 1 }}
-                transition={{ duration: 0.2, ease: 'easeOut' }}
+                animate={
+                  prefersReducedMotion ? undefined : isCurrent ? { scale: 1.01 } : { scale: 1 }
+                }
+                transition={{ duration: prefersReducedMotion ? 0 : 0.2, ease: 'easeOut' }}
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-sm font-semibold tracking-wide text-offwhite">
@@ -260,17 +312,7 @@ export default function HowItWorks() {
                 </div>
 
                 <p className="mt-1 text-sm leading-relaxed text-offwhite/78">{step.description}</p>
-                <div className="mt-2 space-y-1 text-xs text-offwhite/72">
-                  <p>
-                    <span className="font-semibold text-offwhite/85">IN:</span> {step.input}
-                  </p>
-                  <p>
-                    <span className="font-semibold text-offwhite/85">PROC:</span> {step.processing}
-                  </p>
-                  <p>
-                    <span className="font-semibold text-gold/86">OUT:</span> {step.output}
-                  </p>
-                </div>
+                <p className="mt-2 text-xs text-offwhite/74">{getStageSignal(step, stagePhase)}</p>
               </motion.article>
             </li>
           );

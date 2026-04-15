@@ -19,16 +19,18 @@ describe('HowItWorks', () => {
 
     expect(container.querySelectorAll('[aria-current="step"]')).toHaveLength(1);
     expect(container.querySelectorAll('[data-stage-state="active"]')).toHaveLength(1);
-    expect(container.querySelector('[data-stage-phase="processing"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-stage-phase="receiving"]')).toBeInTheDocument();
   });
 
-  it('shows input/process/output artifacts in the active stage card', () => {
-    const { container } = render(<HowItWorks />);
-    const activeStage = container.querySelector('[aria-current="step"]');
+  it('shows input/process/output/handoff artifacts in the active detail panel', () => {
+    render(<HowItWorks />);
+    const handoffLabel = screen.getByText(/^HANDOFF:/i);
+    const detailPanel = handoffLabel.closest('article');
 
-    expect(activeStage).toBeInTheDocument();
-    expect(within(activeStage).getByText(/^IN:/i)).toBeInTheDocument();
-    expect(within(activeStage).getByText(/^PROC:/i)).toBeInTheDocument();
-    expect(within(activeStage).getByText(/^OUT:/i)).toBeInTheDocument();
+    expect(detailPanel).toBeInTheDocument();
+    expect(within(detailPanel).getByText(/^IN:/i)).toBeInTheDocument();
+    expect(within(detailPanel).getByText(/^PROC:/i)).toBeInTheDocument();
+    expect(within(detailPanel).getByText(/^OUT:/i)).toBeInTheDocument();
+    expect(within(detailPanel).getByText(/^HANDOFF:/i)).toBeInTheDocument();
   });
 });

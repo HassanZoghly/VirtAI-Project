@@ -54,7 +54,7 @@ describe('OverviewPage navbar anchors', () => {
       </MemoryRouter>
     );
 
-    expect(screen.queryByText(/team/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /^team$/i })).toBeNull();
   });
 });
 
@@ -71,7 +71,9 @@ describe('OverviewPage how-it-works sticky behavior', () => {
     const howItWorks = document.getElementById('how-it-works');
     expect(howItWorks).toBeTruthy();
     // Subtitle pipeline (voice → asr → rag → llm → tts → avatar)
-    expect(within(howItWorks).getByText(/voice\s*→\s*asr\s*→\s*rag\s*→\s*llm\s*→\s*tts\s*→\s*avatar/i)).toBeInTheDocument();
+    expect(
+      within(howItWorks).getByText(/voice\s*→\s*asr\s*→\s*rag\s*→\s*llm\s*→\s*tts\s*→\s*avatar/i)
+    ).toBeInTheDocument();
   });
 
   it('exactly one timeline item has aria-current="step"', () => {

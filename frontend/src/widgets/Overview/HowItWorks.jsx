@@ -72,6 +72,7 @@ export default function HowItWorks() {
                         ? 'border-crimson/55 bg-crimson/10 text-offwhite shadow-[0_0_20px_rgba(109,0,26,0.35)]'
                         : 'border-white/10 bg-dark/45 text-offwhite/65'
                     }`}
+                    initial={{ scale: 1, opacity: 0.78 }}
                     animate={{ scale: isActive ? 1.02 : 1, opacity: isActive ? 1 : 0.78 }}
                     transition={{ duration: 0.2, ease: 'easeOut' }}
                   >

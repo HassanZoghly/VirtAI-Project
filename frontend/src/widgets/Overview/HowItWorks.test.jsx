@@ -38,7 +38,7 @@ describe('HowItWorks', () => {
     try {
       const { container } = render(<HowItWorks />);
 
-      fireEvent.click(screen.getByRole('button', { name: /^play$/i }));
+      fireEvent.click(screen.getAllByRole('button', { name: /^play$/i })[0]);
       vi.advanceTimersByTime(PIPELINE_PHASE_DURATION_MS * 3 + 80);
 
       const firstStage = container.querySelector('[data-step-index="0"]');

@@ -56,4 +56,16 @@ describe('OverviewPage navbar anchors', () => {
     expect(howItWorksSection).toBeTruthy();
     expect(howItWorksSection.querySelectorAll('[aria-current="step"]')).toHaveLength(1);
   });
+
+  it('renders pipeline playback controls', () => {
+    renderOverviewPage();
+
+    const howItWorksSection = document.getElementById('how-it-works');
+    expect(howItWorksSection).toBeTruthy();
+    expect(within(howItWorksSection).getByRole('button', { name: /^play$/i })).toBeInTheDocument();
+    expect(within(howItWorksSection).getByRole('button', { name: /pause/i })).toBeInTheDocument();
+    expect(
+      within(howItWorksSection).getByRole('button', { name: /^replay$/i })
+    ).toBeInTheDocument();
+  });
 });

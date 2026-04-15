@@ -1,10 +1,54 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { howItWorks as steps } from '@/features/overview';
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
+
+const PIPELINE_STATES = ['receiving', 'processing', 'output'];
+const STATE_LABEL = {
+  idle: 'Idle',
+  receiving: 'Receiving input',
+  processing: 'Processing',
+  output: 'Output ready',
+  completed: 'Completed',
+};
+const PIPELINE_SEQUENCE = 'VOICE → ASR → RAG → LLM → TTS → AVATAR';
+export const PIPELINE_PHASE_DURATION_MS = 900;
+
+function getStagePhase(index, activeIndex, phaseIndex) {
+  if (index < activeIndex) {
+    return 'completed';
+  }
+  if (index > activeIndex) {
+    return 'idle';
+  }
+  return PIPELINE_STATES[phaseIndex] ?? 'processing';
+}
+
+function getCardClasses(phase, isCurrent) {
+  if (phase === 'completed') {
+    return 'border-gold/35 bg-gold/8 text-offwhite/85';
+  }
+  if (isCurrent) {
+    return 'border-crimson/55 bg-crimson/12 text-offwhite shadow-[0_0_20px_rgba(109,0,26,0.3)]';
+  }
+  return 'border-white/10 bg-dark/55 text-offwhite/66';
+}
 
 export default function HowItWorks() {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [phaseIndex, setPhaseIndex] = useState(1);
+  const [isPlaying, setIsPlaying] = useState(false);
   const markersRef = useRef([]);
+  const activeRef = useRef(0);
+  const phaseRef = useRef(1);
+  const prefersReducedMotion = useReducedMotion();
+
+  useEffect(() => {
+    activeRef.current = activeIndex;
+  }, [activeIndex]);
+
+  useEffect(() => {
+    phaseRef.current = phaseIndex;
+  }, [phaseIndex]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof IntersectionObserver === 'undefined') {
@@ -24,14 +68,16 @@ export default function HowItWorks() {
         if (!visible[0]) {
           return;
         }
+
         const nextIndex = Number(visible[0].target.getAttribute('data-step-index'));
         if (!Number.isNaN(nextIndex)) {
           setActiveIndex(nextIndex);
+          setPhaseIndex(1);
         }
       },
       {
-        threshold: [0.25, 0.5, 0.75],
-        rootMargin: '-22% 0px -42% 0px',
+        threshold: [0.5, 0.7, 0.9],
+        rootMargin: '-22% 0px -32% 0px',
       }
     );
 
@@ -39,11 +85,45 @@ export default function HowItWorks() {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || !isPlaying) {
+      return;
+    }
+
+    const tickDuration = prefersReducedMotion
+      ? PIPELINE_PHASE_DURATION_MS * 1.35
+      : PIPELINE_PHASE_DURATION_MS;
+
+    const intervalId = window.setInterval(() => {
+      const currentPhase = phaseRef.current;
+      const currentStage = activeRef.current;
+
+      if (currentPhase < PIPELINE_STATES.length - 1) {
+        setPhaseIndex(currentPhase + 1);
+        return;
+      }
+
+      if (currentStage < steps.length - 1) {
+        setActiveIndex(currentStage + 1);
+        setPhaseIndex(0);
+        return;
+      }
+
+      setIsPlaying(false);
+    }, tickDuration);
+
+    return () => window.clearInterval(intervalId);
+  }, [isPlaying, prefersReducedMotion]);
+
+  const activePhase = useMemo(
+    () => getStagePhase(activeIndex, activeIndex, phaseIndex),
+    [activeIndex, phaseIndex]
+  );
   const activeStep = steps[activeIndex] ?? steps[0];
 
   return (
-    <section id="how-it-works" className="relative mx-auto max-w-6xl px-6 py-18">
-      <header className="sticky top-18 z-30 mb-8 rounded-2xl border border-white/10 bg-dark/75 px-6 py-5 backdrop-blur-md">
+    <section id="how-it-works" className="relative mx-auto max-w-5xl px-6 py-16 lg:py-18">
+      <header className="sticky top-18 z-30 mb-4 rounded-2xl border border-white/10 bg-dark/82 px-5 py-4 shadow-[0_18px_42px_rgba(0,0,0,0.26)] backdrop-blur-md">
         <motion.h2
           className="text-3xl font-bold tracking-tight text-offwhite sm:text-4xl"
           initial={{ opacity: 0, y: 12 }}
@@ -53,82 +133,149 @@ export default function HowItWorks() {
         >
           How It Works
         </motion.h2>
-        <p className="mt-2 text-sm font-medium tracking-wider text-gold/90 sm:text-base">
-          VOICE → ASR → RAG → LLM → TTS → AVATAR
+        <p className="mt-1 text-xs font-semibold tracking-[0.18em] text-gold/90 sm:text-sm">
+          {PIPELINE_SEQUENCE}
+        </p>
+
+        <div
+          className="mt-3 flex flex-wrap gap-2"
+          role="group"
+          aria-label="Pipeline playback controls"
+        >
+          <button
+            type="button"
+            onClick={() => setIsPlaying(true)}
+            className="rounded-md border border-gold/45 bg-gold/10 px-3 py-1.5 text-xs font-semibold text-gold transition-colors hover:bg-gold/16 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark"
+          >
+            Play
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsPlaying(false)}
+            className="rounded-md border border-white/20 px-3 py-1.5 text-xs font-semibold text-offwhite/82 transition-colors hover:bg-white/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offwhite/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark"
+          >
+            Pause
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIsPlaying(false);
+              setActiveIndex(0);
+              setPhaseIndex(1);
+            }}
+            className="rounded-md border border-white/20 px-3 py-1.5 text-xs font-semibold text-offwhite/82 transition-colors hover:bg-white/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offwhite/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark"
+          >
+            Replay
+          </button>
+        </div>
+
+        <p className="mt-3 text-sm text-offwhite/78">
+          <span className="font-semibold text-offwhite">Now:</span> {activeStep.label} —{' '}
+          {STATE_LABEL[activePhase]}
+        </p>
+        <p className="sr-only" aria-live="polite">
+          {`Current stage ${activeStep.label}. State ${STATE_LABEL[activePhase]}.`}
         </p>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,290px)_1fr]">
-        <aside className="relative lg:sticky lg:top-44 lg:h-fit">
-          <div className="pointer-events-none absolute left-5 top-1.5 bottom-1.5 w-px bg-linear-to-b from-crimson/50 via-gold/40 to-crimson/20" />
-          <ol className="space-y-2" aria-label="How it works steps">
-            {steps.map((step, index) => {
-              const isActive = index === activeIndex;
-              return (
-                <li key={step.step} aria-current={isActive ? 'step' : undefined}>
-                  <motion.div
-                    className={`group relative flex items-start gap-3 rounded-xl border px-3 py-3 transition-colors duration-200 ${
-                      isActive
-                        ? 'border-crimson/55 bg-crimson/10 text-offwhite shadow-[0_0_20px_rgba(109,0,26,0.35)]'
-                        : 'border-white/10 bg-dark/45 text-offwhite/65'
-                    }`}
-                    initial={{ scale: 1, opacity: 0.78 }}
-                    animate={{ scale: isActive ? 1.02 : 1, opacity: isActive ? 1 : 0.78 }}
-                    transition={{ duration: 0.2, ease: 'easeOut' }}
-                  >
-                    <span
-                      className={`relative z-10 mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold ${
-                        isActive
-                          ? 'border-crimson/70 bg-crimson/20 text-crimson'
-                          : 'border-white/20 bg-white/5 text-offwhite/60'
-                      }`}
-                    >
-                      {step.step}
-                    </span>
-                    <span className="text-sm font-medium tracking-wide">{step.label}</span>
-                  </motion.div>
-                </li>
-              );
-            })}
-          </ol>
-        </aside>
+      <ol className="space-y-2" aria-label="How it works pipeline stages">
+        {steps.map((step, index) => {
+          const stagePhase = getStagePhase(index, activeIndex, phaseIndex);
+          const isCurrent = index === activeIndex;
+          const isFlowing = isCurrent && stagePhase === 'output';
+          const connectorFilled = index < activeIndex || isFlowing;
 
-        <div className="relative">
-          <div className="sticky top-44 z-20 rounded-2xl border border-white/10 bg-dark/72 p-6 shadow-[0_18px_54px_rgba(0,0,0,0.35)] backdrop-blur-sm">
-            <motion.article
-              key={activeStep.step}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.22, ease: 'easeOut' }}
-              aria-live="polite"
+          return (
+            <li
+              key={step.step}
+              ref={(node) => {
+                markersRef.current[index] = node;
+              }}
+              data-step-index={index}
+              data-stage-state={
+                index < activeIndex ? 'completed' : isCurrent ? 'active' : 'upcoming'
+              }
+              data-stage-phase={stagePhase}
+              aria-current={isCurrent ? 'step' : undefined}
+              className="relative pl-9"
             >
-              <p className="text-xs font-semibold tracking-[0.22em] text-gold/85">
-                STEP {activeStep.step}
-              </p>
-              <h3 className="mt-2 text-2xl font-semibold text-offwhite">{activeStep.label}</h3>
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-offwhite/78">
-                {activeStep.description}
-              </p>
-            </motion.article>
-          </div>
-
-          <div className="mt-6 space-y-5">
-            {steps.map((step, index) => (
-              <article
-                key={`marker-${step.step}`}
-                ref={(node) => {
-                  markersRef.current[index] = node;
-                }}
-                data-step-index={index}
-                className="rounded-xl border border-white/8 bg-dark/35 px-4 py-7"
+              <span
+                className={`absolute left-0 top-6 flex h-6 w-6 items-center justify-center rounded-full border text-[10px] font-semibold ${
+                  isCurrent
+                    ? 'border-crimson/70 bg-crimson/22 text-crimson'
+                    : index < activeIndex
+                      ? 'border-gold/60 bg-gold/14 text-gold'
+                      : 'border-white/20 bg-white/6 text-offwhite/60'
+                }`}
               >
-                <p className="text-xs tracking-[0.18em] text-offwhite/50">SCROLL CUE {step.step}</p>
-                <p className="mt-1 text-sm text-offwhite/68">{step.label}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </div>
+                {step.step}
+              </span>
+
+              {index < steps.length - 1 && (
+                <span className="pointer-events-none absolute left-3 top-12 h-6 w-px bg-white/16">
+                  <motion.span
+                    className={`absolute inset-x-0 top-0 w-px ${
+                      connectorFilled ? 'bg-gold' : 'bg-transparent'
+                    }`}
+                    animate={{ height: connectorFilled ? '100%' : '0%' }}
+                    transition={{ duration: 0.35, ease: 'easeInOut' }}
+                  />
+                  {isFlowing && !prefersReducedMotion ? (
+                    <motion.span
+                      className="absolute left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-gold shadow-[0_0_10px_rgba(230,196,122,0.65)]"
+                      initial={{ y: 0, opacity: 0 }}
+                      animate={{ y: 18, opacity: [0, 1, 0.6] }}
+                      transition={{ duration: 0.45, ease: 'easeInOut' }}
+                    />
+                  ) : null}
+                </span>
+              )}
+
+              <motion.article
+                className={`rounded-xl border px-4 py-3 transition-colors duration-200 ${getCardClasses(
+                  stagePhase,
+                  isCurrent
+                )}`}
+                initial={{ opacity: 0.8, y: 6 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.4 }}
+                animate={isCurrent ? { scale: 1.01 } : { scale: 1 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-semibold tracking-wide text-offwhite">
+                    {step.label}
+                  </h3>
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${
+                      stagePhase === 'completed'
+                        ? 'border-gold/55 bg-gold/12 text-gold'
+                        : isCurrent
+                          ? 'border-crimson/45 bg-crimson/18 text-crimson'
+                          : 'border-white/18 bg-white/4 text-offwhite/62'
+                    }`}
+                  >
+                    {STATE_LABEL[stagePhase]}
+                  </span>
+                </div>
+
+                <p className="mt-1 text-sm leading-relaxed text-offwhite/78">{step.description}</p>
+                <div className="mt-2 space-y-1 text-xs text-offwhite/72">
+                  <p>
+                    <span className="font-semibold text-offwhite/85">IN:</span> {step.input}
+                  </p>
+                  <p>
+                    <span className="font-semibold text-offwhite/85">PROC:</span> {step.processing}
+                  </p>
+                  <p>
+                    <span className="font-semibold text-gold/86">OUT:</span> {step.output}
+                  </p>
+                </div>
+              </motion.article>
+            </li>
+          );
+        })}
+      </ol>
     </section>
   );
 }

@@ -2,7 +2,7 @@ import { motion } from 'motion/react';
 
 export default function DemoPreview() {
   return (
-    <section className="relative mx-auto max-w-5xl px-6 py-28">
+    <section id="demo" className="relative mx-auto max-w-5xl px-6 py-28">
       <motion.h2
         className="mb-14 text-center text-4xl font-bold text-offwhite sm:text-5xl"
         initial={{ opacity: 0, y: 20 }}

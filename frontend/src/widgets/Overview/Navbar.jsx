@@ -3,9 +3,9 @@ import { useEffect, useState } from 'react';
 
 const NAV_ITEMS = [
   { label: 'Features', target: 'features' },
-  { label: 'Workflow', target: 'workflow' },
+  { label: 'How It Works', target: 'how-it-works' },
+  { label: 'Demo', target: 'demo' },
   { label: 'Tech Stack', target: 'tech-stack' },
-  { label: 'Team', target: 'team' },
 ];
 
 export default function Navbar() {
@@ -16,12 +16,6 @@ export default function Navbar() {
   useEffect(() => {
     const onScroll = () => {
       setVisible(window.scrollY > window.innerHeight * 0.6);
-
-      const atBottom =
-        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
-      if (atBottom) {
-        setActiveId('team');
-      }
     };
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);

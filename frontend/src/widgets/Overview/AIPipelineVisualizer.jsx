@@ -217,7 +217,7 @@ export default function AIPipelineVisualizer() {
 
   return (
     <section
-      id="workflow"
+      id="how-it-works"
       ref={containerRef}
       className="relative flex h-screen w-full select-none flex-col items-center justify-center overflow-hidden bg-dark px-6"
     >

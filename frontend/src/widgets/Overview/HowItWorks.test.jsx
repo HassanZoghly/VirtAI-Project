@@ -24,7 +24,7 @@ describe('HowItWorks', () => {
 
   it('shows input/process/output/handoff artifacts in the active detail panel', () => {
     render(<HowItWorks />);
-    const detailPanel = screen.getByText(/^STEP\s*1$/i).closest('article');
+    const detailPanel = screen.getAllByText(/^HANDOFF:/i)[0]?.closest('article');
 
     expect(detailPanel).toBeInTheDocument();
     expect(within(detailPanel).getByText(/^IN:/i)).toBeInTheDocument();

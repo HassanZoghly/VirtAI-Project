@@ -2,42 +2,28 @@
 
 import '@testing-library/jest-dom/vitest';
 import { render, screen, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it } from 'vitest';
-import React from 'react';
-// Mock OverviewPage to avoid loader/alias issues in this test environment.
-// The real component is tested elsewhere; here we only need structure for behavioral tests.
-const OverviewPage = () => (
-  <>
-    <section id="features" />
-    <section id="how-it-works">
-      <h2>How it works</h2>
-      <p>voice → asr → rag → llm → tts → avatar</p>
-      <ol>
-        <li aria-current="step">Step 1</li>
-        <li>Step 2</li>
-      </ol>
-    </section>
-    <section id="demo" />
-    <section id="tech-stack" />
-  </>
-);
+import { OverviewPage } from '@/features/overview';
 
 beforeEach(() => {
   // prevent test environment errors from window.scrollTo
   global.scrollTo = () => {};
 });
 
+const renderOverviewPage = () =>
+  render(
+    <HelmetProvider>
+      <MemoryRouter>
+        <OverviewPage />
+      </MemoryRouter>
+    </HelmetProvider>
+  );
+
 describe('OverviewPage navbar anchors', () => {
   it('navbar targets map to existing section ids', () => {
-    render(
-      <MemoryRouter>
-        <HelmetProvider>
-          <OverviewPage />
-        </HelmetProvider>
-      </MemoryRouter>
-    );
+    renderOverviewPage();
 
     const ids = ['features', 'how-it-works', 'demo', 'tech-stack'];
     ids.forEach((id) => {
@@ -46,46 +32,28 @@ describe('OverviewPage navbar anchors', () => {
   });
 
   it('does not render a team nav item', () => {
-    render(
-      <MemoryRouter>
-        <HelmetProvider>
-          <OverviewPage />
-        </HelmetProvider>
-      </MemoryRouter>
-    );
+    renderOverviewPage();
 
     expect(screen.queryByRole('button', { name: /^team$/i })).toBeNull();
   });
-});
 
-describe('OverviewPage how-it-works sticky behavior', () => {
-  it('process subtitle is visible in #how-it-works context', () => {
-    render(
-      <MemoryRouter>
-        <HelmetProvider>
-          <OverviewPage />
-        </HelmetProvider>
-      </MemoryRouter>
-    );
+  it('shows process subtitle in how-it-works section', () => {
+    renderOverviewPage();
 
-    const howItWorks = document.getElementById('how-it-works');
-    expect(howItWorks).toBeTruthy();
-    // Subtitle pipeline (voice → asr → rag → llm → tts → avatar)
+    const howItWorksSection = document.getElementById('how-it-works');
+    expect(howItWorksSection).toBeTruthy();
     expect(
-      within(howItWorks).getByText(/voice\s*→\s*asr\s*→\s*rag\s*→\s*llm\s*→\s*tts\s*→\s*avatar/i)
+      within(howItWorksSection).getByText(
+        /voice\s*→\s*asr\s*→\s*rag\s*→\s*llm\s*→\s*tts\s*→\s*avatar/i
+      )
     ).toBeInTheDocument();
   });
 
-  it('exactly one timeline item has aria-current="step"', () => {
-    render(
-      <MemoryRouter>
-        <HelmetProvider>
-          <OverviewPage />
-        </HelmetProvider>
-      </MemoryRouter>
-    );
+  it('has exactly one timeline item marked as current step', () => {
+    renderOverviewPage();
 
-    const items = document.querySelectorAll('[aria-current="step"]');
-    expect(items.length).toBe(1);
+    const howItWorksSection = document.getElementById('how-it-works');
+    expect(howItWorksSection).toBeTruthy();
+    expect(howItWorksSection.querySelectorAll('[aria-current="step"]')).toHaveLength(1);
   });
 });

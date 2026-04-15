@@ -7,7 +7,9 @@ export default function HowItWorks() {
   const markersRef = useRef([]);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof IntersectionObserver === 'undefined') return;
+    if (typeof window === 'undefined' || typeof IntersectionObserver === 'undefined') {
+      return;
+    }
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -19,9 +21,13 @@ export default function HowItWorks() {
               a.boundingClientRect.top - b.boundingClientRect.top
           );
 
-        if (!visible[0]) return;
+        if (!visible[0]) {
+          return;
+        }
         const nextIndex = Number(visible[0].target.getAttribute('data-step-index'));
-        if (!Number.isNaN(nextIndex)) setActiveIndex(nextIndex);
+        if (!Number.isNaN(nextIndex)) {
+          setActiveIndex(nextIndex);
+        }
       },
       {
         threshold: [0.25, 0.5, 0.75],

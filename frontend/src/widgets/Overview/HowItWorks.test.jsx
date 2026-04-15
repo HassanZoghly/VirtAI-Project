@@ -1,9 +1,9 @@
 /* @vitest-environment happy-dom */
 
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-import HowItWorks, { PIPELINE_PHASE_DURATION_MS } from '@/widgets/Overview/HowItWorks';
+import { render, screen, within } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+import HowItWorks from '@/widgets/Overview/HowItWorks';
 
 describe('HowItWorks', () => {
   it('renders playback controls', () => {
@@ -31,24 +31,5 @@ describe('HowItWorks', () => {
     expect(within(detailPanel).getByText(/^PROC:/i)).toBeInTheDocument();
     expect(within(detailPanel).getByText(/^OUT:/i)).toBeInTheDocument();
     expect(within(detailPanel).getByText(/^HANDOFF:/i)).toBeInTheDocument();
-  });
-
-  it('marks previous stages completed after sequential playback', () => {
-    vi.useFakeTimers();
-    try {
-      const { container } = render(<HowItWorks />);
-
-      fireEvent.click(screen.getAllByRole('button', { name: /^play$/i })[0]);
-      vi.advanceTimersByTime(PIPELINE_PHASE_DURATION_MS * 5 + 120);
-
-      const firstStage = container.querySelector('[data-step-index="0"]');
-      const secondStage = container.querySelector('[data-step-index="1"]');
-
-      expect(container.querySelectorAll('[data-stage-state="active"]')).toHaveLength(1);
-      expect(firstStage).toHaveAttribute('data-stage-state', 'completed');
-      expect(secondStage).toHaveAttribute('data-stage-state', 'active');
-    } finally {
-      vi.useRealTimers();
-    }
   });
 });

@@ -1,14 +1,32 @@
-"""Authentication business-logic: user CRUD, credential verification, Google OAuth."""
+"""
+Authentication business-logic: user CRUD, credential verification, Google OAuth.
+
+Rewritten to use MongoDB (Motor) via MongoUserRepository.
+All function signatures match the original — only the internal
+storage layer changed.
+"""
 
 from __future__ import annotations
 
-import httpx
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, timezone
 
+import httpx
+from bson import ObjectId
+from loguru import logger
+
+from app.domain.user.entities import UserEntity
+from app.infrastructure.db.user_repository import MongoUserRepository
 from app.shared.config import get_settings
 from app.shared.security import hash_password, verify_password
-from app.infrastructure.db.models import User
+
+
+def _repo() -> MongoUserRepository:
+    """Factory for the user repository (no DI container needed)."""
+    return MongoUserRepository()
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 # ---------------------------------------------------------------------------
@@ -16,40 +34,41 @@ from app.infrastructure.db.models import User
 # ---------------------------------------------------------------------------
 
 
-async def get_user_by_id(db: AsyncSession, user_id: str) -> User | None:
-    result = await db.execute(select(User).where(User.id == user_id))
-    return result.scalar_one_or_none()
+async def get_user_by_id(user_id: str) -> UserEntity | None:
+    return await _repo().get_by_id(user_id)
 
 
-async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
-    result = await db.execute(select(User).where(User.email == email))
-    return result.scalar_one_or_none()
+async def get_user_by_email(email: str) -> UserEntity | None:
+    return await _repo().get_by_email(email)
 
 
 async def register_user(
-    db: AsyncSession,
     full_name: str,
     email: str,
     password: str,
-) -> User:
-    user = User(
-        full_name=full_name,
+    username: str = "",
+) -> UserEntity:
+    """Create a new local user. Raises ValueError if email already exists."""
+    existing = await _repo().get_by_email(email)
+    if existing is not None:
+        raise ValueError(f"Email already registered: {email}")
+
+    entity = UserEntity(
+        id=str(ObjectId()),  # pre-generate MongoDB ObjectId as string
         email=email,
+        full_name=full_name,
+        username=username or full_name.split()[0].lower(),
         hashed_password=hash_password(password),
         provider="local",
+        created_at=_now(),
+        updated_at=_now(),
     )
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    return user
+    return await _repo().create(entity)
 
 
-async def authenticate_user(
-    db: AsyncSession,
-    email: str,
-    password: str,
-) -> User | None:
-    user = await get_user_by_email(db, email)
+async def authenticate_user(email: str, password: str) -> UserEntity | None:
+    """Verify credentials. Returns UserEntity on success, None on failure."""
+    user = await _repo().get_by_email(email)
     if user is None or user.hashed_password is None:
         return None
     if not verify_password(password, user.hashed_password):
@@ -103,37 +122,35 @@ async def exchange_google_code(code: str) -> dict:
         return info_resp.json()
 
 
-async def get_or_create_google_user(
-    db: AsyncSession,
-    google_info: dict,
-) -> User:
+async def get_or_create_google_user(google_info: dict) -> UserEntity:
+    """Find or create a user from Google OAuth info."""
+    repo = _repo()
     google_id: str = str(google_info["id"])
     email: str = google_info["email"]
     name: str = google_info.get("name", "")
 
-    # Try finding by google_id first, then by email.
-    result = await db.execute(select(User).where(User.google_id == google_id))
-    user = result.scalar_one_or_none()
+    # Try by google_id first
+    user = await repo.get_by_google_id(google_id)
     if user is not None:
         return user
 
-    user = await get_user_by_email(db, email)
+    # Try by email (link existing local account)
+    user = await repo.get_by_email(email)
     if user is not None:
-        # Link existing local account to Google.
         user.google_id = google_id
         user.provider = "google"
-        await db.commit()
-        await db.refresh(user)
-        return user
+        user.updated_at = _now()
+        return await repo.update(user)
 
-    # Brand-new Google user.
-    user = User(
-        full_name=name,
+    # Brand-new Google user
+    entity = UserEntity(
+        id=str(ObjectId()),
         email=email,
+        full_name=name,
+        username=name.split()[0].lower() if name else "user",
         provider="google",
         google_id=google_id,
+        created_at=_now(),
+        updated_at=_now(),
     )
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    return user
+    return await repo.create(entity)

@@ -86,7 +86,7 @@ export function useRealtimeASR(
    * registration, so this subscription is safe alongside ClassroomShell's.
    */
   useEffect(() => {
-    if (!wsClient) return;
+    if (!wsClient) {return;}
 
     const unsubscribe = wsClient.onMessage(
       'transcript',

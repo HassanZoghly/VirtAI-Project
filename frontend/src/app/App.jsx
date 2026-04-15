@@ -4,6 +4,7 @@ import { BrowserRouter as Router } from 'react-router-dom';
 import './App.css';
 
 import { useRestoreSession } from '@/features/auth/hooks/useAuth';
+import PageLoader from '@/shared/components/PageLoader';
 import AppRoutes, { preloadClassroom, preloadSetup } from './routes';
 
 const ROUTER_FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true };
@@ -35,18 +36,6 @@ class ErrorBoundary extends Component {
     }
     return this.props.children;
   }
-}
-
-function PageLoader() {
-  return (
-    <div className="page-loader">
-      <div className="loader">
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
-    </div>
-  );
 }
 
 function App() {

@@ -1,5 +1,6 @@
 """JWT token creation / verification and password hashing utilities."""
 
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from jose import JWTError, jwt
@@ -35,10 +36,12 @@ def _create_token(
 ) -> str:
     settings = get_settings()
     payload = data.copy()
+    jti = str(uuid.uuid4())  # unique token ID — used for blacklisting
     payload.update(
         {
             "exp": datetime.now(timezone.utc) + expires_delta,
             "type": token_type,
+            "jti": jti,
         }
     )
     return jwt.encode(
@@ -66,8 +69,14 @@ def create_refresh_token(user_id: str) -> str:
     )
 
 
-def verify_token(token: str, expected_type: str = "access") -> str | None:
-    """Return the *user_id* embedded in the token, or ``None`` on failure."""
+def verify_token(token: str, expected_type: str = "access") -> tuple[str, str] | None:
+    """
+    Decode and verify a JWT token.
+
+    Returns:
+        (user_id, jti) tuple on success — jti needed for blacklist checks.
+        None on failure (invalid, expired, wrong type).
+    """
     settings = get_settings()
     try:
         payload = jwt.decode(
@@ -77,6 +86,25 @@ def verify_token(token: str, expected_type: str = "access") -> str | None:
         )
         if payload.get("type") != expected_type:
             return None
-        return payload.get("sub")
+        user_id = payload.get("sub")
+        jti = payload.get("jti", "")
+        if not user_id:
+            return None
+        return user_id, jti
+    except JWTError:
+        return None
+
+
+def extract_jti(token: str) -> str | None:
+    """Extract JTI from a token without full verification (for blacklisting on logout)."""
+    settings = get_settings()
+    try:
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+            options={"verify_exp": False},  # allow expired tokens to be blacklisted
+        )
+        return payload.get("jti")
     except JWTError:
         return None

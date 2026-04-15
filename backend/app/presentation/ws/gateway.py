@@ -177,7 +177,20 @@ class WebSocketHandler:
                         self.ws.receive(), timeout=1.0  # short timeout so ping loop can run
                     )
 
-                    # Handle different message types
+                    # ── Explicit disconnect detection ──────────────────────────
+                    # Starlette's receive() can return a raw ASGI disconnect dict
+                    # *before* raising WebSocketDisconnect — handle it here so we
+                    # never call receive() again after the connection closed.
+                    if message.get("type") == "websocket.disconnect":
+                        code = message.get("code", 1000)
+                        logger.info(
+                            f"[WS] Disconnect frame received | "
+                            f"session={self.session.session_id} | code={code}"
+                        )
+                        self._connected = False
+                        break
+
+                    # Handle normal message types
                     if "text" in message:
                         # Text frame - route to text message handler
                         await self._route_message(message["text"], audio_buffer)
@@ -185,20 +198,21 @@ class WebSocketHandler:
                         # Binary frame - route to binary message handler (PCM audio)
                         await self._handle_binary_frame(message["bytes"])
                     else:
-                        # Unknown message type
-                        logger.warning(f"[WS] Unknown message type: {message}")
+                        logger.debug(f"[WS] Unhandled ASGI message type: {message.get('type')}")
 
                 except asyncio.TimeoutError:
                     # No message received, continue (ping loop handles keepalive)
                     continue
-                except WebSocketDisconnect:
-                    # Comprehensive error logging for WebSocket disconnection (Requirement 11.1, 11.2)
+                except WebSocketDisconnect as exc:
+                    # Raised by Starlette when client disconnects
                     logger.warning(
                         f"[WS] Client disconnected | "
                         f"session={self.session.session_id} | "
                         f"avatar={self.session.avatar_id} | "
+                        f"code={exc.code} | "
                         f"voice_mode_active={self._voice_mode_handler is not None} | "
-                        f"pipeline_running={self._pipeline_task is not None and not self._pipeline_task.done()}"
+                        f"pipeline_running="
+                        f"{self._pipeline_task is not None and not self._pipeline_task.done()}"
                     )
 
                     # Clear voice mode buffer if active
@@ -212,7 +226,22 @@ class WebSocketHandler:
                             )
                         self._voice_mode_handler.audio_pipeline.clear_buffer()
 
+                    self._connected = False
                     break
+                except RuntimeError as e:
+                    # Starlette raises RuntimeError("Cannot call ...") after disconnect;
+                    # treat it the same as a normal disconnect.
+                    if "disconnect" in str(e).lower() or "receive" in str(e).lower():
+                        logger.warning(
+                            f"[WS] RuntimeError after disconnect (suppressed) | "
+                            f"session={self.session.session_id} | {e}"
+                        )
+                        self._connected = False
+                        break
+                    logger.error(f"[WS] Unexpected RuntimeError: {e}")
+                    await self._safe_send(
+                        make_error_msg(code="INTERNAL_ERROR", message="Error processing message")
+                    )
                 except Exception as e:
                     logger.error(f"[WS] Error receiving message: {e}")
                     await self._safe_send(

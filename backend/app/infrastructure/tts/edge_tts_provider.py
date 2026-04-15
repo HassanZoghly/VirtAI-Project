@@ -12,6 +12,7 @@ from app.shared.errors import TTSException
 from app.domain.voice.entities import TTSChunk, TTSResult, VisemeEvent, WordBoundary
 from app.domain.voice.ports import BaseTTSProvider
 from app.infrastructure.tts.tts_utils import calculate_audio_duration
+from app.infrastructure.cache.tts_cache import cache_audio, get_cached_audio
 
 
 class EdgeTTSProvider(BaseTTSProvider):
@@ -183,8 +184,23 @@ class EdgeTTSProvider(BaseTTSProvider):
             f"TTS generate | session={session_id} | message={message_id} | text_len={len(text)}"
         )
 
-        # Synthesize audio
-        result = await self.synthesize(text)
+        # Try Redis cache first to avoid repeated synthesis for identical text+voice.
+        cached_audio = await get_cached_audio(text=text, voice=self.voice)
+        if cached_audio is not None:
+            logger.info(
+                f"TTS cache hit | session={session_id} | message={message_id} | "
+                f"voice={self.voice} | bytes={len(cached_audio):,}"
+            )
+            result = TTSResult(
+                audio_bytes=cached_audio,
+                visemes=[],
+                word_boundaries=[],
+                audio_duration_ms=calculate_audio_duration(cached_audio, format="mp3"),
+            )
+        else:
+            # Cache miss -> synthesize then store in Redis.
+            result = await self.synthesize(text)
+            await cache_audio(text=text, voice=self.voice, audio_bytes=result.audio_bytes)
 
         # Create storage directory
         from app.shared.config import get_settings

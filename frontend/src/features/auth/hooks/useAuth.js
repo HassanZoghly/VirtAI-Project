@@ -109,12 +109,20 @@ export function useRestoreSession() {
 
   const restore = useCallback(async () => {
     setLoading(true);
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('timeout')), 8000)
-    );
+    const deadline = (ms) =>
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms));
     try {
-      const { access_token } = await Promise.race([refreshAccessToken(), timeout]);
-      const user = await Promise.race([getMe(), timeout]);
+      // Step 1 — refresh the access token
+      const { access_token } = await Promise.race([refreshAccessToken(), deadline(8000)]);
+
+      // Step 2 — store the new token immediately so the axios interceptor
+      //           picks it up before the /auth/me request fires
+      useAuthStore.getState().setAuth(null, access_token);
+
+      // Step 3 — fetch the user profile with the fresh token
+      const user = await Promise.race([getMe(), deadline(8000)]);
+
+      // Step 4 — store the complete auth state
       setAuth(user, access_token);
     } catch {
       // Guard against wiping auth that handleCallback() may have already set

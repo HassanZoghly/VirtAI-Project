@@ -422,7 +422,7 @@ export function useVoiceMode(
      * - 8.3, 9.4, 10.5: Handle error messages
      */
     useEffect(() => {
-        if (!wsClient) return;
+        if (!wsClient) {return;}
 
         const unsubscribeTranscript = wsClient.onMessage('transcript', handleTranscript);
         const unsubscribeError = wsClient.onMessage('error', handleError);

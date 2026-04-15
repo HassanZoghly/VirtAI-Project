@@ -145,7 +145,7 @@ self.onmessage = (event: MessageEvent<VADWorkerRequest>) => {
 
     try {
         switch (type) {
-            case 'process':
+            case 'process': {
                 if (!audioData) {
                     throw new Error('audioData is required for process command');
                 }
@@ -159,6 +159,7 @@ self.onmessage = (event: MessageEvent<VADWorkerRequest>) => {
                 };
                 self.postMessage(response);
                 break;
+            }
 
             case 'reset':
                 reset();

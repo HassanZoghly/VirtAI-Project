@@ -188,8 +188,14 @@ class ConversationPipeline:
         """
         Process user message through LLM → TTS → Visemes pipeline.
 
-        Uses late imports for schemas/ws_messages and viseme generator
-        to avoid circular imports and keep this module presentation-free.
+        Flow:
+          1. Persist user message to MongoDB
+          2. Push user message to Redis context
+          3. Warm up in-memory history from Redis if empty (cache miss → rebuild from MongoDB)
+          4. LLM streams tokens
+          5. Persist assistant message to MongoDB + push to Redis context
+          6. TTS generation
+          7. Viseme generation
         """
         from app.schemas.ws_messages import (
             make_chat_delta,
@@ -200,6 +206,11 @@ class ConversationPipeline:
             make_visemes_ready,
         )
         from app.infrastructure.tts.viseme_generator import VisemeGenerator
+        from app.infrastructure.db.chat_repository import save_message
+        from app.infrastructure.cache.chat_context_cache import (
+            get_or_rebuild_context,
+            push_message as push_ctx,
+        )
 
         self._aborted = False
         self._current_message_id = message_id
@@ -216,6 +227,29 @@ class ConversationPipeline:
                 )
                 return
 
+            # ── 1. Persist user message to MongoDB ────────────────────────────
+            try:
+                await save_message(
+                    session_id=session_id,
+                    role="user",
+                    content=text,
+                    input_type="text",
+                )
+            except Exception as e:
+                logger.warning(f"[Pipeline] Failed to persist user message: {e}")
+
+            # ── 2. Push user message to Redis context ─────────────────────────
+            await push_ctx(session_id, "user", text)
+
+            # ── 3. Warm up in-memory history from Redis if empty ──────────────
+            if self._history.is_empty:
+                ctx_messages = await get_or_rebuild_context(session_id)
+                for msg in ctx_messages[:-1]:  # skip the just-pushed user message
+                    if msg["role"] == "user":
+                        self._history.add_user_message(msg["content"])
+                    elif msg["role"] == "assistant":
+                        self._history.add_assistant_message(msg["content"])
+
             self._history.add_user_message(text)
             await send_callback(make_pipeline_state(session_id, "thinking"))
 
@@ -223,7 +257,7 @@ class ConversationPipeline:
                 await send_callback(make_pipeline_state(session_id, "idle"))
                 return
 
-            # Stream LLM tokens
+            # ── 4. Stream LLM tokens ──────────────────────────────────────────
             full_response_parts: list[str] = []
             if not self._llm:
                 raise LLMException("LLM service not configured")
@@ -292,11 +326,34 @@ class ConversationPipeline:
             )
             self._history.add_assistant_message(full_response)
 
+            # ── 5. Persist assistant message + update Redis context ────────────
+            tts_key: Optional[str] = None
+            try:
+                from app.infrastructure.cache.cache_keys import tts_cache_key as _tts_key
+                from app.shared.config import get_settings as _settings
+                tts_key = _tts_key(full_response, _settings().TTS_VOICE)
+                await save_message(
+                    session_id=session_id,
+                    role="assistant",
+                    content=full_response,
+                    input_type="text",
+                    tts_cache_key=tts_key,
+                )
+            except Exception as e:
+                logger.warning(f"[Pipeline] Failed to persist assistant message: {e}")
+
+            await push_ctx(
+                session_id,
+                "assistant",
+                full_response,
+                extra={"tts_cache_key": tts_key} if tts_key else None,
+            )
+
             if self._aborted:
                 await send_callback(make_pipeline_state(session_id, "idle"))
                 return
 
-            # TTS
+            # ── 6. TTS ────────────────────────────────────────────────────────
             await send_callback(make_pipeline_state(session_id, "speaking"))
             if not self._tts:
                 raise TTSException("TTS service not configured")
@@ -323,7 +380,7 @@ class ConversationPipeline:
                 await send_callback(make_pipeline_state(session_id, "idle"))
                 return
 
-            # Visemes
+            # ── 7. Visemes ────────────────────────────────────────────────────
             viseme_generator = VisemeGenerator()
             mouth_cues = await viseme_generator.generate_from_audio(
                 audio_path=tts_result.file_path or "",
@@ -421,6 +478,40 @@ class ConversationPipeline:
             yield ev(PipelineEventType.IDLE)
             return
 
+        history_was_empty = self._history.is_empty
+
+        # Persist/warm cache for legacy protocol flows as well.
+        if session_id:
+            try:
+                from app.infrastructure.db.chat_repository import save_message
+
+                await save_message(
+                    session_id=session_id,
+                    role="user",
+                    content=user_text,
+                    input_type="text",
+                )
+            except Exception as e:
+                logger.warning(f"[Pipeline] Failed to persist user message: {e}")
+
+            try:
+                from app.infrastructure.cache.chat_context_cache import (
+                    get_or_rebuild_context,
+                    push_message as push_ctx,
+                )
+
+                await push_ctx(session_id, "user", user_text)
+
+                if history_was_empty:
+                    ctx_messages = await get_or_rebuild_context(session_id)
+                    for msg in ctx_messages[:-1]:
+                        if msg["role"] == "user":
+                            self._history.add_user_message(msg["content"])
+                        elif msg["role"] == "assistant":
+                            self._history.add_assistant_message(msg["content"])
+            except Exception as e:
+                logger.warning(f"[Pipeline] Failed to update Redis user context: {e}")
+
         self._history.add_user_message(user_text)
         yield ev(PipelineEventType.THINKING)
 
@@ -467,8 +558,39 @@ class ConversationPipeline:
             for e in collected_events
             if e.type == PipelineEventType.LLM_TOKEN
         )
-        if full_response.strip():
-            self._history.add_assistant_message(full_response.strip())
+        assistant_text = full_response.strip()
+        if assistant_text:
+            self._history.add_assistant_message(assistant_text)
+
+            if session_id:
+                tts_key: Optional[str] = None
+                try:
+                    from app.infrastructure.cache.cache_keys import tts_cache_key as _tts_key
+                    from app.infrastructure.db.chat_repository import save_message
+                    from app.shared.config import get_settings as _settings
+
+                    tts_key = _tts_key(assistant_text, _settings().TTS_VOICE)
+                    await save_message(
+                        session_id=session_id,
+                        role="assistant",
+                        content=assistant_text,
+                        input_type="text",
+                        tts_cache_key=tts_key,
+                    )
+                except Exception as e:
+                    logger.warning(f"[Pipeline] Failed to persist assistant message: {e}")
+
+                try:
+                    from app.infrastructure.cache.chat_context_cache import push_message as push_ctx
+
+                    await push_ctx(
+                        session_id,
+                        "assistant",
+                        assistant_text,
+                        extra={"tts_cache_key": tts_key} if tts_key else None,
+                    )
+                except Exception as e:
+                    logger.warning(f"[Pipeline] Failed to update Redis assistant context: {e}")
 
         elapsed = time.perf_counter() - start
         logger.info(f"Pipeline done | {elapsed:.2f}s | session={session_id}")

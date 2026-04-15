@@ -168,6 +168,13 @@ class SessionManager:
             session = self._sessions[session_id]
             session.cleanup()
             del self._sessions[session_id]
+
+            # Keep Redis chat context until TTL expiry to support reconnect warm-up
+            # and avoid losing cache immediately on normal WebSocket disconnect.
+            logger.debug(
+                f"[SessionManager] Preserving Redis context until TTL | session={session_id}"
+            )
+
             logger.info(f"Session removed | id={session_id} | total_active={len(self._sessions)}")
 
     async def cleanup_idle(self) -> int:

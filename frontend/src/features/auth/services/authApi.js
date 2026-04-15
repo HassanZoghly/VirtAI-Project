@@ -30,7 +30,10 @@ export async function exchangeGoogleCode(code) {
 }
 
 export async function refreshAccessToken() {
-  const { data } = await apiClient.post('/auth/refresh', null, {
+  // Use bare axios (not apiClient) to avoid the 401 interceptor
+  // retrying refresh indefinitely when the refresh token itself is invalid.
+  const { default: axios } = await import('axios');
+  const { data } = await axios.post('/api/v1/auth/refresh', null, {
     withCredentials: true,
   });
   return data;

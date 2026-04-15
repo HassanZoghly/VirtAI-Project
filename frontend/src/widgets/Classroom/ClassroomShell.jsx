@@ -53,7 +53,7 @@ export default function ClassroomShell() {
       // Restore scroll position of incoming session (next tick after render)
       requestAnimationFrame(() => {
         const saved = scrollPositionsRef.current.get(nextId);
-        if (chatScrollRef.current && saved != null) {
+        if (chatScrollRef.current && saved !== null) {
           chatScrollRef.current.scrollTop = saved;
           shouldStickToBottom.current = false;
         } else {

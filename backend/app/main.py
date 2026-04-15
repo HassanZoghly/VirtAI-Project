@@ -14,7 +14,8 @@ from loguru import logger
 from app.presentation.http.v1.dependencies import init_session_manager
 from app.presentation.http.v1.router import router as api_v1_router
 from app.shared.config import get_settings
-from app.infrastructure.db.database import init_db
+from app.infrastructure.db.mongodb import init_mongodb, close_mongodb
+from app.infrastructure.cache.redis_client import init_redis, close_redis
 from app.shared.errors import (
     AvatarBaseException,
     avatar_exception_handler,
@@ -38,9 +39,12 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
 
-    # ── Database ──────────────────────────────────────────────────────────────
-    await init_db()
-    logger.info("Database initialised")
+    # ── Database & Cache ────────────────────────────────────────────────────────
+    await init_mongodb()
+    logger.info("MongoDB initialised")
+
+    await init_redis()
+    logger.info("Redis initialised")
 
     # Check for GROQ_API_KEY in development mode
     if not settings.GROQ_API_KEY:
@@ -126,6 +130,8 @@ async def lifespan(app: FastAPI):
     for task in background_tasks:
         task.cancel()
     await asyncio.gather(*background_tasks, return_exceptions=True)
+    await close_redis()
+    await close_mongodb()
     logger.info("Server shutdown complete")
 
 

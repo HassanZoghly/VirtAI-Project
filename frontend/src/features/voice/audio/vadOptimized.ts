@@ -275,7 +275,7 @@ export class OptimizedVADProcessor implements VADProcessor {
      * Calculate RMS energy from audio samples
      */
     private calculateRMSEnergy(audioData: Float32Array): number {
-        if (audioData.length === 0) return 0.0;
+        if (audioData.length === 0) {return 0.0;}
         let sumOfSquares = 0.0;
         for (let i = 0; i < audioData.length; i++) {
             sumOfSquares += audioData[i] * audioData[i];

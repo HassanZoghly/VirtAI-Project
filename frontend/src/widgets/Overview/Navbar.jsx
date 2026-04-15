@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 const NAV_ITEMS = [
   { label: 'Features', target: 'features' },
   { label: 'How It Works', target: 'how-it-works' },
-  { label: 'Demo', target: 'demo' },
   { label: 'Tech Stack', target: 'tech-stack' },
 ];
 
@@ -12,7 +11,7 @@ export default function Navbar() {
   const [visible, setVisible] = useState(false);
   const [activeId, setActiveId] = useState('');
 
-  /* show/hide based on scroll past hero + force "team" when at page bottom */
+  /* show/hide based on scroll past hero */
   useEffect(() => {
     const onScroll = () => {
       setVisible(window.scrollY > window.innerHeight * 0.6);
@@ -37,18 +36,23 @@ export default function Navbar() {
 
     ids.forEach((id) => {
       const el = document.getElementById(id);
-      if (el) {
-        observer.observe(el);
-      }
+      if (el) observer.observe(el);
     });
     return () => observer.disconnect();
   }, []);
 
   const scrollTo = (id) => {
     const el = document.getElementById(id);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    if (!el) return;
+
+    const offset = 80;
+    const y = el.getBoundingClientRect().top + window.scrollY - offset;
+
+    window.scrollTo({ top: y, behavior: 'smooth' });
+  };
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -64,7 +68,7 @@ export default function Navbar() {
         >
           {/* logo */}
           <button
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            onClick={scrollToTop}
             aria-label="Scroll to top"
             className="flex shrink-0 items-center gap-2"
           >
@@ -76,30 +80,41 @@ export default function Navbar() {
             </span>
           </button>
 
-          {/* nav links */}
-          <ul className="flex items-center gap-8">
-            {NAV_ITEMS.map(({ label, target }) => (
-              <li key={target}>
-                <button
-                  onClick={() => scrollTo(target)}
-                  className="relative cursor-pointer px-1 py-2 text-sm font-medium tracking-wide transition-colors duration-200"
-                  style={{
-                    fontFamily: 'var(--font-display)',
-                    color: activeId === target ? '#b5ac8a' : '#f5f1ec',
-                  }}
-                >
-                  {label}
-                  {activeId === target && (
-                    <motion.span
-                      layoutId="nav-underline"
-                      className="absolute bottom-0 left-0 h-0.5 w-full rounded-full bg-gold"
-                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                    />
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
+          {/* nav links and CTA */}
+          <div className="flex items-center gap-8">
+            <ul className="flex items-center gap-8">
+              {NAV_ITEMS.map(({ label, target }) => (
+                <li key={target}>
+                  <button
+                    onClick={() => scrollTo(target)}
+                    className="relative cursor-pointer px-1 py-2 text-sm font-medium tracking-wide transition-colors duration-200"
+                    style={{
+                      fontFamily: 'var(--font-display)',
+                      color: activeId === target ? '#b5ac8a' : '#f5f1ec',
+                    }}
+                  >
+                    {label}
+                    {activeId === target && (
+                      <motion.span
+                        layoutId="nav-underline"
+                        className="absolute bottom-0 left-0 h-0.5 w-full rounded-full bg-gold"
+                        transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                      />
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            
+            {/* Demo CTA Button */}
+            <button
+              onClick={() => scrollTo('demo')}
+              className="rounded-full bg-offwhite px-5 py-2 text-sm font-semibold tracking-wide text-dark transition-transform duration-200 hover:scale-105"
+              style={{ fontFamily: 'var(--font-display)' }}
+            >
+              Demo
+            </button>
+          </div>
         </motion.nav>
       )}
     </AnimatePresence>

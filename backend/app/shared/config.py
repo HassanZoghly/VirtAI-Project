@@ -95,8 +95,16 @@ class Settings(BaseSettings):
     AUDIO_MAX_DURATION_SEC: int = 30
     AUDIO_SAMPLE_RATE: int = 16000
 
-    # Database
-    DATABASE_PATH: str = str(BASE_DIR / ".data" / "virtai.db")
+    # MongoDB
+    MONGODB_URL: str = "mongodb://virtai-mongodb:27017"
+    MONGODB_DB_NAME: str = "virtai"
+
+    # Redis
+    REDIS_URL: str = "redis://virtai-redis:6379/0"
+    REDIS_CHAT_CONTEXT_TTL: int = 3600  # seconds — active chat context
+    REDIS_TTS_CACHE_TTL: int = 86400  # seconds — synthesised audio
+    REDIS_LLM_CACHE_TTL: int = 1800  # seconds — LLM completions
+    REDIS_JWT_BLACKLIST_TTL: int = 604800  # seconds — matches refresh token lifetime
 
     # Auth / JWT
     JWT_SECRET_KEY: str = Field(

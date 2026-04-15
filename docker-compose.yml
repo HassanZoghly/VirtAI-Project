@@ -5,6 +5,56 @@
 # ═══════════════════════════════════════════════════════════════════
 
 services:
+  # ── MongoDB ─────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7
+    container_name: virtai-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: Admin1234
+      MONGO_INITDB_DATABASE: ${MONGODB_DB_NAME:-virtai}
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongodb-data:/data/db
+    networks:
+      - virtai-network
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'mongosh',
+          '--username', 'admin',
+          '--password', 'Admin1234',
+          '--authenticationDatabase', 'admin',
+          '--eval', "db.adminCommand('ping')",
+          '--quiet',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── Redis ────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: virtai-redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis-data:/data
+    networks:
+      - virtai-network
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
   # ── Backend (FastAPI) ───────────────────────────────────────────
   backend:
     build:
@@ -12,7 +62,7 @@ services:
       dockerfile: Dockerfile
     container_name: virtai-backend
     ports:
-      - "8000:8000"
+      - '8000:8000'
     env_file:
       - ./backend/.env
     volumes:
@@ -20,12 +70,23 @@ services:
     networks:
       - virtai-network
     restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')",
+        ]
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 15s
 
   # ── Frontend (React + Vite) ────────────────────────────────────
   frontend:
@@ -34,7 +95,7 @@ services:
       dockerfile: Dockerfile
     container_name: virtai-frontend
     ports:
-      - "3000:3000"
+      - '3000:3000'
     environment:
       - VITE_API_TARGET=http://backend:8000
     depends_on:
@@ -46,6 +107,10 @@ services:
 
 # ── Volumes ──────────────────────────────────────────────────────
 volumes:
+  mongodb-data:
+    driver: local
+  redis-data:
+    driver: local
   backend-data:
     driver: local
 

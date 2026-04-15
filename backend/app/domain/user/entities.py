@@ -19,6 +19,7 @@ class UserEntity:
     id: str
     email: str
     full_name: str
+    username: str = ""
     hashed_password: Optional[str] = None
     provider: str = "local"  # local | google
     google_id: Optional[str] = None
@@ -26,3 +27,4 @@ class UserEntity:
     is_active: bool = True
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+

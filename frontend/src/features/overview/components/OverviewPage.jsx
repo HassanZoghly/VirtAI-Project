@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
 
-import HowItWorks from '@/widgets/Overview/HowItWorks';
 import CircuitBoardBackground from '@/widgets/Overview/CircuitBoardBackground';
 import DemoPreview from '@/widgets/Overview/DemoPreview';
 import FeaturesSection from '@/widgets/Overview/FeaturesSection';
 import Footer from '@/widgets/Overview/Footer';
 import HeroSection from '@/widgets/Overview/HeroSection';
+import HowItWorks from '@/widgets/Overview/HowItWorks';
 import Navbar from '@/widgets/Overview/Navbar';
 import SplashScreen from '@/widgets/Overview/SplashScreen';
 import TechStackSection from '@/widgets/Overview/TechStackSection';

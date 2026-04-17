@@ -7,74 +7,78 @@ Import from ``app.schemas`` for a flat, convenient namespace:
 """
 
 # ── audio ────────────────────────────────────────────────────
-from app.schemas.audio import (  # noqa: F401
-    AudioChunk,
-    AudioBuffer,
+from app.schemas.audio import (
     ASRResponse,
+    AudioBuffer,
+    AudioChunk,
 )
 
 # ── auth ─────────────────────────────────────────────────────
-from app.schemas.auth import (  # noqa: F401
-    LoginRequest,
-    SignupRequest,
+from app.schemas.auth import (
     GoogleCallbackRequest,
+    LoginRequest,
+    SetupStatusRequest,
+    SignupRequest,
     TokenResponse,
     UserResponse,
 )
 
 # ── voice_mode ───────────────────────────────────────────────
-from app.schemas.voice_mode import (  # noqa: F401
+from app.schemas.voice_mode import (
     AudioChunkMessage,
-    VoiceModeStop,
     TranscriptMessage,
     VoiceModeError,
-    make_transcript_message,
-    make_voice_mode_error,
+    VoiceModeStop,
     make_buffer_overflow_error,
-    make_transcription_failed_error,
-    make_rate_limit_error,
     make_invalid_audio_format_error,
+    make_rate_limit_error,
+    make_transcript_message,
+    make_transcription_failed_error,
+    make_voice_mode_error,
 )
 
 # ── ws_messages (modern protocol) ────────────────────────────
-from app.schemas.ws_messages import (  # noqa: F401
-    # Envelope / base
-    WSMessageEnvelope,
-    # Client → Server
-    ChatUserMessage,
+from app.schemas.ws_messages import (
+    AudioData,
+    AnimationTimelineV2,
+    AnimationTimelineV2Item,
+    AvatarStatus,
     ChatAbort,
-    TTSRequest,
     # Server → Client (modern)
     ChatDelta,
     ChatFinal,
-    PipelineState,
-    AudioData,
-    TTSReady,
-    MouthCue,
-    VisemesReady,
+    # Client → Server
+    ChatUserMessage,
+    # Legacy enums
+    ClientMessageType,
     ErrorMessage,
+    MouthCue,
+    PipelineState,
+    # Legacy models
+    ServerMessage,
+    ServerMessageType,
+    TTSReady,
+    TTSRequest,
+    VisemeEvent,
+    VisemesData,
+    VisemesReady,
+    # Envelope / base
+    WSMessageEnvelope,
     # Modern factory helpers
     make_chat_delta,
     make_chat_final,
-    make_pipeline_state,
-    make_tts_ready,
-    make_visemes_ready,
     make_error,
-    # Legacy enums
-    ClientMessageType,
-    ServerMessageType,
-    AvatarStatus,
-    # Legacy models
-    ServerMessage,
-    VisemeEvent,
-    VisemesData,
+    make_animation_timeline_v2,
     # Legacy factory helpers
     make_error_msg,
+    make_llm_chunk_msg,
+    make_pipeline_state,
     make_status_msg,
     make_transcript_msg,
     make_tts_chunk_msg,
+    make_tts_ready,
     make_visemes_msg,
-    make_llm_chunk_msg,
+    make_visemes_ready,
 )
 
 __all__ = [
@@ -85,6 +89,7 @@ __all__ = [
     # auth
     "LoginRequest",
     "SignupRequest",
+    "SetupStatusRequest",
     "GoogleCallbackRequest",
     "TokenResponse",
     "UserResponse",
@@ -108,12 +113,15 @@ __all__ = [
     "ChatFinal",
     "PipelineState",
     "AudioData",
+    "AnimationTimelineV2",
+    "AnimationTimelineV2Item",
     "TTSReady",
     "MouthCue",
     "VisemesReady",
     "ErrorMessage",
     "make_chat_delta",
     "make_chat_final",
+    "make_animation_timeline_v2",
     "make_pipeline_state",
     "make_tts_ready",
     "make_visemes_ready",

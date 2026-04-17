@@ -14,9 +14,24 @@ from __future__ import annotations
 
 import base64
 from typing import Literal, Optional
-from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
+
+
+def _normalize_optional_identifier(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError("Identifier cannot be empty")
+    return normalized
+
+
+def _normalize_required_identifier(value: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError("Identifier cannot be empty")
+    return normalized
 
 
 # ── Client Messages (Frontend -> Backend) ─────────────────────────────────────
@@ -25,10 +40,10 @@ from pydantic import BaseModel, Field, field_validator
 class AudioChunkMessage(BaseModel):
     """
     Client sends audio chunk from microphone capture.
-    
+
     Audio data is base64-encoded for WebSocket transmission.
     The is_final flag indicates silence was detected by VAD.
-    
+
     Validates: Requirements 18.1, 18.2
     """
 
@@ -38,42 +53,35 @@ class AudioChunkMessage(BaseModel):
     audio: str = Field(..., min_length=1, description="Base64-encoded audio data")
     is_final: bool = Field(default=False, description="True when silence detected by VAD")
     timestamp: float = Field(..., ge=0.0, description="Client timestamp in milliseconds")
-    format: Literal["webm", "opus", "wav"] = Field(
-        default="webm", description="Audio codec format"
-    )
-    session_id: Optional[str] = Field(None, description="Session UUID")
+    format: Literal["webm", "opus", "wav"] = Field(default="webm", description="Audio codec format")
+    session_id: Optional[str] = Field(None, description="Session identifier")
 
     @field_validator("audio")
     @classmethod
     def validate_base64(cls, v: str) -> str:
         """
         Validate that audio field contains valid base64 data.
-        
+
         Validates: Requirement 18.2
         """
         if not v:
             raise ValueError("Audio data cannot be empty")
-        
+
         try:
             # Attempt to decode base64 to verify validity
             decoded = base64.b64decode(v, validate=True)
             if len(decoded) == 0:
                 raise ValueError("Decoded audio data is empty")
         except Exception as e:
-            raise ValueError(f"Invalid base64 audio data: {str(e)}")
-        
+            raise ValueError(f"Invalid base64 audio data: {e!s}")
+
         return v
 
     @field_validator("session_id")
     @classmethod
-    def validate_uuid_format(cls, v: Optional[str]) -> Optional[str]:
-        """Validate that session_id is a valid UUID when provided."""
-        if v is not None:
-            try:
-                UUID(v)
-            except ValueError:
-                raise ValueError(f"Invalid UUID format: {v}")
-        return v
+    def validate_identifier_format(cls, v: Optional[str]) -> Optional[str]:
+        """Validate that session_id is non-empty when provided."""
+        return _normalize_optional_identifier(v)
 
     @field_validator("timestamp")
     @classmethod
@@ -87,24 +95,20 @@ class AudioChunkMessage(BaseModel):
 class VoiceModeStop(BaseModel):
     """
     Client requests to stop voice mode session.
-    
+
     Triggers cleanup of audio buffers and session resources.
     """
 
     type: Literal["voice_mode_stop"] = Field(
         default="voice_mode_stop", description="Message type identifier"
     )
-    session_id: str = Field(..., description="Session UUID to stop")
+    session_id: str = Field(..., description="Session identifier to stop")
 
     @field_validator("session_id")
     @classmethod
-    def validate_uuid_format(cls, v: str) -> str:
-        """Validate UUID format."""
-        try:
-            UUID(v)
-        except ValueError:
-            raise ValueError(f"Invalid UUID format: {v}")
-        return v
+    def validate_identifier_format(cls, v: str) -> str:
+        """Validate identifier format."""
+        return _normalize_required_identifier(v)
 
 
 # ── Server Messages (Backend -> Frontend) ─────────────────────────────────────
@@ -113,14 +117,14 @@ class VoiceModeStop(BaseModel):
 class TranscriptMessage(BaseModel):
     """
     Server sends transcribed text from ASR service.
-    
+
     Includes confidence score and detected language for quality assessment.
-    
+
     Validates: Requirements 18.5
     """
 
     type: Literal["transcript"] = Field(default="transcript", description="Message type identifier")
-    session_id: str = Field(..., description="Session UUID")
+    session_id: str = Field(..., description="Session identifier")
     text: str = Field(..., min_length=1, description="Transcribed text from ASR")
     confidence: float = Field(
         ..., ge=0.0, le=1.0, description="Transcription confidence score (0.0-1.0)"
@@ -130,20 +134,16 @@ class TranscriptMessage(BaseModel):
 
     @field_validator("session_id")
     @classmethod
-    def validate_uuid_format(cls, v: str) -> str:
-        """Validate UUID format."""
-        try:
-            UUID(v)
-        except ValueError:
-            raise ValueError(f"Invalid UUID format: {v}")
-        return v
+    def validate_identifier_format(cls, v: str) -> str:
+        """Validate identifier format."""
+        return _normalize_required_identifier(v)
 
     @field_validator("text")
     @classmethod
     def validate_text_not_empty(cls, v: str) -> str:
         """
         Ensure text is not just whitespace.
-        
+
         Validates: Requirement 18.5
         """
         if not v.strip():
@@ -155,7 +155,7 @@ class TranscriptMessage(BaseModel):
     def validate_confidence_range(cls, v: float) -> float:
         """
         Ensure confidence is between 0.0 and 1.0.
-        
+
         Validates: Requirement 18.5
         """
         if not 0.0 <= v <= 1.0:
@@ -166,7 +166,7 @@ class TranscriptMessage(BaseModel):
 class VoiceModeError(BaseModel):
     """
     Server reports voice mode specific errors to client.
-    
+
     Error codes:
     - BUFFER_OVERFLOW: Audio buffer exceeded size limit
     - TRANSCRIPTION_FAILED: ASR service failed to transcribe audio
@@ -179,21 +179,16 @@ class VoiceModeError(BaseModel):
     type: Literal["voice_mode_error"] = Field(
         default="voice_mode_error", description="Message type identifier"
     )
-    session_id: Optional[str] = Field(None, description="Session UUID (if applicable)")
+    session_id: Optional[str] = Field(None, description="Session identifier (if applicable)")
     code: str = Field(..., description="Error code identifier")
     message: str = Field(..., description="Human-readable error message")
     details: Optional[dict] = Field(None, description="Additional error context")
 
     @field_validator("session_id")
     @classmethod
-    def validate_uuid_format(cls, v: Optional[str]) -> Optional[str]:
-        """Validate UUID format when provided."""
-        if v is not None:
-            try:
-                UUID(v)
-            except ValueError:
-                raise ValueError(f"Invalid UUID format: {v}")
-        return v
+    def validate_identifier_format(cls, v: Optional[str]) -> Optional[str]:
+        """Validate identifier format when provided."""
+        return _normalize_optional_identifier(v)
 
     @field_validator("code")
     @classmethod
@@ -260,9 +255,7 @@ def make_buffer_overflow_error(session_id: str, buffer_size: int, max_size: int)
     )
 
 
-def make_transcription_failed_error(
-    session_id: str, error_message: str
-) -> VoiceModeError:
+def make_transcription_failed_error(session_id: str, error_message: str) -> VoiceModeError:
     """Create a transcription failed error message."""
     return make_voice_mode_error(
         code="TRANSCRIPTION_FAILED",

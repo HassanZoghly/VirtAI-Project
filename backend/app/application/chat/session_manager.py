@@ -52,12 +52,24 @@ class ConversationSession:
         )
         self.created_at: datetime = datetime.now(timezone.utc)
         self.last_activity: datetime = datetime.now(timezone.utc)
+        self.connected: bool = True
+        self.disconnected_at: datetime | None = None
         self.background_tasks: set[asyncio.Task] = set()
         self.on_cleanup: Optional[Callable[[], None]] = None
 
     def touch(self) -> None:
         """Updates last_activity timestamp."""
         self.last_activity = datetime.now(timezone.utc)
+
+    def mark_connected(self) -> None:
+        self.connected = True
+        self.disconnected_at = None
+        self.touch()
+
+    def mark_disconnected(self) -> None:
+        self.connected = False
+        self.disconnected_at = datetime.now(timezone.utc)
+        self.touch()
 
     @property
     def idle_seconds(self) -> float:
@@ -126,6 +138,9 @@ class SessionManager:
         tts_service: Optional[BaseTTSProvider] = None,
     ) -> ConversationSession:
         sid = session_id or str(uuid.uuid4())
+        if sid in self._sessions:
+            # Guard accidental session-id reuse for new chats.
+            sid = str(uuid.uuid4())
 
         asr = asr_service or (self._asr_service_factory() if self._asr_service_factory else None)
         llm = llm_service or (self._llm_service_factory() if self._llm_service_factory else None)
@@ -162,6 +177,22 @@ class SessionManager:
         if session:
             session.touch()
         return session
+
+    async def connect_existing_session(self, session_id: str) -> ConversationSession | None:
+        """Mark an existing session as connected (used for WS resume)."""
+        session = self._sessions.get(session_id)
+        if session:
+            session.mark_connected()
+        return session
+
+    def disconnect_session(self, session_id: str) -> None:
+        """Mark session disconnected but keep it alive for timeout-based resume."""
+        session = self._sessions.get(session_id)
+        if session is None:
+            return
+        session.pipeline.abort()
+        session.mark_disconnected()
+        logger.info(f"Session disconnected | id={session_id} | total_active={len(self._sessions)}")
 
     def remove_session(self, session_id: str) -> None:
         if session_id in self._sessions:
@@ -231,6 +262,7 @@ class SessionManager:
                 {
                     "id": sid,
                     "avatar": s.avatar_id,
+                    "connected": s.connected,
                     "idle_sec": round(s.idle_seconds, 1),
                     "history_length": s.pipeline.history_length,
                 }

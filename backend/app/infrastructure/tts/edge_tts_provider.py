@@ -8,11 +8,11 @@ import edge_tts
 from edge_tts import Communicate
 from loguru import logger
 
-from app.shared.errors import TTSException
 from app.domain.voice.entities import TTSChunk, TTSResult, VisemeEvent, WordBoundary
 from app.domain.voice.ports import BaseTTSProvider
-from app.infrastructure.tts.tts_utils import calculate_audio_duration
 from app.infrastructure.cache.tts_cache import cache_audio, get_cached_audio
+from app.infrastructure.tts.tts_utils import calculate_audio_duration
+from app.shared.errors import TTSException
 
 
 class EdgeTTSProvider(BaseTTSProvider):

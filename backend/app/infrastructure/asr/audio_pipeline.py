@@ -15,8 +15,9 @@ Key features:
 """
 
 import time
-import numpy as np
 from typing import Optional
+
+import numpy as np
 
 
 class BufferOverflowError(Exception):
@@ -59,7 +60,7 @@ class AudioPipeline:
         buffer_timeout: Maximum time to accumulate audio in seconds (default 30s)
         max_buffer_duration: Proactive flush threshold in seconds (default 25s)
     """
-    
+
     def __init__(
         self,
         max_buffer_size: int = 10 * 1024 * 1024,
@@ -114,11 +115,11 @@ class AudioPipeline:
             ValueError: If pcm_bytes is empty or invalid
         """
         current_time = time.time()
-        
+
         # Initialize timestamps on first chunk
         if self._started_at is None:
             self._started_at = current_time
-        
+
         # Check buffer timeout (but allow if buffer is ready to process)
         if self._started_at is not None:
             elapsed = current_time - self._started_at
@@ -129,23 +130,23 @@ class AudioPipeline:
                         f"Buffer accumulation exceeded timeout of {self.buffer_timeout} seconds "
                         f"(elapsed: {elapsed:.1f} seconds)"
                     )
-        
+
         # Validate PCM bytes
         if not pcm_bytes:
             raise ValueError("pcm_bytes cannot be empty")
-        
+
         if not isinstance(pcm_bytes, bytes):
             raise ValueError("pcm_bytes must be bytes object")
-        
+
         chunk_size = len(pcm_bytes)
-        
+
         # Check single chunk size limit
         if chunk_size > self.max_chunk_size:
             raise ChunkSizeError(
                 f"Chunk size {chunk_size} bytes exceeds maximum allowed "
                 f"chunk size of {self.max_chunk_size} bytes"
             )
-        
+
         # Check if adding this chunk would exceed the buffer limit
         if len(self._buffer) + chunk_size > self.max_buffer_size:
             raise BufferOverflowError(
@@ -153,11 +154,11 @@ class AudioPipeline:
                 f"max_buffer_size of {self.max_buffer_size} bytes "
                 f"(current size: {len(self._buffer)} bytes)"
             )
-        
+
         # Add chunk to buffer (simple byte concatenation - safe for PCM)
         self._buffer.extend(pcm_bytes)
         self._last_chunk_at = current_time
-        
+
         # Update final flag
         if is_final:
             self._is_final = True
@@ -178,13 +179,13 @@ class AudioPipeline:
         # Primary trigger: VAD detected silence
         if self._is_final:
             return True
-        
+
         # Fallback trigger: Buffer duration reached proactive flush threshold
         if self._started_at is not None:
             elapsed = time.time() - self._started_at
             if elapsed >= self.max_buffer_duration:
                 return True
-        
+
         return False
 
     def get_audio_for_asr(self) -> np.ndarray:
@@ -202,14 +203,14 @@ class AudioPipeline:
         """
         if len(self._buffer) == 0:
             raise ValueError("Cannot convert empty buffer to audio")
-        
+
         # PCM Int16 requires 2 bytes per sample
         if len(self._buffer) % 2 != 0:
             raise ValueError(
                 f"Buffer size {len(self._buffer)} is not a multiple of 2 "
                 "(Int16 PCM requires 2 bytes per sample)"
             )
-        
+
         return pcm_bytes_to_float32(bytes(self._buffer))
 
     def clear_buffer(self) -> None:
@@ -256,17 +257,17 @@ def pcm_bytes_to_float32(pcm_bytes: bytes) -> np.ndarray:
     """
     if not pcm_bytes:
         raise ValueError("pcm_bytes cannot be empty")
-    
+
     if len(pcm_bytes) % 2 != 0:
         raise ValueError(
             f"pcm_bytes size {len(pcm_bytes)} is not a multiple of 2 "
             "(Int16 PCM requires 2 bytes per sample)"
         )
-    
+
     # Convert bytes to Int16 array
     int16_array = np.frombuffer(pcm_bytes, dtype=np.int16)
-    
+
     # Convert Int16 to float32 in range [-1.0, 1.0]
     float32_array = int16_array.astype(np.float32) / 32768.0
-    
+
     return float32_array

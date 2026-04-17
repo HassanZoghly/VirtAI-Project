@@ -15,8 +15,8 @@ export default function LoginForm({ onToggleMode }) {
   const { login, isLoading } = useLogin();
   const [showPassword, setShowPassword] = useState(false);
   const inputClass =
-    'w-full rounded-xl border border-(--border-color)/80 bg-black/[0.22] px-4 py-3 text-sm text-(--text-primary) placeholder-(--text-muted) shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] outline-none transition-[border-color,box-shadow,background-color,transform] duration-200 focus:scale-[1.005] focus:border-(--accent-primary) focus:bg-black/30 focus:shadow-[0_0_0_3px_rgba(240,200,82,0.16)] disabled:cursor-not-allowed disabled:border-(--border-color)/55 disabled:bg-black/[0.16] disabled:opacity-60';
-  const labelClass = 'mb-1.5 block text-sm font-medium text-(--text-secondary)';
+    'w-full rounded-xl border border-(--border-color)/80 bg-black/[0.22] px-4 py-2.5 text-sm text-(--text-primary) placeholder-(--text-muted) shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] outline-none transition-[border-color,box-shadow,background-color,transform] duration-200 focus:scale-[1.005] focus:border-(--accent-primary) focus:bg-black/30 focus:shadow-[0_0_0_3px_rgba(240,200,82,0.16)] disabled:cursor-not-allowed disabled:border-(--border-color)/55 disabled:bg-black/[0.16] disabled:opacity-60';
+  const labelClass = 'mb-1 block text-xs font-semibold text-(--text-secondary) uppercase tracking-wide';
 
   const {
     register,
@@ -36,18 +36,9 @@ export default function LoginForm({ onToggleMode }) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.26 }}
-      className="w-full space-y-5"
+      className="w-full space-y-3"
     >
-      <div className="space-y-1.5 text-center">
-        <h2 className="text-[1.45rem] leading-tight font-semibold tracking-tight text-(--text-primary)">
-          Sign in
-        </h2>
-        <p className="text-sm leading-relaxed text-(--text-secondary)">
-          Continue with your existing VirtAI account.
-        </p>
-      </div>
-
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
         {/* Email */}
         <div>
           <label htmlFor="login-email" className={labelClass}>
@@ -128,7 +119,7 @@ export default function LoginForm({ onToggleMode }) {
         <button
           type="submit"
           disabled={isLoading}
-          className="flex w-full items-center justify-center rounded-xl bg-(--accent-primary) px-4 py-3.5 text-sm font-semibold text-(--primary-bg) shadow-[0_22px_34px_-24px_rgba(240,200,82,0.9)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-(--accent-secondary) hover:shadow-[0_24px_36px_-20px_rgba(240,200,82,0.9)] active:scale-[0.985] active:translate-y-0 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-(--accent-primary)/55 disabled:text-(--primary-bg)/80 disabled:opacity-100 disabled:shadow-none"
+          className="flex w-full items-center justify-center rounded-xl bg-(--accent-primary) px-4 py-3 text-sm font-semibold text-(--primary-bg) shadow-[0_22px_34px_-24px_rgba(240,200,82,0.9)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-(--accent-secondary) hover:shadow-[0_24px_36px_-20px_rgba(240,200,82,0.9)] active:scale-[0.985] active:translate-y-0 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-(--accent-primary)/55 disabled:text-(--primary-bg)/80 disabled:opacity-100 disabled:shadow-none"
         >
           {isLoading ? (
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-current/30 border-t-current" />
@@ -139,21 +130,21 @@ export default function LoginForm({ onToggleMode }) {
       </form>
 
       {/* Divider */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 !mt-3">
         <div className="h-px flex-1 bg-(--border-color)/70" />
-        <span className="text-xs text-(--text-muted)">or continue with</span>
+        <span className="text-xs text-(--text-muted)">or</span>
         <div className="h-px flex-1 bg-(--border-color)/70" />
       </div>
 
       <GoogleAuthButton />
 
       {/* Toggle to signup */}
-      <p className="text-center text-sm text-(--text-secondary)">
+      <p className="text-center text-xs text-(--text-secondary) !mt-2">
         Don&apos;t have an account?{' '}
         <button
           type="button"
           onClick={onToggleMode}
-          className="font-medium text-(--accent-primary) transition-colors hover:text-(--accent-secondary) hover:underline"
+          className="font-semibold text-(--accent-primary) transition-colors hover:text-(--accent-secondary) hover:underline"
         >
           Create one
         </button>

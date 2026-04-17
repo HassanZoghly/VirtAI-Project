@@ -16,16 +16,16 @@ from typing import TYPE_CHECKING, Optional
 
 from loguru import logger
 
+from app.application.animation.audio_analysis import analyze_tts_for_animation
+from app.application.animation.intelligence_service import AnimationIntelligenceService
 from app.domain.chat.entities import (
     ConversationHistory,
-    LLMChunk,
     PipelineEvent,
     PipelineEventType,
     ev,
 )
 from app.domain.chat.policies import build_conversation
 from app.domain.chat.ports import BaseLLMProvider
-from app.domain.voice.entities import TTSChunk
 from app.domain.voice.ports import BaseTTSProvider, StreamingASRService
 from app.shared.errors import ASRException, LLMException, TTSException
 
@@ -146,6 +146,8 @@ class ConversationPipeline:
         self._current_tts_task: Optional[asyncio.Task] = None
         self._current_message_id: Optional[str] = None
         self._max_sentence_queue_size = max_sentence_queue_size
+        self._animation_service = AnimationIntelligenceService()
+        self._recent_animation_assets: list[str] = []
         logger.info(f"ConversationPipeline created | avatar={avatar_id}")
 
     # ── Public API ────────────────────────────────────────────────────────────
@@ -197,19 +199,23 @@ class ConversationPipeline:
           6. TTS generation
           7. Viseme generation
         """
+        from app.infrastructure.cache.chat_context_cache import (
+            get_or_rebuild_context,
+        )
+        from app.infrastructure.cache.chat_context_cache import (
+            push_message as push_ctx,
+        )
+        from app.infrastructure.db.chat_repository import save_message
+        from app.infrastructure.tts.viseme_generator import VisemeGenerator
         from app.schemas.ws_messages import (
+            make_animation_timeline_v2,
             make_chat_delta,
             make_chat_final,
             make_error,
             make_pipeline_state,
             make_tts_ready,
+            make_user_message_echo,
             make_visemes_ready,
-        )
-        from app.infrastructure.tts.viseme_generator import VisemeGenerator
-        from app.infrastructure.db.chat_repository import save_message
-        from app.infrastructure.cache.chat_context_cache import (
-            get_or_rebuild_context,
-            push_message as push_ctx,
         )
 
         self._aborted = False
@@ -237,6 +243,15 @@ class ConversationPipeline:
                 )
             except Exception as e:
                 logger.warning(f"[Pipeline] Failed to persist user message: {e}")
+
+            await send_callback(
+                make_user_message_echo(
+                    session_id=session_id,
+                    message_id=message_id,
+                    text=text,
+                    conversation_id=session_id,
+                )
+            )
 
             # ── 2. Push user message to Redis context ─────────────────────────
             await push_ctx(session_id, "user", text)
@@ -324,6 +339,7 @@ class ConversationPipeline:
                     emotion=emotion,
                 )
             )
+
             self._history.add_assistant_message(full_response)
 
             # ── 5. Persist assistant message + update Redis context ────────────
@@ -331,6 +347,7 @@ class ConversationPipeline:
             try:
                 from app.infrastructure.cache.cache_keys import tts_cache_key as _tts_key
                 from app.shared.config import get_settings as _settings
+
                 tts_key = _tts_key(full_response, _settings().TTS_VOICE)
                 await save_message(
                     session_id=session_id,
@@ -393,6 +410,20 @@ class ConversationPipeline:
                 await send_callback(make_pipeline_state(session_id, "idle"))
                 return
 
+            # ── 8. Audio-driven animation timeline v2 ────────────────────────
+            audio_features = analyze_tts_for_animation(
+                tts_result=tts_result,
+                mouth_cues=mouth_cues,
+                text=full_response,
+            )
+
+            timeline_payload = self._animation_service.build_timeline_v2(
+                text=full_response,
+                audio_features=audio_features,
+                recent_assets=self._recent_animation_assets,
+                emotion=emotion,
+            )
+
             audio_url = f"/api/v1/audio/{session_id}/{message_id}.mp3"
             await send_callback(
                 make_tts_ready(
@@ -409,6 +440,22 @@ class ConversationPipeline:
                     mouth_cues=mouth_cues,
                 )
             )
+
+            if timeline_payload["timeline"]:
+                await send_callback(
+                    make_animation_timeline_v2(
+                        session_id=session_id,
+                        message_id=message_id,
+                        timeline=timeline_payload["timeline"],
+                        meta=timeline_payload.get("meta", {}),
+                    )
+                )
+                self._recent_animation_assets.extend(
+                    item["animation_asset"]
+                    for item in timeline_payload["timeline"]
+                    if item.get("animation_asset") and item["animation_asset"] != "Idle"
+                )
+                self._recent_animation_assets = self._recent_animation_assets[-12:]
 
         except Exception as e:
             logger.error(f"Pipeline error: {e}")
@@ -497,6 +544,8 @@ class ConversationPipeline:
             try:
                 from app.infrastructure.cache.chat_context_cache import (
                     get_or_rebuild_context,
+                )
+                from app.infrastructure.cache.chat_context_cache import (
                     push_message as push_ctx,
                 )
 

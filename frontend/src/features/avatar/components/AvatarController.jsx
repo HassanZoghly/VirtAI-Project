@@ -5,6 +5,79 @@ import AvatarScene from './AvatarScene';
 
 /** Mandatory silence between consecutive spoken responses (ms). */
 const INTER_RESPONSE_PAUSE_MS = 2500;
+const START_WITH_IDLE_STANCE = true;
+const TIMELINE_FPS = 30;
+
+function firstFinite(...values) {
+  for (const value of values) {
+    if (Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function toAnimationDirective(item) {
+  const animationAsset = item.animation_asset ?? item.animationAsset ?? null;
+  const inferredTalk =
+    typeof animationAsset === 'string'
+      ? (() => {
+          const match = animationAsset.match(/talk(\d+)/i);
+          return match ? `talk${match[1]}` : null;
+        })()
+      : null;
+
+  return {
+    animation: item.animation ?? inferredTalk ?? 'idle',
+    animationAsset,
+    startFrame: firstFinite(item.start_frame, item.startFrame),
+    endFrame: firstFinite(item.end_frame, item.endFrame),
+    transitionOutFrame: firstFinite(item.transition_out_frame, item.transitionOutFrame),
+    loopStartFrame: firstFinite(item.loop_start_frame, item.loopStartFrame),
+    loopEndFrame: firstFinite(item.loop_end_frame, item.loopEndFrame),
+    startTime: firstFinite(item.start_time, item.startTime),
+    endTime: firstFinite(item.end_time, item.endTime),
+    loopStartTime: firstFinite(item.loop_start_time, item.loopStartTime),
+    loopEndTime: firstFinite(item.loop_end_time, item.loopEndTime),
+    transitionOutTime: firstFinite(item.transition_out_time, item.transitionOutTime),
+    blend: firstFinite(item.blend_weight, item.blendWeight, item.blend),
+    speed: firstFinite(item.speed, item.playback_speed, item.playbackSpeed),
+    intensity: firstFinite(item.intensity),
+    transitionType: item.transition_type ?? item.transitionType,
+    intent: item.intent,
+    tone: item.tone,
+    text: item.text,
+  };
+}
+
+function estimateTimelineDurationMs(item) {
+  const startTime = firstFinite(item.start_time, item.startTime);
+  const endTime = firstFinite(item.end_time, item.endTime);
+
+  if (Number.isFinite(startTime) && Number.isFinite(endTime) && endTime > startTime) {
+    return Math.max(100, Math.round((endTime - startTime) * 1000));
+  }
+
+  const start = Number.isFinite(item.start_frame) ? item.start_frame : 0;
+  const effectiveEnd = Number.isFinite(item.transition_out_frame)
+    ? item.transition_out_frame
+    : Number.isFinite(item.end_frame)
+      ? item.end_frame
+      : null;
+
+  if (Number.isFinite(effectiveEnd) && effectiveEnd > start) {
+    const frameSpan = Math.max(1, effectiveEnd - start + 1);
+    const blend = Number.isFinite(item.blend) ? Math.max(0, Math.min(1, item.blend)) : 0.3;
+    const blendMs = 80 + blend * 160;
+    return Math.max(120, Math.round((frameSpan / TIMELINE_FPS) * 1000 + blendMs));
+  }
+
+  const words =
+    typeof item.text === 'string' ? item.text.trim().split(/\s+/).filter(Boolean).length : 0;
+  const fromText = words > 0 ? words * 170 : 0;
+
+  return fromText > 0 ? Math.max(180, Math.round(fromText)) : 420;
+}
 
 /**
  * useAnimationQueue — sequential animation queue with interrupt support.
@@ -16,8 +89,9 @@ const INTER_RESPONSE_PAUSE_MS = 2500;
  *
  * `flush(animation)` clears the queue and immediately plays `animation`.
  * `enqueue(items)` appends one or more items and starts processing if idle.
+ * `replace(items)` replaces the queue and starts processing immediately.
  */
-function useAnimationQueue(setAnimation) {
+function useAnimationQueue(setAnimation, onDrain) {
   const queueRef = useRef([]);
   const timerRef = useRef(null);
   const processingRef = useRef(false);
@@ -25,6 +99,7 @@ function useAnimationQueue(setAnimation) {
   const processNext = useCallback(() => {
     if (queueRef.current.length === 0) {
       processingRef.current = false;
+      onDrain?.();
       return;
     }
 
@@ -40,7 +115,7 @@ function useAnimationQueue(setAnimation) {
       }, durationMs);
     }
     // If no duration, the item stays active until flush() or next enqueue with advance
-  }, [setAnimation]);
+  }, [setAnimation, onDrain]);
 
   const enqueue = useCallback(
     (items) => {
@@ -64,12 +139,26 @@ function useAnimationQueue(setAnimation) {
     [setAnimation]
   );
 
+  const replace = useCallback(
+    (items) => {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+      queueRef.current = [];
+      processingRef.current = false;
+
+      const list = Array.isArray(items) ? items : [items];
+      queueRef.current.push(...list);
+      processNext();
+    },
+    [processNext]
+  );
+
   // Cleanup on unmount
   useEffect(() => {
     return () => clearTimeout(timerRef.current);
   }, []);
 
-  return { enqueue, flush };
+  return { enqueue, flush, replace };
 }
 
 /**
@@ -82,6 +171,7 @@ function useAnimationQueue(setAnimation) {
  * @param {'idle'|'thinking'|'speaking'|'error'} [props.pipelineState='idle'] - Current pipeline state
  * @param {string|null} [props.audioUrl] - URL to audio file (when TTS is ready)
  * @param {Array<{ start: number, end: number, value: string }>} [props.mouthCues] - Lip-sync timeline
+ * @param {Array<object>} [props.animationTimeline] - Backend animation timeline items
  * @param {string} props.modelPath - Path to GLB model file
  * @param {() => void} [props.onModelLoaded] - Callback when model is loaded
  * @param {(err: Error) => void} [props.onError] - Callback for errors
@@ -91,6 +181,7 @@ export default function AvatarController({
   pipelineState = 'idle',
   audioUrl = null,
   mouthCues = [],
+  animationTimeline = [],
   modelPath,
   onModelLoaded,
   onError,
@@ -102,6 +193,12 @@ export default function AvatarController({
   const hasGreetedRef = useRef(false);
   const hasInitializedRef = useRef(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const isPlayingAudioRef = useRef(false);
+  const pendingTimelineRef = useRef([]);
+  const hasActiveTimelineRef = useRef(false);
+  // Tracks whether we've started playback for the current audio URL.
+  // Cleared when currentPlayUrl changes so the scene picks a fresh talk variant.
+  const audioGenerationRef = useRef(0);
 
   // --- Inter-response pause state ---
   // Decoupled from the prop so incoming URLs can be queued during the pause.
@@ -110,10 +207,83 @@ export default function AvatarController({
   const pauseTimerRef = useRef(null);
   const pendingAudioUrlRef = useRef(null); // URL queued during a pause
 
-  const { enqueue, flush } = useAnimationQueue(setCurrentAnimation);
+  const { enqueue, flush, replace } = useAnimationQueue(setCurrentAnimation, () => {
+    hasActiveTimelineRef.current = false;
+    if (isPlayingAudioRef.current) {
+      setCurrentAnimation('speaking');
+    }
+  });
 
   // Use enhanced audio-driven lip sync hook to get morph targets and body motion
-  const { morphTargets } = useAudioDrivenLipSync(audioRef, mouthCues, isPlayingAudio);
+  const { morphTargetsRef } = useAudioDrivenLipSync(audioRef, mouthCues, isPlayingAudio);
+
+  useEffect(() => {
+    isPlayingAudioRef.current = isPlayingAudio;
+  }, [isPlayingAudio]);
+
+  useEffect(() => {
+    if (!Array.isArray(animationTimeline) || animationTimeline.length === 0) {
+      return;
+    }
+
+    const normalized = animationTimeline
+      .filter(
+        (item) =>
+          item &&
+          (typeof item.animation === 'string' ||
+            typeof item.animation_asset === 'string' ||
+            typeof item.animationAsset === 'string')
+      )
+      .map((item) => ({
+        directive: toAnimationDirective(item),
+        durationMs: estimateTimelineDurationMs(item),
+      }));
+
+    if (normalized.length > 0) {
+      pendingTimelineRef.current = normalized;
+    }
+  }, [animationTimeline]);
+
+  const startTimelinePlayback = useCallback(() => {
+    const pending = [...pendingTimelineRef.current];
+    if (!pending || pending.length === 0) {
+      return false;
+    }
+
+    pending.sort((a, b) => {
+      const aStart = a.directive.startTime;
+      const bStart = b.directive.startTime;
+      if (Number.isFinite(aStart) && Number.isFinite(bStart)) {
+        return aStart - bStart;
+      }
+      return 0;
+    });
+
+    const queueItems = pending.map((item, index) => ({
+      animation: item.directive,
+      durationMs: item.durationMs,
+      onComplete:
+        index === pending.length - 1
+          ? () => {
+              hasActiveTimelineRef.current = false;
+            }
+          : undefined,
+    }));
+
+    hasActiveTimelineRef.current = true;
+    replace(queueItems);
+    pendingTimelineRef.current = [];
+    return true;
+  }, [replace]);
+
+  useEffect(() => {
+    if (!isPlayingAudio || hasActiveTimelineRef.current) {
+      return;
+    }
+    if (pendingTimelineRef.current.length > 0) {
+      startTimelinePlayback();
+    }
+  }, [animationTimeline, isPlayingAudio, startTimelinePlayback]);
 
   // Map pipeline state to animation state — flushes queue on each state change
   useEffect(() => {
@@ -123,37 +293,48 @@ export default function AvatarController({
     }
 
     // If audio is playing, keep speaking animation regardless of pipeline state
-    // This fixes the "stands still" bug where avatar stops moving before audio ends
     if (isPlayingAudio) {
-      flush('speaking');
+      if (!hasActiveTimelineRef.current) {
+        const started = startTimelinePlayback();
+        if (!started) {
+          flush('speaking');
+        }
+      }
       return;
     }
 
     const animationMap = {
       idle: 'idle',
       thinking: 'thinking',
-      speaking: 'speaking',
+      speaking: 'idle',
       error: 'idle',
     };
 
     flush(animationMap[pipelineState] || 'idle');
-  }, [pipelineState, isPlayingAudio, flush]);
+  }, [pipelineState, isPlayingAudio, flush, startTimelinePlayback]);
 
   // Handle model loaded — queue greeting → idle sequence
   const handleModelLoaded = () => {
     if (!hasInitializedRef.current) {
       hasInitializedRef.current = true;
-      enqueue([
-        {
-          animation: 'greeting',
-          durationMs: GREETING_DURATION_MS,
-          onComplete: () => {
-            hasGreetedRef.current = true;
-            onAnimationComplete?.();
+
+      if (START_WITH_IDLE_STANCE) {
+        hasGreetedRef.current = true;
+        flush('idle');
+        onAnimationComplete?.();
+      } else {
+        enqueue([
+          {
+            animation: 'greeting',
+            durationMs: GREETING_DURATION_MS,
+            onComplete: () => {
+              hasGreetedRef.current = true;
+              onAnimationComplete?.();
+            },
           },
-        },
-        { animation: 'idle' },
-      ]);
+          { animation: 'idle' },
+        ]);
+      }
     }
 
     onModelLoaded?.();
@@ -171,6 +352,8 @@ export default function AvatarController({
       pauseTimerRef.current = null;
       isPausingRef.current = false;
       pendingAudioUrlRef.current = null;
+      pendingTimelineRef.current = [];
+      hasActiveTimelineRef.current = false;
       return;
     }
 
@@ -188,6 +371,8 @@ export default function AvatarController({
   // --- Stage 2: begin the mandatory 2.5 s silence after speech ends ---
   const beginPostSpeechPause = useCallback(() => {
     isPausingRef.current = true;
+    hasActiveTimelineRef.current = false;
+    pendingTimelineRef.current = [];
     flush('idle'); // return to natural idle while waiting
 
     clearTimeout(pauseTimerRef.current);
@@ -215,28 +400,43 @@ export default function AvatarController({
       return;
     }
 
+    // Increment generation so AvatarScene knows this is a fresh response
+    // and should pick a new talk variant instead of keeping the old one.
+    audioGenerationRef.current += 1;
+
     const audio = new Audio(currentPlayUrl);
     audioRef.current = audio;
+    audio.preload = 'auto';
+
+    const handlePlay = () => {
+      setIsPlayingAudio(true);
+    };
+
+    const handlePause = () => {
+      setIsPlayingAudio(false);
+    };
+
+    const handleEnded = () => {
+      setIsPlayingAudio(false);
+      beginPostSpeechPause();
+    };
+
+    audio.addEventListener('play', handlePlay);
+    audio.addEventListener('pause', handlePause);
+    audio.addEventListener('ended', handleEnded);
 
     audio
       .play()
-      .then(() => {
-        setIsPlayingAudio(true);
-      })
       .catch((err) => {
         console.error('[AvatarController] Audio play failed:', err);
         setIsPlayingAudio(false);
         onError?.(err);
       });
 
-    // When speech finishes, start the inter-response pause instead of going
-    // idle immediately — the pause itself transitions to idle via flush().
-    audio.onended = () => {
-      setIsPlayingAudio(false);
-      beginPostSpeechPause();
-    };
-
     return () => {
+      audio.removeEventListener('play', handlePlay);
+      audio.removeEventListener('pause', handlePause);
+      audio.removeEventListener('ended', handleEnded);
       audio.pause();
       audio.src = '';
       setIsPlayingAudio(false);
@@ -247,13 +447,14 @@ export default function AvatarController({
     <AvatarScene
       modelPath={modelPath}
       currentAnimation={currentAnimation}
-      morphTargets={morphTargets}
+      morphTargetsRef={morphTargetsRef}
       onModelLoaded={handleModelLoaded}
       onError={onError}
       audioRef={audioRef}
       mouthCues={mouthCues}
       isPlaying={isPlayingAudio}
       emotionData={emotionData}
+      audioGeneration={audioGenerationRef.current}
     />
   );
 }

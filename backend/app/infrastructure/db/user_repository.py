@@ -9,7 +9,6 @@ ObjectId is stored as string in UserEntity.id for domain isolation.
 
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timezone
 from typing import Optional
 

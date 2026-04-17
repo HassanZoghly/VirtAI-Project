@@ -11,18 +11,19 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from app.presentation.http.v1.dependencies import init_session_manager
+from app.application.chat.session_manager import SessionManager
+from app.infrastructure.cache.redis_client import close_redis, init_redis
+from app.infrastructure.db.mongodb import close_mongodb, init_mongodb
+from app.presentation.http.v1.dependencies import init_session_manager, init_ws_connection_manager
 from app.presentation.http.v1.router import router as api_v1_router
+from app.presentation.ws.connection_manager import WSConnectionManager
 from app.shared.config import get_settings
-from app.infrastructure.db.mongodb import init_mongodb, close_mongodb
-from app.infrastructure.cache.redis_client import init_redis, close_redis
 from app.shared.errors import (
     AvatarBaseException,
     avatar_exception_handler,
     generic_exception_handler,
 )
 from app.shared.log_config import setup_logging
-from app.application.chat.session_manager import SessionManager
 
 settings = get_settings()
 
@@ -99,6 +100,9 @@ async def lifespan(app: FastAPI):
         tts_service_factory=create_tts_service,
     )
     init_session_manager(session_manager)
+
+    ws_connection_manager = WSConnectionManager(history_size=250)
+    init_ws_connection_manager(ws_connection_manager)
 
     # Background task: cleanup idle sessions at configured interval
     async def cleanup_task():

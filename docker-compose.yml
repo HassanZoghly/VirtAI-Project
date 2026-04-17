@@ -15,7 +15,7 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: Admin1234
       MONGO_INITDB_DATABASE: ${MONGODB_DB_NAME:-virtai}
     ports:
-      - '27017:27017'
+      - '127.0.0.1:27017:27017'
     volumes:
       - mongodb-data:/data/db
     networks:
@@ -25,10 +25,14 @@ services:
         [
           'CMD',
           'mongosh',
-          '--username', 'admin',
-          '--password', 'Admin1234',
-          '--authenticationDatabase', 'admin',
-          '--eval', "db.adminCommand('ping')",
+          '--username',
+          'admin',
+          '--password',
+          'Admin1234',
+          '--authenticationDatabase',
+          'admin',
+          '--eval',
+          "db.adminCommand('ping')",
           '--quiet',
         ]
       interval: 10s
@@ -43,7 +47,7 @@ services:
     restart: unless-stopped
     command: redis-server --save 60 1 --loglevel warning
     ports:
-      - '6379:6379'
+      - '127.0.0.1:6379:6379'
     volumes:
       - redis-data:/data
     networks:

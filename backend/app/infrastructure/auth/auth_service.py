@@ -12,7 +12,6 @@ from datetime import datetime, timezone
 
 import httpx
 from bson import ObjectId
-from loguru import logger
 
 from app.domain.user.entities import UserEntity
 from app.infrastructure.db.user_repository import MongoUserRepository
@@ -40,6 +39,18 @@ async def get_user_by_id(user_id: str) -> UserEntity | None:
 
 async def get_user_by_email(email: str) -> UserEntity | None:
     return await _repo().get_by_email(email)
+
+
+async def set_user_setup_complete(user_id: str, setup_complete: bool) -> UserEntity | None:
+    """Update setup completion status for an existing user."""
+    repo = _repo()
+    user = await repo.get_by_id(user_id)
+    if user is None:
+        return None
+
+    user.setup_complete = setup_complete
+    user.updated_at = _now()
+    return await repo.update(user)
 
 
 async def register_user(

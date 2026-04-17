@@ -26,6 +26,7 @@ export default function ClassroomShell() {
 
   const [audioUrl, setAudioUrl] = useState(null);
   const [mouthCues, setMouthCues] = useState([]);
+  const [animationTimeline, setAnimationTimeline] = useState([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [avatarLoaded, setAvatarLoaded] = useState(false);
@@ -40,6 +41,7 @@ export default function ClassroomShell() {
   const textareaRef = useRef(null);
   const scrollPositionsRef = useRef(new Map());
   const prevSessionIdRef = useRef(session.currentSessionId);
+  const timelineProtocolRef = useRef(null);
 
   // Save / restore scroll position on session switch
   useEffect(() => {
@@ -67,6 +69,16 @@ export default function ClassroomShell() {
   // WebSocket message subscriptions
   useEffect(() => {
     const unsubs = [
+      onMessage('user.message.echo', (d) => {
+        if (!d?.message_id || !d?.text) {
+          return;
+        }
+        dispatch({ type: 'USER_MESSAGE', payload: { message_id: d.message_id, text: d.text } });
+        session.addUserMessage(
+          { id: d.message_id, role: 'user', content: d.text, timestamp: Date.now() },
+          d.text
+        );
+      }),
       onMessage('chat.delta', (d) => dispatch({ type: 'CHAT_DELTA', payload: d })),
       onMessage('chat.final', (d) => {
         dispatch({ type: 'CHAT_FINAL', payload: d });
@@ -78,6 +90,17 @@ export default function ClassroomShell() {
       onMessage('pipeline.state', (d) => dispatch({ type: 'PIPELINE_STATE', payload: d })),
       onMessage('tts.ready', (d) => setAudioUrl(d.audio.url)),
       onMessage('visemes.ready', (d) => setMouthCues(d.mouthCues)),
+      onMessage('animation.timeline.v2', (d) => {
+        timelineProtocolRef.current = 'v2';
+        setAnimationTimeline(Array.isArray(d.timeline) ? d.timeline : []);
+      }),
+      onMessage('animation.timeline', (d) => {
+        if (timelineProtocolRef.current === 'v2') {
+          return;
+        }
+        timelineProtocolRef.current = 'v1';
+        setAnimationTimeline(Array.isArray(d.timeline) ? d.timeline : []);
+      }),
       onMessage('error', (d) => {
         dispatch({ type: 'ERROR', payload: d });
         toast.show('error', 'Error', d.message || 'An error occurred', 5000);
@@ -88,6 +111,8 @@ export default function ClassroomShell() {
           if (d.text?.trim()) {
             const text = d.text.trim();
             const message_id = crypto.randomUUID();
+            timelineProtocolRef.current = null;
+            setAnimationTimeline([]);
             dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
             session.addUserMessage(
               { id: message_id, role: 'user', content: text, timestamp: Date.now() },
@@ -132,6 +157,8 @@ export default function ClassroomShell() {
       return;
     }
     const message_id = crypto.randomUUID();
+    timelineProtocolRef.current = null;
+    setAnimationTimeline([]);
     dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
     session.addUserMessage(
       { id: message_id, role: 'user', content: text, timestamp: Date.now() },
@@ -155,6 +182,8 @@ export default function ClassroomShell() {
         return;
       }
       const message_id = crypto.randomUUID();
+      timelineProtocolRef.current = null;
+      setAnimationTimeline([]);
       dispatch({ type: 'USER_MESSAGE', payload: { message_id, text: trimmed } });
       session.addUserMessage(
         { id: message_id, role: 'user', content: trimmed, timestamp: Date.now() },
@@ -247,6 +276,7 @@ export default function ClassroomShell() {
             pipelineState={conversationState.pipelineState}
             audioUrl={audioUrl}
             mouthCues={mouthCues}
+            animationTimeline={animationTimeline}
             onModelLoaded={handleAvatarLoaded}
             onError={handleAvatarError}
             emotionData={emotionData}

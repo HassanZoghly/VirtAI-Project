@@ -12,9 +12,24 @@ Message Flow:
 from __future__ import annotations
 
 from typing import Any, Literal, Optional
-from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
+
+
+def _normalize_optional_identifier(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError("Identifier cannot be empty")
+    return normalized
+
+
+def _normalize_required_identifier(value: str) -> str:
+    normalized = value.strip()
+    if not normalized:
+        raise ValueError("Identifier cannot be empty")
+    return normalized
 
 
 # ── Message Envelope ──────────────────────────────────────────────────────────
@@ -26,19 +41,14 @@ class WSMessageEnvelope(BaseModel):
 
     type: str = Field(..., description="Message type identifier")
     data: dict[str, Any] = Field(default_factory=dict, description="Message payload")
-    session_id: Optional[str] = Field(None, description="Session identifier (UUID)")
-    message_id: Optional[str] = Field(None, description="Message identifier (UUID)")
+    session_id: Optional[str] = Field(None, description="Session identifier")
+    message_id: Optional[str] = Field(None, description="Message identifier")
 
     @field_validator("session_id", "message_id")
     @classmethod
-    def validate_uuid_format(cls, v: Optional[str]) -> Optional[str]:
-        """Validate that session_id and message_id are valid UUIDs when provided."""
-        if v is not None:
-            try:
-                UUID(v)
-            except ValueError:
-                raise ValueError(f"Invalid UUID format: {v}")
-        return v
+    def validate_identifier_format(cls, v: Optional[str]) -> Optional[str]:
+        """Validate that optional identifiers are non-empty when provided."""
+        return _normalize_optional_identifier(v)
 
 
 # ── Client Messages (Frontend -> Backend) ─────────────────────────────────────
@@ -50,21 +60,16 @@ class ChatUserMessage(BaseModel):
     """
 
     session_id: Optional[str] = Field(
-        None, description="Session UUID (optional, server assigns if missing)"
+        None, description="Session identifier (optional, server assigns if missing)"
     )
-    message_id: str = Field(..., description="Unique message UUID")
+    message_id: str = Field(..., description="Unique message identifier")
     text: str = Field(..., min_length=1, max_length=2000, description="User message text")
 
     @field_validator("session_id", "message_id")
     @classmethod
-    def validate_uuid_format(cls, v: Optional[str]) -> Optional[str]:
-        """Validate UUID format."""
-        if v is not None:
-            try:
-                UUID(v)
-            except ValueError:
-                raise ValueError(f"Invalid UUID format: {v}")
-        return v
+    def validate_identifier_format(cls, v: Optional[str]) -> Optional[str]:
+        """Validate identifier format."""
+        return _normalize_optional_identifier(v)
 
     @field_validator("text")
     @classmethod
@@ -82,18 +87,14 @@ class ChatAbort(BaseModel):
     Cancels: LLM streaming, TTS generation, and any pending operations
     """
 
-    session_id: str = Field(..., description="Session UUID")
-    message_id: str = Field(..., description="Message UUID to abort")
+    session_id: str = Field(..., description="Session identifier")
+    message_id: str = Field(..., description="Message identifier to abort")
 
     @field_validator("session_id", "message_id")
     @classmethod
-    def validate_uuid_format(cls, v: str) -> str:
-        """Validate UUID format."""
-        try:
-            UUID(v)
-        except ValueError:
-            raise ValueError(f"Invalid UUID format: {v}")
-        return v
+    def validate_identifier_format(cls, v: str) -> str:
+        """Validate identifier format."""
+        return _normalize_required_identifier(v)
 
 
 class TTSRequest(BaseModel):
@@ -103,8 +104,8 @@ class TTSRequest(BaseModel):
     Optional: Used for standalone TTS without LLM generation
     """
 
-    session_id: str = Field(..., description="Session UUID")
-    message_id: str = Field(..., description="Message UUID")
+    session_id: str = Field(..., description="Session identifier")
+    message_id: str = Field(..., description="Message identifier")
     text: str = Field(..., min_length=1, max_length=2000, description="Text to synthesize")
     voice: Optional[str] = Field("en-US-AriaNeural", description="TTS voice identifier")
     rate: Optional[str] = Field("+0%", description="Speech rate adjustment")
@@ -112,13 +113,9 @@ class TTSRequest(BaseModel):
 
     @field_validator("session_id", "message_id")
     @classmethod
-    def validate_uuid_format(cls, v: str) -> str:
-        """Validate UUID format."""
-        try:
-            UUID(v)
-        except ValueError:
-            raise ValueError(f"Invalid UUID format: {v}")
-        return v
+    def validate_identifier_format(cls, v: str) -> str:
+        """Validate identifier format."""
+        return _normalize_required_identifier(v)
 
     @field_validator("text")
     @classmethod
@@ -153,6 +150,17 @@ class ChatFinal(BaseModel):
     message_id: str = Field(..., description="Message UUID")
     text: str = Field(..., description="Complete response text")
     emotion: Optional[str] = Field(None, description="Detected emotion from AI response")
+
+
+class UserMessageEcho(BaseModel):
+    """
+    Server echoes the user message after persistence for idempotent client reconciliation.
+    """
+
+    session_id: str = Field(..., description="Session UUID")
+    message_id: str = Field(..., description="Message UUID")
+    text: str = Field(..., description="User message text")
+    conversation_id: Optional[str] = Field(None, description="Conversation identifier")
 
 
 class PipelineState(BaseModel):
@@ -237,6 +245,75 @@ class VisemesReady(BaseModel):
         return v
 
 
+class AnimationTimelineItem(BaseModel):
+    """Single animation segment with frame-range and blending hints."""
+
+    animation: str = Field(..., description="Frontend animation id (e.g., talk6)")
+    animation_asset: str = Field(..., description="Source FBX asset stem (e.g., Talk6.1)")
+    start_frame: int = Field(..., ge=0)
+    end_frame: int = Field(..., ge=0)
+    transition_out_frame: int = Field(..., ge=0)
+    loop_start_frame: int = Field(..., ge=0)
+    loop_end_frame: int = Field(..., ge=0)
+    blend: float = Field(..., ge=0.0, le=1.0)
+    intent: str = Field(..., description="Detected semantic intent")
+    intent_scores: dict[str, float] = Field(
+        default_factory=dict,
+        description="Intent probability distribution used for selection",
+    )
+    tone: str = Field(..., description="Detected tone/emotion")
+    text: str = Field(..., description="Source text segment")
+
+
+class AnimationTimeline(BaseModel):
+    """Timeline generated by backend animation intelligence engine."""
+
+    session_id: str = Field(..., description="Session UUID")
+    message_id: str = Field(..., description="Message UUID")
+    timeline: list[AnimationTimelineItem] = Field(default_factory=list)
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class AnimationTimelineV2Item(BaseModel):
+    """Audio-synchronized animation segment used by timeline v2."""
+
+    start_time: float = Field(..., ge=0.0, description="Segment start in seconds")
+    end_time: float = Field(..., ge=0.0, description="Segment end in seconds")
+    animation: str = Field(..., description="Frontend animation id (e.g., talk4, idle)")
+    animation_asset: str = Field(..., description="Source asset stem (e.g., Talk4.2)")
+    blend_weight: float = Field(..., ge=0.0, le=1.0)
+    speed: float = Field(..., ge=0.5, le=1.5)
+    intensity: float = Field(..., ge=0.0, le=1.0)
+    transition_type: Literal["smooth", "emphasis", "pause", "hold"] = Field(
+        ..., description="Transition style hint"
+    )
+    intent: str = Field(..., description="Semantic intent")
+    intent_scores: dict[str, float] = Field(default_factory=dict)
+    tone: str = Field(..., description="Semantic tone")
+    text: str = Field(..., description="Source semantic segment text")
+    start_frame: int = Field(..., ge=0)
+    end_frame: int = Field(..., ge=0)
+    transition_out_frame: int = Field(..., ge=0)
+    loop_start_frame: int = Field(..., ge=0)
+    loop_end_frame: int = Field(..., ge=0)
+
+    @field_validator("end_time")
+    @classmethod
+    def validate_end_after_start(cls, v: float, info):
+        if "start_time" in info.data and v <= info.data["start_time"]:
+            raise ValueError("end_time must be greater than start_time")
+        return v
+
+
+class AnimationTimelineV2(BaseModel):
+    """Audio-driven + context-aware animation timeline."""
+
+    session_id: str = Field(..., description="Session UUID")
+    message_id: str = Field(..., description="Message UUID")
+    timeline: list[AnimationTimelineV2Item] = Field(default_factory=list)
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
 class ErrorMessage(BaseModel):
     """
     Server reports an error to the client.
@@ -268,6 +345,21 @@ def make_chat_final(
     return ChatFinal(session_id=session_id, message_id=message_id, text=text, emotion=emotion)
 
 
+def make_user_message_echo(
+    session_id: str,
+    message_id: str,
+    text: str,
+    conversation_id: Optional[str] = None,
+) -> UserMessageEcho:
+    """Create a UserMessageEcho message."""
+    return UserMessageEcho(
+        session_id=session_id,
+        message_id=message_id,
+        text=text,
+        conversation_id=conversation_id,
+    )
+
+
 def make_pipeline_state(
     session_id: str, state: Literal["idle", "thinking", "speaking", "error"]
 ) -> PipelineState:
@@ -287,6 +379,38 @@ def make_visemes_ready(
     """Create a VisemesReady message."""
     return VisemesReady(
         session_id=session_id, message_id=message_id, format="mouthCues", mouthCues=mouth_cues
+    )
+
+
+def make_animation_timeline(
+    session_id: str,
+    message_id: str,
+    timeline: list[dict],
+    meta: Optional[dict[str, Any]] = None,
+) -> AnimationTimeline:
+    """Create animation timeline message for frontend playback orchestration."""
+    items = [AnimationTimelineItem(**item) for item in timeline]
+    return AnimationTimeline(
+        session_id=session_id,
+        message_id=message_id,
+        timeline=items,
+        meta=meta or {},
+    )
+
+
+def make_animation_timeline_v2(
+    session_id: str,
+    message_id: str,
+    timeline: list[dict],
+    meta: Optional[dict[str, Any]] = None,
+) -> AnimationTimelineV2:
+    """Create audio-synchronized timeline v2 message."""
+    items = [AnimationTimelineV2Item(**item) for item in timeline]
+    return AnimationTimelineV2(
+        session_id=session_id,
+        message_id=message_id,
+        timeline=items,
+        meta=meta or {},
     )
 
 

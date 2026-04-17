@@ -1,6 +1,8 @@
 /* eslint-disable no-console */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
+
+const TARGET_UPDATE_INTERVAL_MS = 1000 / 30;
 
 /**
  * useRealismEnhancements - Adds coarticulation, jaw coupling, blinks, and subtle head/eye motion
@@ -13,11 +15,11 @@ import * as THREE from 'three';
  * - Tiny head bob on Head bone only (never Spine)
  *
  * @param {THREE.Scene} scene - The loaded avatar scene
- * @param {Object} baseMorphTargets - Base morph targets from lip sync
+ * @param {Object|React.MutableRefObject<Object>} baseMorphTargets - Base morph targets or ref
  * @param {boolean} isPlaying - Whether audio is playing
  * @param {React.RefObject} audioRef - Reference to audio element
  * @param {Array} mouthCues - Mouth cues for coarticulation
- * @returns {Object} Enhanced morph targets with realism features
+ * @returns {React.MutableRefObject<Object>} Enhanced morph target ref
  */
 export function useRealismEnhancements(
   scene,
@@ -27,7 +29,7 @@ export function useRealismEnhancements(
   mouthCues,
   currentAnimation
 ) {
-  const [enhancedTargets, setEnhancedTargets] = useState({});
+  const enhancedTargetsRef = useRef({});
 
   // Refs for bones
   const headBoneRef = useRef(null);
@@ -40,8 +42,8 @@ export function useRealismEnhancements(
   // Eye look-at state
   const eyeLookPhaseRef = useRef(0);
 
-  // Animation frame
-  const frameRef = useRef(null);
+  const rafRef = useRef(null);
+  const lastUpdateTimeRef = useRef(0);
 
   // Find bones and meshes on scene load
   useEffect(() => {
@@ -100,7 +102,11 @@ export function useRealismEnhancements(
   // Main enhancement loop
   useEffect(() => {
     const updateEnhancements = () => {
-      const enhanced = { ...baseMorphTargets };
+      const baseTargets =
+        baseMorphTargets && typeof baseMorphTargets === 'object' && 'current' in baseMorphTargets
+          ? baseMorphTargets.current || {}
+          : baseMorphTargets || {};
+      const enhanced = { ...baseTargets };
 
       // 1. COARTICULATION: Blend between current and next viseme near boundaries
       if (isPlaying && audioRef?.current && mouthCues && mouthCues.length > 0) {
@@ -180,20 +186,35 @@ export function useRealismEnhancements(
         rightEyeBoneRef.current.rotation.y *= 0.95;
       }
 
-      setEnhancedTargets(enhanced);
-      frameRef.current = requestAnimationFrame(updateEnhancements);
+      enhancedTargetsRef.current = enhanced;
     };
 
-    frameRef.current = requestAnimationFrame(updateEnhancements);
+    const runLoop = (timestamp) => {
+      if (
+        !lastUpdateTimeRef.current ||
+        timestamp - lastUpdateTimeRef.current >= TARGET_UPDATE_INTERVAL_MS
+      ) {
+        updateEnhancements();
+        lastUpdateTimeRef.current = timestamp;
+      }
+
+      rafRef.current = window.requestAnimationFrame(runLoop);
+    };
+
+    updateEnhancements();
+    lastUpdateTimeRef.current = 0;
+    rafRef.current = window.requestAnimationFrame(runLoop);
 
     return () => {
-      if (frameRef.current) {
-        cancelAnimationFrame(frameRef.current);
+      if (rafRef.current) {
+        window.cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
       }
+      lastUpdateTimeRef.current = 0;
     };
   }, [baseMorphTargets, isPlaying, audioRef, mouthCues, scene, currentAnimation]);
 
-  return enhancedTargets;
+  return enhancedTargetsRef;
 }
 
 /**

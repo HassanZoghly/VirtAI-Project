@@ -1,5 +1,5 @@
 /* eslint-disable no-console */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * Connection states for the WebSocket lifecycle.
@@ -38,11 +38,52 @@ function useWSClient(url) {
   const handlers = useRef({});
   const reconnectTimeoutRef = useRef(null);
   const wsRef = useRef(null);
+  const sessionIdRef = useRef(null);
+  const lastSeqRef = useRef(0);
+  const lastAckedSeqRef = useRef(0);
+  const ackTimerRef = useRef(null);
   const isIntentionalCloseRef = useRef(false);
   const isConnectingRef = useRef(false);
   const lastErrorTimeRef = useRef(0);
   const mountIdRef = useRef(Math.random());
   const initTimerRef = useRef(null); // timer for initializing→online transition
+
+  const flushAck = useCallback(() => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    if (lastSeqRef.current <= lastAckedSeqRef.current) {
+      return;
+    }
+
+    const ackPayload = {
+      type: 'ws.ack',
+      data: {
+        last_seq: lastSeqRef.current,
+        session_id: sessionIdRef.current,
+      },
+    };
+
+    try {
+      wsRef.current.send(JSON.stringify(ackPayload));
+      lastAckedSeqRef.current = lastSeqRef.current;
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        console.debug('[WS] Failed to send ack payload:', err);
+      }
+    }
+  }, []);
+
+  const scheduleAck = useCallback(() => {
+    if (ackTimerRef.current) {
+      return;
+    }
+    ackTimerRef.current = setTimeout(() => {
+      ackTimerRef.current = null;
+      flushAck();
+    }, 80);
+  }, [flushAck]);
 
   const connect = useCallback(() => {
     // STRICT CONNECTION GUARD: Never create new WS if one exists in CONNECTING/OPEN
@@ -77,7 +118,20 @@ function useWSClient(url) {
     }
 
     try {
-      const socket = new WebSocket(url);
+      let socketUrl = url;
+      try {
+        const parsed = new URL(url);
+        if (sessionIdRef.current) {
+          parsed.searchParams.set('resume', 'true');
+          parsed.searchParams.set('session_id', sessionIdRef.current);
+          parsed.searchParams.set('last_seq', String(lastSeqRef.current));
+        }
+        socketUrl = parsed.toString();
+      } catch {
+        // Keep original URL for non-standard runtimes.
+      }
+
+      const socket = new WebSocket(socketUrl);
       wsRef.current = socket;
       socket._mountId = currentMountId;
       socket._instanceId = instanceId;
@@ -136,6 +190,14 @@ function useWSClient(url) {
         try {
           const message = JSON.parse(event.data);
 
+          if (Number.isFinite(message.seq_id)) {
+            const nextSeq = Number(message.seq_id);
+            if (nextSeq > lastSeqRef.current) {
+              lastSeqRef.current = nextSeq;
+            }
+            scheduleAck();
+          }
+
           if (!message.type) {
             if (import.meta.env.DEV) {
               console.warn('[WS] Invalid message: missing type field', message);
@@ -143,13 +205,31 @@ function useWSClient(url) {
             return;
           }
 
+          const messageData = message.data || {};
+          if (
+            typeof messageData.session_id === 'string' &&
+            messageData.session_id.length > 0 &&
+            !sessionIdRef.current
+          ) {
+            sessionIdRef.current = messageData.session_id;
+          }
+
           // 'ready' / 'pong' are control messages — use 'ready' to promote to ONLINE early
           if (message.type === 'ready') {
+            const readyData = message.data || {};
+            if (typeof readyData.session_id === 'string' && readyData.session_id.length > 0) {
+              sessionIdRef.current = readyData.session_id;
+            }
+            if (Number.isFinite(readyData.last_seq)) {
+              lastSeqRef.current = Math.max(lastSeqRef.current, Number(readyData.last_seq));
+            }
+
             if (initTimerRef.current) {
               clearTimeout(initTimerRef.current);
               initTimerRef.current = null;
             }
             setConnectionState(ConnectionState.ONLINE);
+            scheduleAck();
             if (import.meta.env.DEV) {
               console.debug('[WS] Received ready — promoted to ONLINE');
             }
@@ -289,7 +369,7 @@ function useWSClient(url) {
         connect();
       }, delay);
     }
-  }, [url]);
+  }, [url, scheduleAck]);
 
   // Initialize connection on mount
   useEffect(() => {
@@ -307,6 +387,10 @@ function useWSClient(url) {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
+      }
+      if (ackTimerRef.current) {
+        clearTimeout(ackTimerRef.current);
+        ackTimerRef.current = null;
       }
       if (initTimerRef.current) {
         clearTimeout(initTimerRef.current);
@@ -393,6 +477,10 @@ function useWSClient(url) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
+    if (ackTimerRef.current) {
+      clearTimeout(ackTimerRef.current);
+      ackTimerRef.current = null;
+    }
     if (initTimerRef.current) {
       clearTimeout(initTimerRef.current);
       initTimerRef.current = null;
@@ -404,6 +492,9 @@ function useWSClient(url) {
     }
 
     setConnectionState(ConnectionState.OFFLINE);
+    sessionIdRef.current = null;
+    lastSeqRef.current = 0;
+    lastAckedSeqRef.current = 0;
   }, []);
 
   return {

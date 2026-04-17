@@ -1,10 +1,8 @@
 import {
   exchangeGoogleCode,
   getGoogleAuthUrl,
-  getMe,
   loginUser,
   logoutUser,
-  refreshAccessToken,
   signupUser,
 } from '@/features/auth/services/authApi';
 import { useAuthStore } from '@/features/auth/store/authStore';
@@ -25,7 +23,7 @@ export function useLogin() {
       const { access_token, user } = await loginUser(email, password);
       setAuth(user, access_token);
       toast.show('success', 'Welcome back!', `Signed in as ${user.email}`);
-      navigate('/setup');
+      navigate(user.setupComplete ? '/classroom' : '/setup');
     } catch (err) {
       const message = err.response?.data?.detail || 'Invalid email or password.';
       toast.show('error', 'Login Failed', message);
@@ -49,7 +47,7 @@ export function useSignup() {
       const { access_token, user } = await signupUser(formData);
       setAuth(user, access_token);
       toast.show('success', 'Account Created', 'Welcome to VirtAI!');
-      navigate('/setup');
+      navigate(user.setupComplete ? '/classroom' : '/setup');
     } catch (err) {
       const message = err.response?.data?.detail || 'Could not create account.';
       toast.show('error', 'Signup Failed', message);
@@ -90,7 +88,7 @@ export function useGoogleCallback() {
       const { access_token, user } = await exchangeGoogleCode(code);
       setAuth(user, access_token);
       toast.show('success', 'Welcome!', `Signed in as ${user.email}`);
-      navigate('/setup');
+      navigate(user.setupComplete ? '/classroom' : '/setup');
     } catch (err) {
       toast.show('error', 'Auth Failed', 'Google sign-in failed.');
       navigate('/auth');
@@ -103,36 +101,11 @@ export function useGoogleCallback() {
 }
 
 export function useRestoreSession() {
-  const setAuth = useAuthStore((s) => s.setAuth);
-  const setLoading = useAuthStore((s) => s.setLoading);
-  const logout = useAuthStore((s) => s.logout);
+  const initAuth = useAuthStore((s) => s.initAuth);
 
   const restore = useCallback(async () => {
-    setLoading(true);
-    const deadline = (ms) =>
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms));
-    try {
-      // Step 1 — refresh the access token
-      const { access_token } = await Promise.race([refreshAccessToken(), deadline(8000)]);
-
-      // Step 2 — store the new token immediately so the axios interceptor
-      //           picks it up before the /auth/me request fires
-      useAuthStore.getState().setAuth(null, access_token);
-
-      // Step 3 — fetch the user profile with the fresh token
-      const user = await Promise.race([getMe(), deadline(8000)]);
-
-      // Step 4 — store the complete auth state
-      setAuth(user, access_token);
-    } catch {
-      // Guard against wiping auth that handleCallback() may have already set
-      if (!useAuthStore.getState().isAuthenticated) {
-        logout();
-      } else {
-        setLoading(false);
-      }
-    }
-  }, [setAuth, setLoading, logout]);
+    await initAuth();
+  }, [initAuth]);
 
   return { restore };
 }

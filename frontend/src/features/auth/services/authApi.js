@@ -19,6 +19,13 @@ export async function getMe() {
   return data;
 }
 
+export async function updateSetupStatus(setupComplete = true) {
+  const { data } = await apiClient.patch('/auth/me/setup', {
+    setup_complete: setupComplete,
+  });
+  return data;
+}
+
 export async function getGoogleAuthUrl() {
   const { data } = await apiClient.get('/auth/google/url');
   return data.url;

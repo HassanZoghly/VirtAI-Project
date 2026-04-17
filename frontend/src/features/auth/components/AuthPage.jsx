@@ -12,55 +12,146 @@ const AUTH_MODES = [
 export default function AuthPage() {
   const [mode, setMode] = useState('login');
 
-  const toggleMode = () => setMode((currentMode) => (currentMode === 'login' ? 'signup' : 'login'));
-  const activeMode = AUTH_MODES.find((authMode) => authMode.key === mode) ?? AUTH_MODES[0];
+  const toggleMode = () => setMode((m) => (m === 'login' ? 'signup' : 'login'));
+  const activeMode = AUTH_MODES.find((m) => m.key === mode) ?? AUTH_MODES[0];
 
   return (
     <>
       <Helmet>
         <title>Sign In — VirtAI</title>
       </Helmet>
+
+      {/* ── Page shell — full screen, no scroll ── */}
       <div
         data-testid="auth-shell"
-        className="relative flex min-h-screen items-center justify-center overflow-hidden bg-(--primary-bg) px-4 py-12 sm:px-6"
+        style={{
+          position: 'fixed',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+          backgroundColor: 'var(--secondary-bg, #1a1a1a)', // Left color: dark secondary
+        }}
       >
-        <div aria-hidden className="pointer-events-none absolute inset-0 bg-[#0d0d10]" />
+        {/* ── RIGHT diagonal gold background ── */}
         <div
-          data-testid="auth-background-wash"
           aria-hidden
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_-10%,rgba(240,200,82,0.08),transparent_42%),radial-gradient(circle_at_88%_8%,rgba(109,0,26,0.12),transparent_30%),linear-gradient(180deg,rgba(18,18,22,0.82)_0%,rgba(13,13,16,0.96)_100%)]"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'var(--color-gold, #b5ac8a)', // Gold color
+            // Diagonal cut exactly anchored relative to center
+            clipPath: 'polygon(calc(50vw - 240px) 0, 100% 0, 100% 100%, calc(50vw + 240px) 100%)', 
+          }}
         />
-        <motion.section
-          initial={{ opacity: 0, y: 22, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.4, ease: 'easeOut' }}
-          className="relative w-full max-w-[35rem] rounded-[1.75rem] border border-white/10 bg-[linear-gradient(165deg,rgba(255,255,255,0.055)_0%,rgba(255,255,255,0.018)_100%)] p-6 shadow-[0_38px_78px_-44px_rgba(0,0,0,0.88)] backdrop-blur-2xl sm:p-10"
+
+        {/* ── VirtAI wordmark — page top-left ── */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: 'easeOut' }}
+          style={{
+            position: 'absolute',
+            top: 40,
+            left: 48,
+            zIndex: 30,
+          }}
         >
-          <div className="text-center">
-            <span className="inline-flex items-center rounded-full border border-(--color-gold)/35 bg-(--color-gold)/10 px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-(--color-gold) uppercase">
+          <span
+            style={{
+              fontFamily: 'var(--font-display, "Space Grotesk", system-ui)',
+              fontWeight: 800,
+              fontSize: '1.5rem',
+              letterSpacing: '-0.03em',
+              color: 'var(--color-gold, #b5ac8a)',
+              textShadow: '0 2px 14px rgba(0,0,0,0.5)',
+            }}
+          >
+            VirtAI
+          </span>
+        </motion.div>
+
+        {/* ── AUTH CARD — overlapping the diagonal ── */}
+        <motion.section
+          initial={{ opacity: 0, y: 20, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+          style={{
+            position: 'relative',
+            zIndex: 20,
+            width: '100%',
+            maxWidth: '430px', // slightly wider form container if needed, matches compact
+            borderRadius: '20px',
+            background: 'var(--card-bg, #1e1e1e)', // Form background remains dark card
+            border: '1px solid rgba(255,255,255,0.06)',
+            boxShadow: '0 32px 64px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.15)',
+            padding: '2.5rem 2rem 2rem',
+            // Centered perfectly, removing translation ensures our calc(50vw) clips align gracefully
+          }}
+        >
+          {/* Badge */}
+          <div style={{ textAlign: 'center', marginBottom: '1.25rem' }}>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                borderRadius: 99,
+                border: '1px solid rgba(181, 172, 138, 0.4)',
+                background: 'rgba(181, 172, 138, 0.1)',
+                padding: '4px 14px',
+                fontSize: '0.65rem',
+                fontWeight: 700,
+                letterSpacing: '0.15em',
+                textTransform: 'uppercase',
+                color: 'var(--color-gold, #b5ac8a)',
+              }}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: 'var(--color-gold, #b5ac8a)',
+                  display: 'inline-block',
+                }}
+              />
               VirtAI Secure Access
             </span>
-            <h1 className="mt-6 text-[2rem] leading-[1.12] font-semibold tracking-tight text-(--text-primary) sm:text-[2.3rem]">
-              Welcome back to VirtAI
-            </h1>
-            <p className="mx-auto mt-3 max-w-[30rem] text-sm leading-relaxed text-(--text-secondary) sm:text-[0.96rem]">
-              Secure access to your classroom, sessions, and AI tutor experience.
-            </p>
           </div>
 
+          {/* Tab switcher */}
           <div
             role="tablist"
             aria-label="Auth mode"
-            className="relative mt-8 grid grid-cols-2 rounded-xl border border-white/12 bg-black/20 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+            style={{
+              position: 'relative',
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              borderRadius: '0.75rem',
+              border: '1px solid rgba(255,255,255,0.05)',
+              background: 'rgba(0,0,0,0.4)',
+              padding: '6px',
+              marginBottom: '1.5rem',
+            }}
           >
             <motion.span
               data-testid="auth-tab-indicator"
               data-active-mode={mode}
               layout
               transition={{ type: 'spring', stiffness: 340, damping: 28, mass: 0.85 }}
-              className={`pointer-events-none absolute top-1.5 bottom-1.5 z-0 w-[calc(50%_-_0.5rem)] rounded-[0.7rem] bg-[linear-gradient(135deg,#f0c852_0%,#d4af37_100%)] shadow-[0_16px_28px_-18px_rgba(240,200,82,0.92)] ring-1 ring-[#f5d77f]/45 ${
-                mode === 'login' ? 'left-1.5' : 'left-[calc(50%_+_0.25rem)]'
-              }`}
+              style={{
+                pointerEvents: 'none',
+                position: 'absolute',
+                top: 6,
+                bottom: 6,
+                zIndex: 0,
+                width: 'calc(50% - 6px)',
+                borderRadius: '0.5rem',
+                background: 'var(--color-gold, #b5ac8a)',
+                left: mode === 'login' ? 6 : 'calc(50% + 0px)',
+              }}
             />
             {AUTH_MODES.map((authMode) => {
               const isActive = mode === authMode.key;
@@ -75,11 +166,19 @@ export default function AuthPage() {
                   aria-selected={isActive}
                   tabIndex={isActive ? 0 : -1}
                   onClick={() => setMode(authMode.key)}
-                  className={`relative z-10 rounded-[0.7rem] px-4 py-2.5 text-sm font-semibold transition-[color,opacity,transform] duration-300 active:scale-[0.985] ${
-                    isActive
-                      ? 'text-[#191919] drop-shadow-[0_1px_0_rgba(255,255,255,0.2)]'
-                      : 'text-(--text-secondary) hover:text-(--text-primary) hover:opacity-100'
-                  }`}
+                  style={{
+                    position: 'relative',
+                    zIndex: 1,
+                    borderRadius: '0.5rem',
+                    padding: '8px 16px',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    border: 'none',
+                    background: 'transparent',
+                    cursor: 'pointer',
+                    transition: 'color 0.25s',
+                    color: isActive ? '#121212' : 'var(--text-secondary, #b0b0b0)',
+                  }}
                 >
                   {authMode.label}
                 </button>
@@ -87,26 +186,25 @@ export default function AuthPage() {
             })}
           </div>
 
-          <div className="mt-8">
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.div
-                key={mode}
-                role="tabpanel"
-                id={activeMode.panelId}
-                aria-labelledby={activeMode.tabId}
-                initial={{ opacity: 0, y: 12, scale: 0.995 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -10, scale: 0.995 }}
-                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-              >
-                {mode === 'login' ? (
-                  <LoginForm onToggleMode={toggleMode} />
-                ) : (
-                  <SignupForm onToggleMode={toggleMode} />
-                )}
-              </motion.div>
-            </AnimatePresence>
-          </div>
+          {/* Form panel */}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={mode}
+              role="tabpanel"
+              id={activeMode.panelId}
+              aria-labelledby={activeMode.tabId}
+              initial={{ opacity: 0, y: 10, scale: 0.996 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.996 }}
+              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+            >
+              {mode === 'login' ? (
+                <LoginForm onToggleMode={toggleMode} />
+              ) : (
+                <SignupForm onToggleMode={toggleMode} />
+              )}
+            </motion.div>
+          </AnimatePresence>
         </motion.section>
       </div>
     </>

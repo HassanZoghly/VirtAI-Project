@@ -56,3 +56,13 @@ def rate_limit_key(identifier: str, window: int) -> str:
 def ws_session_key(session_id: str) -> str:
     """Redis hash key for WebSocket session metadata."""
     return f"virtai:ws:session:{session_id}"
+
+
+def auth_session_key(user_id: str) -> str:
+    """Redis hash key for cached authenticated user profile."""
+    return f"virtai:auth:session:{user_id}"
+
+
+def token_validation_key(jti: str) -> str:
+    """Redis string key for cached JWT validation status."""
+    return f"virtai:auth:token:{jti}"

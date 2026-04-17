@@ -1,24 +1,45 @@
 import { motion } from 'motion/react';
+import { useState } from 'react';
 import { FiCheck } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 
+import { updateSetupStatus } from '@/features/auth/services/authApi';
+import { useAuthStore } from '@/features/auth/store/authStore';
+import { markStartNewConversation } from '@/features/session/services/sessionStorage';
+import Toast from '@/shared/utils/toast';
 import { saveSetup } from '../services/setupStorage';
 import SuccessAnimation from './SuccessAnimation';
 
+const toast = new Toast();
+
 export default function AllSetTab({ avatar, voice }) {
   const navigate = useNavigate();
+  const setUser = useAuthStore((s) => s.setUser);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = () => {
-    if (!avatar || !voice) {
+  const handleSave = async () => {
+    if (!avatar || !voice || isSaving) {
       return;
     }
 
-    saveSetup({
-      avatarId: avatar.id,
-      voiceId: voice.id,
-    });
+    setIsSaving(true);
 
-    navigate('/classroom');
+    try {
+      const updatedUser = await updateSetupStatus(true);
+      setUser(updatedUser);
+
+      saveSetup({
+        avatarId: avatar.id,
+        voiceId: voice.id,
+      });
+
+      markStartNewConversation();
+      navigate('/classroom');
+    } catch {
+      toast.show('error', 'Setup Save Failed', 'Could not persist setup status. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const isReady = !!avatar && !!voice;
@@ -68,15 +89,17 @@ export default function AllSetTab({ avatar, voice }) {
       <motion.button
         className="shiny-save-btn"
         onClick={handleSave}
-        disabled={!isReady}
+        disabled={!isReady || isSaving}
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: 1.3, type: 'spring', stiffness: 300, damping: 20 }}
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
-        style={!isReady ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+        style={!isReady || isSaving ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
       >
-        <span style={{ position: 'relative', zIndex: 1 }}>Save &amp; Continue to Classroom →</span>
+        <span style={{ position: 'relative', zIndex: 1 }}>
+          {isSaving ? 'Saving...' : 'Save & Continue to Classroom →'}
+        </span>
       </motion.button>
     </div>
   );

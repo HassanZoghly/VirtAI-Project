@@ -15,13 +15,15 @@ from typing import Annotated
 import redis.asyncio as aioredis
 from fastapi import Depends
 
-from app.shared.config import Settings, get_settings
 from app.application.chat.session_manager import SessionManager
 from app.infrastructure.cache.redis_client import get_redis
+from app.presentation.ws.connection_manager import WSConnectionManager
+from app.shared.config import Settings, get_settings
 
 # Application-scoped SessionManager instance
 # Initialised in main.py lifespan and stored here
 _session_manager: SessionManager | None = None
+_connection_manager: WSConnectionManager | None = None
 
 
 def init_session_manager(manager: SessionManager) -> None:
@@ -33,6 +35,12 @@ def init_session_manager(manager: SessionManager) -> None:
     """
     global _session_manager
     _session_manager = manager
+
+
+def init_ws_connection_manager(manager: WSConnectionManager) -> None:
+    """Initialise WebSocket connection manager (called from main.py lifespan)."""
+    global _connection_manager
+    _connection_manager = manager
 
 
 def get_session_manager() -> SessionManager:
@@ -53,6 +61,16 @@ def get_session_manager() -> SessionManager:
     return _session_manager
 
 
+def get_ws_connection_manager() -> WSConnectionManager:
+    """Dependency injection function for WebSocket connection manager."""
+    if _connection_manager is None:
+        raise RuntimeError(
+            "WSConnectionManager not initialised. "
+            "Ensure init_ws_connection_manager() is called in lifespan."
+        )
+    return _connection_manager
+
+
 def get_redis_client() -> aioredis.Redis:
     """Dependency: return the active Redis client."""
     return get_redis()
@@ -60,5 +78,6 @@ def get_redis_client() -> aioredis.Redis:
 
 # Type aliases for dependency injection
 SessionManagerDep = Annotated[SessionManager, Depends(get_session_manager)]
+WSConnectionManagerDep = Annotated[WSConnectionManager, Depends(get_ws_connection_manager)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 RedisDep = Annotated[aioredis.Redis, Depends(get_redis_client)]

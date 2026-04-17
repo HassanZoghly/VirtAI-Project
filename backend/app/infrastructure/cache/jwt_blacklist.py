@@ -22,6 +22,11 @@ from loguru import logger
 
 from app.infrastructure.cache.cache_keys import jwt_blacklist_key
 from app.infrastructure.cache.redis_client import get_redis
+from app.infrastructure.cache.token_validation_cache import (
+    cache_token_status,
+    get_token_status,
+    invalidate_token_status,
+)
 from app.shared.config import get_settings
 
 
@@ -39,6 +44,7 @@ async def blacklist_token(jti: str, ttl_seconds: int | None = None) -> None:
         ttl = ttl_seconds if ttl_seconds is not None else settings.REDIS_JWT_BLACKLIST_TTL
         key = jwt_blacklist_key(jti)
         await get_redis().setex(key, ttl, "1")
+        await cache_token_status(jti, is_revoked=True, ttl_seconds=min(ttl, 300))
         logger.debug(f"[JWTBlacklist] Token blacklisted | jti={jti[:8]}... | ttl={ttl}s")
     except Exception as e:
         logger.error(f"[JWTBlacklist] blacklist_token failed | jti={jti[:8]}... | {e}")
@@ -53,11 +59,24 @@ async def is_blacklisted(jti: str) -> bool:
         False → token is valid, or Redis error (fail open to avoid locking users out)
     """
     try:
+        cached = await get_token_status(jti)
+        if cached is not None:
+            logger.debug(f"[JWTBlacklist] cache_hit | jti={jti[:8]}... | revoked={cached}")
+            return cached
+
+        logger.debug(f"[JWTBlacklist] cache_miss | jti={jti[:8]}...")
         key = jwt_blacklist_key(jti)
         exists = await get_redis().exists(key)
-        return bool(exists)
+        revoked = bool(exists)
+        await cache_token_status(jti, is_revoked=revoked)
+        return revoked
     except Exception as e:
         # Fail open — prefer availability over strict security during Redis outages.
         # Log at ERROR level so ops teams are alerted.
         logger.error(f"[JWTBlacklist] is_blacklisted check failed (failing open): {e}")
         return False
+
+
+async def clear_blacklist_cache(jti: str) -> None:
+    """Clear short-lived token validation cache for a JTI."""
+    await invalidate_token_status(jti)

@@ -17,16 +17,17 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from app.domain.voice.ports import StreamingASRService
 from app.infrastructure.asr.audio_pipeline import (
     AudioPipeline,
     BufferOverflowError,
     BufferTimeoutError,
     ChunkSizeError,
 )
-from app.domain.voice.ports import StreamingASRService
 
 if TYPE_CHECKING:
     from fastapi import WebSocket
+
     from app.application.voice.handle_voice_turn import ConversationPipeline
 
 
@@ -207,18 +208,18 @@ class VoiceModeHandler:
                 await self.process_accumulated_audio()
 
         except RateLimitError as e:
-            logger.warning(f"Rate limit exceeded | session={self.session_id} | error={str(e)}")
+            logger.warning(f"Rate limit exceeded | session={self.session_id} | error={e!s}")
             await self.websocket.send_json(
                 {
                     "type": "error",
                     "code": "RATE_LIMIT_EXCEEDED",
-                    "message": f"Too many audio chunks. Please slow down. ({str(e)})",
+                    "message": f"Too many audio chunks. Please slow down. ({e!s})",
                     "session_id": self.session_id,
                 }
             )
 
         except ChunkSizeError as e:
-            logger.error(f"Chunk size exceeded | session={self.session_id} | error={str(e)}")
+            logger.error(f"Chunk size exceeded | session={self.session_id} | error={e!s}")
             await self.websocket.send_json(
                 {
                     "type": "error",
@@ -235,7 +236,7 @@ class VoiceModeHandler:
                 f"session={self.session_id} | "
                 f"buffer_size={self.audio_pipeline.get_buffer_size():,}B | "
                 f"timeout={self.audio_pipeline.buffer_timeout}s | "
-                f"error={str(e)}"
+                f"error={e!s}"
             )
             await self.websocket.send_json(
                 {
@@ -255,7 +256,7 @@ class VoiceModeHandler:
                 f"session={self.session_id} | "
                 f"buffer_size={self.audio_pipeline.get_buffer_size():,}B | "
                 f"max_buffer_size={self.audio_pipeline.max_buffer_size:,}B | "
-                f"error={str(e)}"
+                f"error={e!s}"
             )
             await self.websocket.send_json(
                 {
@@ -269,17 +270,17 @@ class VoiceModeHandler:
             self.audio_pipeline.clear_buffer()
 
         except ValueError as e:
-            logger.error(f"Invalid PCM audio data | session={self.session_id} | error={str(e)}")
+            logger.error(f"Invalid PCM audio data | session={self.session_id} | error={e!s}")
             await self.websocket.send_json(
                 {
                     "type": "error",
                     "code": "INVALID_AUDIO_DATA",
-                    "message": f"Invalid PCM audio data: {str(e)}",
+                    "message": f"Invalid PCM audio data: {e!s}",
                     "session_id": self.session_id,
                 }
             )
 
-        except Exception as e:
+        except Exception:
             logger.exception(f"Unexpected error handling audio chunk | session={self.session_id}")
             await self.websocket.send_json(
                 {
@@ -444,6 +445,6 @@ class VoiceModeHandler:
                 f"confidence={confidence:.2f}"
             )
 
-        except Exception as e:
+        except Exception:
             logger.exception(f"Failed to send transcript | session={self.session_id}")
             # Don't raise - this is a best-effort notification

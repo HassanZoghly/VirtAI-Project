@@ -53,6 +53,7 @@ function conversationReducer(state, action) {
       };
 
     case 'CHAT_FINAL': {
+      const alreadyExists = state.messages.some((m) => m.id === action.payload.message_id);
       // Finalize assistant message
       const newMessage = {
         id: action.payload.message_id,
@@ -63,7 +64,7 @@ function conversationReducer(state, action) {
       };
       return {
         ...state,
-        messages: [...state.messages, newMessage],
+        messages: alreadyExists ? state.messages : [...state.messages, newMessage],
         currentMessage: '',
         activeMessageId: null,
       };
@@ -78,6 +79,7 @@ function conversationReducer(state, action) {
       };
 
     case 'USER_MESSAGE': {
+      const alreadyExists = state.messages.some((m) => m.id === action.payload.message_id);
       // Add user message
       const userMessage = {
         id: action.payload.message_id,
@@ -87,7 +89,7 @@ function conversationReducer(state, action) {
       };
       return {
         ...state,
-        messages: [...state.messages, userMessage],
+        messages: alreadyExists ? state.messages : [...state.messages, userMessage],
         activeMessageId: action.payload.message_id,
         currentMessage: '',
         error: null,

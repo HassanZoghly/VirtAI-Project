@@ -80,7 +80,7 @@ export class PCMRecorder {
             });
 
             if (import.meta.env.DEV) {
-                console.log('[PCMRecorder] AudioContext created with sample rate:', this.audioContext.sampleRate);
+                logger.debug(`[PCMRecorder] AudioContext created with sample rate: ${this.audioContext.sampleRate}`);
             }
 
             // Request microphone access with audio constraints
@@ -95,7 +95,7 @@ export class PCMRecorder {
             });
 
             if (import.meta.env.DEV) {
-                console.log('[PCMRecorder] Microphone access granted');
+                logger.debug('[PCMRecorder] Microphone access granted');
             }
 
             // Load AudioWorklet processor module
@@ -103,7 +103,7 @@ export class PCMRecorder {
             await this.audioContext.audioWorklet.addModule(workletUrl.href);
 
             if (import.meta.env.DEV) {
-                console.log('[PCMRecorder] AudioWorklet module loaded');
+                logger.debug('[PCMRecorder] AudioWorklet module loaded');
             }
 
             // Create source node from microphone stream
@@ -128,7 +128,7 @@ export class PCMRecorder {
 
             this.isRecording = true;
             if (import.meta.env.DEV) {
-                console.log('[PCMRecorder] Recording started');
+                logger.info('[PCMRecorder] Recording started');
             }
 
         } catch (error) {
@@ -168,7 +168,7 @@ export class PCMRecorder {
         this.cleanup();
         this.isRecording = false;
         if (import.meta.env.DEV) {
-            console.log('[PCMRecorder] Recording stopped');
+            logger.info('[PCMRecorder] Recording stopped');
         }
     }
 

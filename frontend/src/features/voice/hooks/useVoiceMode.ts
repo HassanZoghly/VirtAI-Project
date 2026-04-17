@@ -34,13 +34,16 @@ interface VoiceModeState {
     canRetry: boolean;
 }
 
-/**
- * WebSocket client interface (subset needed for voice mode)
- */
 interface WSClient {
     connectionState?: string;
     isConnected: boolean;
+    // Reason: WebSocket client interface lacks generated type
+    // bindings from the Python/FastAPI backend schema
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     send: (message: any) => void;
+    // Reason: Pipeline state shape is defined by backend ASGI
+    // messages without a shared TypeScript contract
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onMessage: (type: string, handler: (data: any) => void) => () => void;
 }
 
@@ -74,7 +77,7 @@ interface ErrorMessage {
     code: string;
     message: string;
     session_id?: string;
-    details?: any;
+    details?: unknown;
 }
 
 /**
@@ -200,7 +203,7 @@ export function useVoiceMode(
                 autoStopInProgressRef.current = true;
 
                 if (import.meta.env.DEV) {
-                    console.log('[VoiceMode] VAD detected silence after speech — auto-stopping');
+                    logger.info('[VoiceMode] VAD detected silence after speech — auto-stopping');
                 }
 
                 // Send final JSON control message (same as manual stop)
@@ -235,7 +238,7 @@ export function useVoiceMode(
      */
     const handleTranscript = useCallback((message: TranscriptMessage) => {
         if (import.meta.env.DEV) {
-            console.log('[VoiceMode] Transcript received:', message.text);
+            logger.debug(`[VoiceMode] Transcript received: ${message.text}`);
         }
         // Parent component will handle displaying the transcript
         // by listening to the same WebSocket message
@@ -353,11 +356,11 @@ export function useVoiceMode(
                 try {
                     wsClient.send(finalMessage);
                     if (import.meta.env.DEV) {
-                        console.log('[VoiceMode] Sent final chunk on stop');
+                        logger.debug('[VoiceMode] Sent final chunk on stop');
                     }
                 } catch (err) {
                     if (import.meta.env.DEV) {
-                        console.warn('[VoiceMode] Error sending final chunk:', err);
+                        logger.warn('[VoiceMode] Error sending final chunk:', err);
                     }
                 }
             }
@@ -396,7 +399,7 @@ export function useVoiceMode(
             if (micIsListening) {
                 setState(prev => ({ ...prev, isPaused: true })); // Requirement 7.2
                 if (import.meta.env.DEV) {
-                    console.log('[VoiceMode] Audio capture paused - assistant speaking');
+                    logger.info('[VoiceMode] Audio capture paused - assistant speaking');
                 }
             }
         }
@@ -406,7 +409,7 @@ export function useVoiceMode(
             if (micIsListening) {
                 setState(prev => ({ ...prev, isPaused: false })); // Requirement 7.4
                 if (import.meta.env.DEV) {
-                    console.log('[VoiceMode] Audio capture resumed - assistant finished');
+                    logger.info('[VoiceMode] Audio capture resumed - assistant finished');
                 }
             }
         }
@@ -521,7 +524,7 @@ export function useVoiceMode(
         // Clear disconnection error when fully online
         if (wsClient.isConnected && state.errorCode === 'WEBSOCKET_DISCONNECTED') {
             if (import.meta.env.DEV) {
-                console.log('[VoiceMode] WebSocket reconnected, clearing error');
+                logger.info('[VoiceMode] WebSocket reconnected, clearing error');
             }
             setState(prev => ({
                 ...prev,
@@ -536,19 +539,17 @@ export function useVoiceMode(
      * Cleanup on unmount
      */
     useEffect(() => {
+        const audioCtx = audioContextRef.current;
         return () => {
             // Dispose optimized VAD processor
             if (vadRef.current) {
                 vadRef.current.dispose();
             }
             // Close audio context
-            if (audioContextRef.current) {
-                audioContextRef.current.close().catch(() => {});
+            if (audioCtx) {
+                audioCtx.close().catch(() => {});
             }
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        // Intentional: dependency omitted to prevent teardown
-        // re-creation on every render cycle (audio worklet lifecycle)
     }, []);
 
     return {

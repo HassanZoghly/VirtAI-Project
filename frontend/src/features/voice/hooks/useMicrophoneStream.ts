@@ -91,7 +91,7 @@ export function useMicrophoneStream(
             setIsListening(true);
 
             if (import.meta.env.DEV) {
-                console.log('[MicrophoneStream] Started listening with PCM format at', sampleRate, 'Hz');
+                logger.info(`[MicrophoneStream] Started listening with PCM format at ${sampleRate} Hz`);
             }
         } catch (err) {
             // Handle microphone permission and initialization errors
@@ -140,7 +140,7 @@ export function useMicrophoneStream(
             setIsListening(false);
 
             if (import.meta.env.DEV) {
-                console.log('[MicrophoneStream] Stopped listening');
+                logger.info('[MicrophoneStream] Stopped listening');
             }
         } catch (err) {
             logger.error('[MicrophoneStream] Error stopping:', err);

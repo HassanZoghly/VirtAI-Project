@@ -7,7 +7,13 @@ import { useVoiceMode } from './useVoiceMode';
  */
 interface WSClient {
   isConnected: boolean;
+  // Reason: WebSocket client interface lacks generated type
+  // bindings from the Python/FastAPI backend schema
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   send: (message: any) => void;
+  // Reason: Pipeline state shape is defined by backend ASGI
+  // messages without a shared TypeScript contract
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onMessage: (type: string, handler: (data: any) => void) => () => void;
 }
 

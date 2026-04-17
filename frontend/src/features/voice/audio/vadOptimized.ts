@@ -11,6 +11,7 @@
 
 import { VADConfig, VADResult, VADProcessor } from './vad';
 import { CircularAudioBuffer } from './circularBuffer';
+import { logger } from '@/shared/utils/logger';
 
 /**
  * Performance metrics for VAD processing
@@ -113,10 +114,10 @@ export class OptimizedVADProcessor implements VADProcessor {
             this.worker = new Worker(workerUrl);
 
             if (import.meta.env.DEV) {
-                console.log('[OptimizedVAD] Web Worker initialized');
+                logger.debug('[OptimizedVAD] Web Worker initialized');
             }
         } catch (error) {
-            console.warn('[OptimizedVAD] Failed to initialize Web Worker, using synchronous mode:', error);
+            logger.warn('[OptimizedVAD] Failed to initialize Web Worker, using synchronous mode:', error);
             this.worker = null;
             this.useWorker = false;
         }
@@ -219,7 +220,7 @@ export class OptimizedVADProcessor implements VADProcessor {
         const avgProcessingTime = this.processingTimes.reduce((a, b) => a + b, 0) / this.processingTimes.length;
         if (!this.useWorker && avgProcessingTime > 10 && this.worker) {
             if (import.meta.env.DEV) {
-                console.log(`[OptimizedVAD] Average processing time ${avgProcessingTime.toFixed(2)}ms exceeds 10ms, enabling Web Worker`);
+                logger.debug(`[OptimizedVAD] Average processing time ${avgProcessingTime.toFixed(2)}ms exceeds 10ms, enabling Web Worker`);
             }
             this.useWorker = true;
         }

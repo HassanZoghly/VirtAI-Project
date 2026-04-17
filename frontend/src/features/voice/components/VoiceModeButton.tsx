@@ -8,6 +8,9 @@ import './VoiceModeButton.css';
  */
 interface VoiceModeButtonProps {
   /** WebSocket client for voice mode communication */
+  // Reason: WebSocket client interface lacks generated type
+  // bindings from the Python/FastAPI backend schema
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   wsClient: any;
   /** Current conversation pipeline state */
   pipelineState: 'idle' | 'thinking' | 'speaking' | 'error';
@@ -47,7 +50,6 @@ export default function VoiceModeButton({
     isProcessing,
     interimText,
     error,
-    errorCode,
     canRetry,
     clearError,
     startListening,
@@ -85,35 +87,6 @@ export default function VoiceModeButton({
     if (isListening) {return 'Stop voice mode';}
     return 'Start voice mode';
   }, [isListening, isPaused, error]);
-
-  // Get user-friendly error message with instructions
-  const errorDisplay = useMemo(() => {
-    if (!error) {return null;}
-
-    const message = error;
-    let instruction = '';
-
-    // Add specific instructions based on error code
-    switch (errorCode) {
-      case 'MICROPHONE_ERROR':
-        if (error.includes('denied') || error.includes('permission')) {
-          instruction = 'Go to browser settings → Privacy → Microphone and allow access.';
-        }
-        break;
-      case 'BUFFER_OVERFLOW':
-      case 'BUFFER_TIMEOUT':
-        instruction = 'Try speaking in shorter sentences (5-10 seconds at a time).';
-        break;
-      case 'TRANSCRIPTION_FAILED':
-        instruction = 'Check your internet connection and try again.';
-        break;
-      case 'WEBSOCKET_DISCONNECTED':
-        instruction = 'Waiting for connection to restore...';
-        break;
-    }
-
-    return { message, instruction };
-  }, [error, errorCode]);
 
   return (
     <div className={`voice-mode-container ${className}`}>

@@ -42,6 +42,11 @@ export default function ClassroomShell() {
   const scrollPositionsRef = useRef(new Map());
   const prevSessionIdRef = useRef(session.currentSessionId);
   const timelineProtocolRef = useRef(null);
+  
+  const sessionRef = useRef(session);
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
 
   // Save / restore scroll position on session switch
   useEffect(() => {
@@ -74,7 +79,7 @@ export default function ClassroomShell() {
           return;
         }
         dispatch({ type: 'USER_MESSAGE', payload: { message_id: d.message_id, text: d.text } });
-        session.addUserMessage(
+        sessionRef.current.addUserMessage(
           { id: d.message_id, role: 'user', content: d.text, timestamp: Date.now() },
           d.text
         );
@@ -82,7 +87,7 @@ export default function ClassroomShell() {
       onMessage('chat.delta', (d) => dispatch({ type: 'CHAT_DELTA', payload: d })),
       onMessage('chat.final', (d) => {
         dispatch({ type: 'CHAT_FINAL', payload: d });
-        session.addAssistantMessage(`${d.message_id}-assistant`, d.text);
+        sessionRef.current.addAssistantMessage(`${d.message_id}-assistant`, d.text);
         if (d.emotion) {
           setEmotionData({ emotion: d.emotion, timestamp: Date.now() });
         }
@@ -114,7 +119,7 @@ export default function ClassroomShell() {
             timelineProtocolRef.current = null;
             setAnimationTimeline([]);
             dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
-            session.addUserMessage(
+            sessionRef.current.addUserMessage(
               { id: message_id, role: 'user', content: text, timestamp: Date.now() },
               text
             );
@@ -126,7 +131,7 @@ export default function ClassroomShell() {
       }),
     ];
     return () => unsubs.forEach((fn) => fn?.());
-  }, [onMessage, dispatch, session.addAssistantMessage, session.addUserMessage, send]);
+  }, [onMessage, dispatch, send]);
 
   const avatarData = useMemo(() => getAvatarById(activeAvatarId), [activeAvatarId]);
 
@@ -160,7 +165,7 @@ export default function ClassroomShell() {
     timelineProtocolRef.current = null;
     setAnimationTimeline([]);
     dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
-    session.addUserMessage(
+    sessionRef.current.addUserMessage(
       { id: message_id, role: 'user', content: text, timestamp: Date.now() },
       text
     );
@@ -173,7 +178,7 @@ export default function ClassroomShell() {
     if (!isConnected) {
       toast.show('warning', 'Offline', 'Message queued. Will send when connected.', 3000);
     }
-  }, [inputValue, isConnected, send, dispatch, session.addUserMessage]);
+  }, [inputValue, isConnected, send, dispatch]);
 
   const handleSendText = useCallback(
     (text) => {
@@ -185,7 +190,7 @@ export default function ClassroomShell() {
       timelineProtocolRef.current = null;
       setAnimationTimeline([]);
       dispatch({ type: 'USER_MESSAGE', payload: { message_id, text: trimmed } });
-      session.addUserMessage(
+      sessionRef.current.addUserMessage(
         { id: message_id, role: 'user', content: trimmed, timestamp: Date.now() },
         trimmed
       );
@@ -194,7 +199,7 @@ export default function ClassroomShell() {
         toast.show('warning', 'Offline', 'Message queued. Will send when connected.', 3000);
       }
     },
-    [isConnected, send, dispatch, session.addUserMessage]
+    [isConnected, send, dispatch]
   );
 
   const onKeyDown = useCallback(

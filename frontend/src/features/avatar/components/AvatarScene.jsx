@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { AvatarFaceController } from '../AvatarFaceController';
 import { ANIMATION_METADATA, getTransitionFade, MORPH_SMOOTHING } from '../constants';
 import { useRealismEnhancements } from '../hooks/useRealismEnhancements';
+import { logger } from '@/shared/utils/logger';
 
 const CAMERA_CONFIG = { position: [0, 0.2, 3.6], fov: 45, near: 0.01, far: 100 };
 const GL_CONFIG = { antialias: true, alpha: true, preserveDrawingBuffer: false };
@@ -817,7 +818,7 @@ const AvatarRig = React.memo(function AvatarRig({
   // When a new audio response starts, unlock the talk variant so a fresh one is selected.
   // This allows variety between responses while preventing mid-response churn.
   useEffect(() => {
-    if (!audioGeneration) return;
+    if (!audioGeneration) { return; }
     // Only clear if a talk variant is currently locked — idle/greeting don't need resetting
     if (currentActionNameRef.current && TALK_VARIANT_PATTERN.test(currentActionNameRef.current)) {
       currentActionNameRef.current = null;
@@ -1220,7 +1221,7 @@ const AvatarScene = React.memo(function AvatarScene({
       // Preload model
       useGLTF.preload(modelPath);
     } catch (err) {
-      console.error('[AvatarScene] Failed to preload model:', err);
+      logger.error('[AvatarScene] Failed to preload model:', err);
       onError?.(err);
     }
   }, [modelPath, onError]);

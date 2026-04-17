@@ -8,6 +8,8 @@
  * Requirements: 2.1, 2.3, 2.4
  */
 
+import { logger } from '@/shared/utils/logger';
+
 /**
  * Callback type for PCM audio data
  * @param pcmData - Int16 PCM audio samples
@@ -260,7 +262,7 @@ export class PCMRecorder {
             }
 
         } catch (error) {
-            console.error('[PCMRecorder] Error during cleanup:', error);
+            logger.error('[PCMRecorder] Error during cleanup:', error);
         }
     }
 

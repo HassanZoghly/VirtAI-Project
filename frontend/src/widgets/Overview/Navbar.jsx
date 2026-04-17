@@ -35,7 +35,7 @@ export default function Navbar() {
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (isScrolling.current) return;
+        if (isScrolling.current) { return; }
 
         let hasChanges = false;
         for (const entry of entries) {
@@ -54,7 +54,7 @@ export default function Navbar() {
           } else {
             const visibleArray = Array.from(visibleSections);
             const active = ids.find((id) => visibleArray.includes(id));
-            if (active) setActiveId(active);
+            if (active) { setActiveId(active); }
           }
         }
       },
@@ -65,7 +65,7 @@ export default function Navbar() {
     const timeoutId = setTimeout(() => {
       ids.forEach((id) => {
         const el = document.getElementById(id);
-        if (el) observer.observe(el);
+        if (el) { observer.observe(el); }
       });
     }, 100);
 
@@ -77,7 +77,7 @@ export default function Navbar() {
 
   const scrollTo = (id) => {
     const el = document.getElementById(id);
-    if (!el) return;
+    if (!el) { return; }
 
     isScrolling.current = true;
     setActiveId(id);

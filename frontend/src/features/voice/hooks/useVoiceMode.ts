@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useMicrophoneStream } from './useMicrophoneStream';
 import { OptimizedVADProcessor } from '../audio/vadOptimized';
+import { logger } from '@/shared/utils/logger';
 
 /**
  * Hook interface for voice mode management
@@ -219,7 +220,7 @@ export function useVoiceMode(
                 autoStopInProgressRef.current = false;
             }
         } catch (err) {
-            console.error('[VoiceMode] Failed to process audio chunk:', err);
+            logger.error('[VoiceMode] Failed to process audio chunk:', err);
         }
     }, [state.isPaused, wsClient]);
 
@@ -262,7 +263,7 @@ export function useVoiceMode(
      * @param message - Error message from backend
      */
     const handleError = useCallback((message: ErrorMessage) => {
-        console.error('[VoiceMode] Error received:', message.code, message.message);
+        logger.error('[VoiceMode] Error received:', message.code, message.message);
 
         let userFriendlyMessage = message.message;
         let canRetry = true;

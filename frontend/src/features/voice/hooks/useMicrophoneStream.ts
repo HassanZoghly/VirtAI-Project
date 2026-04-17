@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { PCMRecorder } from '../audio/pcmRecorder';
+import { logger } from '@/shared/utils/logger';
 
 /**
  * Hook interface for microphone stream management
@@ -100,7 +101,7 @@ export function useMicrophoneStream(
                 setError('An unknown error occurred while accessing the microphone.');
             }
 
-            console.error('[MicrophoneStream] Failed to start listening:', err);
+            logger.error('[MicrophoneStream] Failed to start listening:', err);
             setIsListening(false);
 
             // Cleanup on error
@@ -142,7 +143,7 @@ export function useMicrophoneStream(
                 console.log('[MicrophoneStream] Stopped listening');
             }
         } catch (err) {
-            console.error('[MicrophoneStream] Error stopping:', err);
+            logger.error('[MicrophoneStream] Error stopping:', err);
             // Still update state even if cleanup fails
             setIsListening(false);
         }

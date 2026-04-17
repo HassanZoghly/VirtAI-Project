@@ -1,5 +1,6 @@
 /* eslint-disable no-console */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { logger } from '@/shared/utils/logger';
 
 /**
  * Connection states for the WebSocket lifecycle.
@@ -181,7 +182,7 @@ function useWSClient(url) {
           try {
             socket.send(JSON.stringify(msg));
           } catch (err) {
-            console.error('[WS] Failed to send queued message:', err);
+            logger.error('[WS] Failed to send queued message:', err);
           }
         }
       };
@@ -252,7 +253,7 @@ function useWSClient(url) {
             console.warn('[WS] Unknown message type:', message.type);
           }
         } catch (err) {
-          console.error('[WS] Failed to parse message:', err);
+          logger.error('[WS] Failed to parse message:', err);
         }
       };
 
@@ -435,7 +436,7 @@ function useWSClient(url) {
         try {
           wsRef.current.send(isBinary ? message : JSON.stringify(message));
         } catch (err) {
-          console.error('[WS] Failed to send message:', err);
+          logger.error('[WS] Failed to send message:', err);
           if (!isBinary) {
             messageQueue.current.push(message);
           }

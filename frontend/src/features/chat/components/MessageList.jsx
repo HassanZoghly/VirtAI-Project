@@ -27,7 +27,7 @@ export default function MessageList({
   pipelineState,
 }) {
   return (
-    <div className="chat-messages" ref={chatScrollRef} onScroll={onScroll} role="log" aria-label="Chat messages">
+    <div className="chat-messages" ref={chatScrollRef} onScroll={onScroll} role="log" aria-live="polite" aria-label="Chat messages">
       {messages.length === 0 ? (
         <div className="welcome-state">
           <PiLightbulbFilament className="welcome-icon" />

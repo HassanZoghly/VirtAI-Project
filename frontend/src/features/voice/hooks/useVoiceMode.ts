@@ -546,6 +546,9 @@ export function useVoiceMode(
                 audioContextRef.current.close().catch(() => {});
             }
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // Intentional: dependency omitted to prevent teardown
+        // re-creation on every render cycle (audio worklet lifecycle)
     }, []);
 
     return {

@@ -1,7 +1,8 @@
 import { GREETING_DURATION_MS } from '@/widgets/Classroom/constants';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useAudioDrivenLipSync } from '../hooks/useAudioDrivenLipSync';
-import AvatarScene from './AvatarScene';
+
+const AvatarScene = React.lazy(() => import('./AvatarScene'));
 
 /** Mandatory silence between consecutive spoken responses (ms). */
 const INTER_RESPONSE_PAUSE_MS = 2500;
@@ -444,17 +445,25 @@ export default function AvatarController({
   }, [currentPlayUrl, beginPostSpeechPause, onError]);
 
   return (
-    <AvatarScene
-      modelPath={modelPath}
-      currentAnimation={currentAnimation}
-      morphTargetsRef={morphTargetsRef}
-      onModelLoaded={handleModelLoaded}
-      onError={onError}
-      audioRef={audioRef}
-      mouthCues={mouthCues}
-      isPlaying={isPlayingAudio}
-      emotionData={emotionData}
-      audioGeneration={audioGenerationRef.current}
-    />
+    <Suspense
+      fallback={
+        <div className="flex h-full w-full items-center justify-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-t-2 border-b-2 border-gold opacity-80" />
+        </div>
+      }
+    >
+      <AvatarScene
+        modelPath={modelPath}
+        currentAnimation={currentAnimation}
+        morphTargetsRef={morphTargetsRef}
+        onModelLoaded={handleModelLoaded}
+        onError={onError}
+        audioRef={audioRef}
+        mouthCues={mouthCues}
+        isPlaying={isPlayingAudio}
+        emotionData={emotionData}
+        audioGeneration={audioGenerationRef.current}
+      />
+    </Suspense>
   );
 }

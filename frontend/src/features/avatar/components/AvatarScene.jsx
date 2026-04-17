@@ -247,6 +247,9 @@ const AvatarRig = React.memo(function AvatarRig({
   audioGeneration,
 }) {
   const group = useRef();
+  const prefersReducedMotionRef = useRef(
+    typeof window !== 'undefined' ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false
+  );
   const { scene } = useGLTF(modelPath);
 
   // Load all animation FBX files (static hook calls — must always be the same count)
@@ -942,18 +945,22 @@ const AvatarRig = React.memo(function AvatarRig({
     }
 
     // Apply subtle head motion ONLY (NO spine to prevent body deformation)
-    if (isPlaying && headBoneRef.current) {
-      applySubtleHeadMotion(
-        headBoneRef.current,
-        enhancedMorphTargets,
-        safeDt,
-        headMotionStateRef.current
-      );
-    } else if (currentAnimationName === 'thinking' && headBoneRef.current) {
-      applyThinkingMotion(headBoneRef.current, safeDt, headMotionStateRef.current);
-    } else if (headBoneRef.current) {
-      // Return head to neutral when not speaking (slower for smoother transition)
-      applyReturnToNeutral(headBoneRef.current, safeDt, headMotionStateRef.current);
+    const prefersReducedMotion = prefersReducedMotionRef.current;
+
+    if (!prefersReducedMotion) {
+      if (isPlaying && headBoneRef.current) {
+        applySubtleHeadMotion(
+          headBoneRef.current,
+          enhancedMorphTargets,
+          safeDt,
+          headMotionStateRef.current
+        );
+      } else if (currentAnimationName === 'thinking' && headBoneRef.current) {
+        applyThinkingMotion(headBoneRef.current, safeDt, headMotionStateRef.current);
+      } else if (headBoneRef.current) {
+        // Return head to neutral when not speaking (slower for smoother transition)
+        applyReturnToNeutral(headBoneRef.current, safeDt, headMotionStateRef.current);
+      }
     }
 
     // Keep avatar grounded and forward-facing even if source clips contain root drift.

@@ -48,6 +48,21 @@ export default function ClassroomShell() {
     sessionRef.current = session;
   }, [session]);
 
+  const commitAndSend = useCallback(
+    (text) => {
+      const message_id = crypto.randomUUID();
+      timelineProtocolRef.current = null;
+      setAnimationTimeline([]);
+      dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
+      sessionRef.current.addUserMessage(
+        { id: message_id, role: 'user', content: text, timestamp: Date.now() },
+        text
+      );
+      send({ type: 'chat.user_message', data: { message_id, text } });
+    },
+    [dispatch, send]
+  );
+
   // Save / restore scroll position on session switch
   useEffect(() => {
     const prevId = prevSessionIdRef.current;
@@ -115,15 +130,7 @@ export default function ClassroomShell() {
           setInterimTranscript('');
           if (d.text?.trim()) {
             const text = d.text.trim();
-            const message_id = crypto.randomUUID();
-            timelineProtocolRef.current = null;
-            setAnimationTimeline([]);
-            dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
-            sessionRef.current.addUserMessage(
-              { id: message_id, role: 'user', content: text, timestamp: Date.now() },
-              text
-            );
-            send({ type: 'chat.user_message', data: { message_id, text } });
+            commitAndSend(text);
           }
         } else {
           setInterimTranscript(d.text || '');
@@ -131,7 +138,7 @@ export default function ClassroomShell() {
       }),
     ];
     return () => unsubs.forEach((fn) => fn?.());
-  }, [onMessage, dispatch, send]);
+  }, [onMessage, dispatch, send, commitAndSend]);
 
   const avatarData = useMemo(() => getAvatarById(activeAvatarId), [activeAvatarId]);
 
@@ -161,15 +168,7 @@ export default function ClassroomShell() {
     if (!text) {
       return;
     }
-    const message_id = crypto.randomUUID();
-    timelineProtocolRef.current = null;
-    setAnimationTimeline([]);
-    dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
-    sessionRef.current.addUserMessage(
-      { id: message_id, role: 'user', content: text, timestamp: Date.now() },
-      text
-    );
-    send({ type: 'chat.user_message', data: { message_id, text } });
+    commitAndSend(text);
 
     setInputValue('');
     if (textareaRef.current) {
@@ -178,29 +177,8 @@ export default function ClassroomShell() {
     if (!isConnected) {
       toast.show('warning', 'Offline', 'Message queued. Will send when connected.', 3000);
     }
-  }, [inputValue, isConnected, send, dispatch]);
+  }, [inputValue, isConnected, commitAndSend]);
 
-  const handleSendText = useCallback(
-    (text) => {
-      const trimmed = text.trim();
-      if (!trimmed) {
-        return;
-      }
-      const message_id = crypto.randomUUID();
-      timelineProtocolRef.current = null;
-      setAnimationTimeline([]);
-      dispatch({ type: 'USER_MESSAGE', payload: { message_id, text: trimmed } });
-      sessionRef.current.addUserMessage(
-        { id: message_id, role: 'user', content: trimmed, timestamp: Date.now() },
-        trimmed
-      );
-      send({ type: 'chat.user_message', data: { message_id, text: trimmed } });
-      if (!isConnected) {
-        toast.show('warning', 'Offline', 'Message queued. Will send when connected.', 3000);
-      }
-    },
-    [isConnected, send, dispatch]
-  );
 
   const onKeyDown = useCallback(
     (e) => {

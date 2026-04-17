@@ -1,9 +1,9 @@
-import { useAuthStore } from '@/features/auth/store/authStore';
+import { useAuthStore, selectIsAuthenticated } from '@/features/auth/store/authStore';
 import { Navigate } from 'react-router-dom';
 import PageLoader from './PageLoader';
 
 export default function ProtectedRoute({ children }) {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isAuthenticated = useAuthStore(selectIsAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
   const user = useAuthStore((s) => s.user);
 

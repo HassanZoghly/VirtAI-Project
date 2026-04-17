@@ -1,3 +1,4 @@
+import { refreshAccessTokenSingleFlight } from '@/features/auth/services/refreshService';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import axios from 'axios';
 
@@ -22,12 +23,10 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
       try {
-        const res = await axios.post('/api/v1/auth/refresh', null, {
-          withCredentials: true,
-        });
+        const resData = await refreshAccessTokenSingleFlight();
         const store = useAuthStore.getState();
-        store.setAuth(store.user, res.data.access_token);
-        original.headers.Authorization = `Bearer ${res.data.access_token}`;
+        store.setAuth(store.user, resData.access_token);
+        original.headers.Authorization = `Bearer ${resData.access_token}`;
         return apiClient(original);
       } catch {
         useAuthStore.getState().logout();

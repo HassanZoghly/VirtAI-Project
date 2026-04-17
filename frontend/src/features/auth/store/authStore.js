@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { getMe, refreshAccessToken } from '../services/authApi';
 
 export const useAuthStore = create((set) => ({
   user: null,
@@ -21,7 +22,6 @@ export const useAuthStore = create((set) => ({
   initAuth: async () => {
     set({ isLoading: true });
     try {
-      const { getMe, refreshAccessToken } = await import('../services/authApi');
       const { access_token } = await refreshAccessToken();
 
       set((state) => ({ ...state, accessToken: access_token }));

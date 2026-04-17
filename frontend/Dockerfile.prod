@@ -1,0 +1,25 @@
+# ── BUILD STAGE ────────────────────────────────────────────────────
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Maximize layer caching by copying manifests first
+COPY package*.json ./
+RUN npm ci
+
+# Copy application footprint and execute production compilation hook
+COPY . .
+RUN npm run build
+
+# ── RUNTIME STAGE ──────────────────────────────────────────────────
+FROM nginx:alpine
+
+# Swap in our optimized Native Server configurations
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Map statically compiled artifact footprint cleanly over the server root
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+EXPOSE 3000
+
+CMD ["nginx", "-g", "daemon off;"]

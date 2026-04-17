@@ -102,9 +102,6 @@ services:
       - '3000:3000'
     environment:
       - VITE_API_TARGET=http://backend:8000
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
     depends_on:
       backend:
         condition: service_healthy

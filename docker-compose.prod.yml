@@ -1,0 +1,16 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: virtai-frontend-prod
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - virtai-network
+    restart: unless-stopped
+    # Destroy all mapped dev volumes preventing host filesystem bleeding over prod logic.
+    volumes: []

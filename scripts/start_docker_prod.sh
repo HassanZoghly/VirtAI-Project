@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════════
-#  VirtAI — Start Docker Environment (Development)
+#  VirtAI — Start Docker Environment (Production Override)
 # ═══════════════════════════════════════════════════════════════════
 set -e
 
 cd "$(dirname "$0")/.."
 
 echo "╔══════════════════════════════════════════════════╗"
-echo "║     VirtAI — Docker Start Script (DEV)           ║"
+echo "║     VirtAI — Docker Start Script (PROD)          ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo ""
 
 if ! command -v docker &> /dev/null; then
     echo "❌ Docker is not installed. Please install Docker first."
-    echo "   Download: https://www.docker.com/products/docker-desktop"
     exit 1
 fi
 
@@ -49,14 +48,14 @@ else
 fi
 
 echo ""
-echo "🚀 Starting VirtAI in DEVELOPMENT mode..."
+echo "🚀 Starting VirtAI in PRODUCTION mode..."
 echo ""
 
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 
 echo ""
-echo "✅ VirtAI development environment is up."
+echo "✅ VirtAI production environment is up."
 echo "- Website : http://localhost:3000"
 echo ""
 echo "To view logs:"
-echo "   docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f"
+echo "   docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f"

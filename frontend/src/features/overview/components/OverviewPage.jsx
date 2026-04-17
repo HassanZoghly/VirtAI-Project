@@ -1,16 +1,17 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
 
-import CircuitBoardBackground from '@/widgets/Overview/CircuitBoardBackground';
-import DemoPreview from '@/widgets/Overview/DemoPreview';
-import FeaturesSection from '@/widgets/Overview/FeaturesSection';
-import Footer from '@/widgets/Overview/Footer';
 import HeroSection from '@/widgets/Overview/HeroSection';
-import HowItWorks from '@/widgets/Overview/HowItWorks';
 import Navbar from '@/widgets/Overview/Navbar';
 import SplashScreen from '@/widgets/Overview/SplashScreen';
-import TechStackSection from '@/widgets/Overview/TechStackSection';
+
+const CircuitBoardBackground = lazy(() => import('@/widgets/Overview/CircuitBoardBackground'));
+const DemoPreview = lazy(() => import('@/widgets/Overview/DemoPreview'));
+const FeaturesSection = lazy(() => import('@/widgets/Overview/FeaturesSection'));
+const Footer = lazy(() => import('@/widgets/Overview/Footer'));
+const HowItWorks = lazy(() => import('@/widgets/Overview/HowItWorks'));
+const TechStackSection = lazy(() => import('@/widgets/Overview/TechStackSection'));
 
 export default function OverviewPage() {
   const [splashDone, setSplashDone] = useState(false);
@@ -48,17 +49,27 @@ export default function OverviewPage() {
         >
           Skip to content
         </a>
-        <CircuitBoardBackground />
+        
+        <Suspense fallback={null}>
+          <CircuitBoardBackground />
+        </Suspense>
+
         <Navbar />
 
         <main id="main-content">
           <HeroSection onCTA={handleCTA} />
-          <FeaturesSection />
-          <HowItWorks />
-          <TechStackSection />
-          <DemoPreview />
+          
+          <Suspense fallback={<div className="min-h-[50vh]" />}>
+            <FeaturesSection />
+            <HowItWorks />
+            <TechStackSection />
+            <DemoPreview />
+          </Suspense>
         </main>
-        <Footer />
+        
+        <Suspense fallback={null}>
+          <Footer />
+        </Suspense>
       </div>
     </>
   );

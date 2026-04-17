@@ -128,9 +128,9 @@
 }
 
 .avatar-settings-btn:hover {
-  background: rgba(212, 175, 55, 0.1);
+  background: rgba(180, 171, 139, 0.1);
   border-color: rgba(240, 200, 82, 0.35);
-  color: var(--accent-primary, #f0c852);
+  color: var(--accent-primary, #B4AB8B);
   transform: rotate(12deg);
 }
 
@@ -300,7 +300,7 @@
 
 .welcome-icon {
   font-size: 3.5rem;
-  color: var(--accent-primary, #f0c852);
+  color: var(--accent-primary, #B4AB8B);
   opacity: 0.55;
   margin-bottom: 0.5rem;
 }
@@ -347,7 +347,7 @@
 
 .user-message .message-avatar {
   border-color: rgba(240, 200, 82, 0.55);
-  color: var(--accent-primary, #f0c852);
+  color: var(--accent-primary, #B4AB8B);
 }
 
 .message-bubble {
@@ -370,7 +370,7 @@
 
 /* User messages: right-aligned, accent tint, rounded except bottom-right */
 .user-message .message-bubble {
-    background: linear-gradient(135deg, #b8961f, #d4af37);
+    background: linear-gradient(135deg, #B4AB8B, #B4AB8B);
     color: #1a1a1a;
     border: 1px solid rgba(240, 200, 82, 0.55);
     border-radius: 15px;
@@ -529,7 +529,7 @@
 .chat-input:focus {
   outline: none;
   border-color: rgba(240, 200, 82, 0.6);
-  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.18);
+  box-shadow: 0 0 0 3px rgba(180, 171, 139, 0.18);
 }
 
 .chat-input::placeholder {
@@ -543,8 +543,8 @@
   margin-bottom: 4px;
   background: linear-gradient(
     135deg,
-    var(--accent-secondary, #d4af37) 0%,
-    var(--accent-primary, #f0c852) 100%
+    var(--accent-secondary, #B4AB8B) 0%,
+    var(--accent-primary, #B4AB8B) 100%
   );
   border: none;
   color: #141414;
@@ -671,7 +671,7 @@
 
 .drawer-title-icon {
   font-size: 1.2rem;
-  color: var(--accent-primary, #f0c852);
+  color: var(--accent-primary, #B4AB8B);
   flex-shrink: 0;
 }
 
@@ -790,7 +790,7 @@
 .new-session-btn {
   background: transparent;
   border: none;
-  color: var(--accent-primary, #f0c852);
+  color: var(--accent-primary, #B4AB8B);
   font-size: 1.5rem;
   cursor: pointer;
   padding: 0.25rem;
@@ -804,7 +804,7 @@
 }
 
 .new-session-btn:hover {
-  background: var(--accent-soft, rgba(212, 175, 55, 0.1));
+  background: var(--accent-soft, rgba(180, 171, 139, 0.1));
   transform: scale(1.05);
 }
 
@@ -879,7 +879,7 @@
 
 .session-action-btn:hover {
   background: rgba(255, 255, 255, 0.05);
-  color: var(--accent-primary, #f0c852);
+  color: var(--accent-primary, #B4AB8B);
 }
 
 .session-action-btn.delete:hover {
@@ -940,7 +940,7 @@
 }
 
 .session-icon {
-  color: var(--accent-primary, #f0c852);
+  color: var(--accent-primary, #B4AB8B);
   font-size: 1.2rem;
   flex-shrink: 0;
 }
@@ -983,7 +983,7 @@
 }
 
 .session-search:focus-within {
-  border-color: var(--accent-primary, #f0c852);
+  border-color: var(--accent-primary, #B4AB8B);
 }
 
 .session-search-icon {
@@ -1232,7 +1232,7 @@
 }
 
 .copy-btn:hover {
-  color: var(--accent-primary, #f0c852);
+  color: var(--accent-primary, #B4AB8B);
   background: rgba(240, 200, 82, 0.1);
   opacity: 1;
   transform: scale(1.05);
@@ -1325,7 +1325,7 @@
 
 .modal-input:focus {
   outline: none;
-  border-color: var(--accent-primary, #f0c852);
+  border-color: var(--accent-primary, #B4AB8B);
   box-shadow:
     0 0 0 4px rgba(240, 200, 82, 0.2),
     0 2px 8px rgba(0, 0, 0, 0.3) inset;
@@ -1365,8 +1365,8 @@
 .modal-btn.confirm {
   background: linear-gradient(
     135deg,
-    var(--accent-secondary, #d4af37) 0%,
-    var(--accent-primary, #f0c852) 100%
+    var(--accent-secondary, #B4AB8B) 0%,
+    var(--accent-primary, #B4AB8B) 100%
   );
   color: #141414;
   font-weight: 700;
@@ -1486,7 +1486,7 @@
   display: inline-block;
   margin-left: 2px;
   animation: blink 1s step-end infinite;
-  color: var(--accent-primary, #f0c852);
+  color: var(--accent-primary, #B4AB8B);
 }
 
 @keyframes blink {

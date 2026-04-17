@@ -38,7 +38,7 @@ export default function CircuitLines({ className }) {
 
   const dots = [
     { progress: dot1, path: 'circuit-0', color: '#6D001A' },
-    { progress: dot2, path: 'circuit-1', color: '#B5AC8A' },
+    { progress: dot2, path: 'circuit-1', color: '#B4AB8B' },
     { progress: dot3, path: 'circuit-2', color: '#6D001A' },
   ];
 

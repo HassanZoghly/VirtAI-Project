@@ -66,7 +66,7 @@
 }
 
 .setup-step-indicator .step-text span {
-  color: var(--color-gold, #b5ac8a);
+  color: var(--color-gold, #B4AB8B);
 }
 
 .step-dots {
@@ -85,8 +85,8 @@
 }
 
 .step-dot.completed {
-  background: var(--color-gold, #b5ac8a);
-  box-shadow: 0 0 8px rgba(181, 172, 138, 0.5);
+  background: var(--color-gold, #B4AB8B);
+  box-shadow: 0 0 8px rgba(180, 171, 139, 0.5);
 }
 
 .step-dot.active {
@@ -164,7 +164,7 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: var(--color-gold, #b5ac8a);
+  background: var(--color-gold, #B4AB8B);
   color: var(--color-dark, #1a1a1a);
   font-size: 11px;
   flex-shrink: 0;

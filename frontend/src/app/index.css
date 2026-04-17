@@ -3,7 +3,7 @@
 @theme {
   --color-dark: #1a1a1a;
   --color-crimson: #6d001a;
-  --color-gold: #b5ac8a;
+  --color-gold: #B4AB8B;
   --color-offwhite: #f5f1ec;
 }
 
@@ -26,9 +26,9 @@
   --card-bg: #1e1e1e;
   --modal-bg: #252525;
 
-  --accent-primary: #f0c852;
-  --accent-secondary: #d4af37;
-  --accent-soft: rgba(212, 175, 55, 0.1);
+  --accent-primary: #B4AB8B;
+  --accent-secondary: #B4AB8B;
+  --accent-soft: rgba(180, 171, 139, 0.1);
 
   --text-primary: #ffffff;
   --text-secondary: #b0b0b0;
@@ -43,7 +43,7 @@
   /* Overview palette */
   --color-dark: #1a1a1a;
   --color-crimson: #6d001a;
-  --color-gold: #b5ac8a;
+  --color-gold: #B4AB8B;
   --color-offwhite: #f5f1ec;
 
   /* Transitions */
@@ -75,8 +75,8 @@
     --text-secondary: #333333;
     --text-muted: #666666;
     --border-color: #cccccc;
-    --accent-primary: #8b6200;
-    --accent-secondary: #7a5500;
+    --accent-primary: #B4AB8B;
+    --accent-secondary: #B4AB8B;
   }
 }
 
@@ -93,33 +93,96 @@ body {
   min-height: 100vh;
 }
 
-/* Custom scrollbar */
+/* ── Dark Theme Scrollbar ── */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--accent-secondary) var(--secondary-bg);
+  scrollbar-color: #B4AB8B #1a1916;
 }
 
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--secondary-bg);
+  background: #1a1916;
+  border-radius: 0px;
+  padding: 2px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--accent-secondary);
-  border-radius: 99px;
+  background: #B4AB8B;
+  border-radius: 10px;
+  min-height: 30px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-primary);
+  background: #B4AB8B;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: #B4AB8B;
+}
+
+/* Hide scrollbar arrow buttons globally but keep scrollbar track/thumb visible */
+html::-webkit-scrollbar-button,
+body::-webkit-scrollbar-button,
+*::-webkit-scrollbar-button,
+html::-webkit-scrollbar-button:single-button,
+body::-webkit-scrollbar-button:single-button,
+*::-webkit-scrollbar-button:single-button,
+html::-webkit-scrollbar-button:start:decrement,
+html::-webkit-scrollbar-button:end:increment,
+body::-webkit-scrollbar-button:start:decrement,
+body::-webkit-scrollbar-button:end:increment,
+*::-webkit-scrollbar-button:start:decrement,
+*::-webkit-scrollbar-button:end:increment,
+html::-webkit-scrollbar-button:vertical:start:decrement,
+html::-webkit-scrollbar-button:vertical:end:increment,
+body::-webkit-scrollbar-button:vertical:start:decrement,
+body::-webkit-scrollbar-button:vertical:end:increment,
+*::-webkit-scrollbar-button:vertical:start:decrement,
+*::-webkit-scrollbar-button:vertical:end:increment,
+*::-webkit-scrollbar-button:vertical:decrement,
+*::-webkit-scrollbar-button:vertical:increment,
+*::-webkit-scrollbar-button:horizontal:decrement,
+*::-webkit-scrollbar-button:horizontal:increment {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  content: none !important;
+  background: transparent !important;
+  background-image: none !important;
+  -webkit-appearance: none !important;
+}
+
+/* Keep top-right corner clean when both axes are scrollable */
+::-webkit-scrollbar-corner {
+  background: #1a1916;
+}
+
+/* Keep inner timeline scroll behavior but hide its scrollbar visuals */
+.how-it-works-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.how-it-works-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 /* Global focus-visible ring for keyboard navigation */
 :focus-visible {
-  outline: 2px solid var(--accent-primary, #f0c852);
+  outline: 2px solid var(--accent-primary, #B4AB8B);
   outline-offset: 2px;
 }
 

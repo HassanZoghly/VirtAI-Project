@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const NAV_ITEMS = [
   { label: 'Features', target: 'features' },
@@ -10,11 +10,19 @@ const NAV_ITEMS = [
 export default function Navbar() {
   const [visible, setVisible] = useState(false);
   const [activeId, setActiveId] = useState('');
+  const isScrolling = useRef(false);
 
   /* show/hide based on scroll past hero */
   useEffect(() => {
+    let ticking = false;
     const onScroll = () => {
-      setVisible(window.scrollY > window.innerHeight * 0.6);
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          setVisible(window.scrollY > window.innerHeight * 0.6);
+          ticking = false;
+        });
+        ticking = true;
+      }
     };
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
@@ -23,32 +31,66 @@ export default function Navbar() {
   /* highlight active section via IntersectionObserver */
   useEffect(() => {
     const ids = NAV_ITEMS.map((n) => n.target);
+    const visibleSections = new Set();
+
     const observer = new IntersectionObserver(
       (entries) => {
+        if (isScrolling.current) return;
+
+        let hasChanges = false;
         for (const entry of entries) {
           if (entry.isIntersecting) {
-            setActiveId(entry.target.id);
+            visibleSections.add(entry.target.id);
+            hasChanges = true;
+          } else {
+            visibleSections.delete(entry.target.id);
+            hasChanges = true;
+          }
+        }
+
+        if (hasChanges) {
+          if (visibleSections.size === 0) {
+            setActiveId('');
+          } else {
+            const visibleArray = Array.from(visibleSections);
+            const active = ids.find((id) => visibleArray.includes(id));
+            if (active) setActiveId(active);
           }
         }
       },
       { rootMargin: '-40% 0px -55% 0px' }
     );
 
-    ids.forEach((id) => {
-      const el = document.getElementById(id);
-      if (el) observer.observe(el);
-    });
-    return () => observer.disconnect();
+    // Give DOM time to paint conditional elements
+    const timeoutId = setTimeout(() => {
+      ids.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) observer.observe(el);
+      });
+    }, 100);
+
+    return () => {
+      clearTimeout(timeoutId);
+      observer.disconnect();
+    };
   }, []);
 
   const scrollTo = (id) => {
     const el = document.getElementById(id);
     if (!el) return;
 
+    isScrolling.current = true;
+    setActiveId(id);
+
     const offset = 80;
     const y = el.getBoundingClientRect().top + window.scrollY - offset;
 
     window.scrollTo({ top: y, behavior: 'smooth' });
+
+    // Release lock after smooth scroll completes
+    setTimeout(() => {
+      isScrolling.current = false;
+    }, 800);
   };
 
   const scrollToTop = () => {
@@ -70,7 +112,7 @@ export default function Navbar() {
           <button
             onClick={scrollToTop}
             aria-label="Scroll to top"
-            className="flex shrink-0 items-center gap-2"
+            className="flex shrink-0 cursor-pointer items-center gap-2"
           >
             <span
               className="text-lg font-semibold tracking-wide text-offwhite"
@@ -85,12 +127,16 @@ export default function Navbar() {
             <ul className="flex items-center gap-8">
               {NAV_ITEMS.map(({ label, target }) => (
                 <li key={target}>
-                  <button
-                    onClick={() => scrollTo(target)}
-                    className="relative cursor-pointer px-1 py-2 text-sm font-medium tracking-wide transition-colors duration-200"
+                  <a
+                    href={`#${target}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      scrollTo(target);
+                    }}
+                    className="relative block cursor-pointer px-1 py-2 text-sm font-medium tracking-wide transition-colors duration-200"
                     style={{
                       fontFamily: 'var(--font-display)',
-                      color: activeId === target ? '#b5ac8a' : '#f5f1ec',
+                      color: activeId === target ? '#B4AB8B' : '#f5f1ec',
                     }}
                   >
                     {label}
@@ -101,15 +147,15 @@ export default function Navbar() {
                         transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                       />
                     )}
-                  </button>
+                  </a>
                 </li>
               ))}
             </ul>
-            
+
             {/* Demo CTA Button */}
             <button
               onClick={() => scrollTo('demo')}
-              className="rounded-full bg-offwhite px-5 py-2 text-sm font-semibold tracking-wide text-dark transition-transform duration-200 hover:scale-105"
+              className="cursor-pointer rounded-full bg-offwhite px-5 py-2 text-sm font-semibold tracking-wide text-dark transition-transform duration-200 hover:scale-105"
               style={{ fontFamily: 'var(--font-display)' }}
             >
               Demo

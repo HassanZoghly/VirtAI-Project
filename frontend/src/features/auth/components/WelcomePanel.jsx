@@ -44,7 +44,7 @@ export default function WelcomePanel() {
         animate="animate"
         className="absolute -bottom-16 -right-16 h-60 w-60 rounded-full"
         style={{
-          background: 'radial-gradient(circle, rgba(181,172,138,0.2) 0%, transparent 70%)',
+          background: 'radial-gradient(circle, rgba(180, 171, 139, 0.2) 0%, transparent 70%)',
           animationDelay: '2s',
         }}
       />
@@ -96,9 +96,9 @@ export default function WelcomePanel() {
               key={feature}
               className="rounded-full border px-3 py-1 text-xs font-medium"
               style={{
-                borderColor: 'rgba(181,172,138,0.25)',
+                borderColor: 'rgba(180, 171, 139, 0.25)',
                 color: 'var(--color-gold)',
-                background: 'rgba(181,172,138,0.08)',
+                background: 'rgba(180, 171, 139, 0.08)',
               }}
             >
               {feature}

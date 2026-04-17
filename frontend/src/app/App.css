@@ -22,7 +22,7 @@
 
 .error-fallback button {
   padding: 0.75rem 1.5rem;
-  background: var(--accent-primary, #f0c852);
+  background: var(--accent-primary, #B4AB8B);
   border: none;
   border-radius: 4px;
   font-size: var(--text-md, 1rem);
@@ -32,7 +32,7 @@
 }
 
 .error-fallback button:hover {
-  background: var(--accent-secondary, #d4af37);
+  background: var(--accent-secondary, #B4AB8B);
 }
 
 /* Page loader */

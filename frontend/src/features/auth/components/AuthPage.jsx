@@ -40,7 +40,7 @@ export default function AuthPage() {
           style={{
             position: 'absolute',
             inset: 0,
-            background: 'var(--color-gold, #b5ac8a)', // Gold color
+            background: 'var(--color-gold, #B4AB8B)', // Gold color
             // Diagonal cut exactly anchored relative to center
             clipPath: 'polygon(calc(50vw - 240px) 0, 100% 0, 100% 100%, calc(50vw + 240px) 100%)', 
           }}
@@ -64,7 +64,7 @@ export default function AuthPage() {
               fontWeight: 800,
               fontSize: '1.5rem',
               letterSpacing: '-0.03em',
-              color: 'var(--color-gold, #b5ac8a)',
+              color: 'var(--color-gold, #B4AB8B)',
               textShadow: '0 2px 14px rgba(0,0,0,0.5)',
             }}
           >
@@ -98,14 +98,14 @@ export default function AuthPage() {
                 alignItems: 'center',
                 gap: 6,
                 borderRadius: 99,
-                border: '1px solid rgba(181, 172, 138, 0.4)',
-                background: 'rgba(181, 172, 138, 0.1)',
+                border: '1px solid rgba(180, 171, 139, 0.4)',
+                background: 'rgba(180, 171, 139, 0.1)',
                 padding: '4px 14px',
                 fontSize: '0.65rem',
                 fontWeight: 700,
                 letterSpacing: '0.15em',
                 textTransform: 'uppercase',
-                color: 'var(--color-gold, #b5ac8a)',
+                color: 'var(--color-gold, #B4AB8B)',
               }}
             >
               <span
@@ -113,7 +113,7 @@ export default function AuthPage() {
                   width: 6,
                   height: 6,
                   borderRadius: '50%',
-                  background: 'var(--color-gold, #b5ac8a)',
+                  background: 'var(--color-gold, #B4AB8B)',
                   display: 'inline-block',
                 }}
               />
@@ -149,7 +149,7 @@ export default function AuthPage() {
                 zIndex: 0,
                 width: 'calc(50% - 6px)',
                 borderRadius: '0.5rem',
-                background: 'var(--color-gold, #b5ac8a)',
+                background: 'var(--color-gold, #B4AB8B)',
                 left: mode === 'login' ? 6 : 'calc(50% + 0px)',
               }}
             />

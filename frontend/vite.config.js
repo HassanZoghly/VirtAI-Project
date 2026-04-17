@@ -16,6 +16,9 @@ export default defineConfig({
     port: parseInt(process.env.PORT || '3000', 10),
     // Never try to open a browser — not possible inside Docker / CI
     open: false,
+    watch: {
+      usePolling: true,
+    },
     proxy: {
       '/api': {
         target: process.env.VITE_API_TARGET || 'http://localhost:8000',

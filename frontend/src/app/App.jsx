@@ -5,7 +5,7 @@ import './App.css';
 
 import { useRestoreSession } from '@/features/auth/hooks/useAuth';
 import PageLoader from '@/shared/components/PageLoader';
-import AppRoutes, { preloadClassroom, preloadSetup } from './routes';
+import AppRoutes from './routes';
 
 const ROUTER_FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true };
 
@@ -42,11 +42,13 @@ function App() {
   const { restore } = useRestoreSession();
 
   useEffect(() => {
-    if (!window.location.pathname.startsWith('/auth/callback')) {
+    const pathname = window.location.pathname;
+    const shouldRestoreSession =
+      pathname !== '/' && !pathname.startsWith('/auth/callback');
+
+    if (shouldRestoreSession) {
       restore();
     }
-    preloadSetup();
-    preloadClassroom();
   }, [restore]);
 
   return (

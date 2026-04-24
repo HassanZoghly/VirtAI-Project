@@ -27,17 +27,4 @@ export default defineConfig({
       },
     },
   },
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'three-core': ['three'],
-          'three-fiber': ['@react-three/fiber'],
-          'three-drei': ['@react-three/drei'],
-          icons: ['react-icons'],
-          motion: ['motion'],
-        },
-      },
-    },
-  },
 });

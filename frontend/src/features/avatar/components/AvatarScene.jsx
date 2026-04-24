@@ -1,4 +1,5 @@
 /* eslint-disable no-console */
+import { logger } from '@/shared/utils/logger';
 import { ContactShadows, Environment, OrbitControls, useFBX, useGLTF } from '@react-three/drei';
 import { Canvas, useFrame } from '@react-three/fiber';
 import React, { Component, Suspense, useEffect, useMemo, useRef } from 'react';
@@ -6,7 +7,8 @@ import * as THREE from 'three';
 import { AvatarFaceController } from '../AvatarFaceController';
 import { ANIMATION_METADATA, getTransitionFade, MORPH_SMOOTHING } from '../constants';
 import { useRealismEnhancements } from '../hooks/useRealismEnhancements';
-import { logger } from '@/shared/utils/logger';
+
+THREE.Cache.enabled = true;
 
 const CAMERA_CONFIG = { position: [0, 0.2, 3.6], fov: 45, near: 0.01, far: 100 };
 const GL_CONFIG = { antialias: true, alpha: true, preserveDrawingBuffer: false };
@@ -14,7 +16,7 @@ const TIMELINE_FPS = 30;
 const AVATAR_BASE_POSITION = [0, -1.25, 0];
 const AVATAR_BASE_SCALE = 1.25;
 const SAFE_MIN_DELTA = 1 / 120;
-const SAFE_MAX_DELTA = 1 / 15;  // tolerate up to ~66 ms spikes without huge motion jumps
+const SAFE_MAX_DELTA = 1 / 15; // tolerate up to ~66 ms spikes without huge motion jumps
 
 const TALK_VARIANT_PATTERN = /^talk\d\.\d$/i;
 const ROOT_TRANSLATION_NODE_PATTERN = /(hips|pelvis|root|armature)/i;
@@ -248,7 +250,9 @@ const AvatarRig = React.memo(function AvatarRig({
 }) {
   const group = useRef();
   const prefersReducedMotionRef = useRef(
-    typeof window !== 'undefined' ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false
+    typeof window !== 'undefined'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      : false
   );
   const { scene } = useGLTF(modelPath);
 
@@ -649,7 +653,13 @@ const AvatarRig = React.memo(function AvatarRig({
     // mid-response — this prevents the jarring flip/angle-change during speaking.
     const currentIsTalkVariant =
       currentActionNameRef.current && TALK_VARIANT_PATTERN.test(currentActionNameRef.current);
-    if (isTalkRequest && currentIsTalkVariant && !hasTimeRange && !hasFrameRange && !requestedAsset) {
+    if (
+      isTalkRequest &&
+      currentIsTalkVariant &&
+      !hasTimeRange &&
+      !hasFrameRange &&
+      !requestedAsset
+    ) {
       return;
     }
 
@@ -662,12 +672,12 @@ const AvatarRig = React.memo(function AvatarRig({
     const startTime = hasTimeRange
       ? THREE.MathUtils.clamp(directive.startTime, 0, Math.max(0, clip.duration - 0.001))
       : hasFrameRange
-      ? THREE.MathUtils.clamp(
-          frameToSeconds(directive.startFrame),
-          0,
-          Math.max(0, clip.duration - 0.001)
-        )
-      : 0;
+        ? THREE.MathUtils.clamp(
+            frameToSeconds(directive.startFrame),
+            0,
+            Math.max(0, clip.duration - 0.001)
+          )
+        : 0;
     const endTime = hasTimeRange
       ? THREE.MathUtils.clamp(
           directive.endTime,
@@ -675,12 +685,12 @@ const AvatarRig = React.memo(function AvatarRig({
           Math.max(startTime + 1 / TIMELINE_FPS, clip.duration)
         )
       : hasFrameRange
-      ? THREE.MathUtils.clamp(
-          frameToSeconds(directive.endFrame),
-          startTime + 1 / TIMELINE_FPS,
-          clip.duration
-        )
-      : clip.duration;
+        ? THREE.MathUtils.clamp(
+            frameToSeconds(directive.endFrame),
+            startTime + 1 / TIMELINE_FPS,
+            clip.duration
+          )
+        : clip.duration;
 
     const loopStartTime = hasTimeRange
       ? THREE.MathUtils.clamp(
@@ -689,14 +699,14 @@ const AvatarRig = React.memo(function AvatarRig({
           endTime
         )
       : hasFrameRange
-      ? THREE.MathUtils.clamp(
-          Number.isFinite(directive.loopStartFrame)
-            ? frameToSeconds(directive.loopStartFrame)
-            : startTime,
-          startTime,
-          endTime
-        )
-      : 0;
+        ? THREE.MathUtils.clamp(
+            Number.isFinite(directive.loopStartFrame)
+              ? frameToSeconds(directive.loopStartFrame)
+              : startTime,
+            startTime,
+            endTime
+          )
+        : 0;
     const loopEndTime = hasTimeRange
       ? THREE.MathUtils.clamp(
           Number.isFinite(directive.loopEndTime) ? directive.loopEndTime : endTime,
@@ -704,14 +714,14 @@ const AvatarRig = React.memo(function AvatarRig({
           endTime
         )
       : hasFrameRange
-      ? THREE.MathUtils.clamp(
-          Number.isFinite(directive.loopEndFrame)
-            ? frameToSeconds(directive.loopEndFrame)
-            : endTime,
-          loopStartTime + 1 / TIMELINE_FPS,
-          endTime
-        )
-      : clip.duration;
+        ? THREE.MathUtils.clamp(
+            Number.isFinite(directive.loopEndFrame)
+              ? frameToSeconds(directive.loopEndFrame)
+              : endTime,
+            loopStartTime + 1 / TIMELINE_FPS,
+            endTime
+          )
+        : clip.duration;
     const transitionOutTime = hasTimeRange
       ? THREE.MathUtils.clamp(
           Number.isFinite(directive.transitionOutTime) ? directive.transitionOutTime : endTime,
@@ -719,14 +729,14 @@ const AvatarRig = React.memo(function AvatarRig({
           endTime
         )
       : hasFrameRange
-      ? THREE.MathUtils.clamp(
-          Number.isFinite(directive.transitionOutFrame)
-            ? frameToSeconds(directive.transitionOutFrame)
-            : endTime,
-          startTime + 1 / TIMELINE_FPS,
-          endTime
-        )
-      : clip.duration;
+        ? THREE.MathUtils.clamp(
+            Number.isFinite(directive.transitionOutFrame)
+              ? frameToSeconds(directive.transitionOutFrame)
+              : endTime,
+            startTime + 1 / TIMELINE_FPS,
+            endTime
+          )
+        : clip.duration;
 
     const blendFade = Number.isFinite(directive.blend)
       ? THREE.MathUtils.clamp(0.12 + directive.blend * 0.38, 0.08, 0.5)
@@ -821,7 +831,9 @@ const AvatarRig = React.memo(function AvatarRig({
   // When a new audio response starts, unlock the talk variant so a fresh one is selected.
   // This allows variety between responses while preventing mid-response churn.
   useEffect(() => {
-    if (!audioGeneration) { return; }
+    if (!audioGeneration) {
+      return;
+    }
     // Only clear if a talk variant is currently locked — idle/greeting don't need resetting
     if (currentActionNameRef.current && TALK_VARIANT_PATTERN.test(currentActionNameRef.current)) {
       currentActionNameRef.current = null;
@@ -837,7 +849,6 @@ const AvatarRig = React.memo(function AvatarRig({
 
     playAction(currentAnimation);
   }, [currentAnimation, scene, clips]);
-
 
   // Apply emotion data from AI response to face controller
   useEffect(() => {
@@ -1107,18 +1118,18 @@ function applySubtleHeadMotion(headBone, morphTargets, deltaTime, state) {
   // Frame-rate-independent exponential smoothing: 1 - e^(-speed * dt)
   // Coefficients: pitch=4 converges in ~0.75s, yaw=2.5 in ~1.2s, roll=2 in ~1.5s
   const pitchSpeed = 1.0 - Math.exp(-4.0 * deltaTime);
-  const yawSpeed   = 1.0 - Math.exp(-2.5 * deltaTime);
-  const rollSpeed  = 1.0 - Math.exp(-2.0 * deltaTime);
+  const yawSpeed = 1.0 - Math.exp(-2.5 * deltaTime);
+  const rollSpeed = 1.0 - Math.exp(-2.0 * deltaTime);
 
   // Update current state smoothly
   state.currentPitch = THREE.MathUtils.lerp(state.currentPitch, targetPitch, pitchSpeed);
-  state.currentYaw   = THREE.MathUtils.lerp(state.currentYaw,   targetYaw,   yawSpeed);
-  state.currentRoll  = THREE.MathUtils.lerp(state.currentRoll,  targetRoll,  rollSpeed);
+  state.currentYaw = THREE.MathUtils.lerp(state.currentYaw, targetYaw, yawSpeed);
+  state.currentRoll = THREE.MathUtils.lerp(state.currentRoll, targetRoll, rollSpeed);
 
   // Apply clamped values to bone
-  headBone.rotation.x = THREE.MathUtils.clamp(state.currentPitch, -0.03,  0.03);
-  headBone.rotation.y = THREE.MathUtils.clamp(state.currentYaw,  -0.025, 0.025);
-  headBone.rotation.z = THREE.MathUtils.clamp(state.currentRoll,  -0.02,  0.02);
+  headBone.rotation.x = THREE.MathUtils.clamp(state.currentPitch, -0.03, 0.03);
+  headBone.rotation.y = THREE.MathUtils.clamp(state.currentYaw, -0.025, 0.025);
+  headBone.rotation.z = THREE.MathUtils.clamp(state.currentRoll, -0.02, 0.02);
 }
 
 /**
@@ -1149,13 +1160,13 @@ function applyReturnToNeutral(headBone, deltaTime, state) {
 
   // Update current state smoothly
   state.currentPitch = THREE.MathUtils.lerp(state.currentPitch, targetPitch, returnSpeed);
-  state.currentYaw   = THREE.MathUtils.lerp(state.currentYaw,   targetYaw,   returnSpeed);
-  state.currentRoll  = THREE.MathUtils.lerp(state.currentRoll,  targetRoll,  returnSpeed);
+  state.currentYaw = THREE.MathUtils.lerp(state.currentYaw, targetYaw, returnSpeed);
+  state.currentRoll = THREE.MathUtils.lerp(state.currentRoll, targetRoll, returnSpeed);
 
   // Apply to bone (clamped for safety)
   headBone.rotation.x = THREE.MathUtils.clamp(state.currentPitch, -0.02, 0.02);
-  headBone.rotation.y = THREE.MathUtils.clamp(state.currentYaw,  -0.02, 0.02);
-  headBone.rotation.z = THREE.MathUtils.clamp(state.currentRoll,  -0.015, 0.015);
+  headBone.rotation.y = THREE.MathUtils.clamp(state.currentYaw, -0.02, 0.02);
+  headBone.rotation.z = THREE.MathUtils.clamp(state.currentRoll, -0.015, 0.015);
 }
 
 /**
@@ -1185,12 +1196,12 @@ function applyThinkingMotion(headBone, deltaTime, state) {
   const speed = 1.0 - Math.exp(-2.0 * deltaTime);
 
   state.currentPitch = THREE.MathUtils.lerp(state.currentPitch, thinkPitch, speed);
-  state.currentYaw   = THREE.MathUtils.lerp(state.currentYaw,   thinkYaw,   speed);
-  state.currentRoll  = THREE.MathUtils.lerp(state.currentRoll,  thinkRoll,  speed);
+  state.currentYaw = THREE.MathUtils.lerp(state.currentYaw, thinkYaw, speed);
+  state.currentRoll = THREE.MathUtils.lerp(state.currentRoll, thinkRoll, speed);
 
-  headBone.rotation.x = THREE.MathUtils.clamp(state.currentPitch, -0.03,  0.03);
-  headBone.rotation.y = THREE.MathUtils.clamp(state.currentYaw,  -0.025, 0.025);
-  headBone.rotation.z = THREE.MathUtils.clamp(state.currentRoll,  -0.02,  0.02);
+  headBone.rotation.x = THREE.MathUtils.clamp(state.currentPitch, -0.03, 0.03);
+  headBone.rotation.y = THREE.MathUtils.clamp(state.currentYaw, -0.025, 0.025);
+  headBone.rotation.z = THREE.MathUtils.clamp(state.currentRoll, -0.02, 0.02);
 }
 
 /**
@@ -1299,3 +1310,16 @@ const AvatarScene = React.memo(function AvatarScene({
 });
 
 export default AvatarScene;
+
+// Preload the default avatar model as soon as this chunk is downloaded
+useGLTF.preload('/models/avatar1.glb');
+
+// Warm HTTP cache for critical animations
+// THREE.Cache.enabled = true (set above) ensures FBXLoader
+// will reuse these cached responses instead of re-downloading
+if (typeof window !== 'undefined') {
+  [
+    '/models/animations/Idle/Idle.fbx',
+    '/models/animations/Greeting/Greeting.fbx',
+  ].forEach((url) => fetch(url, { priority: 'low' }).catch(() => {}));
+}

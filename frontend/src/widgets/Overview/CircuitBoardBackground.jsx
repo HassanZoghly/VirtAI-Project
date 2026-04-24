@@ -334,7 +334,7 @@ function resetPulse(p, paths) {
 /* ════════════════════════════════════════════════════════════
    COMPONENT
    ════════════════════════════════════════════════════════════ */
-export default function CircuitBoardBackground({ pulseCount = 12, opacity = 0.5, className = '' }) {
+export default function CircuitBoardBackground({ pulseCount = 8, opacity = 0.5, className = '' }) {
   const canvasRef = useRef(null);
   const stateRef = useRef({
     paths: [],
@@ -389,6 +389,10 @@ export default function CircuitBoardBackground({ pulseCount = 12, opacity = 0.5,
     const s = stateRef.current;
     const canvas = canvasRef.current;
     if (!canvas) {
+      return;
+    }
+    if (document.hidden) {
+      s.raf = requestAnimationFrame(draw);
       return;
     }
 
@@ -551,7 +555,7 @@ export default function CircuitBoardBackground({ pulseCount = 12, opacity = 0.5,
     const s = stateRef.current;
 
     function resize() {
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
       const w = window.innerWidth;
       const h = window.innerHeight;
       canvas.width = w * dpr;
@@ -566,12 +570,26 @@ export default function CircuitBoardBackground({ pulseCount = 12, opacity = 0.5,
     ro.observe(document.documentElement);
     resize();
 
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (s.raf) {
+          cancelAnimationFrame(s.raf);
+          s.raf = 0;
+        }
+      } else if (!s.raf) {
+        s.lastTime = 0;
+        s.raf = requestAnimationFrame(draw);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     s.lastTime = 0;
     s.raf = requestAnimationFrame(draw);
 
     return () => {
       cancelAnimationFrame(s.raf);
       ro.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [regenerate, draw]);
 

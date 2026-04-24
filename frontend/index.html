@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <link
+      rel="preload"
+      as="image"
+      href="/assets/images/image.webp"
+      fetchpriority="high"
+    />
+
     <!-- Primary SEO -->
     <title>VirtAI — Virtual AI Assistant for Speech & Chat</title>
     <meta
@@ -42,15 +49,6 @@
       />
     </noscript>
 
-    <!-- Preload LCP hero image -->
-    <link
-      rel="preload"
-      href="/assets/images/image.webp"
-      as="image"
-      type="image/webp"
-      fetchpriority="high"
-    />
-
     <!-- Social sharing (Open Graph) -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="VirtAI" />
@@ -83,10 +81,16 @@
         "@context": "https://schema.org",
         "@type": "WebApplication",
         "name": "VirtAI",
+        "url": "https://virtai.app/",
         "description": "A real-time AI teaching assistant powered by speech recognition, large language models, and a 3D avatar.",
         "applicationCategory": "EducationalApplication",
         "operatingSystem": "Web",
-        "offers": { "@type": "Offer", "price": "0" }
+        "image": "https://virtai.app/assets/images/image.webp",
+        "offers": {
+          "@type": "Offer",
+          "price": "0.00",
+          "priceCurrency": "USD"
+        }
       }
     </script>
   </head>
@@ -94,5 +98,5 @@
   <body>
     <div id="root"></div>
     <script type="module" src="./src/app/main.jsx"></script>
-  </body>
+</body>
 </html>

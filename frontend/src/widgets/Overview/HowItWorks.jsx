@@ -1,4 +1,4 @@
-import { howItWorks as steps } from '@/features/overview';
+import steps from '@/features/overview/data/howItWorks';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useRef, useState } from 'react';
 import { FiCheck } from 'react-icons/fi';

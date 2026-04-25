@@ -1,4 +1,4 @@
-import { team } from '@/features/overview';
+import team from '@/features/overview/data/team';
 import { motion } from 'motion/react';
 
 export default function Footer() {

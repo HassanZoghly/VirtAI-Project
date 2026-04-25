@@ -3,7 +3,6 @@ import { Helmet, HelmetProvider } from 'react-helmet-async';
 import { BrowserRouter as Router } from 'react-router-dom';
 import './App.css';
 
-import { useRestoreSession } from '@/features/auth/hooks/useAuth';
 import PageLoader from '@/shared/components/PageLoader';
 import AppRoutes from './routes';
 
@@ -39,17 +38,28 @@ class ErrorBoundary extends Component {
 }
 
 function App() {
-  const { restore } = useRestoreSession();
-
   useEffect(() => {
     const pathname = window.location.pathname;
     const shouldRestoreSession =
       pathname !== '/' && !pathname.startsWith('/auth/callback');
 
-    if (shouldRestoreSession) {
-      restore();
+    if (!shouldRestoreSession) {
+      return;
     }
-  }, [restore]);
+
+    let cancelled = false;
+    const restoreSession = async () => {
+      const { useAuthStore } = await import('@/features/auth/store/authStore');
+      if (!cancelled) {
+        await useAuthStore.getState().initAuth();
+      }
+    };
+
+    restoreSession();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <HelmetProvider>

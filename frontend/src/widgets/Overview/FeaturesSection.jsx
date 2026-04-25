@@ -1,4 +1,4 @@
-import { features } from '@/features/overview';
+import features from '@/features/overview/data/features';
 import CardHoverEffect from '@/shared/ui/CardHoverEffect';
 import { motion } from 'motion/react';
 

@@ -53,7 +53,7 @@ export default function HeroSection({ onCTA }) {
               src="/assets/images/image.webp"
               alt="VirtAI platform classroom preview"
               className="block w-full object-cover"
-              fetchpriority="high"
+              fetchPriority="high"
               width={896}
               height={504}
               loading="eager"

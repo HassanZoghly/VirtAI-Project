@@ -43,7 +43,7 @@ export default function CardHoverEffect({ items, className }) {
                 </div>
               )}
               <h3 className="mb-2 text-lg font-semibold text-offwhite">{item.title}</h3>
-              <p className="text-sm leading-relaxed text-offwhite/60">{item.description}</p>
+              <p className="max-w-[65ch] text-sm leading-relaxed text-offwhite/60">{item.description}</p>
             </div>
           </div>
         );

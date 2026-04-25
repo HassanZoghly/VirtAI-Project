@@ -3,7 +3,7 @@ export default function HeroSection({ onCTA }) {
     <section className="relative flex min-h-[88vh] items-center px-6 py-20 sm:px-10 lg:px-16 lg:py-24">
       <div className="mx-auto grid w-full max-w-7xl gap-14 lg:grid-cols-12 lg:items-center">
         <div className="lg:col-span-7">
-          <p className="text-sm font-semibold tracking-[0.14em] text-gold/90 uppercase">
+          <p className="text-sm font-medium tracking-[0.03em] text-gold/90">
             Trusted AI infrastructure for education
           </p>
 

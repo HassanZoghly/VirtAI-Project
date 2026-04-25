@@ -40,7 +40,7 @@ function PipelineBadge({ activeIndex }) {
               'flex items-center gap-1 rounded-full border px-2.5 py-0.5',
               'text-[10px] font-bold uppercase tracking-widest transition-all duration-300',
               isActive
-                ? 'border-crimson/60 bg-crimson/20 text-offwhite shadow-[0_0_14px_rgba(109,0,26,0.45)]'
+                ? 'border-crimson/55 bg-crimson/16 text-offwhite'
                 : isDone
                   ? 'border-gold/40 bg-gold/10 text-gold/90'
                   : 'border-white/10 bg-white/5 text-offwhite/38',
@@ -108,7 +108,7 @@ function TimelineStep({ step, index, isActive, isDone, isLast, stepRef, reduced 
           'absolute left-0 top-0 flex items-center justify-center rounded-full border',
           'text-sm font-bold transition-all duration-300',
           isActive
-            ? 'border-crimson/60 bg-crimson/20 text-offwhite shadow-[0_0_16px_rgba(109,0,26,0.35)]'
+            ? 'border-crimson/55 bg-crimson/16 text-offwhite'
             : isDone
               ? 'border-gold/50 bg-gold/14 text-gold'
               : 'border-white/14 bg-white/6 text-offwhite/45',
@@ -126,7 +126,7 @@ function TimelineStep({ step, index, isActive, isDone, isLast, stepRef, reduced 
         className={[
           'rounded-2xl border px-5 py-4 transition-colors duration-300',
           isActive
-            ? 'border-crimson/50 bg-crimson/10 shadow-[0_0_28px_rgba(109,0,26,0.22)]'
+            ? 'border-crimson/45 bg-crimson/9'
             : isDone
               ? 'border-gold/25 bg-gold/[0.06]'
               : 'border-white/8 bg-white/[0.03]',
@@ -178,7 +178,7 @@ function TimelineStep({ step, index, isActive, isDone, isLast, stepRef, reduced 
               animate={{ opacity: 1, height: 'auto' }}
               exit={reduced ? undefined : { opacity: 0, height: 0 }}
               transition={{ duration: reduced ? 0 : 0.2 }}
-              className="mt-2 overflow-hidden text-[11px] font-mono text-gold/70"
+              className="mt-2 overflow-hidden text-xs leading-relaxed font-mono text-gold/70"
             >
               OUT → {step.output}
             </motion.p>
@@ -230,13 +230,10 @@ export default function HowItWorks() {
         transition={{ duration: 0.6 }}
       >
         <h2 className="text-4xl font-bold text-offwhite sm:text-5xl">
-          How It{' '}
-          <span className="bg-gradient-to-r from-gold via-[#B4AB8B] to-gold bg-clip-text text-transparent">
-            Works
-          </span>
+          How It <span className="text-gold">Works</span>
         </h2>
         <p className="mx-auto mt-4 max-w-lg text-offwhite/70">
-          Your voice travels through a six-stage AI pipeline — from speech recognition to a
+          Your voice travels through a six-stage AI pipeline, from speech recognition to a
           lip-synced 3D avatar delivering the answer.
         </p>
       </motion.div>

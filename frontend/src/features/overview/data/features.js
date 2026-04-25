@@ -33,7 +33,7 @@ const features = [
     icon: HiOutlineUser,
     title: 'Synchronized Avatar States',
     description:
-      'Greeting → Idle → Listening → Thinking → Talking → Waiting → Reacting → Expressing → Idle — a lifelike 3D avatar state machine synced to every response, now with enhanced emotional depth and interactivity.',
+      'A clear avatar state machine keeps Greeting, Listening, Thinking, Talking, and Reacting in sync with every response.',
   },
   {
     id: 'learning',

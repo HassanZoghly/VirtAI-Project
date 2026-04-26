@@ -1,7 +1,7 @@
 import { AvatarPanel } from '@/features/avatar';
 import { getAvatarById, getAvatarModelPath } from '@/features/avatar/data/avatars';
 import { ChatInput, MessageList } from '@/features/chat';
-import { RenameModal, SettingsDrawer, useSessionManager } from '@/features/session';
+import { SettingsDrawer, useSessionManager } from '@/features/session';
 import { loadSetup } from '@/features/setup';
 import useConversationReducer from '@/shared/hooks/useConversationReducer';
 import useWSClient, { ConnectionState } from '@/shared/hooks/useWSClient';
@@ -222,7 +222,7 @@ export default function ClassroomShell() {
           onSessionSelect={session.switchSession}
           onNewSession={session.createNewSession}
           onDeleteSession={session.deleteSession}
-          onRenameClick={session.openRenameModal}
+          onRenameSession={session.renameSession}
         />
 
         <button
@@ -289,13 +289,6 @@ export default function ClassroomShell() {
             />
           </div>
         </div>
-
-        <RenameModal
-          isOpen={session.isRenameModalOpen}
-          sessionTitle={session.sessionToRename?.title || ''}
-          onConfirm={session.handleRenameConfirm}
-          onCancel={session.handleRenameCancel}
-        />
       </div>
     </>
   );

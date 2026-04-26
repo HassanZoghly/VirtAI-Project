@@ -1,6 +1,6 @@
 import steps from '@/features/overview/data/howItWorks';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { FiCheck } from 'react-icons/fi';
 import {
   PiBrainFill,
@@ -195,30 +195,35 @@ export default function HowItWorks() {
   const [activeIndex, setActiveIndex] = useState(0);
 
   const stepRefs = useRef([]);
+  const scrollerRef = useRef(null);
   const reduced = useReducedMotion();
 
-  const handleScroll = (e) => {
-    const scroller = e.currentTarget;
-    const containerTop = scroller.getBoundingClientRect().top;
-    const targetY = scroller.clientHeight * 0.35; // 35% from the top
-    let best = 0;
-    let bestDist = Infinity;
-
-    stepRefs.current.forEach((el, i) => {
-      if (!el) {
-        return;
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const index = Number(entry.target.getAttribute('data-step-index'));
+            setActiveIndex(index);
+          }
+        }
+      },
+      {
+        root: scrollerRef.current,
+        rootMargin: '-30% 0px -50% 0px',
+        threshold: 0,
       }
-      const rect = el.getBoundingClientRect();
-      const relTop = rect.top - containerTop;
-      const dist = Math.abs(relTop - targetY);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = i;
+    );
+
+    const elements = stepRefs.current;
+    elements.forEach((el) => {
+      if (el) {
+        observer.observe(el);
       }
     });
 
-    setActiveIndex((prev) => (prev !== best ? best : prev));
-  };
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <section id="how-it-works" className="relative mx-auto max-w-6xl px-6 py-28">
@@ -290,7 +295,7 @@ export default function HowItWorks() {
             RIGHT PANEL — isolated scroll
         ══════════════════════════════════════ */}
         <div
-          onScroll={handleScroll}
+          ref={scrollerRef}
           className="how-it-works-scroll relative z-10 flex-1 overflow-y-auto px-5 py-10 max-h-[60vh] lg:max-h-none lg:py-0 lg:pl-8 lg:pr-12"
           aria-label="Pipeline steps timeline"
         >

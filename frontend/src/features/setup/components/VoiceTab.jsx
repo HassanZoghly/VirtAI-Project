@@ -49,7 +49,8 @@ export default function VoiceTab({
           const isSelected = selected?.id === voice.id;
           const isCurrentlyPlaying = playingId === voice.id && isPlaying;
           return (
-            <motion.div
+            <motion.button
+              type="button"
               key={voice.id}
               className={`voice-card${isSelected ? ' selected' : ''}`}
               onClick={() => onSelect(voice)}
@@ -59,13 +60,6 @@ export default function VoiceTab({
               role="radio"
               aria-checked={isSelected}
               aria-label={`${voice.name} — ${voice.desc}`}
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onSelect(voice);
-                }
-              }}
             >
               <div className="voice-card-info">
                 <div className="voice-card-name">
@@ -85,6 +79,7 @@ export default function VoiceTab({
               </div>
 
               <button
+                type="button"
                 className={`voice-play-btn${isCurrentlyPlaying ? ' playing' : ''}`}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -110,7 +105,7 @@ export default function VoiceTab({
                   </motion.span>
                 )}
               </AnimatePresence>
-            </motion.div>
+            </motion.button>
           );
         })}
       </div>

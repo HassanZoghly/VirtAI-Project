@@ -56,17 +56,8 @@
   font-weight: 600;
   cursor: pointer;
   transition:
-    transform 0.2s ease,
     box-shadow 0.2s ease,
     background 0.2s ease;
-}
-
-.notfound-btn:hover {
-  transform: translateY(-2px);
-}
-
-.notfound-btn:active {
-  transform: translateY(0);
 }
 
 .notfound-btn.primary {

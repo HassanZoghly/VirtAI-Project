@@ -39,8 +39,6 @@ export default function useSessionManager() {
   const initialState = useMemo(() => initializeSessionState(), []);
   const [sessions, setSessions] = useState(() => initialState.sessions);
   const [currentSessionId, setCurrentSessionId] = useState(() => initialState.currentSessionId);
-  const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
-  const [sessionToRename, setSessionToRename] = useState(null);
 
   // Stable ref so addUserMessage / addAssistantMessage never change identity
   const currentSessionIdRef = useRef(currentSessionId);
@@ -95,33 +93,10 @@ export default function useSessionManager() {
     });
   }, [setActiveSessionId]);
 
-  const openRenameModal = useCallback(
-    (sessionId) => {
-      const session = sessions.find((s) => s.id === sessionId);
-      if (session) {
-        setSessionToRename(session);
-        setIsRenameModalOpen(true);
-      }
-    },
-    [sessions]
-  );
-
-  const handleRenameConfirm = useCallback(
-    (newTitle) => {
-      if (sessionToRename) {
-        setSessions((prev) =>
-          prev.map((s) => (s.id === sessionToRename.id ? { ...s, title: newTitle } : s))
-        );
-        setIsRenameModalOpen(false);
-        setSessionToRename(null);
-      }
-    },
-    [sessionToRename]
-  );
-
-  const handleRenameCancel = useCallback(() => {
-    setIsRenameModalOpen(false);
-    setSessionToRename(null);
+  const renameSession = useCallback((sessionId, newTitle) => {
+    setSessions((prev) =>
+      prev.map((s) => (s.id === sessionId ? { ...s, title: newTitle } : s))
+    );
   }, []);
 
   /** Append a user message to the active session (also auto-titles if first message). */
@@ -165,15 +140,11 @@ export default function useSessionManager() {
     sessions,
     currentSessionId,
     currentSession,
-    isRenameModalOpen,
-    sessionToRename,
     createNewSession,
     startNewConversation,
     switchSession,
     deleteSession,
-    openRenameModal,
-    handleRenameConfirm,
-    handleRenameCancel,
+    renameSession,
     addUserMessage,
     addAssistantMessage,
   };

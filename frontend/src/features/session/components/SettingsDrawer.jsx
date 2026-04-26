@@ -12,7 +12,7 @@ import SessionList from './SessionList';
  * @param {(id: string) => void} props.onSessionSelect - Session switch callback
  * @param {() => void} props.onNewSession - New session callback
  * @param {(id: string) => void} props.onDeleteSession - Delete session callback
- * @param {(id: string) => void} props.onRenameClick - Rename session callback
+ * @param {(id: string, title: string) => void} props.onRenameSession - Rename session callback
  */
 export default function SettingsDrawer({
   isOpen,
@@ -22,7 +22,7 @@ export default function SettingsDrawer({
   onSessionSelect,
   onNewSession,
   onDeleteSession,
-  onRenameClick,
+  onRenameSession,
 }) {
   const drawerRef = useRef(null);
 
@@ -97,7 +97,7 @@ export default function SettingsDrawer({
             onSessionSelect={onSessionSelect}
             onNewSession={onNewSession}
             onDeleteSession={onDeleteSession}
-            onRenameClick={onRenameClick}
+            onRenameSession={onRenameSession}
           />
         </div>
 

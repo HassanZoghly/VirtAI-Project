@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
+import { FiMenu, FiX } from 'react-icons/fi';
 
 const NAV_ITEMS = [
   { label: 'Features', target: 'features' },
@@ -10,6 +11,7 @@ const NAV_ITEMS = [
 export default function Navbar() {
   const [visible, setVisible] = useState(false);
   const [activeId, setActiveId] = useState('');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isScrolling = useRef(false);
 
   /* show/hide based on scroll past hero */
@@ -81,6 +83,7 @@ export default function Navbar() {
 
     isScrolling.current = true;
     setActiveId(id);
+    setMobileMenuOpen(false);
 
     const offset = 80;
     const y = el.getBoundingClientRect().top + window.scrollY - offset;
@@ -94,74 +97,151 @@ export default function Navbar() {
   };
 
   const scrollToTop = () => {
+    setMobileMenuOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
     <AnimatePresence>
       {visible && (
-        <motion.nav
-          key="navbar"
-          initial={{ y: -72, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: -72, opacity: 0 }}
-          transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-          className="fixed top-0 right-0 left-0 z-50 flex h-16 items-center justify-between border-b border-white/10 bg-dark/80 px-6 backdrop-blur-md"
-        >
-          {/* logo */}
-          <button
-            onClick={scrollToTop}
-            aria-label="Scroll to top"
-            className="flex shrink-0 cursor-pointer items-center gap-2"
+        <>
+          {/* Desktop & Tablet Navbar */}
+          <motion.nav
+            key="navbar"
+            initial={{ y: -72, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -72, opacity: 0 }}
+            transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+            className="fixed top-0 right-0 left-0 z-50 flex h-16 items-center justify-between border-b border-white/10 bg-dark/80 px-6 backdrop-blur-md"
           >
-            <span
-              className="text-lg font-semibold tracking-wide text-offwhite"
-              style={{ fontFamily: 'var(--font-display)' }}
-            >
-              VirtAI
-            </span>
-          </button>
-
-          {/* nav links and CTA */}
-          <div className="flex items-center gap-8">
-            <ul className="flex items-center gap-8">
-              {NAV_ITEMS.map(({ label, target }) => (
-                <li key={target}>
-                  <a
-                    href={`#${target}`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      scrollTo(target);
-                    }}
-                    className="relative block cursor-pointer px-1 py-2 text-sm font-medium tracking-wide transition-colors duration-200"
-                    style={{
-                      fontFamily: 'var(--font-display)',
-                      color: activeId === target ? '#B4AB8B' : '#f5f1ec',
-                    }}
-                  >
-                    {label}
-                    {activeId === target && (
-                      <motion.span
-                        layoutId="nav-underline"
-                        className="absolute bottom-0 left-0 h-0.5 w-full rounded-full bg-gold"
-                        transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                      />
-                    )}
-                  </a>
-                </li>
-              ))}
-            </ul>
-
-            {/* Demo CTA Button */}
+            {/* logo */}
             <button
-              onClick={() => scrollTo('demo')}
-              className="cursor-pointer rounded-full bg-offwhite px-5 py-2 text-sm font-semibold tracking-wide text-dark transition-transform duration-200 hover:scale-105"
-              style={{ fontFamily: 'var(--font-display)' }}
+              onClick={scrollToTop}
+              aria-label="VirtAI — Scroll to top"
+              className="flex shrink-0 cursor-pointer items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark rounded-lg"
             >
-              Demo
+              <span
+                className="text-lg font-semibold tracking-wide text-offwhite"
+                style={{ fontFamily: 'var(--font-display)' }}
+              >
+                VirtAI
+              </span>
             </button>
-          </div>
-        </motion.nav>
+
+            {/* Desktop nav links and CTA (hidden below md: 768px) */}
+            <div className="hidden md:flex items-center gap-8">
+              <ul className="flex items-center gap-8">
+                {NAV_ITEMS.map(({ label, target }) => (
+                  <li key={target}>
+                    <a
+                      href={`#${target}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        scrollTo(target);
+                      }}
+                      className="relative block cursor-pointer px-1 py-2 text-sm font-medium tracking-wide transition-colors duration-200"
+                      style={{
+                        fontFamily: 'var(--font-display)',
+                        color: activeId === target ? '#B4AB8B' : '#f5f1ec',
+                      }}
+                    >
+                      {label}
+                      {activeId === target && (
+                        <motion.span
+                          layoutId="nav-underline"
+                          className="absolute bottom-0 left-0 h-0.5 w-full rounded-full bg-gold"
+                          transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                        />
+                      )}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Demo CTA Button */}
+              <button
+                onClick={() => scrollTo('demo')}
+                className="cursor-pointer rounded-full bg-offwhite px-5 py-2 text-sm font-semibold tracking-wide text-dark transition-transform duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark"
+                style={{ fontFamily: 'var(--font-display)' }}
+              >
+                Demo
+              </button>
+            </div>
+
+            {/* Mobile hamburger button (visible below md: 768px) */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+              className="md:hidden w-10 h-10 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark"
+            >
+              {mobileMenuOpen ? (
+                <FiX className="w-6 h-6 text-offwhite" />
+              ) : (
+                <FiMenu className="w-6 h-6 text-offwhite" />
+              )}
+            </button>
+          </motion.nav>
+
+          {/* Mobile Menu Drawer */}
+          <AnimatePresence>
+            {mobileMenuOpen && (
+              <>
+                {/* Backdrop */}
+                <motion.div
+                  key="backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="fixed inset-0 z-40 bg-black/40 md:hidden"
+                  onClick={() => setMobileMenuOpen(false)}
+                  aria-hidden="true"
+                />
+
+                {/* Menu */}
+                <motion.div
+                  key="mobile-menu"
+                  initial={{ x: '100%', opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  exit={{ x: '100%', opacity: 0 }}
+                  transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+                  className="fixed top-16 right-0 bottom-0 z-40 w-full max-w-xs bg-dark/95 backdrop-blur-md border-l border-white/10 flex flex-col md:hidden"
+                >
+                  <nav className="flex-1 flex flex-col gap-2 p-6">
+                    <p className="text-xs font-semibold text-offwhite/60 uppercase tracking-widest mb-4">
+                      Navigation
+                    </p>
+                    {NAV_ITEMS.map(({ label, target }) => (
+                      <button
+                        key={target}
+                        onClick={() => scrollTo(target)}
+                        className={`text-left px-4 py-3 rounded-lg font-medium transition-colors ${
+                          activeId === target
+                            ? 'bg-gold/15 text-gold font-semibold'
+                            : 'text-offwhite/80 hover:bg-white/10'
+                        }`}
+                        style={{ fontFamily: 'var(--font-display)' }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </nav>
+
+                  {/* Mobile CTA Button */}
+                  <div className="p-6 border-t border-white/10">
+                    <button
+                      onClick={() => scrollTo('demo')}
+                      className="w-full cursor-pointer rounded-full bg-offwhite px-6 py-3 text-sm font-semibold tracking-wide text-dark transition-transform duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark"
+                      style={{ fontFamily: 'var(--font-display)' }}
+                    >
+                      Request Demo
+                    </button>
+                  </div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </>
       )}
     </AnimatePresence>
   );

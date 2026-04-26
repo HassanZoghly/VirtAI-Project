@@ -34,8 +34,8 @@
 .setup-card {
   position: relative;
   z-index: 10;
-  width: min(85%, 1200px);
-  height: min(80%, 720px);
+  width: min(85vw, 1200px);
+  height: min(85dvh, 720px);
   background: rgba(255, 255, 255, 0.07);
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
@@ -244,18 +244,48 @@
   margin-top: 20px;
 }
 
+@media (max-width: 1024px) {
+  .avatar-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .avatar-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .avatar-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
 .avatar-card {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  padding: 24px 16px;
+  padding: 20px 12px;
   background: rgba(255, 255, 255, 0.05);
   border: 2px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-height: 160px;
+  justify-content: center;
+}
+
+@media (max-width: 768px) {
+  .avatar-card {
+    padding: 16px 12px;
+    min-height: auto;
+  }
 }
 
 .avatar-card:hover {
@@ -282,6 +312,13 @@
   transition: border-color 0.3s ease;
 }
 
+@media (max-width: 480px) {
+  .avatar-card-img {
+    width: 70px;
+    height: 70px;
+  }
+}
+
 .avatar-card.selected .avatar-card-img {
   border-color: var(--color-crimson, #6d001a);
 }
@@ -293,25 +330,38 @@
   color: var(--text-primary, #ffffff);
 }
 
+@media (max-width: 480px) {
+  .avatar-card-name {
+    font-size: 14px;
+  }
+}
+
 .avatar-card-desc {
   font-size: 13px;
   color: var(--text-muted, #808080);
   text-align: center;
 }
 
+@media (max-width: 480px) {
+  .avatar-card-desc {
+    font-size: 12px;
+  }
+}
+
 .avatar-card-check {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 24px;
-  height: 24px;
+  top: 8px;
+  right: 8px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: var(--color-crimson, #6d001a);
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 16px;
+  font-weight: bold;
 }
 
 /* ── Voice tab scroll wrapper ─────────────────────────────── */

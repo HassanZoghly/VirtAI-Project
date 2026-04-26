@@ -129,7 +129,7 @@
 
 .avatar-settings-btn:hover {
   background: rgba(180, 171, 139, 0.1);
-  border-color: rgba(240, 200, 82, 0.35);
+  border-color: rgba(180, 171, 139, 0.35);
   color: var(--accent-primary, #B4AB8B);
   transform: rotate(12deg);
 }
@@ -346,7 +346,7 @@
 }
 
 .user-message .message-avatar {
-  border-color: rgba(240, 200, 82, 0.55);
+  border-color: rgba(180, 171, 139, 0.55);
   color: var(--accent-primary, #B4AB8B);
 }
 
@@ -374,7 +374,7 @@
 .user-message .message-bubble {
     background: linear-gradient(135deg, #B4AB8B, #B4AB8B);
     color: #1a1a1a;
-    border: 1px solid rgba(240, 200, 82, 0.55);
+    border: 1px solid rgba(180, 171, 139, 0.55);
     border-radius: 15px;
 }
 
@@ -530,7 +530,7 @@
 
 .chat-input:focus {
   outline: none;
-  border-color: rgba(240, 200, 82, 0.6);
+  border-color: rgba(180, 171, 139, 0.6);
   box-shadow: 0 0 0 3px rgba(180, 171, 139, 0.18);
 }
 
@@ -741,7 +741,7 @@
 }
 
 .drawer-close:focus-visible {
-  outline: 2px solid rgba(240, 200, 82, 0.6);
+  outline: 2px solid rgba(180, 171, 139, 0.6);
   outline-offset: 2px;
 }
 
@@ -850,8 +850,8 @@
 }
 
 .session-item.active {
-  background: rgba(240, 200, 82, 0.1);
-  border-color: rgba(240, 200, 82, 0.3);
+  background: rgba(180, 171, 139, 0.1);
+  border-color: rgba(180, 171, 139, 0.3);
 }
 
 .session-actions {
@@ -1266,7 +1266,7 @@
 
 .copy-btn:hover {
   color: var(--accent-primary, #B4AB8B);
-  background: rgba(240, 200, 82, 0.1);
+  background: rgba(180, 171, 139, 0.1);
   opacity: 1;
   transform: scale(1.05);
 }
@@ -1360,7 +1360,7 @@
   outline: none;
   border-color: var(--accent-primary, #B4AB8B);
   box-shadow:
-    0 0 0 4px rgba(240, 200, 82, 0.2),
+    0 0 0 4px rgba(180, 171, 139, 0.2),
     0 2px 8px rgba(0, 0, 0, 0.3) inset;
 }
 
@@ -1403,13 +1403,13 @@
   );
   color: #141414;
   font-weight: 700;
-  box-shadow: 0 4px 14px 0 rgba(240, 200, 82, 0.3);
+  box-shadow: 0 4px 14px 0 rgba(0, 0, 0, 0.2);
 }
 
 .modal-btn.confirm:hover {
   filter: brightness(1.1);
   transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 8px 20px 0 rgba(240, 200, 82, 0.4);
+  box-shadow: 0 8px 20px 0 rgba(0, 0, 0, 0.3);
 }
 
 .modal-btn.confirm:active {

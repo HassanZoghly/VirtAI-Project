@@ -33,7 +33,7 @@ export default function SignupForm({ onToggleMode }) {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const inputClass =
-    'w-full rounded-xl border border-(--border-color)/80 bg-black/[0.22] px-4 py-2.5 text-sm text-(--text-primary) placeholder-(--text-muted) shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] outline-none transition-[border-color,box-shadow,background-color,transform] duration-200 focus:scale-[1.005] focus:border-(--accent-primary) focus:bg-black/30 focus:shadow-[0_0_0_3px_rgba(240,200,82,0.16)] disabled:cursor-not-allowed disabled:border-(--border-color)/55 disabled:bg-black/[0.16] disabled:opacity-60';
+    'w-full rounded-xl border border-(--border-color)/80 bg-black/[0.22] px-4 py-2.5 text-sm text-(--text-primary) placeholder-(--text-muted) shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] outline-none transition-[border-color,box-shadow,background-color,transform] duration-200 focus:scale-[1.005] focus:border-(--accent-primary) focus:bg-black/30 focus:shadow-[0_0_0_3px_rgba(255,255,255,0.1)] disabled:cursor-not-allowed disabled:border-(--border-color)/55 disabled:bg-black/[0.16] disabled:opacity-60';
   const labelClass = 'mb-1 block text-xs font-semibold text-(--text-secondary) uppercase tracking-wide';
 
   const {
@@ -227,7 +227,7 @@ export default function SignupForm({ onToggleMode }) {
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full rounded-xl bg-(--accent-primary) px-4 py-3 text-sm font-semibold text-(--primary-bg) shadow-[0_22px_34px_-24px_rgba(240,200,82,0.9)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-(--accent-secondary) hover:shadow-[0_24px_36px_-20px_rgba(240,200,82,0.9)] active:scale-[0.985] active:translate-y-0 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-(--accent-primary)/55 disabled:text-(--primary-bg)/80 disabled:opacity-100 disabled:shadow-none"
+          className="w-full rounded-xl bg-(--accent-primary) px-4 py-3 text-sm font-semibold text-[#121212] shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:bg-(--accent-secondary) hover:shadow-lg active:scale-[0.985] active:translate-y-0 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-(--accent-primary)/55 disabled:text-[#121212]/80 disabled:opacity-100 disabled:shadow-none"
         >
           {isLoading ? (
             <span className="flex items-center justify-center gap-2">

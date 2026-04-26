@@ -72,12 +72,12 @@
 .notfound-btn.primary {
   background: var(--accent-primary, #B4AB8B);
   color: #121212;
-  box-shadow: 0 4px 14px rgba(240, 200, 82, 0.3);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
 }
 
 .notfound-btn.primary:hover {
   background: var(--accent-secondary, #B4AB8B);
-  box-shadow: 0 6px 20px rgba(240, 200, 82, 0.4);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
 }
 
 .notfound-btn.secondary {

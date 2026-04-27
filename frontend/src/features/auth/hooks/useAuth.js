@@ -121,6 +121,8 @@ export function useLogout() {
       // ignore
     }
     storeLogout();
+    const { clearStorage } = await import('@/features/session/services/sessionStorage');
+    clearStorage();
     navigate('/');
   };
 

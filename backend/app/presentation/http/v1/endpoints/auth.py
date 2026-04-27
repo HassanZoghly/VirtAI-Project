@@ -163,10 +163,8 @@ def _refresh_cookie_max_age() -> int:
 
 
 def _refresh_cookie_policy() -> tuple[bool, str]:
-    settings = get_settings()
-    if settings.ENVIRONMENT == "production":
-        # Cross-origin frontend/backend deployments need SameSite=None + Secure.
-        return True, "none"
+    # Since frontend and backend use a proxy, they are same-origin from the browser's perspective.
+    # SameSite=lax and Secure=False guarantees the cookie is sent correctly in local dev and Docker.
     return False, "lax"
 
 

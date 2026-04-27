@@ -71,7 +71,7 @@ function App() {
 
       <Router future={ROUTER_FUTURE}>
         <div className="app">
-          <Toaster richColors position="top-right" />
+          <Toaster richColors position="top-right" theme="dark" />
           <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
               <AppRoutes />

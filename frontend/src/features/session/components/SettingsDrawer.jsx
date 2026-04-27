@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { PiXFill } from 'react-icons/pi';
 import SessionList from './SessionList';
 
 /**
@@ -74,23 +73,14 @@ export default function SettingsDrawer({
     <div className="settings-drawer open">
       <div className="drawer-overlay" onClick={onClose} role="presentation" />
       <div
-        className="drawer-content"
+        className="drawer-content sidebar-minimal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="settings-drawer-title"
         ref={drawerRef}
         onKeyDown={handleKeyDown}
       >
-        <div className="drawer-header">
-          <h2 className="drawer-title" id="settings-drawer-title">
-            Settings
-          </h2>
-          <button className="drawer-close" onClick={onClose} aria-label="Close settings">
-            <PiXFill />
-          </button>
-        </div>
-
-        <div className="drawer-body">
+        <div className="drawer-body" style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1rem 0' }}>
           <SessionList
             sessions={sessions}
             currentSessionId={currentSessionId}
@@ -98,18 +88,7 @@ export default function SettingsDrawer({
             onNewSession={onNewSession}
             onDeleteSession={onDeleteSession}
             onRenameSession={onRenameSession}
-          />
-        </div>
-
-        <div className="drawer-footer">
-          <img
-            src="/assets/icons/logo.svg"
-            alt="VirtAI Avatar Chat"
-            width={120}
-            height={32}
-            className="drawer-brand-logo"
-            loading="lazy"
-            decoding="async"
+            onCloseDrawer={onClose}
           />
         </div>
       </div>

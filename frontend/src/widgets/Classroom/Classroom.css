@@ -739,7 +739,7 @@
 }
 
 .drawer-section {
-  padding: 1.25rem 1.75rem;
+  padding: 2rem;
 }
 
 .drawer-section-title {
@@ -786,15 +786,15 @@
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 0.85rem;
-  padding: 0.85rem 1rem;
+  gap: 1rem;
+  padding: 1.25rem;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border-color, #333);
   border-radius: 12px;
   color: var(--text-primary, #fff);
   cursor: pointer;
   transition: all 0.2s ease;
-  margin-bottom: 1.5rem;
+  margin-bottom: 2rem;
   text-align: left;
 }
 

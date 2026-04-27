@@ -66,3 +66,8 @@ def auth_session_key(user_id: str) -> str:
 def token_validation_key(jti: str) -> str:
     """Redis string key for cached JWT validation status."""
     return f"virtai:auth:token:{jti}"
+
+
+def auth_refresh_key(user_id: str) -> str:
+    """Redis string key for the active refresh token of a user."""
+    return f"auth:refresh:{user_id}"

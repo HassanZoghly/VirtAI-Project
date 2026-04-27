@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useRef, useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { FiCheck, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { HiOutlineSparkles, HiOutlineSpeakerWave, HiOutlineUser } from 'react-icons/hi2';
@@ -12,6 +12,9 @@ import AllSetTab from './AllSetTab';
 import AvatarPreview from './AvatarPreview';
 import AvatarTab from './AvatarTab';
 import VoiceTab from './VoiceTab';
+import { loadSetup } from '../services/setupStorage';
+import { avatarImages } from '@/features/avatar/data/avatars';
+import { voices as VOICES } from '../data/voices';
 
 const TABS = [
   { key: 'avatar', label: 'Avatar', icon: HiOutlineUser },
@@ -24,6 +27,21 @@ export default function SetupPage() {
   const [activeTab, setActiveTab] = useState(0);
   const [selectedAvatar, setSelectedAvatar] = useState(null);
   const [selectedVoice, setSelectedVoice] = useState(null);
+
+  useEffect(() => {
+    const saved = loadSetup();
+    if (saved) {
+      const AVATARS = Object.values(avatarImages);
+      if (saved.avatarId && AVATARS) {
+        const a = AVATARS.find(av => av.id === saved.avatarId);
+        if (a) setSelectedAvatar(a);
+      }
+      if (saved.voiceId && VOICES) {
+        const v = VOICES.find(vo => vo.id === saved.voiceId);
+        if (v) setSelectedVoice(v);
+      }
+    }
+  }, []);
 
   // Clear voice selection when avatar gender changes
   const handleAvatarSelect = useCallback(

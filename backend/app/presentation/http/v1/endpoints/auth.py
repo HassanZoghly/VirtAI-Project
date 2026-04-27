@@ -31,8 +31,10 @@ from app.infrastructure.cache.auth_session_cache import (
     get_cached_auth_session,
     invalidate_auth_session,
 )
+from app.infrastructure.cache.cache_keys import auth_refresh_key
 from app.infrastructure.cache.jwt_blacklist import blacklist_token, is_blacklisted
 from app.infrastructure.cache.rate_limiter import check_rate_limit
+from app.infrastructure.cache.redis_client import get_redis
 from app.schemas.auth import (
     GoogleCallbackRequest,
     LoginRequest,
@@ -45,6 +47,7 @@ from app.shared.security import (
     create_access_token,
     create_refresh_token,
     extract_jti,
+    extract_user_id,
     verify_token,
 )
 
@@ -208,6 +211,7 @@ async def login(body: LoginRequest, response: Response, request: Request) -> dic
         raise HTTPException(status_code=403, detail="User account is inactive")
     access = create_access_token(user.id)
     refresh = create_refresh_token(user.id)
+    await get_redis().setex(auth_refresh_key(user.id), _refresh_cookie_max_age(), refresh)
     await cache_auth_session(user.id, _serialize_user_for_cache(user))
     _set_refresh_cookie(response, refresh)
     return {
@@ -226,6 +230,7 @@ async def signup(body: SignupRequest, response: Response, request: Request) -> d
     user = await register_user(body.full_name, body.email, body.password)
     access = create_access_token(user.id)
     refresh = create_refresh_token(user.id)
+    await get_redis().setex(auth_refresh_key(user.id), _refresh_cookie_max_age(), refresh)
     await cache_auth_session(user.id, _serialize_user_for_cache(user))
     _set_refresh_cookie(response, refresh)
     return {
@@ -270,6 +275,7 @@ async def google_callback(
         raise HTTPException(status_code=403, detail="User account is inactive")
     access = create_access_token(user.id)
     refresh = create_refresh_token(user.id)
+    await get_redis().setex(auth_refresh_key(user.id), _refresh_cookie_max_age(), refresh)
     await cache_auth_session(user.id, _serialize_user_for_cache(user))
     _set_refresh_cookie(response, refresh)
     return {
@@ -299,6 +305,11 @@ async def refresh(
     if jti and await is_blacklisted(jti):
         raise HTTPException(status_code=401, detail="Refresh token has been revoked")
 
+    # Check against Redis directly to ensure this is the active refresh token for the user
+    expected_token = await get_redis().get(auth_refresh_key(user_id))
+    if not expected_token or expected_token.decode() != refresh_token:
+        raise HTTPException(status_code=401, detail="Refresh token invalid or superseded")
+
     user = await get_user_by_id(user_id)
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
@@ -311,6 +322,7 @@ async def refresh(
 
     new_access = create_access_token(user_id)
     new_refresh = create_refresh_token(user_id)
+    await get_redis().setex(auth_refresh_key(user_id), _refresh_cookie_max_age(), new_refresh)
     _set_refresh_cookie(response, new_refresh)
     return {"access_token": new_access, "token_type": "bearer"}
 
@@ -336,9 +348,13 @@ async def logout(
         if verified_access is not None:
             user_id, access_jti = verified_access
             await invalidate_auth_session(user_id)
+            await get_redis().delete(auth_refresh_key(user_id))
         else:
             # Best effort fallback for partially invalid tokens (e.g. expired).
             access_jti = extract_jti(creds.credentials)
+            user_id = extract_user_id(creds.credentials)
+            if user_id:
+                await get_redis().delete(auth_refresh_key(user_id))
 
         if access_jti:
             settings = get_settings()
@@ -353,8 +369,13 @@ async def logout(
         refresh_jti = (
             verified_refresh[1] if verified_refresh is not None else extract_jti(refresh_token)
         )
+        refresh_user_id = (
+            verified_refresh[0] if verified_refresh is not None else extract_user_id(refresh_token)
+        )
         if refresh_jti:
             await blacklist_token(refresh_jti)  # uses default REDIS_JWT_BLACKLIST_TTL
+        if refresh_user_id:
+            await get_redis().delete(auth_refresh_key(refresh_user_id))
 
     secure, same_site = _refresh_cookie_policy()
     response.delete_cookie(

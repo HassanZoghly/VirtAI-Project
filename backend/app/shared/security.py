@@ -108,3 +108,18 @@ def extract_jti(token: str) -> str | None:
         return payload.get("jti")
     except JWTError:
         return None
+
+
+def extract_user_id(token: str) -> str | None:
+    """Extract user_id (sub) from a token without full verification."""
+    settings = get_settings()
+    try:
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+            options={"verify_exp": False},
+        )
+        return payload.get("sub")
+    except JWTError:
+        return None

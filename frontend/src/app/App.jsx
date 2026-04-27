@@ -4,6 +4,7 @@ import { BrowserRouter as Router } from 'react-router-dom';
 import './App.css';
 
 import PageLoader from '@/shared/components/PageLoader';
+import { Toaster } from 'sonner';
 import AppRoutes from './routes';
 
 const ROUTER_FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true };
@@ -70,6 +71,7 @@ function App() {
 
       <Router future={ROUTER_FUTURE}>
         <div className="app">
+          <Toaster richColors position="top-right" />
           <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
               <AppRoutes />

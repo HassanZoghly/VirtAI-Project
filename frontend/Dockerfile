@@ -2,14 +2,20 @@
 # Node 20 Alpine for React + Vite dev server
 # ───────────────────────────────────────────────────────────────────
 
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 
 # ── Install dependencies ─────────────────────────────────────────
 # Copy dependency files first for Docker layer caching
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package*.json ./
+RUN npm config set fetch-retries 5 && \
+    npm config set fetch-retry-mintimeout 20000 && \
+    npm config set fetch-retry-maxtimeout 120000 && \
+    npm config set fetch-timeout 300000 && \
+    npm config set maxsockets 3 && \
+    npm config set prefer-offline true && \
+    npm install --no-audit --no-fund --legacy-peer-deps
 
 # ── Copy application source code ────────────────────────────────
 COPY . .

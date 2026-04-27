@@ -25,10 +25,16 @@ function initializeSessionState() {
   if (saved && saved.length > 0) {
     if (shouldStartFresh) {
       const fresh = createSession();
-      const sessions = clampSessionCount([...saved, fresh]);
+      const sessions = clampSessionCount([fresh, ...saved]);
       return { sessions, currentSessionId: fresh.id };
     }
-    return { sessions: saved, currentSessionId: saved[0].id };
+    // Find the newest session by timestamp
+    const latest = [...saved].sort((a, b) => {
+      const aTime = a.messages?.[a.messages.length - 1]?.timestamp || a.createdAt || 0;
+      const bTime = b.messages?.[b.messages.length - 1]?.timestamp || b.createdAt || 0;
+      return bTime - aTime;
+    })[0];
+    return { sessions: saved, currentSessionId: latest.id };
   }
 
   const fresh = createSession();
@@ -64,7 +70,7 @@ export default function useSessionManager() {
   const createNewSession = useCallback(() => {
     const s = createSession();
     setSessions((prev) => {
-      return clampSessionCount([...prev, s]);
+      return clampSessionCount([s, ...prev]);
     });
     setActiveSessionId(s.id);
   }, [setActiveSessionId]);
@@ -83,10 +89,19 @@ export default function useSessionManager() {
       const remaining = prev.filter((s) => s.id !== sessionId);
       const deletedActive = sessionId === currentSessionIdRef.current;
 
-      if (remaining.length === 0 || deletedActive) {
+      if (remaining.length === 0) {
         const fresh = createSession();
         setActiveSessionId(fresh.id);
-        return clampSessionCount([...remaining, fresh]);
+        return clampSessionCount([fresh]);
+      }
+      
+      if (deletedActive) {
+        const latest = [...remaining].sort((a, b) => {
+          const aTime = a.messages?.[a.messages.length - 1]?.timestamp || a.createdAt || 0;
+          const bTime = b.messages?.[b.messages.length - 1]?.timestamp || b.createdAt || 0;
+          return bTime - aTime;
+        })[0];
+        setActiveSessionId(latest.id);
       }
 
       return remaining;

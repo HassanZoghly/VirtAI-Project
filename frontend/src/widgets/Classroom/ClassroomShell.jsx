@@ -48,6 +48,15 @@ export default function ClassroomShell() {
     sessionRef.current = session;
   }, [session]);
 
+  // Auto-create a first chat session for new users with no history
+  const hasAutoCreated = useRef(false);
+  useEffect(() => {
+    if (session.sessions.length === 0 && !hasAutoCreated.current) {
+      hasAutoCreated.current = true;
+      session.createNewSession();
+    }
+  }, [session.sessions.length, session.createNewSession]);
+
   const commitAndSend = useCallback(
     (text) => {
       const message_id = crypto.randomUUID();

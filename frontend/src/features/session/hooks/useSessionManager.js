@@ -37,8 +37,15 @@ function initializeSessionState() {
     return { sessions: saved, currentSessionId: latest.id };
   }
 
-  const fresh = createSession();
-  return { sessions: [fresh], currentSessionId: fresh.id };
+  // Return empty — let ClassroomShell detect this and auto-create via useEffect.
+  // Previously we created a session here, which masked the "no sessions" state
+  // and prevented auto-start logic from triggering.
+  if (shouldStartFresh) {
+    const fresh = createSession();
+    return { sessions: [fresh], currentSessionId: fresh.id };
+  }
+
+  return { sessions: [], currentSessionId: null };
 }
 
 export default function useSessionManager() {
@@ -63,7 +70,7 @@ export default function useSessionManager() {
   }, [sessions]);
 
   const currentSession = useMemo(
-    () => sessions.find((s) => s.id === currentSessionId) || sessions[0],
+    () => sessions.find((s) => s.id === currentSessionId) || sessions[0] || { id: null, title: '', messages: [] },
     [sessions, currentSessionId]
   );
 

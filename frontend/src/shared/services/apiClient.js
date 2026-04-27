@@ -24,8 +24,10 @@ apiClient.interceptors.response.use(
       original._retry = true;
       try {
         const resData = await refreshAccessTokenSingleFlight();
-        const store = useAuthStore.getState();
-        store.setAuth(store.user, resData.access_token);
+        // Only update the token — never touch the user object mid-flight.
+        // setAuth(store.user, token) would wipe user to null if initAuth
+        // hasn't finished populating it yet (e.g. on hard page refresh).
+        useAuthStore.setState({ accessToken: resData.access_token });
         original.headers.Authorization = `Bearer ${resData.access_token}`;
         return apiClient(original);
       } catch {

@@ -828,55 +828,16 @@
   border-color: var(--accent-primary, #B4AB8B);
 }
 
-/* Floating Context Menu */
-.session-more-menu-container {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 0.5rem;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.sidebar-session-item-wrapper:hover .session-more-menu-container,
-.session-more-btn.active {
-  opacity: 1;
-}
-
-.session-more-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-muted, #8c8c8c);
-  cursor: pointer;
-  padding: 0.25rem;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color 0.2s, color 0.2s;
-}
-
-.session-more-btn:hover,
-.session-more-btn.active {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text-primary, #fff);
-}
-
+/* Right-Click Floating Context Menu (rendered via portal) */
 .session-context-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 4px;
   background: var(--card-bg, #1e1e1e);
   border: 1px solid var(--border-color, #333);
   border-radius: 6px;
   padding: 0.25rem;
   min-width: 140px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-  z-index: 100;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
   /* Compositor-safe popup animation */
-  transform-origin: top right;
+  transform-origin: top left;
   animation: menuPopup 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 

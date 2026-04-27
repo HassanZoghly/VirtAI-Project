@@ -1,10 +1,10 @@
-import { memo, useMemo, useState, useRef, useEffect } from 'react';
+import { memo, useMemo, useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   PiChatCircleTextFill,
   PiChatsFill,
   PiPlusFill,
-  PiDotsThreeBold,
   PiPencilSimpleFill,
   PiTrashSimpleFill,
   PiUserGearFill
@@ -38,6 +38,7 @@ function formatTime(ts) {
 
 /**
  * Scrollable list of chat sessions with new/rename/delete actions.
+ * Right-click a chat item to open the floating context menu.
  * @param {object} props
  * @param {{ id: string, title: string, messages: any[], createdAt?: number }[]} props.sessions
  * @param {string} props.currentSessionId
@@ -59,19 +60,36 @@ const SessionList = memo(function SessionList({
   const navigate = useNavigate();
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState('');
-  const [contextMenuOpen, setContextMenuOpen] = useState(null);
-  
+
+  // Context menu state: { sessionId, x, y } or null
+  const [contextMenu, setContextMenu] = useState(null);
   const contextMenuRef = useRef(null);
 
+  // Close context menu on any click outside of it
   useEffect(() => {
+    if (!contextMenu) return;
     function handleClickOutside(event) {
       if (contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
-        setContextMenuOpen(null);
+        setContextMenu(null);
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    // Use a short delay so the opening right-click doesn't immediately close it
+    const id = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 0);
+    return () => {
+      clearTimeout(id);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [contextMenu]);
+
+  // Close context menu on scroll
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleScroll = () => setContextMenu(null);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => window.removeEventListener('scroll', handleScroll, true);
+  }, [contextMenu]);
 
   const filtered = useMemo(() => {
     return [...sessions].sort((a, b) => {
@@ -81,46 +99,55 @@ const SessionList = memo(function SessionList({
     });
   }, [sessions]);
 
-  const handleDelete = (e, sessionId) => {
+  const handleContextMenu = useCallback((e, sessionId) => {
+    e.preventDefault();
     e.stopPropagation();
-    onDeleteSession(sessionId);
-    setContextMenuOpen(null);
-  };
+    setContextMenu({ sessionId, x: e.clientX, y: e.clientY });
+  }, []);
 
-  const startEditing = (e, session) => {
-    e.stopPropagation();
+  const handleDelete = useCallback((sessionId) => {
+    onDeleteSession(sessionId);
+    setContextMenu(null);
+  }, [onDeleteSession]);
+
+  const startEditing = useCallback((session) => {
     setEditingId(session.id);
     setEditValue(session.title || 'New chat');
-    setContextMenuOpen(null);
-  };
+    setContextMenu(null);
+  }, []);
 
-  const saveEdit = (sessionId) => {
+  const saveEdit = useCallback((sessionId) => {
     if (editValue.trim() && editingId === sessionId) {
       onRenameSession(sessionId, editValue.trim());
     }
     setEditingId(null);
-  };
+  }, [editValue, editingId, onRenameSession]);
 
-  const handleEditKeyDown = (e, sessionId) => {
+  const handleEditKeyDown = useCallback((e, sessionId) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       saveEdit(sessionId);
     } else if (e.key === 'Escape') {
       setEditingId(null);
     }
-  };
+  }, [saveEdit]);
 
-  const handleSessionSelect = (id) => {
+  const handleSessionSelect = useCallback((id) => {
     onSessionSelect(id);
     if (onCloseDrawer && window.innerWidth < 1024) {
       onCloseDrawer();
     }
-  };
+  }, [onSessionSelect, onCloseDrawer]);
 
-  const handleSetupClick = () => {
+  const handleSetupClick = useCallback(() => {
     navigate('/setup');
     if (onCloseDrawer) onCloseDrawer();
-  };
+  }, [navigate, onCloseDrawer]);
+
+  // Find the session object for the context menu (needed for "Rename")
+  const contextSession = contextMenu
+    ? sessions.find((s) => s.id === contextMenu.sessionId)
+    : null;
 
   return (
     <div className="sidebar-inner">
@@ -167,7 +194,11 @@ const SessionList = memo(function SessionList({
               const isEditing = editingId === session.id;
 
               return (
-                <div key={session.id} className="sidebar-session-item-wrapper">
+                <div
+                  key={session.id}
+                  className="sidebar-session-item-wrapper"
+                  onContextMenu={(e) => handleContextMenu(e, session.id)}
+                >
                   <button
                     className={`sidebar-session-item ${session.id === currentSessionId ? 'active' : ''}`}
                     onClick={() => handleSessionSelect(session.id)}
@@ -203,47 +234,44 @@ const SessionList = memo(function SessionList({
                       )}
                     </div>
                   </button>
-
-                  {!isEditing && (
-                    <div className="session-more-menu-container">
-                      <button
-                        className={`session-more-btn ${contextMenuOpen === session.id ? 'active' : ''}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setContextMenuOpen(contextMenuOpen === session.id ? null : session.id);
-                        }}
-                        aria-label="More options"
-                      >
-                        <PiDotsThreeBold />
-                      </button>
-
-                      {contextMenuOpen === session.id && (
-                        <div className="session-context-menu" ref={contextMenuRef}>
-                          <button 
-                            className="context-menu-item"
-                            onClick={(e) => startEditing(e, session)}
-                          >
-                            <PiPencilSimpleFill /> Rename
-                          </button>
-                          <div className="context-menu-divider" />
-                          <button 
-                            className="context-menu-item danger"
-                            onClick={(e) => handleDelete(e, session.id)}
-                          >
-                            <PiTrashSimpleFill /> Delete
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               );
             })
           )}
         </div>
       </div>
+
+      {/* Floating Context Menu — rendered via portal at cursor position */}
+      {contextMenu && contextSession && createPortal(
+        <div
+          className="session-context-menu"
+          ref={contextMenuRef}
+          style={{
+            position: 'fixed',
+            top: contextMenu.y,
+            left: contextMenu.x,
+            zIndex: 9999,
+          }}
+        >
+          <button 
+            className="context-menu-item"
+            onClick={() => startEditing(contextSession)}
+          >
+            <PiPencilSimpleFill /> Rename
+          </button>
+          <div className="context-menu-divider" />
+          <button 
+            className="context-menu-item danger"
+            onClick={() => handleDelete(contextMenu.sessionId)}
+          >
+            <PiTrashSimpleFill /> Delete
+          </button>
+        </div>,
+        document.body
+      )}
     </div>
   );
 });
 
 export default SessionList;
+

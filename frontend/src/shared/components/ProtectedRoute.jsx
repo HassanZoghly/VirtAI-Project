@@ -1,11 +1,12 @@
 import { useAuthStore, selectIsAuthenticated } from '@/features/auth/store/authStore';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import PageLoader from './PageLoader';
 
 export default function ProtectedRoute({ children }) {
   const isAuthenticated = useAuthStore(selectIsAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
   const user = useAuthStore((s) => s.user);
+  const location = useLocation();
 
   if (isLoading) {
     return <PageLoader />;
@@ -21,12 +22,11 @@ export default function ProtectedRoute({ children }) {
 
   const setupDone = !!user?.setupComplete;
 
-  if (!setupDone && !window.location.pathname.startsWith('/setup')) {
+  // Force users who haven't completed setup to the setup page,
+  // but do NOT block users who have completed it from revisiting /setup
+  // (they may want to change avatar/voice settings).
+  if (!setupDone && !location.pathname.startsWith('/setup')) {
     return <Navigate to="/setup" replace />;
-  }
-
-  if (setupDone && window.location.pathname.startsWith('/setup')) {
-    return <Navigate to="/classroom" replace />;
   }
 
   return children;

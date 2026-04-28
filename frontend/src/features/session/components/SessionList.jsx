@@ -1,14 +1,16 @@
-import { memo, useMemo, useState, useRef, useEffect, useCallback } from 'react';
+import { useLogout } from '@/features/auth/hooks/useAuth';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { FiLogOut } from 'react-icons/fi';
 import {
   PiChatCircleTextFill,
   PiChatsFill,
-  PiPlusFill,
   PiPencilSimpleFill,
+  PiPlusFill,
   PiTrashSimpleFill,
   PiUserGearFill,
 } from 'react-icons/pi';
+import { useNavigate } from 'react-router-dom';
 
 /** Format a timestamp to a short relative / absolute label. */
 function formatTime(ts) {
@@ -60,6 +62,7 @@ const SessionList = memo(function SessionList({
   const navigate = useNavigate();
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState('');
+  const { logout } = useLogout();
 
   // Context menu state: { sessionId, x, y } or null
   const [contextMenu, setContextMenu] = useState(null);
@@ -162,6 +165,13 @@ const SessionList = memo(function SessionList({
     }
   }, [navigate, onCloseDrawer]);
 
+  const handleLogout = useCallback(() => {
+    void logout();
+    if (onCloseDrawer) {
+      onCloseDrawer();
+    }
+  }, [logout, onCloseDrawer]);
+
   // Find the session object for the context menu (needed for "Rename")
   const contextSession = contextMenu ? sessions.find((s) => s.id === contextMenu.sessionId) : null;
 
@@ -252,6 +262,18 @@ const SessionList = memo(function SessionList({
               );
             })
           )}
+        </div>
+
+        <div className="mt-auto px-0 pb-4 pt-4">
+          <button
+            type="button"
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-medium text-offwhite/75 transition-colors duration-200 hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60"
+            onClick={handleLogout}
+            aria-label="Log out of VirtAI"
+          >
+            <FiLogOut className="h-4 w-4" />
+            <span>Log Out</span>
+          </button>
         </div>
       </div>
 

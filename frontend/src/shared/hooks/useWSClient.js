@@ -458,7 +458,14 @@ function useWSClient(url) {
 
       scheduleReconnect(err?.message || 'Failed to create WebSocket connection');
     }
-  }, [url, scheduleAck, clearReconnectState, clearReconnectTimer, scheduleReconnect]);
+  }, [
+    url,
+    scheduleAck,
+    clearReconnectState,
+    clearReconnectTimer,
+    scheduleReconnect,
+    pauseReconnect,
+  ]);
 
   useEffect(() => {
     connectRef.current = connect;

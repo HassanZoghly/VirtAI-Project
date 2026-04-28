@@ -4,7 +4,7 @@ import { refreshAccessTokenSingleFlight } from '../services/refreshService';
 
 let initAuthPromise = null;
 
-export const useAuthStore = create((set, get) => ({
+export const useAuthStore = create((set, _get) => ({
   user: null,
   accessToken: null,
 

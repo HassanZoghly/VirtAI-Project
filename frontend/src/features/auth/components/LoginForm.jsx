@@ -16,7 +16,8 @@ export default function LoginForm({ onToggleMode }) {
   const [showPassword, setShowPassword] = useState(false);
   const inputClass =
     'w-full rounded-xl border border-(--border-color)/80 bg-black/[0.22] px-4 py-2.5 text-sm text-(--text-primary) placeholder-(--text-muted) shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] outline-none transition-[border-color,box-shadow,background-color,transform] duration-200 focus:scale-[1.005] focus:border-(--accent-primary) focus:bg-black/30 focus:shadow-[0_0_0_3px_rgba(255,255,255,0.1)] disabled:cursor-not-allowed disabled:border-(--border-color)/55 disabled:bg-black/[0.16] disabled:opacity-60';
-  const labelClass = 'mb-1 block text-xs font-semibold text-(--text-secondary) uppercase tracking-wide';
+  const labelClass =
+    'mb-1 block text-xs font-semibold text-(--text-secondary) uppercase tracking-wide';
 
   const {
     register,
@@ -53,7 +54,9 @@ export default function LoginForm({ onToggleMode }) {
             {...register('email')}
             className={inputClass}
           />
-          {errors.email && <p className="mt-1.5 text-xs font-medium text-(--error)">{errors.email.message}</p>}
+          {errors.email && (
+            <p className="mt-1.5 text-xs font-medium text-(--error)">{errors.email.message}</p>
+          )}
         </div>
 
         {/* Password */}

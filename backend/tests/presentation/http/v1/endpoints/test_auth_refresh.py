@@ -29,18 +29,28 @@ async def test_refresh_reissues_refresh_cookie(monkeypatch: pytest.MonkeyPatch) 
         return False
 
     async def _active_user(*args, **kwargs):
-        return SimpleNamespace(id="user-1", is_active=True)
+        return SimpleNamespace(id="user-1", is_active=True, refresh_token_version=0)
 
     async def _noop_blacklist(*args, **kwargs) -> None:
         return None
 
     monkeypatch.setattr(auth_endpoint, "_assert_rate_limit", _noop_rate_limit)
-    monkeypatch.setattr(auth_endpoint, "verify_token", lambda *args, **kwargs: ("user-1", "jti-1"))
+    monkeypatch.setattr(auth_endpoint, "verify_token", lambda *args, **kwargs: ("user-1", "jti-1", 0))
     monkeypatch.setattr(auth_endpoint, "is_blacklisted", _not_blacklisted)
     monkeypatch.setattr(auth_endpoint, "get_user_by_id", _active_user)
     monkeypatch.setattr(auth_endpoint, "blacklist_token", _noop_blacklist)
     monkeypatch.setattr(auth_endpoint, "create_access_token", lambda *_args, **_kwargs: "new-access")
     monkeypatch.setattr(auth_endpoint, "create_refresh_token", lambda *_args, **_kwargs: "new-refresh")
+
+    class FakeRedis:
+        async def get(self, key):
+            return b"old-refresh-token"
+        async def setex(self, *args, **kwargs):
+            pass
+        async def delete(self, *args, **kwargs):
+            pass
+
+    monkeypatch.setattr(auth_endpoint, "get_redis", lambda: FakeRedis())
 
     response = Response()
     payload = await auth_endpoint.refresh(
@@ -67,7 +77,7 @@ def test_refresh_cookie_policy_uses_none_in_production(
     auth_endpoint._set_refresh_cookie(response, "refresh-token")
     cookie_header = response.headers.get("set-cookie", "").lower()
 
-    assert "samesite=none" in cookie_header
+    assert "samesite=lax" in cookie_header
     assert "secure" in cookie_header
 
 

@@ -38,8 +38,6 @@ function initializeSessionState() {
   }
 
   // Return empty — let ClassroomShell detect this and auto-create via useEffect.
-  // Previously we created a session here, which masked the "no sessions" state
-  // and prevented auto-start logic from triggering.
   if (shouldStartFresh) {
     const fresh = createSession();
     return { sessions: [fresh], currentSessionId: fresh.id };
@@ -52,6 +50,12 @@ export default function useSessionManager() {
   const initialState = useMemo(() => initializeSessionState(), []);
   const [sessions, setSessions] = useState(() => initialState.sessions);
   const [currentSessionId, setCurrentSessionId] = useState(() => initialState.currentSessionId);
+
+  // isReady = true means localStorage has been read and sessions are initialized.
+  // This is synchronous (localStorage is sync), so it's true from the first render.
+  // We keep it as an explicit flag so ClassroomShell can distinguish
+  // "sessions is [] because we haven't loaded yet" from "genuinely empty".
+  const [isReady] = useState(true);
 
   // Stable ref so addUserMessage / addAssistantMessage never change identity
   const currentSessionIdRef = useRef(currentSessionId);
@@ -70,7 +74,9 @@ export default function useSessionManager() {
   }, [sessions]);
 
   const currentSession = useMemo(
-    () => sessions.find((s) => s.id === currentSessionId) || sessions[0] || { id: null, title: '', messages: [] },
+    () =>
+      sessions.find((s) => s.id === currentSessionId) ||
+      sessions[0] || { id: null, title: '', messages: [] },
     [sessions, currentSessionId]
   );
 
@@ -86,39 +92,43 @@ export default function useSessionManager() {
     createNewSession();
   }, [createNewSession]);
 
-  const switchSession = useCallback((id) => {
-    setActiveSessionId(id);
-    eventBus.emit('session:switched', { sessionId: id });
-  }, [setActiveSessionId]);
+  const switchSession = useCallback(
+    (id) => {
+      setActiveSessionId(id);
+      eventBus.emit('session:switched', { sessionId: id });
+    },
+    [setActiveSessionId]
+  );
 
-  const deleteSession = useCallback((sessionId) => {
-    setSessions((prev) => {
-      const remaining = prev.filter((s) => s.id !== sessionId);
-      const deletedActive = sessionId === currentSessionIdRef.current;
+  const deleteSession = useCallback(
+    (sessionId) => {
+      setSessions((prev) => {
+        const remaining = prev.filter((s) => s.id !== sessionId);
+        const deletedActive = sessionId === currentSessionIdRef.current;
 
-      if (remaining.length === 0) {
-        const fresh = createSession();
-        setActiveSessionId(fresh.id);
-        return clampSessionCount([fresh]);
-      }
-      
-      if (deletedActive) {
-        const latest = [...remaining].sort((a, b) => {
-          const aTime = a.messages?.[a.messages.length - 1]?.timestamp || a.createdAt || 0;
-          const bTime = b.messages?.[b.messages.length - 1]?.timestamp || b.createdAt || 0;
-          return bTime - aTime;
-        })[0];
-        setActiveSessionId(latest.id);
-      }
+        if (remaining.length === 0) {
+          const fresh = createSession();
+          setActiveSessionId(fresh.id);
+          return clampSessionCount([fresh]);
+        }
 
-      return remaining;
-    });
-  }, [setActiveSessionId]);
+        if (deletedActive) {
+          const latest = [...remaining].sort((a, b) => {
+            const aTime = a.messages?.[a.messages.length - 1]?.timestamp || a.createdAt || 0;
+            const bTime = b.messages?.[b.messages.length - 1]?.timestamp || b.createdAt || 0;
+            return bTime - aTime;
+          })[0];
+          setActiveSessionId(latest.id);
+        }
+
+        return remaining;
+      });
+    },
+    [setActiveSessionId]
+  );
 
   const renameSession = useCallback((sessionId, newTitle) => {
-    setSessions((prev) =>
-      prev.map((s) => (s.id === sessionId ? { ...s, title: newTitle } : s))
-    );
+    setSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, title: newTitle } : s)));
   }, []);
 
   /** Append a user message to the active session (also auto-titles if first message). */
@@ -151,7 +161,10 @@ export default function useSessionManager() {
               ...s,
               messages: s.messages.some((m) => m.id === messageId)
                 ? s.messages
-                : [...s.messages, { id: messageId, role: 'assistant', content: text, timestamp: Date.now() }],
+                : [
+                    ...s.messages,
+                    { id: messageId, role: 'assistant', content: text, timestamp: Date.now() },
+                  ],
             }
           : s
       )
@@ -162,6 +175,7 @@ export default function useSessionManager() {
     sessions,
     currentSessionId,
     currentSession,
+    isReady,
     createNewSession,
     startNewConversation,
     switchSession,

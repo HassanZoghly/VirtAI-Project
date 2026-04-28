@@ -47,12 +47,14 @@ def _to_object_id(value: str) -> ObjectId | str:
 async def create_chat_session(
     user_id: str,
     title: str = "New Chat",
+    session_id: str | None = None,
 ) -> dict:
     """
     Insert a new chat session document.
     Returns the created document with string _id.
     """
     doc = {
+        **({"_id": _to_object_id(session_id)} if session_id is not None else {}),
         "user_id": _to_object_id(user_id),  # real Mongo ObjectId if user_id is a Mongo _id
         "title": title,
         "created_at": _now(),
@@ -62,7 +64,7 @@ async def create_chat_session(
     }
     result = await chat_sessions_col().insert_one(doc)
     doc["_id"] = str(result.inserted_id)
-    doc["user_id"] = user_id
+    doc["user_id"] = str(user_id)
     logger.debug(f"Chat session created | id={doc['_id']} | user={user_id}")
     return doc
 
@@ -180,12 +182,7 @@ async def get_session_messages(
     """
     sid = _to_object_id(session_id)
     # Fetch in reverse order (newest first), then reverse to get oldest first
-    cursor = (
-        messages_col()
-        .find({"session_id": sid})
-        .sort("timestamp", -1)
-        .limit(limit)
-    )
+    cursor = messages_col().find({"session_id": sid}).sort("timestamp", -1).limit(limit)
     docs = [doc async for doc in cursor]
     docs.reverse()  # oldest → newest for context building
     return [_serialise_message(d) for d in docs]

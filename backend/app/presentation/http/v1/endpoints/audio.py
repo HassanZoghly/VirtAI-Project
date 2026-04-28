@@ -8,12 +8,15 @@ import re
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi import Path as PathParam
 from fastapi.responses import FileResponse
 from loguru import logger
 
 from app.shared.config import get_settings
+from app.domain.user.entities import UserEntity
+from app.infrastructure.db.chat_repository import get_chat_session
+from app.presentation.http.v1.endpoints.auth import _current_user
 
 router = APIRouter()
 
@@ -42,6 +45,7 @@ def is_safe_path_component(component: str) -> bool:
 async def get_audio_file(
     session_id: Annotated[str, PathParam(description="Session identifier")],
     message_id: Annotated[str, PathParam(description="Message identifier")],
+    user: UserEntity = Depends(_current_user),
 ) -> FileResponse:
     if not is_safe_path_component(session_id):
         logger.warning(f"Invalid session_id attempted: {session_id}")
@@ -50,6 +54,11 @@ async def get_audio_file(
     if not is_safe_path_component(message_id):
         logger.warning(f"Invalid message_id attempted: {message_id}")
         raise HTTPException(status_code=400, detail=f"Invalid message_id format: {message_id}")
+
+    db_session = await get_chat_session(session_id)
+    if db_session is None or str(db_session.get("user_id")) != str(user.id):
+        logger.warning(f"Unauthorized audio access attempt by user {user.id} for session {session_id}")
+        raise HTTPException(status_code=404, detail="Audio file not found")
 
     file_path = AUDIO_STORAGE_PATH / session_id / f"{message_id}.mp3"
 

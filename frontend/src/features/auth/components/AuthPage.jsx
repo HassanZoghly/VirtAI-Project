@@ -1,14 +1,33 @@
+import PageLoader from '@/shared/components/PageLoader';
 import { AnimatePresence, motion } from 'motion/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { selectIsAuthenticated, useAuthStore } from '../store/authStore';
 import LoginForm from './LoginForm';
 import SignupForm from './SignupForm';
 
 export default function AuthPage() {
   const [mode, setMode] = useState('login');
+  const navigate = useNavigate();
+  const isInitializing = useAuthStore((s) => s.isInitializing);
+  const isAuthenticated = useAuthStore(selectIsAuthenticated);
+  const user = useAuthStore((s) => s.user);
+  const setupComplete = user?.setupComplete;
 
   const toggleMode = () => setMode((m) => (m === 'login' ? 'signup' : 'login'));
+
+  useEffect(() => {
+    if (isInitializing || !isAuthenticated) {
+      return;
+    }
+
+    navigate(setupComplete ? '/classroom' : '/setup', { replace: true });
+  }, [isAuthenticated, isInitializing, navigate, setupComplete]);
+
+  if (isInitializing || isAuthenticated) {
+    return <PageLoader />;
+  }
 
   return (
     <>
@@ -17,10 +36,12 @@ export default function AuthPage() {
       </Helmet>
 
       <div className="flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-dark p-4 sm:p-6">
-        
         {/* VirtAI Logo */}
         <div className="absolute left-6 top-6 sm:left-10 sm:top-10">
-          <Link to="/" className="text-2xl font-bold tracking-wide text-gold font-display focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 rounded-md">
+          <Link
+            to="/"
+            className="text-2xl font-bold tracking-wide text-gold font-display focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 rounded-md"
+          >
             VirtAI
           </Link>
         </div>
@@ -59,7 +80,6 @@ export default function AuthPage() {
             </motion.div>
           </AnimatePresence>
         </motion.main>
-
       </div>
     </>
   );

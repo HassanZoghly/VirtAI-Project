@@ -82,10 +82,10 @@ export function useGoogleCallback() {
   const setAuth = useAuthStore((s) => s.setAuth);
   const navigate = useNavigate();
 
-  const handleCallback = async (code) => {
+  const handleCallback = async (code, state) => {
     setIsLoading(true);
     try {
-      const { access_token, user } = await exchangeGoogleCode(code);
+      const { access_token, user } = await exchangeGoogleCode(code, state);
       setAuth(user, access_token);
       toast.show('success', 'Welcome!', `Signed in as ${user.email}`);
       navigate(user.setupComplete ? '/classroom' : '/setup');

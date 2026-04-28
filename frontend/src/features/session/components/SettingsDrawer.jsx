@@ -80,7 +80,10 @@ export default function SettingsDrawer({
         ref={drawerRef}
         onKeyDown={handleKeyDown}
       >
-        <div className="drawer-body" style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1rem 0' }}>
+        <div
+          className="drawer-body"
+          style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1rem 0' }}
+        >
           <SessionList
             sessions={sessions}
             currentSessionId={currentSessionId}

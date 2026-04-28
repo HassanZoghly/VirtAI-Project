@@ -2,6 +2,36 @@ import axios from 'axios';
 
 let refreshPromise = null;
 
+const CSRF_COOKIE_NAME = 'csrf_token';
+const CSRF_HEADER_NAME = 'X-CSRF-Token';
+
+function readCookie(name) {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  const cookiePrefix = `${name}=`;
+  const cookies = document.cookie ? document.cookie.split('; ') : [];
+
+  for (const cookie of cookies) {
+    if (cookie.startsWith(cookiePrefix)) {
+      return decodeURIComponent(cookie.slice(cookiePrefix.length));
+    }
+  }
+
+  return null;
+}
+
+async function ensureCsrfToken() {
+  const existingToken = readCookie(CSRF_COOKIE_NAME);
+  if (existingToken) {
+    return existingToken;
+  }
+
+  await axios.get('/api/v1/auth/csrf', { withCredentials: true });
+  return readCookie(CSRF_COOKIE_NAME);
+}
+
 /**
  * Single-flight refresh token queue.
  * Ensures concurrent requests or double-mounts merge into a single `/auth/refresh` API request
@@ -13,13 +43,21 @@ export function refreshAccessTokenSingleFlight() {
   }
 
   // Use bare axios to bypass apiClient interceptors and avoid infinite 401 loops
-  refreshPromise = axios.post('/api/v1/auth/refresh', null, {
-    withCredentials: true,
-  })
-    .then((res) => res.data)
-    .finally(() => {
-      refreshPromise = null;
+  refreshPromise = (async () => {
+    const csrfToken = await ensureCsrfToken();
+    if (!csrfToken) {
+      throw new Error('Unable to obtain CSRF token for refresh request.');
+    }
+
+    const response = await axios.post('/api/v1/auth/refresh', null, {
+      withCredentials: true,
+      headers: { [CSRF_HEADER_NAME]: csrfToken },
     });
+
+    return response.data;
+  })().finally(() => {
+    refreshPromise = null;
+  });
 
   return refreshPromise;
 }

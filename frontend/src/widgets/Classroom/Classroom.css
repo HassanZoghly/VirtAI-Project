@@ -128,7 +128,7 @@
 .avatar-settings-btn:hover {
   background: rgba(180, 171, 139, 0.1);
   border-color: rgba(180, 171, 139, 0.35);
-  color: var(--accent-primary, #B4AB8B);
+  color: var(--accent-primary, #b4ab8b);
   transform: rotate(12deg);
 }
 
@@ -296,7 +296,7 @@
 
 .welcome-icon {
   font-size: 3.5rem;
-  color: var(--accent-primary, #B4AB8B);
+  color: var(--accent-primary, #b4ab8b);
   opacity: 0.55;
   margin-bottom: 0.5rem;
 }
@@ -343,7 +343,7 @@
 
 .user-message .message-avatar {
   border-color: rgba(180, 171, 139, 0.55);
-  color: var(--accent-primary, #B4AB8B);
+  color: var(--accent-primary, #b4ab8b);
 }
 
 .message-bubble {
@@ -368,10 +368,10 @@
 
 /* User messages: right-aligned, accent tint, rounded except bottom-right */
 .user-message .message-bubble {
-    background: linear-gradient(135deg, #B4AB8B, #B4AB8B);
-    color: #1a1a1a;
-    border: 1px solid rgba(180, 171, 139, 0.55);
-    border-radius: 15px;
+  background: linear-gradient(135deg, #b4ab8b, #b4ab8b);
+  color: #1a1a1a;
+  border: 1px solid rgba(180, 171, 139, 0.55);
+  border-radius: 15px;
 }
 
 /* Entrance animation */
@@ -539,8 +539,8 @@
   margin-bottom: 4px;
   background: linear-gradient(
     135deg,
-    var(--accent-secondary, #B4AB8B) 0%,
-    var(--accent-primary, #B4AB8B) 100%
+    var(--accent-secondary, #b4ab8b) 0%,
+    var(--accent-primary, #b4ab8b) 100%
   );
   border: none;
   color: #141414;
@@ -630,7 +630,10 @@
   color: var(--text-primary, #fff);
   cursor: pointer;
   /* Compositor safe transitions */
-  transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease;
   text-align: left;
 }
 
@@ -698,7 +701,9 @@
   cursor: pointer;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
-  transition: background-color 0.2s, color 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
 }
 
 .sidebar-new-chat-btn:hover {
@@ -743,7 +748,9 @@
   border-radius: 6px;
   color: var(--text-secondary, #b0b0b0);
   cursor: pointer;
-  transition: background-color 0.2s, color 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
   text-align: left;
   width: 100%;
 }
@@ -766,7 +773,7 @@
 
 .sidebar-session-item.active .session-icon {
   opacity: 1;
-  color: var(--accent-primary, #B4AB8B);
+  color: var(--accent-primary, #b4ab8b);
 }
 
 .session-info {
@@ -813,7 +820,7 @@
 }
 
 .session-edit-input {
-  background: rgba(0,0,0,0.2);
+  background: rgba(0, 0, 0, 0.2);
   border: 1px solid var(--border-color, #333);
   color: var(--text-primary, #fff);
   border-radius: 4px;
@@ -825,7 +832,7 @@
 }
 
 .session-edit-input:focus {
-  border-color: var(--accent-primary, #B4AB8B);
+  border-color: var(--accent-primary, #b4ab8b);
 }
 
 /* Right-Click Floating Context Menu (rendered via portal) */
@@ -835,7 +842,7 @@
   border-radius: 6px;
   padding: 0.25rem;
   min-width: 140px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
   /* Compositor-safe popup animation */
   transform-origin: top left;
   animation: menuPopup 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -1089,7 +1096,7 @@
 }
 
 .copy-btn:hover {
-  color: var(--accent-primary, #B4AB8B);
+  color: var(--accent-primary, #b4ab8b);
   background: rgba(180, 171, 139, 0.1);
   opacity: 1;
   transform: scale(1.05);
@@ -1176,7 +1183,7 @@
 
 .modal-input:focus {
   outline: none;
-  border-color: var(--accent-primary, #B4AB8B);
+  border-color: var(--accent-primary, #b4ab8b);
   box-shadow:
     0 0 0 4px rgba(180, 171, 139, 0.2),
     0 2px 8px rgba(0, 0, 0, 0.3) inset;
@@ -1216,8 +1223,8 @@
 .modal-btn.confirm {
   background: linear-gradient(
     135deg,
-    var(--accent-secondary, #B4AB8B) 0%,
-    var(--accent-primary, #B4AB8B) 100%
+    var(--accent-secondary, #b4ab8b) 0%,
+    var(--accent-primary, #b4ab8b) 100%
   );
   color: #141414;
   font-weight: 700;
@@ -1337,7 +1344,7 @@
   display: inline-block;
   margin-left: 2px;
   animation: blink 1s step-end infinite;
-  color: var(--accent-primary, #B4AB8B);
+  color: var(--accent-primary, #b4ab8b);
 }
 
 @keyframes blink {

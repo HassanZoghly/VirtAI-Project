@@ -9,16 +9,16 @@ export const MORPH_SMOOTHING = 0.4;
  * Longer fades = smoother blends between states.
  */
 export const TRANSITION_FADE = {
-  'idle→talk':     0.35,
-  'talk→idle':     0.55,  // longer wind-down to avoid pop on speech end
-  'talk→talk':     0.45,  // smooth blend when switching talk variants between responses
+  'idle→talk': 0.35,
+  'talk→idle': 0.55, // longer wind-down to avoid pop on speech end
+  'talk→talk': 0.45, // smooth blend when switching talk variants between responses
   'idle→greeting': 0.3,
   'greeting→idle': 0.4,
-  'idle→think':    0.4,
-  'think→idle':    0.5,
-  'think→talk':    0.35,
-  'talk→think':    0.45,
-  default:         0.35,
+  'idle→think': 0.4,
+  'think→idle': 0.5,
+  'think→talk': 0.35,
+  'talk→think': 0.45,
+  default: 0.35,
 };
 
 /**

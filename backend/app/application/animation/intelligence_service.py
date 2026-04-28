@@ -477,7 +477,9 @@ class AnimationIntelligenceService:
             cumulative += probability
             if cumulative >= threshold:
                 return intent
-        return max(scores, key=scores.get)
+        if not scores:
+            return "neutral"
+        return max(scores, key=lambda k: scores[k])
 
     def _detect_tone(self, segment: str, emotion: str | None) -> str:
         if emotion:

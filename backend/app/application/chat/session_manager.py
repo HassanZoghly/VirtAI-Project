@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Optional
 from loguru import logger
 
 from app.application.voice.handle_voice_turn import ConversationPipeline
+from app.infrastructure.db.chat_repository import create_chat_session
 
 if TYPE_CHECKING:
     from app.domain.chat.ports import BaseLLMProvider
@@ -37,12 +38,14 @@ class ConversationSession:
     def __init__(
         self,
         session_id: str,
+        user_id: str,
         avatar_id: str = "avatar1",
         asr_service: Optional[StreamingASRService] = None,
         llm_service: Optional[BaseLLMProvider] = None,
         tts_service: Optional[BaseTTSProvider] = None,
     ):
         self.session_id: str = session_id
+        self.user_id: str = user_id
         self.avatar_id: str = avatar_id
         self.pipeline: ConversationPipeline = ConversationPipeline(
             asr=asr_service,
@@ -129,6 +132,7 @@ class SessionManager:
 
     async def create_session(
         self,
+        user_id: str,
         session_id: str | None = None,
         avatar_id: str = "avatar1",
         voice_id: str | None = None,
@@ -142,12 +146,15 @@ class SessionManager:
             # Guard accidental session-id reuse for new chats.
             sid = str(uuid.uuid4())
 
+        await create_chat_session(user_id=user_id, session_id=sid)
+
         asr = asr_service or (self._asr_service_factory() if self._asr_service_factory else None)
         llm = llm_service or (self._llm_service_factory() if self._llm_service_factory else None)
         tts = tts_service or (self._tts_service_factory() if self._tts_service_factory else None)
 
         session = ConversationSession(
             session_id=sid,
+            user_id=user_id,
             avatar_id=avatar_id,
             asr_service=asr,
             llm_service=llm,
@@ -166,6 +173,7 @@ class SessionManager:
         logger.info(
             f"Session created | "
             f"id={sid} | "
+            f"user={user_id} | "
             f"avatar={avatar_id} | "
             f"voice={voice_id or 'default'} | "
             f"total_active={len(self._sessions)}"
@@ -261,6 +269,7 @@ class SessionManager:
             "sessions": [
                 {
                     "id": sid,
+                    "user_id": s.user_id,
                     "avatar": s.avatar_id,
                     "connected": s.connected,
                     "idle_sec": round(s.idle_seconds, 1),

@@ -22,7 +22,7 @@
 
 .error-fallback button {
   padding: 0.75rem 1.5rem;
-  background: var(--accent-primary, #B4AB8B);
+  background: var(--accent-primary, #b4ab8b);
   border: none;
   border-radius: 4px;
   font-size: var(--text-md, 1rem);
@@ -32,7 +32,7 @@
 }
 
 .error-fallback button:hover {
-  background: var(--accent-secondary, #B4AB8B);
+  background: var(--accent-secondary, #b4ab8b);
 }
 
 /* Page loader */
@@ -54,16 +54,28 @@
 .loader span {
   width: 10px;
   height: 10px;
-  background: #F5F1EC;
+  background: #f5f1ec;
   border-radius: 50%;
   animation: loaderPulse 1.4s ease-in-out infinite;
 }
 
-.loader span:nth-child(1) { animation-delay: 0s; }
-.loader span:nth-child(2) { animation-delay: 0.15s; }
-.loader span:nth-child(3) { animation-delay: 0.3s; }
+.loader span:nth-child(1) {
+  animation-delay: 0s;
+}
+.loader span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.loader span:nth-child(3) {
+  animation-delay: 0.3s;
+}
 
 @keyframes loaderPulse {
-  0%, 60%, 100% { opacity: 0.3; }
-  30% { opacity: 1; }
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+  }
+  30% {
+    opacity: 1;
+  }
 }

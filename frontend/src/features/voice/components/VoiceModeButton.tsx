@@ -58,33 +58,57 @@ export default function VoiceModeButton({
 
   // Determine button state and styling
   const buttonState = useMemo(() => {
-    if (error) {return 'error';}
-    if (isPaused) {return 'paused';}
-    if (isProcessing && isListening) {return 'processing';}
-    if (isListening) {return 'listening';}
+    if (error) {
+      return 'error';
+    }
+    if (isPaused) {
+      return 'paused';
+    }
+    if (isProcessing && isListening) {
+      return 'processing';
+    }
+    if (isListening) {
+      return 'listening';
+    }
     return 'idle';
   }, [isListening, isPaused, isProcessing, error]);
 
   // Determine button icon
   const ButtonIcon = useMemo(() => {
-    if (error) {return PiWarningCircleFill;}
-    if (isPaused) {return PiPauseFill;}
+    if (error) {
+      return PiWarningCircleFill;
+    }
+    if (isPaused) {
+      return PiPauseFill;
+    }
     return PiMicrophoneFill;
   }, [error, isPaused]);
 
   // Determine button title/tooltip
   const buttonTitle = useMemo(() => {
-    if (error) {return `Voice mode error: ${error}`;}
-    if (isPaused) {return 'Voice paused (assistant speaking)';}
-    if (isListening) {return 'Stop voice mode';}
+    if (error) {
+      return `Voice mode error: ${error}`;
+    }
+    if (isPaused) {
+      return 'Voice paused (assistant speaking)';
+    }
+    if (isListening) {
+      return 'Stop voice mode';
+    }
     return 'Start voice mode';
   }, [isListening, isPaused, error]);
 
   // Determine button aria-label
   const ariaLabel = useMemo(() => {
-    if (error) {return 'Voice mode error';}
-    if (isPaused) {return 'Voice mode paused';}
-    if (isListening) {return 'Stop voice mode';}
+    if (error) {
+      return 'Voice mode error';
+    }
+    if (isPaused) {
+      return 'Voice mode paused';
+    }
+    if (isListening) {
+      return 'Stop voice mode';
+    }
     return 'Start voice mode';
   }, [isListening, isPaused, error]);
 

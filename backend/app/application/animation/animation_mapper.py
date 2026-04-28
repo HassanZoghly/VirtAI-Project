@@ -80,7 +80,10 @@ class AnimationMapper:
                     base_scores[intent] += 0.06
 
         intent_scores = self._softmax_distribution(base_scores, temperature=0.85)
-        mapped_intent = max(intent_scores, key=intent_scores.get)
+        if not intent_scores:
+            mapped_intent = "neutral"
+        else:
+            mapped_intent = max(intent_scores, key=lambda k: intent_scores[k])
         tone = self._detect_tone(segment, emotion)
 
         return AnimationMappingDecision(

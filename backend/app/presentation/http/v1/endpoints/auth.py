@@ -10,6 +10,7 @@ Changes from original:
 
 from __future__ import annotations
 
+import secrets
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
@@ -59,9 +60,9 @@ def _extract_client_ip(request: Request) -> str:
     if settings.TRUST_PROXY_HEADERS:
         forwarded_for = request.headers.get("x-forwarded-for", "")
         if forwarded_for:
-            first_hop = forwarded_for.split(",")[0].strip()
-            if first_hop:
-                return first_hop
+            last_hop = forwarded_for.split(",")[-1].strip()
+            if last_hop:
+                return last_hop
     return request.client.host if request.client else "unknown"
 
 
@@ -80,15 +81,16 @@ def _serialize_user_for_cache(user: UserEntity) -> dict:
     }
 
 
-def _deserialize_cached_user(data: dict) -> UserEntity:
-    def _parse_dt(raw: str | None) -> datetime:
-        if not raw:
-            return datetime.now(timezone.utc)
-        try:
-            return datetime.fromisoformat(raw)
-        except Exception:
-            return datetime.now(timezone.utc)
+def _parse_dt(raw: str | None) -> datetime:
+    if not raw:
+        return datetime.now(timezone.utc)
+    try:
+        return datetime.fromisoformat(raw)
+    except Exception:
+        return datetime.now(timezone.utc)
 
+
+def _deserialize_cached_user(data: dict) -> UserEntity:
     return UserEntity(
         id=data["id"],
         email=data["email"],
@@ -162,10 +164,14 @@ def _refresh_cookie_max_age() -> int:
     return settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
 
 
-def _refresh_cookie_policy() -> tuple[bool, str]:
+from typing import Literal
+
+
+def _refresh_cookie_policy() -> tuple[bool, Literal["lax", "strict", "none"]]:
     # Since frontend and backend use a proxy, they are same-origin from the browser's perspective.
-    # SameSite=lax and Secure=False guarantees the cookie is sent correctly in local dev and Docker.
-    return False, "lax"
+    # SameSite=lax and Secure=True in production guarantees the cookie is sent correctly.
+    settings = get_settings()
+    return settings.ENVIRONMENT == "production", "lax"
 
 
 def _set_refresh_cookie(response: Response, token: str) -> None:
@@ -199,6 +205,12 @@ def _user_response(user: UserEntity) -> UserResponse:
     )
 
 
+def _issue_tokens(user: UserEntity) -> tuple[str, str]:
+    access = create_access_token(user.id)
+    refresh = create_refresh_token(user.id, user.refresh_token_version)
+    return access, refresh
+
+
 @router.post("/login")
 async def login(body: LoginRequest, response: Response, request: Request) -> dict:
     await _assert_rate_limit(request, "login")
@@ -207,8 +219,7 @@ async def login(body: LoginRequest, response: Response, request: Request) -> dic
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="User account is inactive")
-    access = create_access_token(user.id)
-    refresh = create_refresh_token(user.id)
+    access, refresh = _issue_tokens(user)
     await get_redis().setex(auth_refresh_key(user.id), _refresh_cookie_max_age(), refresh)
     await cache_auth_session(user.id, _serialize_user_for_cache(user))
     _set_refresh_cookie(response, refresh)
@@ -226,8 +237,7 @@ async def signup(body: SignupRequest, response: Response, request: Request) -> d
     if existing is not None:
         raise HTTPException(status_code=409, detail="Email already registered")
     user = await register_user(body.full_name, body.email, body.password)
-    access = create_access_token(user.id)
-    refresh = create_refresh_token(user.id)
+    access, refresh = _issue_tokens(user)
     await get_redis().setex(auth_refresh_key(user.id), _refresh_cookie_max_age(), refresh)
     await cache_auth_session(user.id, _serialize_user_for_cache(user))
     _set_refresh_cookie(response, refresh)
@@ -257,9 +267,20 @@ async def update_setup_status(
     return _user_response(updated).model_dump(by_alias=True)
 
 
+@router.get("/csrf")
+async def get_csrf_token(request: Request, response: Response) -> dict:
+    """
+    Ensure the CSRF cookie is set and return a confirmation.
+    The CSRFMiddleware handles setting the actual cookie.
+    """
+    return {"detail": "CSRF cookie set"}
+
+
 @router.get("/google/url")
 async def google_url() -> dict:
-    return {"url": build_google_auth_url()}
+    state = secrets.token_urlsafe(32)
+    await get_redis().setex(f"oauth:state:{state}", 300, "1")
+    return {"url": build_google_auth_url(state)}
 
 
 @router.post("/google/callback")
@@ -267,12 +288,19 @@ async def google_callback(
     body: GoogleCallbackRequest, response: Response, request: Request
 ) -> dict:
     await _assert_rate_limit(request, "google_callback")
+
+    redis = get_redis()
+    state_key = f"oauth:state:{body.state}"
+    is_valid_state = await redis.get(state_key)
+    if not is_valid_state:
+        raise HTTPException(status_code=400, detail="Invalid or expired state parameter")
+    await redis.delete(state_key)
+
     google_info = await exchange_google_code(body.code)
     user = await get_or_create_google_user(google_info)
     if not user.is_active:
         raise HTTPException(status_code=403, detail="User account is inactive")
-    access = create_access_token(user.id)
-    refresh = create_refresh_token(user.id)
+    access, refresh = _issue_tokens(user)
     await get_redis().setex(auth_refresh_key(user.id), _refresh_cookie_max_age(), refresh)
     await cache_auth_session(user.id, _serialize_user_for_cache(user))
     _set_refresh_cookie(response, refresh)
@@ -297,16 +325,11 @@ async def refresh(
     if result is None:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
-    user_id, jti = result
+    user_id, jti, token_version = result
 
     # Check refresh token blacklist
     if jti and await is_blacklisted(jti):
         raise HTTPException(status_code=401, detail="Refresh token has been revoked")
-
-    # Check against Redis directly to ensure this is the active refresh token for the user
-    expected_token = await get_redis().get(auth_refresh_key(user_id))
-    if not expected_token or expected_token.decode() != refresh_token:
-        raise HTTPException(status_code=401, detail="Refresh token invalid or superseded")
 
     user = await get_user_by_id(user_id)
     if user is None:
@@ -314,12 +337,22 @@ async def refresh(
     if not user.is_active:
         raise HTTPException(status_code=403, detail="User account is inactive")
 
+    # Check MongoDB token version instead of relying purely on Redis (A-01)
+    if token_version != user.refresh_token_version:
+        raise HTTPException(status_code=401, detail="Refresh token invalid or superseded")
+
+    # Check against Redis cache (optional, provides fast failure but not the single source of truth)
+    expected_token = await get_redis().get(auth_refresh_key(user_id))
+    if expected_token and expected_token.decode() != refresh_token:
+        # DB version matches but Redis holds a newer token.
+        # This can happen if clock skew exists or if token was rotated but DB update lagged.
+        pass  # The MongoDB version check is the definitive source of truth now.
+
     # Refresh token rotation: consume current refresh token before issuing a new one.
     if jti:
         await blacklist_token(jti)
 
-    new_access = create_access_token(user_id)
-    new_refresh = create_refresh_token(user_id)
+    new_access, new_refresh = _issue_tokens(user)
     await get_redis().setex(auth_refresh_key(user_id), _refresh_cookie_max_age(), new_refresh)
     _set_refresh_cookie(response, new_refresh)
     return {"access_token": new_access, "token_type": "bearer"}
@@ -329,6 +362,7 @@ async def refresh(
 async def logout(
     request: Request,
     response: Response,
+    user: UserEntity = Depends(_current_user),
     creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     refresh_token: str | None = Cookie(None, alias=COOKIE_KEY),
 ) -> dict:

@@ -43,18 +43,21 @@ def _doc_to_entity(doc: dict) -> UserEntity:
 
 def _entity_to_doc(entity: UserEntity) -> dict:
     """Convert a UserEntity to a MongoDB document dict (without _id)."""
-    return {
+    doc = {
         "email": entity.email,
         "username": entity.username or "",
         "full_name": entity.full_name,
         "password_hash": entity.hashed_password,
         "provider": entity.provider,
-        "google_id": entity.google_id,
         "setup_complete": entity.setup_complete,
         "is_active": entity.is_active,
+        "refresh_token_version": entity.refresh_token_version,
         "created_at": entity.created_at,
         "updated_at": entity.updated_at,
     }
+    if entity.google_id is not None:
+        doc["google_id"] = entity.google_id
+    return doc
 
 
 class MongoUserRepository(UserRepositoryPort):

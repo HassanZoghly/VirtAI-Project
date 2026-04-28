@@ -56,6 +56,9 @@ async def test_ws_does_not_create_session_on_connect_when_not_resuming(
     async def _allow_rate_limit(**kwargs) -> bool:
         return True
 
+    def _mock_verify_token(token: str, expected_type: str = "access"):
+        return ("mock-user", "mock-jti")
+
     class FakeHandler:
         def __init__(self, **kwargs):
             created_handler["session"] = kwargs["session"]
@@ -65,17 +68,19 @@ async def test_ws_does_not_create_session_on_connect_when_not_resuming(
             return None
 
     monkeypatch.setattr(v1_router, "check_rate_limit", _allow_rate_limit)
+    monkeypatch.setattr(v1_router, "verify_token", _mock_verify_token)
     monkeypatch.setattr(v1_router, "WebSocketHandler", FakeHandler)
 
     await v1_router.websocket_endpoint(
         websocket=fake_ws,
         avatar_id="avatar1",
+        token="valid.mock.token",
         voice="en-US-AriaNeural",
         session_id=None,
         resume=False,
         last_seq=0,
         session_manager=fake_sm,
-        connection_manager=fake_cm,
+        connection_manager=fake_cm,  # type: ignore
     )
 
     assert fake_ws.accepted is True
@@ -90,11 +95,16 @@ async def test_ws_resume_uses_existing_session(monkeypatch: pytest.MonkeyPatch) 
     fake_ws = _FakeWebSocket()
     fake_sm = _FakeSessionManager()
     fake_cm = _FakeConnectionManager()
-    resumed_session = SimpleNamespace(session_id="resume-123", avatar_id="avatar1")
+    resumed_session = SimpleNamespace(session_id="resume-123", avatar_id="avatar1", user_id="mock-user")
     created_handler = {}
 
     async def _allow_rate_limit(**kwargs) -> bool:
         return True
+
+    def _mock_verify_token(token: str, expected_type: str = "access"):
+        return ("mock-user", "mock-jti")
+
+    monkeypatch.setattr(v1_router, "verify_token", _mock_verify_token)
 
     async def _connect_existing(session_id: str):
         return resumed_session if session_id == "resume-123" else None
@@ -114,12 +124,13 @@ async def test_ws_resume_uses_existing_session(monkeypatch: pytest.MonkeyPatch) 
     await v1_router.websocket_endpoint(
         websocket=fake_ws,
         avatar_id="avatar1",
+        token="valid.mock.token",
         voice="en-US-AriaNeural",
         session_id="resume-123",
         resume=True,
         last_seq=2,
         session_manager=fake_sm,
-        connection_manager=fake_cm,
+        connection_manager=fake_cm,  # type: ignore
     )
 
     assert fake_ws.accepted is True

@@ -1,3 +1,4 @@
+import apiClient from '@/shared/services/apiClient';
 import { GREETING_DURATION_MS } from '@/widgets/Classroom/constants';
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useAudioDrivenLipSync } from '../hooks/useAudioDrivenLipSync';
@@ -78,6 +79,26 @@ function estimateTimelineDurationMs(item) {
   const fromText = words > 0 ? words * 170 : 0;
 
   return fromText > 0 ? Math.max(180, Math.round(fromText)) : 420;
+}
+
+function normalizeAudioRequestUrl(sourceUrl) {
+  if (typeof sourceUrl !== 'string' || !sourceUrl) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(sourceUrl, window.location.origin);
+    const path = `${parsed.pathname}${parsed.search}`;
+    if (path.startsWith('/api/v1/')) {
+      return path.slice('/api/v1'.length);
+    }
+    return path;
+  } catch {
+    if (sourceUrl.startsWith('/api/v1/')) {
+      return sourceUrl.slice('/api/v1'.length);
+    }
+    return sourceUrl;
+  }
 }
 
 /**
@@ -197,6 +218,7 @@ export default function AvatarController({
   const isPlayingAudioRef = useRef(false);
   const pendingTimelineRef = useRef([]);
   const hasActiveTimelineRef = useRef(false);
+  const audioRequestIdRef = useRef(0);
   // Tracks whether we've started playback for the current audio URL.
   // Cleared when currentPlayUrl changes so the scene picks a fresh talk variant.
   const audioGenerationRef = useRef(0);
@@ -341,6 +363,37 @@ export default function AvatarController({
     onModelLoaded?.();
   };
 
+  const loadSecureAudioUrl = useCallback(
+    async (sourceUrl) => {
+      const requestUrl = normalizeAudioRequestUrl(sourceUrl);
+      if (!requestUrl) {
+        return;
+      }
+
+      const requestId = ++audioRequestIdRef.current;
+
+      try {
+        const { data: blob } = await apiClient.get(requestUrl, { responseType: 'blob' });
+        if (requestId !== audioRequestIdRef.current) {
+          return;
+        }
+
+        const blobUrl = URL.createObjectURL(blob);
+        setCurrentPlayUrl(blobUrl);
+      } catch (err) {
+        if (requestId !== audioRequestIdRef.current) {
+          return;
+        }
+
+        console.error('[AvatarController] Secure audio fetch failed:', err);
+        setIsPlayingAudio(false);
+        setCurrentPlayUrl(null);
+        onError?.(err);
+      }
+    },
+    [onError]
+  );
+
   // --- Stage 1: sync the incoming audioUrl prop into internal play state ---
   // When a new URL arrives during the post-speech pause, it is queued instead
   // of played immediately. Interruptions (new URL while audio is playing) are
@@ -348,6 +401,7 @@ export default function AvatarController({
   useEffect(() => {
     if (!audioUrl) {
       // Stop everything and clear any pending state
+      audioRequestIdRef.current += 1;
       setCurrentPlayUrl(null);
       clearTimeout(pauseTimerRef.current);
       pauseTimerRef.current = null;
@@ -366,8 +420,9 @@ export default function AvatarController({
       };
     }
 
-    setCurrentPlayUrl(audioUrl);
-  }, [audioUrl]);
+    setCurrentPlayUrl(null);
+    void loadSecureAudioUrl(audioUrl);
+  }, [audioUrl, loadSecureAudioUrl]);
 
   // --- Stage 2: begin the mandatory 2.5 s silence after speech ends ---
   const beginPostSpeechPause = useCallback(() => {
@@ -384,10 +439,10 @@ export default function AvatarController({
       const pending = pendingAudioUrlRef.current;
       if (pending) {
         pendingAudioUrlRef.current = null;
-        setCurrentPlayUrl(pending); // triggers Stage 3 to play the queued response
+        void loadSecureAudioUrl(pending); // triggers Stage 3 to play the queued response
       }
     }, INTER_RESPONSE_PAUSE_MS);
-  }, [flush]);
+  }, [flush, loadSecureAudioUrl]);
 
   // Cleanup pause timer on unmount
   useEffect(() => {
@@ -397,6 +452,7 @@ export default function AvatarController({
   // --- Stage 3: actual audio playback (driven by currentPlayUrl, not the prop) ---
   useEffect(() => {
     if (!currentPlayUrl) {
+      audioRef.current = null;
       setIsPlayingAudio(false);
       return;
     }
@@ -419,6 +475,7 @@ export default function AvatarController({
 
     const handleEnded = () => {
       setIsPlayingAudio(false);
+      setCurrentPlayUrl(null);
       beginPostSpeechPause();
     };
 
@@ -426,13 +483,12 @@ export default function AvatarController({
     audio.addEventListener('pause', handlePause);
     audio.addEventListener('ended', handleEnded);
 
-    audio
-      .play()
-      .catch((err) => {
-        console.error('[AvatarController] Audio play failed:', err);
-        setIsPlayingAudio(false);
-        onError?.(err);
-      });
+    audio.play().catch((err) => {
+      console.error('[AvatarController] Audio play failed:', err);
+      setIsPlayingAudio(false);
+      setCurrentPlayUrl(null);
+      onError?.(err);
+    });
 
     return () => {
       audio.removeEventListener('play', handlePlay);
@@ -440,6 +496,12 @@ export default function AvatarController({
       audio.removeEventListener('ended', handleEnded);
       audio.pause();
       audio.src = '';
+      try {
+        URL.revokeObjectURL(currentPlayUrl);
+      } catch {
+        // Ignore revoke failures.
+      }
+      audioRef.current = null;
       setIsPlayingAudio(false);
     };
   }, [currentPlayUrl, beginPostSpeechPause, onError]);

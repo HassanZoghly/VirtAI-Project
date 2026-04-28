@@ -2,8 +2,9 @@
 import { logger } from '@/shared/utils/logger';
 import { ContactShadows, Environment, OrbitControls, useFBX, useGLTF } from '@react-three/drei';
 import { Canvas, useFrame } from '@react-three/fiber';
-import React, { Component, Suspense, useEffect, useMemo, useRef } from 'react';
+import React, { Component, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { AvatarFaceController } from '../AvatarFaceController';
 import { ANIMATION_METADATA, getTransitionFade, MORPH_SMOOTHING } from '../constants';
 import { useRealismEnhancements } from '../hooks/useRealismEnhancements';
@@ -146,6 +147,23 @@ const ANIM = {
   talk72: [{ fbx: `/models/animations/Talk/Talk7.2.fbx${CACHE_BUST}` }],
 };
 
+const TALK_ANIMATIONS = [
+  { name: 'Talk1.1', fbx: ANIM.talk11[0].fbx },
+  { name: 'Talk1.2', fbx: ANIM.talk12[0].fbx },
+  { name: 'Talk2.1', fbx: ANIM.talk21[0].fbx },
+  { name: 'Talk2.2', fbx: ANIM.talk22[0].fbx },
+  { name: 'Talk3.1', fbx: ANIM.talk31[0].fbx },
+  { name: 'Talk3.2', fbx: ANIM.talk32[0].fbx },
+  { name: 'Talk4.1', fbx: ANIM.talk41[0].fbx },
+  { name: 'Talk4.2', fbx: ANIM.talk42[0].fbx },
+  { name: 'Talk5.1', fbx: ANIM.talk51[0].fbx },
+  { name: 'Talk5.2', fbx: ANIM.talk52[0].fbx },
+  { name: 'Talk6.1', fbx: ANIM.talk61[0].fbx },
+  { name: 'Talk6.2', fbx: ANIM.talk62[0].fbx },
+  { name: 'Talk7.1', fbx: ANIM.talk71[0].fbx },
+  { name: 'Talk7.2', fbx: ANIM.talk72[0].fbx },
+];
+
 // Animation fallback map for missing animations
 const ANIMATION_FALLBACK = {
   thinking: 'idle',
@@ -256,70 +274,12 @@ const AvatarRig = React.memo(function AvatarRig({
   );
   const { scene } = useGLTF(modelPath);
 
-  // Load all animation FBX files (static hook calls — must always be the same count)
+  // Load only the critical animations during the initial render pass.
   const greetingFBX = useFBX(ANIM.greeting[0].fbx);
   const idleFBX = useFBX(ANIM.idle[0].fbx);
-  const talk11FBX = useFBX(ANIM.talk11[0].fbx);
-  const talk12FBX = useFBX(ANIM.talk12[0].fbx);
-  const talk21FBX = useFBX(ANIM.talk21[0].fbx);
-  const talk22FBX = useFBX(ANIM.talk22[0].fbx);
-  const talk31FBX = useFBX(ANIM.talk31[0].fbx);
-  const talk32FBX = useFBX(ANIM.talk32[0].fbx);
-  const talk41FBX = useFBX(ANIM.talk41[0].fbx);
-  const talk42FBX = useFBX(ANIM.talk42[0].fbx);
-  const talk51FBX = useFBX(ANIM.talk51[0].fbx);
-  const talk52FBX = useFBX(ANIM.talk52[0].fbx);
-  const talk61FBX = useFBX(ANIM.talk61[0].fbx);
-  const talk62FBX = useFBX(ANIM.talk62[0].fbx);
-  const talk71FBX = useFBX(ANIM.talk71[0].fbx);
-  const talk72FBX = useFBX(ANIM.talk72[0].fbx);
-
-  const talkFBXs = useMemo(
-    () => [
-      { name: 'Talk1.1', fbx: talk11FBX },
-      { name: 'Talk1.2', fbx: talk12FBX },
-      { name: 'Talk2.1', fbx: talk21FBX },
-      { name: 'Talk2.2', fbx: talk22FBX },
-      { name: 'Talk3.1', fbx: talk31FBX },
-      { name: 'Talk3.2', fbx: talk32FBX },
-      { name: 'Talk4.1', fbx: talk41FBX },
-      { name: 'Talk4.2', fbx: talk42FBX },
-      { name: 'Talk5.1', fbx: talk51FBX },
-      { name: 'Talk5.2', fbx: talk52FBX },
-      { name: 'Talk6.1', fbx: talk61FBX },
-      { name: 'Talk6.2', fbx: talk62FBX },
-      { name: 'Talk7.1', fbx: talk71FBX },
-      { name: 'Talk7.2', fbx: talk72FBX },
-    ],
-    [
-      talk11FBX,
-      talk12FBX,
-      talk21FBX,
-      talk22FBX,
-      talk31FBX,
-      talk32FBX,
-      talk41FBX,
-      talk42FBX,
-      talk51FBX,
-      talk52FBX,
-      talk61FBX,
-      talk62FBX,
-      talk71FBX,
-      talk72FBX,
-    ]
-  );
-
-  // Log loaded FBX data to verify animations are present
-  useEffect(() => {
-    if (import.meta.env.DEV) {
-      console.debug('[AvatarScene] FBX Load Status:');
-      console.debug('  - Greeting:', greetingFBX?.animations?.length || 0, 'clips');
-      console.debug('  - Idle:', idleFBX?.animations?.length || 0, 'clips');
-      talkFBXs.forEach(({ name, fbx }) => {
-        console.debug(`  - ${name}:`, fbx?.animations?.length || 0, 'clips');
-      });
-    }
-  }, [greetingFBX, idleFBX, talkFBXs]);
+  const loadedTalkAnimationsRef = useRef(new Map());
+  const talkPreloadStartedRef = useRef(false);
+  const [talkAnimationRevision, setTalkAnimationRevision] = useState(0);
 
   const mixerRef = useRef(null);
   const actionsRef = useRef({});
@@ -480,8 +440,8 @@ const AvatarRig = React.memo(function AvatarRig({
     onModelLoaded?.();
   }, [scene, onModelLoaded]);
 
-  // Setup animation clips - only include animations that loaded successfully
-  const clips = useMemo(() => {
+  // Setup critical animation clips - only include animations that loaded successfully.
+  const criticalClips = useMemo(() => {
     const result = [];
     const normalizeClip = (clip, name) => {
       const c = clip.clone();
@@ -489,30 +449,35 @@ const AvatarRig = React.memo(function AvatarRig({
       return sanitizeClipRootMotion(c, name);
     };
 
-    const g = greetingFBX?.animations?.[0];
-    const i = idleFBX?.animations?.[0];
+    const greetingClip = greetingFBX?.animations?.[0];
+    const idleClip = idleFBX?.animations?.[0];
 
-    if (g) {
-      result.push(normalizeClip(g, 'greeting'));
+    if (greetingClip) {
+      result.push(normalizeClip(greetingClip, 'greeting'));
     }
-    if (i) {
-      result.push(normalizeClip(i, 'idle'));
-    }
-
-    // Add all talk variants
-    for (const { name, fbx } of talkFBXs) {
-      const clip = fbx?.animations?.[0];
-      if (clip) {
-        result.push(normalizeClip(clip, name));
-      }
+    if (idleClip) {
+      result.push(normalizeClip(idleClip, 'idle'));
     }
 
     if (import.meta.env.DEV) {
-      console.debug('[AvatarScene] Loaded clips:', result.map((c) => c.name).join(', '));
+      console.debug('[AvatarScene] Loaded critical clips:', result.map((c) => c.name).join(', '));
     }
 
     return result;
-  }, [greetingFBX, idleFBX, talkFBXs]);
+  }, [greetingFBX, idleFBX]);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.debug('[AvatarScene] FBX Load Status:');
+      console.debug('  - Greeting:', greetingFBX?.animations?.length || 0, 'clips');
+      console.debug('  - Idle:', idleFBX?.animations?.length || 0, 'clips');
+      console.debug(
+        '  - Talk:',
+        loadedTalkAnimationsRef.current.size,
+        'clips loaded in background'
+      );
+    }
+  }, [greetingFBX, idleFBX, talkAnimationRevision]);
 
   useEffect(() => {
     if (!scene || stableSceneTransformRef.current.initialized) {
@@ -526,7 +491,7 @@ const AvatarRig = React.memo(function AvatarRig({
 
   // Setup animation mixer
   useEffect(() => {
-    if (!scene || clips.length === 0) {
+    if (!scene || criticalClips.length === 0) {
       return;
     }
 
@@ -534,7 +499,7 @@ const AvatarRig = React.memo(function AvatarRig({
     const mixer = mixerRef.current;
 
     const actions = {};
-    for (const clip of clips) {
+    for (const clip of criticalClips) {
       const action = mixer.clipAction(clip);
       action.enabled = true;
       action.clampWhenFinished = true;
@@ -546,7 +511,7 @@ const AvatarRig = React.memo(function AvatarRig({
     if (import.meta.env.DEV) {
       console.debug(
         '[AvatarScene] Available animation clips:',
-        clips.map((c) => `${c.name} (${c.duration.toFixed(2)}s)`).join(', ')
+        criticalClips.map((c) => `${c.name} (${c.duration.toFixed(2)}s)`).join(', ')
       );
     }
 
@@ -563,7 +528,89 @@ const AvatarRig = React.memo(function AvatarRig({
       currentActionNameRef.current = null; // Reset name tracking
       currentRangeRef.current = null;
     };
-  }, [scene, clips]);
+  }, [scene, criticalClips]);
+
+  useEffect(() => {
+    if (talkPreloadStartedRef.current || criticalClips.length === 0) {
+      return;
+    }
+
+    talkPreloadStartedRef.current = true;
+    let cancelled = false;
+    const loader = new FBXLoader();
+
+    const loadTalkAnimations = async () => {
+      for (const { name, fbx } of TALK_ANIMATIONS) {
+        if (cancelled || loadedTalkAnimationsRef.current.has(name)) {
+          continue;
+        }
+
+        try {
+          const loaded = await loader.loadAsync(fbx);
+          if (cancelled) {
+            return;
+          }
+
+          loadedTalkAnimationsRef.current.set(name, loaded);
+          setTalkAnimationRevision((revision) => revision + 1);
+
+          if (import.meta.env.DEV) {
+            console.debug(`[AvatarScene] Background-loaded animation '${name}'`);
+          }
+        } catch (err) {
+          if (import.meta.env.DEV) {
+            console.warn(`[AvatarScene] Failed to lazy-load '${name}':`, err);
+          }
+        }
+      }
+    };
+
+    const scheduleLoad =
+      typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function'
+        ? window.requestIdleCallback(
+            () => {
+              void loadTalkAnimations();
+            },
+            { timeout: 1500 }
+          )
+        : window.setTimeout(() => {
+            void loadTalkAnimations();
+          }, 0);
+
+    return () => {
+      cancelled = true;
+      if (typeof window !== 'undefined' && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(scheduleLoad);
+      } else {
+        clearTimeout(scheduleLoad);
+      }
+    };
+  }, [criticalClips.length]);
+
+  useEffect(() => {
+    if (!mixerRef.current || loadedTalkAnimationsRef.current.size === 0) {
+      return;
+    }
+
+    for (const [name, fbx] of loadedTalkAnimationsRef.current.entries()) {
+      if (actionsRef.current[name]) {
+        continue;
+      }
+
+      const clip = fbx?.animations?.[0];
+      if (!clip) {
+        continue;
+      }
+
+      const normalizedClip = sanitizeClipRootMotion(clip.clone(), name);
+      normalizedClip.name = name;
+
+      const action = mixerRef.current.clipAction(normalizedClip);
+      action.enabled = true;
+      action.clampWhenFinished = true;
+      actionsRef.current[name] = action;
+    }
+  }, [scene, criticalClips, talkAnimationRevision]);
 
   // Play animation with smooth transitions and backend timeline directive support.
   const playAction = (request, { loop = THREE.LoopRepeat, fade } = {}) => {
@@ -763,11 +810,15 @@ const AvatarRig = React.memo(function AvatarRig({
 
     const fromCategory = categoryFromName(currentActionNameRef.current);
     const toCategory = categoryFromName(resolvedName);
-    const fadeDuration = THREE.MathUtils.clamp(
+    const baseFadeDuration = THREE.MathUtils.clamp(
       (fade ?? blendFade ?? getTransitionFade(fromCategory, toCategory)) + transitionFadeBoost,
       0.08,
       0.6
     );
+    const idleTalkTransition =
+      (fromCategory === 'idle' && toCategory === 'talk') ||
+      (fromCategory === 'talk' && toCategory === 'idle');
+    const fadeDuration = idleTalkTransition ? 0.5 : baseFadeDuration;
 
     next.setLoop(loop, Infinity);
     next.reset();
@@ -848,7 +899,7 @@ const AvatarRig = React.memo(function AvatarRig({
     }
 
     playAction(currentAnimation);
-  }, [currentAnimation, scene, clips]);
+  }, [currentAnimation, scene, criticalClips, talkAnimationRevision]);
 
   // Apply emotion data from AI response to face controller
   useEffect(() => {
@@ -1318,8 +1369,7 @@ useGLTF.preload('/models/avatar1.glb');
 // THREE.Cache.enabled = true (set above) ensures FBXLoader
 // will reuse these cached responses instead of re-downloading
 if (typeof window !== 'undefined') {
-  [
-    '/models/animations/Idle/Idle.fbx',
-    '/models/animations/Greeting/Greeting.fbx',
-  ].forEach((url) => fetch(url, { priority: 'low' }).catch(() => {}));
+  ['/models/animations/Idle/Idle.fbx', '/models/animations/Greeting/Greeting.fbx'].forEach((url) =>
+    fetch(url, { priority: 'low' }).catch(() => {})
+  );
 }

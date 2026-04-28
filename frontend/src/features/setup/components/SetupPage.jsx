@@ -33,12 +33,16 @@ export default function SetupPage() {
     if (saved) {
       const AVATARS = Object.values(avatarImages);
       if (saved.avatarId && AVATARS) {
-        const a = AVATARS.find(av => av.id === saved.avatarId);
-        if (a) setSelectedAvatar(a);
+        const a = AVATARS.find((av) => av.id === saved.avatarId);
+        if (a) {
+          setSelectedAvatar(a);
+        }
       }
       if (saved.voiceId && VOICES) {
-        const v = VOICES.find(vo => vo.id === saved.voiceId);
-        if (v) setSelectedVoice(v);
+        const v = VOICES.find((vo) => vo.id === saved.voiceId);
+        if (v) {
+          setSelectedVoice(v);
+        }
       }
     }
   }, []);

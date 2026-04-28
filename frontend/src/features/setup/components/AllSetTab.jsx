@@ -4,7 +4,7 @@ import { FiCheck } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 
 import { updateSetupStatus } from '@/features/auth/services/authApi';
-import { useAuthStore } from '@/features/auth/store/authStore';
+import { selectIsAuthenticated, useAuthStore } from '@/features/auth/store/authStore';
 import { markStartNewConversation } from '@/features/session/services/sessionStorage';
 import Toast from '@/shared/utils/toast';
 import { saveSetup } from '../services/setupStorage';
@@ -15,10 +15,12 @@ const toast = new Toast();
 export default function AllSetTab({ avatar, voice }) {
   const navigate = useNavigate();
   const setUser = useAuthStore((s) => s.setUser);
+  const isInitializing = useAuthStore((s) => s.isInitializing);
+  const isAuthenticated = useAuthStore(selectIsAuthenticated);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
-    if (!avatar || !voice || isSaving) {
+    if (!avatar || !voice || isSaving || isInitializing || !isAuthenticated) {
       return;
     }
 
@@ -89,13 +91,17 @@ export default function AllSetTab({ avatar, voice }) {
       <motion.button
         className="shiny-save-btn"
         onClick={handleSave}
-        disabled={!isReady || isSaving}
+        disabled={!isReady || isSaving || isInitializing || !isAuthenticated}
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ delay: 1.3, type: 'spring', stiffness: 300, damping: 20 }}
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
-        style={!isReady || isSaving ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+        style={
+          !isReady || isSaving || isInitializing || !isAuthenticated
+            ? { opacity: 0.4, cursor: 'not-allowed' }
+            : undefined
+        }
       >
         <span style={{ position: 'relative', zIndex: 1 }}>
           {isSaving ? 'Saving...' : 'Save & Continue to Classroom →'}

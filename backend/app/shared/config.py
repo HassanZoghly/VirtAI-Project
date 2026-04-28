@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     _DEFAULT_JWT_SECRET = "change-me-in-production-use-a-long-random-string"
 
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", case_sensitive=True
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=True, extra="ignore"
     )
 
     # App

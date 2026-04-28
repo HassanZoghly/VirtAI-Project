@@ -60,21 +60,24 @@ def create_access_token(user_id: str) -> str:
     )
 
 
-def create_refresh_token(user_id: str) -> str:
+def create_refresh_token(user_id: str, token_version: int = 0) -> str:
     settings = get_settings()
     return _create_token(
-        data={"sub": user_id},
+        data={"sub": user_id, "token_version": token_version},
         expires_delta=timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         token_type="refresh",
     )
 
 
-def verify_token(token: str, expected_type: str = "access") -> tuple[str, str] | None:
+def verify_token(
+    token: str, expected_type: str = "access"
+) -> tuple[str, str] | tuple[str, str, int] | None:
     """
     Decode and verify a JWT token.
 
     Returns:
-        (user_id, jti) tuple on success — jti needed for blacklist checks.
+        (user_id, jti) tuple on success for access tokens.
+        (user_id, jti, token_version) tuple on success for refresh tokens.
         None on failure (invalid, expired, wrong type).
     """
     settings = get_settings()
@@ -82,7 +85,7 @@ def verify_token(token: str, expected_type: str = "access") -> tuple[str, str] |
         payload = jwt.decode(
             token,
             settings.JWT_SECRET_KEY,
-            algorithms=[settings.JWT_ALGORITHM],
+            algorithms=["HS256"],
         )
         if payload.get("type") != expected_type:
             return None
@@ -90,6 +93,8 @@ def verify_token(token: str, expected_type: str = "access") -> tuple[str, str] |
         jti = payload.get("jti", "")
         if not user_id:
             return None
+        if expected_type == "refresh":
+            return user_id, jti, int(payload.get("token_version", 0))
         return user_id, jti
     except JWTError:
         return None
@@ -102,7 +107,7 @@ def extract_jti(token: str) -> str | None:
         payload = jwt.decode(
             token,
             settings.JWT_SECRET_KEY,
-            algorithms=[settings.JWT_ALGORITHM],
+            algorithms=["HS256"],
             options={"verify_exp": False},  # allow expired tokens to be blacklisted
         )
         return payload.get("jti")
@@ -117,7 +122,7 @@ def extract_user_id(token: str) -> str | None:
         payload = jwt.decode(
             token,
             settings.JWT_SECRET_KEY,
-            algorithms=[settings.JWT_ALGORITHM],
+            algorithms=["HS256"],
             options={"verify_exp": False},
         )
         return payload.get("sub")

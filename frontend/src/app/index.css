@@ -3,7 +3,7 @@
 @theme {
   --color-dark: #1a1a1a;
   --color-crimson: #6d001a;
-  --color-gold: #B4AB8B;
+  --color-gold: #b4ab8b;
   --color-offwhite: #f5f1ec;
 }
 
@@ -28,8 +28,8 @@
   --card-bg: #1e1e1e;
   --modal-bg: #252525;
 
-  --accent-primary: #B4AB8B;
-  --accent-secondary: #B4AB8B;
+  --accent-primary: #b4ab8b;
+  --accent-secondary: #b4ab8b;
   --accent-soft: rgba(180, 171, 139, 0.1);
 
   --text-primary: #ffffff;
@@ -45,7 +45,7 @@
   /* Overview palette */
   --color-dark: #1a1a1a;
   --color-crimson: #6d001a;
-  --color-gold: #B4AB8B;
+  --color-gold: #b4ab8b;
   --color-offwhite: #f5f1ec;
 
   /* Transitions */
@@ -77,8 +77,8 @@
     --text-secondary: #333333;
     --text-muted: #666666;
     --border-color: #cccccc;
-    --accent-primary: #B4AB8B;
-    --accent-secondary: #B4AB8B;
+    --accent-primary: #b4ab8b;
+    --accent-secondary: #b4ab8b;
   }
 }
 
@@ -98,7 +98,7 @@ body {
 /* ── Dark Theme Scrollbar ── */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #B4AB8B #1a1916;
+  scrollbar-color: #b4ab8b #1a1916;
 }
 
 ::-webkit-scrollbar {
@@ -112,17 +112,17 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #B4AB8B;
+  background: #b4ab8b;
   border-radius: 10px;
   min-height: 30px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #B4AB8B;
+  background: #b4ab8b;
 }
 
 ::-webkit-scrollbar-thumb:active {
-  background: #B4AB8B;
+  background: #b4ab8b;
 }
 
 /* Hide scrollbar arrow buttons globally but keep scrollbar track/thumb visible */
@@ -184,7 +184,7 @@ body::-webkit-scrollbar-button:vertical:end:increment,
 
 /* Global focus-visible ring for keyboard navigation */
 :focus-visible {
-  outline: 2px solid var(--accent-primary, #B4AB8B);
+  outline: 2px solid var(--accent-primary, #b4ab8b);
   outline-offset: 2px;
 }
 

@@ -19,9 +19,11 @@ from app.shared.config import get_settings
 from app.shared.security import hash_password, verify_password
 
 
+_user_repository = MongoUserRepository()
+
 def _repo() -> MongoUserRepository:
     """Factory for the user repository (no DI container needed)."""
-    return MongoUserRepository()
+    return _user_repository
 
 
 def _now() -> datetime:
@@ -95,7 +97,7 @@ _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 _GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
 
-def build_google_auth_url() -> str:
+def build_google_auth_url(state: str = "") -> str:
     settings = get_settings()
     params = (
         f"client_id={settings.GOOGLE_CLIENT_ID}"
@@ -105,6 +107,8 @@ def build_google_auth_url() -> str:
         "&access_type=offline"
         "&prompt=consent"
     )
+    if state:
+        params += f"&state={state}"
     return f"https://accounts.google.com/o/oauth2/v2/auth?{params}"
 
 

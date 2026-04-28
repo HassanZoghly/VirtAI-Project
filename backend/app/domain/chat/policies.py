@@ -11,6 +11,27 @@ Extracted from:
 from __future__ import annotations
 
 from app.domain.chat.entities import ConversationHistory
+import re
+
+class PromptSanitizer:
+    """Strips common jailbreak patterns from user input."""
+    
+    JAILBREAK_PATTERNS = [
+        r"(?i)\bignore\s+(all\s+)?(previous|prior)\s+instructions\b",
+        r"(?i)\bforget\s+(all\s+)?(previous|prior)\s+instructions\b",
+        r"(?i)\bignore\s+(the\s+)?above\s+instructions\b",
+        r"(?i)\byou\s+are\s+now\b",
+        r"(?i)\bdisregard\s+(all\s+)?previous\b",
+    ]
+    
+    @classmethod
+    def sanitize(cls, text: str) -> str:
+        if not text:
+            return text
+        sanitized = text
+        for pattern in cls.JAILBREAK_PATTERNS:
+            sanitized = re.sub(pattern, "[REDACTED]", sanitized)
+        return sanitized
 
 # ── Conversation Trimming ─────────────────────────────────────────────────────
 MAX_MESSAGES_DEFAULT = 20  # max user+assistant pairs to keep

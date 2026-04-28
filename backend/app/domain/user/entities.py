@@ -25,6 +25,7 @@ class UserEntity:
     google_id: Optional[str] = None
     setup_complete: bool = False
     is_active: bool = True
+    refresh_token_version: int = 0
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 

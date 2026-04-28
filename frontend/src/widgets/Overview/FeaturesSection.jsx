@@ -15,7 +15,8 @@ export default function FeaturesSection() {
           Core <span className="text-gold">Features</span>
         </h2>
         <p className="mt-5 text-lg leading-relaxed text-offwhite/70">
-          Everything you need for an immersive AI-powered learning experience, engineered for reliability.
+          Everything you need for an immersive AI-powered learning experience, engineered for
+          reliability.
         </p>
       </motion.div>
 
@@ -38,9 +39,7 @@ export default function FeaturesSection() {
                 <h3 className="text-2xl font-semibold tracking-wide text-offwhite">{f.title}</h3>
               </div>
               <div className="flex-1">
-                <p className="text-base leading-relaxed text-offwhite/60">
-                  {f.description}
-                </p>
+                <p className="text-base leading-relaxed text-offwhite/60">{f.description}</p>
               </div>
             </motion.div>
           );

@@ -4,14 +4,7 @@ import { FiCheck } from 'react-icons/fi';
 import { HiPlay, HiStop } from 'react-icons/hi2';
 import { voices } from '../data/voices';
 
-export default function VoiceTab({
-  selected,
-  onSelect,
-  avatarGender,
-  onPlay,
-  onStop,
-  isPlaying,
-}) {
+export default function VoiceTab({ selected, onSelect, avatarGender, onPlay, onStop, isPlaying }) {
   const filteredVoices = avatarGender ? voices.filter((v) => v.gender === avatarGender) : voices;
   const [playingId, setPlayingId] = useState(null);
   const playingIdRef = useRef(null);

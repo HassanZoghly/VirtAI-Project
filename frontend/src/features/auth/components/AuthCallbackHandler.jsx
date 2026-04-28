@@ -12,7 +12,8 @@ export default function AuthCallbackHandler() {
 
   useEffect(() => {
     const code = searchParams.get('code');
-    if (!code) {
+    const state = searchParams.get('state');
+    if (!code || !state) {
       navigate('/auth', { replace: true });
       return;
     }
@@ -20,7 +21,7 @@ export default function AuthCallbackHandler() {
       return;
     }
     called.current = true;
-    handleCallback(code);
+    handleCallback(code, state);
   }, [searchParams, handleCallback, navigate]);
 
   return (

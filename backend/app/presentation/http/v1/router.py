@@ -15,6 +15,7 @@ from app.presentation.http.v1.endpoints.health import router as health_router
 from app.presentation.ws.connection_manager import WSConnectionManager
 from app.presentation.ws.gateway import WebSocketHandler
 from app.shared.config import get_settings
+from app.shared.security import verify_token
 
 settings = get_settings()
 
@@ -30,6 +31,7 @@ router.include_router(auth_router, prefix="/auth", tags=["auth"])
 async def websocket_endpoint(
     websocket: WebSocket,
     avatar_id: str,
+    token: str | None = Query(default=None),
     voice: str = Query(default=""),
     session_id: str | None = Query(default=None),
     resume: bool = Query(default=False),
@@ -74,6 +76,20 @@ async def websocket_endpoint(
         logger.error(f"[WS] Failed to accept connection: {e}")
         return
 
+    # WebSocket Auth (S1-01)
+    if not token:
+        logger.warning("[WS] Missing token")
+        await websocket.close(code=4401, reason="Missing token")
+        return
+
+    verified = verify_token(token, expected_type="access")
+    if not verified:
+        logger.warning("[WS] Invalid token")
+        await websocket.close(code=4401, reason="Invalid token")
+        return
+
+    user_id, _ = verified
+
     # Create or resume session
     resumed = False
     session = None
@@ -82,6 +98,13 @@ async def websocket_endpoint(
             session = await session_manager.connect_existing_session(session_id)
             if session is None:
                 await websocket.close(code=4404, reason="Session not found for resume")
+                return
+            # Session Fixation (S1-06)
+            if session.user_id != user_id:
+                logger.warning(
+                    f"[WS] Unauthorized session resume attempt by user {user_id} for session {session_id}"
+                )
+                await websocket.close(code=4403, reason="Unauthorized session resume")
                 return
             resumed = True
             logger.info(f"[WS] Session resumed | session_id={session.session_id}")
@@ -102,6 +125,7 @@ async def websocket_endpoint(
         websocket=websocket,
         session=session,
         session_manager=session_manager,
+        user_id=user_id,
         avatar_id=avatar_id,
         voice_id=voice_id,
         connection_manager=connection_manager,
@@ -125,4 +149,6 @@ async def websocket_endpoint(
         if handler.session.session_id:
             await connection_manager.unregister(handler.session.session_id, websocket)
             session_manager.disconnect_session(handler.session.session_id)
-            logger.info(f"[WS] Session disconnected (kept for resume) | id={handler.session.session_id}")
+            logger.info(
+                f"[WS] Session disconnected (kept for resume) | id={handler.session.session_id}"
+            )

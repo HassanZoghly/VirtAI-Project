@@ -121,6 +121,7 @@ class WebSocketHandler:
         websocket: WebSocket,
         session: Session | None,
         session_manager,
+        user_id: str,
         avatar_id: str,
         voice_id: str,
         connection_manager: WSConnectionManager,
@@ -129,6 +130,7 @@ class WebSocketHandler:
     ):
         self.ws = websocket
         self._session_manager = session_manager
+        self._user_id = user_id
         self._avatar_id = avatar_id
         self._voice_id = voice_id
         self._session_pending = session is None
@@ -165,6 +167,7 @@ class WebSocketHandler:
             return
 
         session = await self._session_manager.create_session(
+            user_id=self._user_id,
             avatar_id=self._avatar_id,
             voice_id=self._voice_id,
         )
@@ -198,9 +201,11 @@ class WebSocketHandler:
                         "avatar_id": self.session.avatar_id,
                         "message": "Connected and ready",
                         "resumed": self.resumed,
-                        "last_seq": self.connection_manager.latest_sequence(self.session.session_id)
-                        if self.session.session_id
-                        else 0,
+                        "last_seq": (
+                            self.connection_manager.latest_sequence(self.session.session_id)
+                            if self.session.session_id
+                            else 0
+                        ),
                         "timestamp": time.time(),
                     },
                 )
@@ -932,7 +937,9 @@ class WebSocketHandler:
             await self.ws.send_text(serialized)
             return
 
-        serialized = await self.connection_manager.stamp_and_record(self.session.session_id, envelope)
+        serialized = await self.connection_manager.stamp_and_record(
+            self.session.session_id, envelope
+        )
         await self.ws.send_text(serialized)
 
     async def _safe_send(self, message: ServerMessage) -> None:
@@ -949,10 +956,14 @@ class WebSocketHandler:
                 await self.ws.send_text(serialized)
                 return
 
-            serialized = await self.connection_manager.stamp_and_record(self.session.session_id, envelope)
+            serialized = await self.connection_manager.stamp_and_record(
+                self.session.session_id, envelope
+            )
             await self.ws.send_text(serialized)
         except Exception:
             pass
+
+    _PROTOCOL_MESSAGE_TYPES: dict[str, str] = {}
 
     async def _send_protocol_message(self, message: BaseModel) -> None:
         """
@@ -968,23 +979,14 @@ class WebSocketHandler:
             return
 
         try:
-            # Get the message type from the model class name
-            # e.g., ChatDelta -> chat.delta, PipelineState -> pipeline.state, TTSReady -> tts.ready
             class_name = message.__class__.__name__
 
-            # Convert CamelCase to snake_case with dots
-            # Handle consecutive capitals correctly (TTS -> tts, not t.t.s)
+            if class_name not in self._PROTOCOL_MESSAGE_TYPES:
+                snake_case = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", class_name)
+                snake_case = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", snake_case)
+                self._PROTOCOL_MESSAGE_TYPES[class_name] = snake_case.lower().replace("_", ".")
 
-            # Insert underscore before uppercase letters that follow lowercase letters or digits
-            # This handles: ChatDelta -> Chat_Delta, TTSReady -> TTS_Ready
-            snake_case = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", class_name)
-
-            # Insert underscore before uppercase letters that are followed by lowercase letters
-            # This handles: TTSReady -> TTS_Ready (already done), HTTPSConnection -> HTTPS_Connection
-            snake_case = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", snake_case)
-
-            # Convert to lowercase and replace underscores with dots
-            message_type = snake_case.lower().replace("_", ".")
+            message_type = self._PROTOCOL_MESSAGE_TYPES[class_name]
 
             # Create envelope with type and data
             envelope = {
@@ -997,7 +999,9 @@ class WebSocketHandler:
                 await self.ws.send_text(serialized)
                 return
 
-            serialized = await self.connection_manager.stamp_and_record(self.session.session_id, envelope)
+            serialized = await self.connection_manager.stamp_and_record(
+                self.session.session_id, envelope
+            )
             await self.ws.send_text(serialized)
 
         except Exception as e:

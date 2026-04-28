@@ -158,6 +158,10 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # ── CSRF ──────────────────────────────────────────────────────────────────
+    from app.shared.csrf import CSRFMiddleware
+    app.add_middleware(CSRFMiddleware)
+
     # ── Error Handlers ────────────────────────────────────────────────────────
     app.add_exception_handler(AvatarBaseException, avatar_exception_handler) # type: ignore
     app.add_exception_handler(Exception, generic_exception_handler)

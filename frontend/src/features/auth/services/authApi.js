@@ -31,12 +31,10 @@ export async function getGoogleAuthUrl() {
   return data.url;
 }
 
-export async function exchangeGoogleCode(code) {
-  const { data } = await apiClient.post('/auth/google/callback', { code });
+export async function exchangeGoogleCode(code, state) {
+  const { data } = await apiClient.post('/auth/google/callback', { code, state });
   return data;
 }
-
-
 
 export async function logoutUser() {
   await apiClient.post('/auth/logout');

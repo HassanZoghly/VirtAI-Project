@@ -7,7 +7,7 @@ import {
   PiPlusFill,
   PiPencilSimpleFill,
   PiTrashSimpleFill,
-  PiUserGearFill
+  PiUserGearFill,
 } from 'react-icons/pi';
 
 /** Format a timestamp to a short relative / absolute label. */
@@ -55,7 +55,7 @@ const SessionList = memo(function SessionList({
   onNewSession,
   onDeleteSession,
   onRenameSession,
-  onCloseDrawer
+  onCloseDrawer,
 }) {
   const navigate = useNavigate();
   const [editingId, setEditingId] = useState(null);
@@ -67,7 +67,9 @@ const SessionList = memo(function SessionList({
 
   // Close context menu on any click outside of it
   useEffect(() => {
-    if (!contextMenu) return;
+    if (!contextMenu) {
+      return;
+    }
     function handleClickOutside(event) {
       if (contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
         setContextMenu(null);
@@ -85,7 +87,9 @@ const SessionList = memo(function SessionList({
 
   // Close context menu on scroll
   useEffect(() => {
-    if (!contextMenu) return;
+    if (!contextMenu) {
+      return;
+    }
     const handleScroll = () => setContextMenu(null);
     window.addEventListener('scroll', handleScroll, true);
     return () => window.removeEventListener('scroll', handleScroll, true);
@@ -105,10 +109,13 @@ const SessionList = memo(function SessionList({
     setContextMenu({ sessionId, x: e.clientX, y: e.clientY });
   }, []);
 
-  const handleDelete = useCallback((sessionId) => {
-    onDeleteSession(sessionId);
-    setContextMenu(null);
-  }, [onDeleteSession]);
+  const handleDelete = useCallback(
+    (sessionId) => {
+      onDeleteSession(sessionId);
+      setContextMenu(null);
+    },
+    [onDeleteSession]
+  );
 
   const startEditing = useCallback((session) => {
     setEditingId(session.id);
@@ -116,45 +123,54 @@ const SessionList = memo(function SessionList({
     setContextMenu(null);
   }, []);
 
-  const saveEdit = useCallback((sessionId) => {
-    if (editValue.trim() && editingId === sessionId) {
-      onRenameSession(sessionId, editValue.trim());
-    }
-    setEditingId(null);
-  }, [editValue, editingId, onRenameSession]);
-
-  const handleEditKeyDown = useCallback((e, sessionId) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      saveEdit(sessionId);
-    } else if (e.key === 'Escape') {
+  const saveEdit = useCallback(
+    (sessionId) => {
+      if (editValue.trim() && editingId === sessionId) {
+        onRenameSession(sessionId, editValue.trim());
+      }
       setEditingId(null);
-    }
-  }, [saveEdit]);
+    },
+    [editValue, editingId, onRenameSession]
+  );
 
-  const handleSessionSelect = useCallback((id) => {
-    onSessionSelect(id);
-    if (onCloseDrawer && window.innerWidth < 1024) {
-      onCloseDrawer();
-    }
-  }, [onSessionSelect, onCloseDrawer]);
+  const handleEditKeyDown = useCallback(
+    (e, sessionId) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        saveEdit(sessionId);
+      } else if (e.key === 'Escape') {
+        setEditingId(null);
+      }
+    },
+    [saveEdit]
+  );
+
+  const handleSessionSelect = useCallback(
+    (id) => {
+      onSessionSelect(id);
+      if (onCloseDrawer && window.innerWidth < 1024) {
+        onCloseDrawer();
+      }
+    },
+    [onSessionSelect, onCloseDrawer]
+  );
 
   const handleSetupClick = useCallback(() => {
     navigate('/setup');
-    if (onCloseDrawer) onCloseDrawer();
+    if (onCloseDrawer) {
+      onCloseDrawer();
+    }
   }, [navigate, onCloseDrawer]);
 
   // Find the session object for the context menu (needed for "Rename")
-  const contextSession = contextMenu
-    ? sessions.find((s) => s.id === contextMenu.sessionId)
-    : null;
+  const contextSession = contextMenu ? sessions.find((s) => s.id === contextMenu.sessionId) : null;
 
   return (
     <div className="sidebar-inner">
       {/* 1. Avatar & System Setup Card */}
       <div className="sidebar-setup-card-wrapper">
-        <button 
-          className="sidebar-setup-card" 
+        <button
+          className="sidebar-setup-card"
           onClick={handleSetupClick}
           aria-label="Avatar and System Setup"
         >
@@ -173,11 +189,7 @@ const SessionList = memo(function SessionList({
           <h3 className="sidebar-section-title">
             <PiChatsFill /> Chats
           </h3>
-          <button
-            className="sidebar-new-chat-btn"
-            onClick={onNewSession}
-            aria-label="New chat"
-          >
+          <button className="sidebar-new-chat-btn" onClick={onNewSession} aria-label="New chat">
             <PiPlusFill size={14} /> New Chat
           </button>
         </div>
@@ -205,7 +217,7 @@ const SessionList = memo(function SessionList({
                     aria-label={`Open chat: ${session.title || 'New chat'}`}
                   >
                     <PiChatCircleTextFill className="session-icon" />
-                    
+
                     <div className="session-info">
                       {isEditing ? (
                         <input
@@ -221,10 +233,12 @@ const SessionList = memo(function SessionList({
                       ) : (
                         <div className="session-title-row">
                           <span className="session-title">{session.title || 'New chat'}</span>
-                          {displayTime && <span className="session-time">{formatTime(displayTime)}</span>}
+                          {displayTime && (
+                            <span className="session-time">{formatTime(displayTime)}</span>
+                          )}
                         </div>
                       )}
-                      
+
                       {!isEditing && (
                         <div className="session-preview-row">
                           <span className="session-preview">
@@ -242,36 +256,34 @@ const SessionList = memo(function SessionList({
       </div>
 
       {/* Floating Context Menu — rendered via portal at cursor position */}
-      {contextMenu && contextSession && createPortal(
-        <div
-          className="session-context-menu"
-          ref={contextMenuRef}
-          style={{
-            position: 'fixed',
-            top: contextMenu.y,
-            left: contextMenu.x,
-            zIndex: 9999,
-          }}
-        >
-          <button 
-            className="context-menu-item"
-            onClick={() => startEditing(contextSession)}
+      {contextMenu &&
+        contextSession &&
+        createPortal(
+          <div
+            className="session-context-menu"
+            ref={contextMenuRef}
+            style={{
+              position: 'fixed',
+              top: contextMenu.y,
+              left: contextMenu.x,
+              zIndex: 9999,
+            }}
           >
-            <PiPencilSimpleFill /> Rename
-          </button>
-          <div className="context-menu-divider" />
-          <button 
-            className="context-menu-item danger"
-            onClick={() => handleDelete(contextMenu.sessionId)}
-          >
-            <PiTrashSimpleFill /> Delete
-          </button>
-        </div>,
-        document.body
-      )}
+            <button className="context-menu-item" onClick={() => startEditing(contextSession)}>
+              <PiPencilSimpleFill /> Rename
+            </button>
+            <div className="context-menu-divider" />
+            <button
+              className="context-menu-item danger"
+              onClick={() => handleDelete(contextMenu.sessionId)}
+            >
+              <PiTrashSimpleFill /> Delete
+            </button>
+          </div>,
+          document.body
+        )}
     </div>
   );
 });
 
 export default SessionList;
-

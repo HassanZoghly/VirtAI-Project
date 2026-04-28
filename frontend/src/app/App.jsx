@@ -1,8 +1,9 @@
-import { Component, Suspense, useEffect } from 'react';
+import { Component, Suspense, useEffect, useRef } from 'react';
 import { Helmet, HelmetProvider } from 'react-helmet-async';
 import { BrowserRouter as Router } from 'react-router-dom';
 import './App.css';
 
+import { useAuthStore } from '@/features/auth/store/authStore';
 import PageLoader from '@/shared/components/PageLoader';
 import { Toaster } from 'sonner';
 import AppRoutes from './routes';
@@ -39,28 +40,35 @@ class ErrorBoundary extends Component {
 }
 
 function App() {
-  useEffect(() => {
-    const pathname = window.location.pathname;
-    const shouldRestoreSession =
-      pathname !== '/' && !pathname.startsWith('/auth/callback');
+  const isInitialized = useAuthStore((s) => s.isInitialized);
+  const isInitializing = useAuthStore((s) => s.isInitializing);
+  const bootstrapStartedRef = useRef(false);
 
-    if (!shouldRestoreSession) {
+  // ALWAYS attempt a silent refresh on app boot — regardless of pathname.
+  // This ensures the auth state is resolved before any routing decisions.
+  useEffect(() => {
+    if (bootstrapStartedRef.current) {
       return;
     }
 
-    let cancelled = false;
-    const restoreSession = async () => {
-      const { useAuthStore } = await import('@/features/auth/store/authStore');
-      if (!cancelled) {
-        await useAuthStore.getState().initAuth();
-      }
-    };
+    bootstrapStartedRef.current = true;
 
-    restoreSession();
-    return () => {
-      cancelled = true;
-    };
+    const pathname = window.location.pathname;
+    // Skip for OAuth callback (it has its own flow)
+    if (pathname.startsWith('/auth/callback')) {
+      // Mark as initialized so the callback page can render
+      useAuthStore.setState({ isInitialized: true, isInitializing: false });
+      return;
+    }
+
+    void useAuthStore.getState().initAuth();
   }, []);
+
+  // Block ALL route rendering until the auth check completes.
+  // This prevents the flash: "unauthenticated → redirect to /auth → actually authenticated"
+  if (isInitializing || !isInitialized) {
+    return <PageLoader />;
+  }
 
   return (
     <HelmetProvider>

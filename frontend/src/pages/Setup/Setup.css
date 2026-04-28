@@ -64,7 +64,7 @@
 }
 
 .setup-step-indicator .step-text span {
-  color: var(--color-gold, #B4AB8B);
+  color: var(--color-gold, #b4ab8b);
 }
 
 .step-dots {
@@ -83,7 +83,7 @@
 }
 
 .step-dot.completed {
-  background: var(--color-gold, #B4AB8B);
+  background: var(--color-gold, #b4ab8b);
   box-shadow: 0 0 8px rgba(180, 171, 139, 0.5);
 }
 
@@ -162,7 +162,7 @@
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: var(--color-gold, #B4AB8B);
+  background: var(--color-gold, #b4ab8b);
   color: var(--color-dark, #1a1a1a);
   font-size: 11px;
   flex-shrink: 0;
@@ -313,7 +313,7 @@
 }
 
 .avatar-card.selected .avatar-card-img {
-  border-color: var(--color-gold, #B4AB8B);
+  border-color: var(--color-gold, #b4ab8b);
 }
 
 .avatar-card-name {
@@ -348,7 +348,7 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: var(--color-gold, #B4AB8B);
+  background: var(--color-gold, #b4ab8b);
   color: var(--primary-bg, #121212);
   display: flex;
   align-items: center;
@@ -392,7 +392,7 @@
 }
 
 .voice-card.selected {
-  border-color: var(--color-gold, #B4AB8B);
+  border-color: var(--color-gold, #b4ab8b);
   background: rgba(180, 171, 139, 0.08);
 }
 
@@ -468,8 +468,8 @@
 }
 
 .voice-play-btn.playing {
-  background: var(--color-gold, #B4AB8B);
-  border-color: var(--color-gold, #B4AB8B);
+  background: var(--color-gold, #b4ab8b);
+  border-color: var(--color-gold, #b4ab8b);
   color: var(--primary-bg, #121212);
 }
 
@@ -480,7 +480,7 @@
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: var(--color-gold, #B4AB8B);
+  background: var(--color-gold, #b4ab8b);
   color: var(--primary-bg, #121212);
   display: flex;
   align-items: center;
@@ -870,7 +870,7 @@
   font-weight: 600;
   font-family: var(--font-display, 'Space Grotesk', sans-serif);
   color: var(--primary-bg, #121212);
-  background: var(--color-gold, #B4AB8B);
+  background: var(--color-gold, #b4ab8b);
   border: none;
   border-radius: 8px;
   cursor: pointer;

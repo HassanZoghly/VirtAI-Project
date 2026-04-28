@@ -1,7 +1,7 @@
 import { lazy, startTransition, Suspense, useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { useNavigate } from 'react-router-dom';
 
+import { selectIsAuthenticated, useAuthStore } from '@/features/auth/store/authStore';
 import HeroSection from '@/widgets/Overview/HeroSection';
 
 const Navbar = lazy(() => import('@/widgets/Overview/Navbar'));
@@ -22,14 +22,7 @@ const INITIAL_PHASES = {
   footer: false,
 };
 
-const PHASE2_SEQUENCE = [
-  'navbar',
-  'features',
-  'howItWorks',
-  'techStack',
-  'demo',
-  'footer',
-];
+const PHASE2_SEQUENCE = ['navbar', 'features', 'howItWorks', 'techStack', 'demo', 'footer'];
 
 function getReducedMotionPreference() {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
@@ -47,8 +40,7 @@ function isLowPerformanceDevice() {
   const connection = navigator.connection;
   const saveDataEnabled = !!connection?.saveData;
   const slowNetwork = ['slow-2g', '2g'].includes(connection?.effectiveType || '');
-  const lowMemoryDevice =
-    typeof navigator.deviceMemory === 'number' && navigator.deviceMemory <= 4;
+  const lowMemoryDevice = typeof navigator.deviceMemory === 'number' && navigator.deviceMemory <= 4;
   const lowCpuDevice =
     typeof navigator.hardwareConcurrency === 'number' && navigator.hardwareConcurrency <= 4;
   const desktopViewport =
@@ -111,7 +103,7 @@ export default function OverviewPage() {
   const [showSplash, setShowSplash] = useState(false);
   const [showAmbient, setShowAmbient] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(getReducedMotionPreference);
-  const navigate = useNavigate();
+  const isAuthenticated = useAuthStore(selectIsAuthenticated);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -210,7 +202,10 @@ export default function OverviewPage() {
     return scheduleIdleTask(() => setShowAmbient(true), { delay: 0, timeout: 2600 });
   }, [phase2.footer, prefersReducedMotion]);
 
-  const handleCTA = () => navigate('/auth');
+  const primaryCta = isAuthenticated
+    ? { label: 'Go to Classroom', to: '/classroom' }
+    : { label: 'Log In / Sign Up', to: '/auth' };
+
   const handleSplashComplete = () => {
     sessionStorage.setItem('virtai:overview-splash-seen', '1');
     setShowSplash(false);
@@ -245,11 +240,11 @@ export default function OverviewPage() {
         </DeferredSection>
 
         <DeferredSection shouldRender={phase2.navbar}>
-          <Navbar />
+          <Navbar ctaLabel={primaryCta.label} ctaTo={primaryCta.to} />
         </DeferredSection>
 
         <main id="main-content">
-          <HeroSection onCTA={handleCTA} />
+          <HeroSection ctaLabel={primaryCta.label} ctaTo={primaryCta.to} />
 
           <DeferredSection shouldRender={phase2.features}>
             <FeaturesSection />
@@ -275,4 +270,3 @@ export default function OverviewPage() {
     </>
   );
 }
-

@@ -1,3 +1,4 @@
+import { selectIsAuthenticated, useAuthStore } from '@/features/auth/store/authStore';
 import { AvatarPanel } from '@/features/avatar';
 import { getAvatarById, getAvatarModelPath } from '@/features/avatar/data/avatars';
 import { ChatInput, MessageList } from '@/features/chat';
@@ -20,9 +21,18 @@ export default function ClassroomShell() {
   const avatarModelPath = getAvatarModelPath(activeAvatarId);
   const wsAvatarId = avatarModelPath.split('/').pop().replace('.glb', '');
   const WS_URL = `ws://localhost:8000/api/v1/ws/${wsAvatarId}?voice=${encodeURIComponent(activeVoiceId)}`;
-  const { connectionState, isConnected, send, onMessage } = useWSClient(WS_URL);
+  const { connectionState, isConnected, send, onMessage, reconnect, reconnectError } =
+    useWSClient(WS_URL);
   const [conversationState, dispatch] = useConversationReducer();
   const session = useSessionManager();
+  const sessionList = session.sessions;
+  const currentSessionId = session.currentSessionId;
+  const currentSession = session.currentSession;
+  const sessionIsReady = session.isReady;
+  const createNewSession = session.createNewSession;
+  const switchSession = session.switchSession;
+  const deleteSession = session.deleteSession;
+  const renameSession = session.renameSession;
 
   const [audioUrl, setAudioUrl] = useState(null);
   const [mouthCues, setMouthCues] = useState([]);
@@ -40,22 +50,46 @@ export default function ClassroomShell() {
   const shouldStickToBottom = useRef(true);
   const textareaRef = useRef(null);
   const scrollPositionsRef = useRef(new Map());
-  const prevSessionIdRef = useRef(session.currentSessionId);
+  const prevSessionIdRef = useRef(currentSessionId);
   const timelineProtocolRef = useRef(null);
-  
+
   const sessionRef = useRef(session);
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
 
-  // Auto-create a first chat session for new users with no history
+  // Auto-create a first chat session for new users with no history.
+  // Triple-gated to prevent race conditions:
+  // 1. Auth must be initialized and authenticated (no point creating chats if we'll redirect to /auth)
+  // 2. Session manager must be ready (localStorage has been read)
+  // 3. Sessions must genuinely be empty, or the active session still has zero messages
+  const isInitialized = useAuthStore((s) => s.isInitialized);
+  const isAuthenticated = useAuthStore(selectIsAuthenticated);
+
   const hasAutoCreated = useRef(false);
   useEffect(() => {
-    if (session.sessions.length === 0 && !hasAutoCreated.current) {
-      hasAutoCreated.current = true;
-      session.createNewSession();
+    if (!isInitialized || !isAuthenticated || !sessionIsReady || hasAutoCreated.current) {
+      return;
     }
-  }, [session.sessions.length, session.createNewSession]);
+
+    const activeHasZeroMessages = (currentSession.messages?.length ?? 0) === 0;
+    const shouldCreateFreshSession = sessionList.length === 0 || activeHasZeroMessages;
+
+    if (shouldCreateFreshSession) {
+      hasAutoCreated.current = true;
+      createNewSession();
+    } else {
+      hasAutoCreated.current = true;
+    }
+  }, [
+    isInitialized,
+    isAuthenticated,
+    sessionList.length,
+    currentSessionId,
+    currentSession.messages.length,
+    sessionIsReady,
+    createNewSession,
+  ]);
 
   const commitAndSend = useCallback(
     (text) => {
@@ -75,7 +109,7 @@ export default function ClassroomShell() {
   // Save / restore scroll position on session switch
   useEffect(() => {
     const prevId = prevSessionIdRef.current;
-    const nextId = session.currentSessionId;
+    const nextId = currentSessionId;
     if (prevId !== nextId) {
       // Save scroll position of outgoing session
       if (chatScrollRef.current) {
@@ -93,7 +127,7 @@ export default function ClassroomShell() {
       });
       prevSessionIdRef.current = nextId;
     }
-  }, [session.currentSessionId]);
+  }, [currentSessionId]);
 
   // WebSocket message subscriptions
   useEffect(() => {
@@ -170,7 +204,7 @@ export default function ClassroomShell() {
       return;
     }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [session.currentSession.messages, conversationState.currentMessage, interimTranscript]);
+  }, [currentSession.messages, conversationState.currentMessage, interimTranscript]);
 
   const handleSendMessage = useCallback(() => {
     const text = inputValue.trim();
@@ -187,7 +221,6 @@ export default function ClassroomShell() {
       toast.show('warning', 'Offline', 'Message queued. Will send when connected.', 3000);
     }
   }, [inputValue, isConnected, commitAndSend]);
-
 
   const onKeyDown = useCallback(
     (e) => {
@@ -210,12 +243,14 @@ export default function ClassroomShell() {
     }[connectionState] || 'offline';
 
   const statusLabel =
+    reconnectError ||
     {
       [ConnectionState.OFFLINE]: `${avatarName} — Offline`,
       [ConnectionState.RECONNECTING]: 'Reconnecting…',
       [ConnectionState.INITIALIZING]: 'Starting up…',
       [ConnectionState.ONLINE]: `${avatarName} Online`,
-    }[connectionState] || `${avatarName} — Offline`;
+    }[connectionState] ||
+    `${avatarName} — Offline`;
 
   return (
     <>
@@ -226,12 +261,12 @@ export default function ClassroomShell() {
         <SettingsDrawer
           isOpen={isSettingsOpen}
           onClose={closeSettings}
-          sessions={session.sessions}
-          currentSessionId={session.currentSessionId}
-          onSessionSelect={session.switchSession}
-          onNewSession={session.createNewSession}
-          onDeleteSession={session.deleteSession}
-          onRenameSession={session.renameSession}
+          sessions={sessionList}
+          currentSessionId={currentSessionId}
+          onSessionSelect={switchSession}
+          onNewSession={createNewSession}
+          onDeleteSession={deleteSession}
+          onRenameSession={renameSession}
         />
 
         <button
@@ -258,6 +293,24 @@ export default function ClassroomShell() {
             />
           )}
           <span className="status-text">{statusLabel}</span>
+          {reconnectError ? (
+            <button
+              type="button"
+              onClick={reconnect}
+              style={{
+                marginLeft: '0.75rem',
+                border: '1px solid rgba(255, 255, 255, 0.18)',
+                borderRadius: '999px',
+                background: 'rgba(255, 255, 255, 0.08)',
+                color: 'inherit',
+                cursor: 'pointer',
+                font: 'inherit',
+                padding: '0.35rem 0.75rem',
+              }}
+            >
+              Reconnect
+            </button>
+          ) : null}
         </div>
 
         <div className="split-container" id="main-content">
@@ -274,9 +327,9 @@ export default function ClassroomShell() {
             emotionData={emotionData}
           />
 
-          <div className="chat-panel" key={session.currentSessionId}>
+          <div className="chat-panel" key={currentSessionId}>
             <MessageList
-              messages={session.currentSession.messages}
+              messages={currentSession.messages}
               currentMessage={conversationState.currentMessage}
               interimTranscript={interimTranscript}
               error={conversationState.error}

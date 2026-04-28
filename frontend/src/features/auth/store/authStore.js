@@ -4,13 +4,22 @@ import { refreshAccessTokenSingleFlight } from '../services/refreshService';
 
 let initAuthPromise = null;
 
-export const useAuthStore = create((set) => ({
+export const useAuthStore = create((set, get) => ({
   user: null,
   accessToken: null,
-  isLoading: true,
+
+  // True while an auth operation (login, refresh, getMe) is in-flight.
+  isLoading: false,
+
+  // True while the app is attempting the first silent auth bootstrap.
+  isInitializing: true,
+
+  // False until the very first initAuth() attempt completes (success OR failure).
+  // No routing decisions should be made while this is false.
+  isInitialized: false,
 
   setAuth: (user, accessToken) =>
-    set({ user, accessToken, isLoading: false }),
+    set({ user, accessToken, isLoading: false, isInitializing: false, isInitialized: true }),
 
   setUser: (user) =>
     set((state) => ({
@@ -18,25 +27,49 @@ export const useAuthStore = create((set) => ({
       user,
     })),
 
-  logout: () => set({ user: null, accessToken: null, isLoading: false }),
+  logout: () =>
+    set({
+      user: null,
+      accessToken: null,
+      isLoading: false,
+      isInitializing: false,
+      isInitialized: true,
+    }),
 
   setLoading: (isLoading) => set({ isLoading }),
 
+  /**
+   * Silent refresh + getMe.
+   * Deduplicates concurrent calls via initAuthPromise.
+   * Always sets isInitialized = true when done, regardless of outcome.
+   */
   initAuth: async () => {
     if (initAuthPromise) {
       return initAuthPromise;
     }
 
     initAuthPromise = (async () => {
-      set({ isLoading: true });
+      set({ isLoading: true, isInitializing: true });
       try {
         const { access_token } = await refreshAccessTokenSingleFlight();
-
+        // Store token immediately so the getMe() call (via apiClient) picks it up
         set((state) => ({ ...state, accessToken: access_token }));
         const user = await getMe();
-        set({ user, accessToken: access_token, isLoading: false });
+        set({
+          user,
+          accessToken: access_token,
+          isLoading: false,
+          isInitializing: false,
+          isInitialized: true,
+        });
       } catch {
-        set({ user: null, accessToken: null, isLoading: false });
+        set({
+          user: null,
+          accessToken: null,
+          isLoading: false,
+          isInitializing: false,
+          isInitialized: true,
+        });
       }
     })().finally(() => {
       initAuthPromise = null;

@@ -68,7 +68,7 @@
 .voice-mode-btn.idle:hover:not(:disabled) {
   background: rgba(240, 200, 82, 0.1);
   border-color: rgba(240, 200, 82, 0.4);
-  color: var(--accent-primary, #B4AB8B);
+  color: var(--accent-primary, #b4ab8b);
 }
 
 /* Listening state */

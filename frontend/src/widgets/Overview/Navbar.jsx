@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import { FiMenu, FiX } from 'react-icons/fi';
+import { Link } from 'react-router-dom';
 
 const NAV_ITEMS = [
   { label: 'Features', target: 'features' },
@@ -8,7 +9,7 @@ const NAV_ITEMS = [
   { label: 'Tech Stack', target: 'tech-stack' },
 ];
 
-export default function Navbar() {
+export default function Navbar({ ctaLabel, ctaTo }) {
   const [visible, setVisible] = useState(false);
   const [activeId, setActiveId] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -37,7 +38,9 @@ export default function Navbar() {
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (isScrolling.current) { return; }
+        if (isScrolling.current) {
+          return;
+        }
 
         let hasChanges = false;
         for (const entry of entries) {
@@ -56,7 +59,9 @@ export default function Navbar() {
           } else {
             const visibleArray = Array.from(visibleSections);
             const active = ids.find((id) => visibleArray.includes(id));
-            if (active) { setActiveId(active); }
+            if (active) {
+              setActiveId(active);
+            }
           }
         }
       },
@@ -67,7 +72,9 @@ export default function Navbar() {
     const timeoutId = setTimeout(() => {
       ids.forEach((id) => {
         const el = document.getElementById(id);
-        if (el) { observer.observe(el); }
+        if (el) {
+          observer.observe(el);
+        }
       });
     }, 100);
 
@@ -79,7 +86,9 @@ export default function Navbar() {
 
   const scrollTo = (id) => {
     const el = document.getElementById(id);
-    if (!el) { return; }
+    if (!el) {
+      return;
+    }
 
     isScrolling.current = true;
     setActiveId(id);
@@ -158,14 +167,14 @@ export default function Navbar() {
                 ))}
               </ul>
 
-              {/* Demo CTA Button */}
-              <button
-                onClick={() => scrollTo('demo')}
-                className="cursor-pointer rounded-full bg-offwhite px-5 py-2 text-sm font-semibold tracking-wide text-dark transition-transform duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark"
+              {/* Primary CTA Button */}
+              <Link
+                to={ctaTo}
+                className="inline-flex cursor-pointer items-center justify-center rounded-full bg-offwhite px-5 py-2 text-sm font-semibold tracking-wide text-dark transition-transform duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark"
                 style={{ fontFamily: 'var(--font-display)' }}
               >
-                Demo
-              </button>
+                {ctaLabel}
+              </Link>
             </div>
 
             {/* Mobile hamburger button (visible below md: 768px) */}
@@ -229,13 +238,13 @@ export default function Navbar() {
 
                   {/* Mobile CTA Button */}
                   <div className="p-6 border-t border-white/10">
-                    <button
-                      onClick={() => scrollTo('demo')}
-                      className="w-full cursor-pointer rounded-full bg-offwhite px-6 py-3 text-sm font-semibold tracking-wide text-dark transition-transform duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark"
+                    <Link
+                      to={ctaTo}
+                      className="inline-flex w-full cursor-pointer items-center justify-center rounded-full bg-offwhite px-6 py-3 text-sm font-semibold tracking-wide text-dark transition-transform duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark"
                       style={{ fontFamily: 'var(--font-display)' }}
                     >
-                      Request Demo
-                    </button>
+                      {ctaLabel}
+                    </Link>
                   </div>
                 </motion.div>
               </>

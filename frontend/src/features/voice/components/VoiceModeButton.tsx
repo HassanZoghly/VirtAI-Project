@@ -8,6 +8,9 @@ import './VoiceModeButton.css';
  */
 interface VoiceModeButtonProps {
   /** WebSocket client for voice mode communication */
+  // Reason: WebSocket client interface lacks generated type
+  // bindings from the Python/FastAPI backend schema
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   wsClient: any;
   /** Current conversation pipeline state */
   pipelineState: 'idle' | 'thinking' | 'speaking' | 'error';
@@ -47,7 +50,6 @@ export default function VoiceModeButton({
     isProcessing,
     interimText,
     error,
-    errorCode,
     canRetry,
     clearError,
     startListening,
@@ -56,64 +58,59 @@ export default function VoiceModeButton({
 
   // Determine button state and styling
   const buttonState = useMemo(() => {
-    if (error) return 'error';
-    if (isPaused) return 'paused';
-    if (isProcessing && isListening) return 'processing';
-    if (isListening) return 'listening';
+    if (error) {
+      return 'error';
+    }
+    if (isPaused) {
+      return 'paused';
+    }
+    if (isProcessing && isListening) {
+      return 'processing';
+    }
+    if (isListening) {
+      return 'listening';
+    }
     return 'idle';
   }, [isListening, isPaused, isProcessing, error]);
 
   // Determine button icon
   const ButtonIcon = useMemo(() => {
-    if (error) return PiWarningCircleFill;
-    if (isPaused) return PiPauseFill;
+    if (error) {
+      return PiWarningCircleFill;
+    }
+    if (isPaused) {
+      return PiPauseFill;
+    }
     return PiMicrophoneFill;
   }, [error, isPaused]);
 
   // Determine button title/tooltip
   const buttonTitle = useMemo(() => {
-    if (error) return `Voice mode error: ${error}`;
-    if (isPaused) return 'Voice paused (assistant speaking)';
-    if (isListening) return 'Stop voice mode';
+    if (error) {
+      return `Voice mode error: ${error}`;
+    }
+    if (isPaused) {
+      return 'Voice paused (assistant speaking)';
+    }
+    if (isListening) {
+      return 'Stop voice mode';
+    }
     return 'Start voice mode';
   }, [isListening, isPaused, error]);
 
   // Determine button aria-label
   const ariaLabel = useMemo(() => {
-    if (error) return 'Voice mode error';
-    if (isPaused) return 'Voice mode paused';
-    if (isListening) return 'Stop voice mode';
+    if (error) {
+      return 'Voice mode error';
+    }
+    if (isPaused) {
+      return 'Voice mode paused';
+    }
+    if (isListening) {
+      return 'Stop voice mode';
+    }
     return 'Start voice mode';
   }, [isListening, isPaused, error]);
-
-  // Get user-friendly error message with instructions
-  const errorDisplay = useMemo(() => {
-    if (!error) return null;
-
-    let message = error;
-    let instruction = '';
-
-    // Add specific instructions based on error code
-    switch (errorCode) {
-      case 'MICROPHONE_ERROR':
-        if (error.includes('denied') || error.includes('permission')) {
-          instruction = 'Go to browser settings → Privacy → Microphone and allow access.';
-        }
-        break;
-      case 'BUFFER_OVERFLOW':
-      case 'BUFFER_TIMEOUT':
-        instruction = 'Try speaking in shorter sentences (5-10 seconds at a time).';
-        break;
-      case 'TRANSCRIPTION_FAILED':
-        instruction = 'Check your internet connection and try again.';
-        break;
-      case 'WEBSOCKET_DISCONNECTED':
-        instruction = 'Waiting for connection to restore...';
-        break;
-    }
-
-    return { message, instruction };
-  }, [error, errorCode]);
 
   return (
     <div className={`voice-mode-container ${className}`}>

@@ -1,5 +1,7 @@
 /* eslint-disable no-console */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
+
+const TARGET_UPDATE_INTERVAL_MS = 1000 / 30;
 
 /**
  * useAudioDrivenLipSync - Enhanced lip sync with audio amplitude fallback
@@ -18,13 +20,14 @@ import { useEffect, useRef, useState } from 'react';
  * @param {React.RefObject} audioRef - Reference to HTMLAudioElement
  * @param {Array} mouthCues - Array of {start, end, value} for lip sync timeline
  * @param {boolean} isPlaying - Whether audio is currently playing
- * @returns {Object} { morphTargets, bodyMotion } - Morph targets and body motion values
+ * @returns {Object} Live refs and snapshots for morph targets/body motion
  */
 export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = false) {
-  const [morphTargets, setMorphTargets] = useState({});
-  const [bodyMotion, setBodyMotion] = useState({ headBob: 0, chestBob: 0 });
+  const morphTargetsRef = useRef({});
+  const bodyMotionRef = useRef({ headBob: 0, chestBob: 0 });
 
-  const animationFrameRef = useRef(null);
+  const rafRef = useRef(null);
+  const lastUpdateTimeRef = useRef(0);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const sourceRef = useRef(null);
@@ -44,6 +47,8 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
       // Reset when not playing
       smoothedAmplitudeRef.current = 0;
       bodyPhaseRef.current = 0;
+      morphTargetsRef.current = {};
+      bodyMotionRef.current = { headBob: 0, chestBob: 0 };
       return;
     }
 
@@ -107,8 +112,8 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
   useEffect(() => {
     if (!isPlaying || !audioRef.current) {
       // Reset morph targets when not playing
-      setMorphTargets({});
-      setBodyMotion({ headBob: 0, chestBob: 0 });
+      morphTargetsRef.current = {};
+      bodyMotionRef.current = { headBob: 0, chestBob: 0 };
       return;
     }
 
@@ -156,15 +161,15 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
           // Scale viseme influence by audio amplitude so quiet speech = small mouth
           const amplitudeScale = 0.25 + smoothAmplitude * 0.75; // range [0.25, 1.0]
 
-          setMorphTargets({
+          morphTargetsRef.current = {
             [activeCue.value]: Math.min(amplitudeScale, 1.0),
-          });
+          };
         } else {
           // Between cues: use amplitude-driven mouth (quieter)
-          setMorphTargets({
+          morphTargetsRef.current = {
             viseme_aa: smoothAmplitude * 0.45,
             viseme_O: smoothAmplitude * 0.2,
-          });
+          };
         }
       } else {
         // MODE 2: Pure amplitude-driven lip sync (fallback when no mouthCues)
@@ -172,38 +177,61 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
         const lipRound = smoothAmplitude * 0.25; // Secondary lip rounding
         const lipWide = smoothAmplitude * 0.15; // Tertiary lip widening
 
-        setMorphTargets({
+        morphTargetsRef.current = {
           viseme_aa: Math.min(jawOpen, 1.0),
           viseme_O: Math.min(lipRound, 1.0),
           viseme_U: Math.min(lipWide * 0.5, 1.0),
-        });
+        };
       }
 
       // Update body motion (subtle head and chest bob)
       const headBobAmount = smoothAmplitude * 0.015 * bodyOscillation; // Very subtle
       const chestBobAmount = smoothAmplitude * 0.01 * bodyOscillation; // Even more subtle
 
-      setBodyMotion({
+      bodyMotionRef.current = {
         headBob: Math.min(headBobAmount, 0.02), // Clamp to max 2cm
         chestBob: Math.min(chestBobAmount, 0.015), // Clamp to max 1.5cm
-      });
-
-      // Continue updating
-      animationFrameRef.current = requestAnimationFrame(updateLipSync);
+      };
     };
 
-    // Start lip sync loop
-    animationFrameRef.current = requestAnimationFrame(updateLipSync);
+    const runLoop = (timestamp) => {
+      if (!audioRef.current || !isPlaying) {
+        rafRef.current = null;
+        return;
+      }
+
+      if (
+        !lastUpdateTimeRef.current ||
+        timestamp - lastUpdateTimeRef.current >= TARGET_UPDATE_INTERVAL_MS
+      ) {
+        updateLipSync();
+        lastUpdateTimeRef.current = timestamp;
+      }
+
+      rafRef.current = window.requestAnimationFrame(runLoop);
+    };
+
+    updateLipSync();
+    lastUpdateTimeRef.current = 0;
+    rafRef.current = window.requestAnimationFrame(runLoop);
 
     // Cleanup
     return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
+      if (rafRef.current) {
+        window.cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
       }
+      lastUpdateTimeRef.current = 0;
     };
   }, [audioRef, mouthCues, isPlaying]);
 
-  return { morphTargets, bodyMotion };
+  return {
+    morphTargetsRef,
+    bodyMotionRef,
+    // Backward-compatible snapshots for any legacy usage.
+    morphTargets: morphTargetsRef.current,
+    bodyMotion: bodyMotionRef.current,
+  };
 }
 
 /**

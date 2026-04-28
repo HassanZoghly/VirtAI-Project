@@ -24,8 +24,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # ── Copy application source code ────────────────────────────────
 COPY app/ ./app/
 
-# ── Create data directory for SQLite ─────────────────────────────
-RUN mkdir -p /app/.data
+# ── Create data directory for audio files ────────────────────────
+RUN mkdir -p /app/.data/sessions
 
 # ── Expose backend port ─────────────────────────────────────────
 EXPOSE 8000

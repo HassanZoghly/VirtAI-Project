@@ -56,28 +56,19 @@
   font-weight: 600;
   cursor: pointer;
   transition:
-    transform 0.2s ease,
     box-shadow 0.2s ease,
     background 0.2s ease;
 }
 
-.notfound-btn:hover {
-  transform: translateY(-2px);
-}
-
-.notfound-btn:active {
-  transform: translateY(0);
-}
-
 .notfound-btn.primary {
-  background: var(--accent-primary, #f0c852);
+  background: var(--accent-primary, #b4ab8b);
   color: #121212;
-  box-shadow: 0 4px 14px rgba(240, 200, 82, 0.3);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
 }
 
 .notfound-btn.primary:hover {
-  background: var(--accent-secondary, #d4af37);
-  box-shadow: 0 6px 20px rgba(240, 200, 82, 0.4);
+  background: var(--accent-secondary, #b4ab8b);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
 }
 
 .notfound-btn.secondary {
@@ -88,7 +79,7 @@
 
 .notfound-btn.secondary:hover {
   background: rgba(255, 255, 255, 0.06);
-  border-color: var(--accent-primary, #f0c852);
+  border-color: var(--accent-primary, #b4ab8b);
 }
 
 @keyframes fadeInUp {

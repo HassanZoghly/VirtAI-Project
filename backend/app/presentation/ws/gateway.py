@@ -33,12 +33,18 @@ import base64
 import json
 import re
 import time
+from types import SimpleNamespace
 from typing import Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
 from loguru import logger
 from pydantic import BaseModel, ValidationError
 
+from app.application.chat.session_manager import Session
+from app.domain.chat.entities import PipelineEvent, PipelineEventType
+from app.infrastructure.asr.groq_whisper import GroqWhisperASR
+from app.presentation.ws.connection_manager import WSConnectionManager
+from app.presentation.ws.voice_mode_handler import VoiceModeHandler
 from app.schemas.audio import AudioBuffer
 from app.schemas.ws_messages import (
     AvatarStatus,
@@ -59,10 +65,6 @@ from app.schemas.ws_messages import (
     make_tts_chunk_msg,
     make_visemes_msg,
 )
-from app.domain.chat.entities import PipelineEvent, PipelineEventType
-from app.application.chat.session_manager import Session
-from app.presentation.ws.voice_mode_handler import VoiceModeHandler
-from app.infrastructure.asr.groq_whisper import GroqWhisperASR
 from app.shared.config import get_settings
 
 
@@ -114,10 +116,33 @@ class WebSocketHandler:
     One instance per connected client.
     """
 
-    def __init__(self, websocket: WebSocket, session: Session):
+    def __init__(
+        self,
+        websocket: WebSocket,
+        session: Session | None,
+        session_manager,
+        user_id: str,
+        avatar_id: str,
+        voice_id: str,
+        connection_manager: WSConnectionManager,
+        resumed: bool = False,
+        replay_after_seq: int = 0,
+    ):
         self.ws = websocket
-        self.session = session
-        self.pipeline = session.pipeline
+        self._session_manager = session_manager
+        self._user_id = user_id
+        self._avatar_id = avatar_id
+        self._voice_id = voice_id
+        self._session_pending = session is None
+        self.session = session or SimpleNamespace(
+            session_id="",
+            avatar_id=avatar_id,
+            touch=lambda: None,
+        )
+        self.pipeline = session.pipeline if session is not None else None
+        self.connection_manager = connection_manager
+        self.resumed = resumed
+        self.replay_after_seq = replay_after_seq
 
         # Background tasks
         self._pipeline_task: asyncio.Task | None = None
@@ -132,9 +157,25 @@ class WebSocketHandler:
 
         logger.info(
             f"WebSocketHandler created | "
-            f"session={session.session_id} | "
-            f"avatar={session.avatar_id}"
+            f"session={self.session.session_id or 'pending'} | "
+            f"avatar={self.session.avatar_id} | "
+            f"resumed={resumed} | replay_after_seq={replay_after_seq}"
         )
+
+    async def _ensure_session(self) -> None:
+        if not self._session_pending:
+            return
+
+        session = await self._session_manager.create_session(
+            user_id=self._user_id,
+            avatar_id=self._avatar_id,
+            voice_id=self._voice_id,
+        )
+        self.session = session
+        self.pipeline = session.pipeline
+        self._session_pending = False
+        await self.connection_manager.register(session.session_id, self.ws)
+        logger.info(f"[WS] Lazy session created | session={session.session_id}")
 
     async def run(self) -> None:
         """
@@ -143,21 +184,48 @@ class WebSocketHandler:
         2. Start ping/pong background task
         3. Listen for incoming messages
         """
+        replay_batch: list[str] = []
+        if self.resumed and self.session.session_id:
+            await self.connection_manager.register(self.session.session_id, self.ws)
+            replay_batch = await self.connection_manager.get_replay_batch(
+                self.session.session_id, after_seq=self.replay_after_seq
+            )
+
         try:
             # Send ready signal with session info
             await self._send(
                 ServerMessage(
                     type=ServerMessageType.READY,
                     data={
-                        "session_id": self.session.session_id,
+                        "session_id": self.session.session_id or None,
                         "avatar_id": self.session.avatar_id,
                         "message": "Connected and ready",
+                        "resumed": self.resumed,
+                        "last_seq": (
+                            self.connection_manager.latest_sequence(self.session.session_id)
+                            if self.session.session_id
+                            else 0
+                        ),
                         "timestamp": time.time(),
                     },
                 )
             )
 
-            logger.info(f"[WS] Ready message sent | session={self.session.session_id}")
+            logger.info(f"[WS] Ready message sent | session={self.session.session_id or 'pending'}")
+
+            if self.resumed:
+                replayed = 0
+                for payload in replay_batch:
+                    if not self._connected:
+                        break
+                    try:
+                        await self.ws.send_text(payload)
+                        replayed += 1
+                    except Exception:
+                        break
+                logger.info(
+                    f"[WS] Replay complete | session={self.session.session_id or 'pending'} | replayed={replayed}"
+                )
         except Exception as e:
             logger.error(f"[WS] Failed to send ready message: {e}")
             self._connected = False
@@ -177,7 +245,20 @@ class WebSocketHandler:
                         self.ws.receive(), timeout=1.0  # short timeout so ping loop can run
                     )
 
-                    # Handle different message types
+                    # ── Explicit disconnect detection ──────────────────────────
+                    # Starlette's receive() can return a raw ASGI disconnect dict
+                    # *before* raising WebSocketDisconnect — handle it here so we
+                    # never call receive() again after the connection closed.
+                    if message.get("type") == "websocket.disconnect":
+                        code = message.get("code", 1000)
+                        logger.info(
+                            f"[WS] Disconnect frame received | "
+                            f"session={self.session.session_id} | code={code}"
+                        )
+                        self._connected = False
+                        break
+
+                    # Handle normal message types
                     if "text" in message:
                         # Text frame - route to text message handler
                         await self._route_message(message["text"], audio_buffer)
@@ -185,20 +266,21 @@ class WebSocketHandler:
                         # Binary frame - route to binary message handler (PCM audio)
                         await self._handle_binary_frame(message["bytes"])
                     else:
-                        # Unknown message type
-                        logger.warning(f"[WS] Unknown message type: {message}")
+                        logger.debug(f"[WS] Unhandled ASGI message type: {message.get('type')}")
 
                 except asyncio.TimeoutError:
                     # No message received, continue (ping loop handles keepalive)
                     continue
-                except WebSocketDisconnect:
-                    # Comprehensive error logging for WebSocket disconnection (Requirement 11.1, 11.2)
+                except WebSocketDisconnect as exc:
+                    # Raised by Starlette when client disconnects
                     logger.warning(
                         f"[WS] Client disconnected | "
                         f"session={self.session.session_id} | "
                         f"avatar={self.session.avatar_id} | "
+                        f"code={exc.code} | "
                         f"voice_mode_active={self._voice_mode_handler is not None} | "
-                        f"pipeline_running={self._pipeline_task is not None and not self._pipeline_task.done()}"
+                        f"pipeline_running="
+                        f"{self._pipeline_task is not None and not self._pipeline_task.done()}"
                     )
 
                     # Clear voice mode buffer if active
@@ -212,7 +294,22 @@ class WebSocketHandler:
                             )
                         self._voice_mode_handler.audio_pipeline.clear_buffer()
 
+                    self._connected = False
                     break
+                except RuntimeError as e:
+                    # Starlette raises RuntimeError("Cannot call ...") after disconnect;
+                    # treat it the same as a normal disconnect.
+                    if "disconnect" in str(e).lower() or "receive" in str(e).lower():
+                        logger.warning(
+                            f"[WS] RuntimeError after disconnect (suppressed) | "
+                            f"session={self.session.session_id} | {e}"
+                        )
+                        self._connected = False
+                        break
+                    logger.error(f"[WS] Unexpected RuntimeError: {e}")
+                    await self._safe_send(
+                        make_error_msg(code="INTERNAL_ERROR", message="Error processing message")
+                    )
                 except Exception as e:
                     logger.error(f"[WS] Error receiving message: {e}")
                     await self._safe_send(
@@ -245,6 +342,14 @@ class WebSocketHandler:
             if not self._connected:
                 break
 
+            if time.time() - self._last_pong_time > settings.WS_HEARTBEAT_TIMEOUT:
+                logger.warning(
+                    f"[WS] Heartbeat timeout | session={self.session.session_id} | "
+                    f"idle_for={time.time() - self._last_pong_time:.1f}s"
+                )
+                self._connected = False
+                break
+
             # Send ping (one-way heartbeat)
             try:
                 await self._send(
@@ -256,7 +361,7 @@ class WebSocketHandler:
                 self._connected = False
                 break
 
-    def _get_voice_mode_handler(self) -> VoiceModeHandler:
+    async def _get_voice_mode_handler(self) -> VoiceModeHandler:
         """
         Get or create VoiceModeHandler for this session.
 
@@ -266,6 +371,7 @@ class WebSocketHandler:
         Returns:
             VoiceModeHandler instance for this session
         """
+        await self._ensure_session()
         if self._voice_mode_handler is None:
             # Initialize ASR service (lazy loading)
             asr_service = GroqWhisperASR()
@@ -295,7 +401,7 @@ class WebSocketHandler:
         """
         try:
             # Get or create voice mode handler
-            voice_handler = self._get_voice_mode_handler()
+            voice_handler = await self._get_voice_mode_handler()
 
             # Parse is_final marker byte from the end of the frame
             is_final = False
@@ -337,6 +443,13 @@ class WebSocketHandler:
             logger.debug(f"Ignoring empty message: {raw[:100]}")
             return
 
+        self.session.touch()
+        self._last_pong_time = time.time()
+
+        if msg_type_str == "ws.ack":
+            await self._handle_ws_ack(data)
+            return
+
         # Check if this is a new protocol message (contains dots like "chat.user_message")
         if "." in msg_type_str:
             # Route to new protocol handler
@@ -355,7 +468,6 @@ class WebSocketHandler:
             )
             return
 
-        self.session.touch()
         logger.debug(f"WS message | type={msg_type.value}")
 
         match msg_type:
@@ -439,7 +551,7 @@ class WebSocketHandler:
         if is_voice_mode:
             # Voice mode JSON audio_chunk is a control signal (actual audio goes via binary frames).
             # Extract is_final and trigger processing of buffered audio if needed.
-            voice_handler = self._get_voice_mode_handler()
+            voice_handler = await self._get_voice_mode_handler()
             voice_data = data if "is_final" in data else data.get("data", {})
             is_final = voice_data.get("is_final", False)
 
@@ -491,6 +603,7 @@ class WebSocketHandler:
             return
 
         # Cancel any ongoing pipeline
+        await self._ensure_session()
         await self._cancel_pipeline()
 
         # Take a snapshot and clear buffer
@@ -516,6 +629,7 @@ class WebSocketHandler:
             return
 
         # Cancel any ongoing pipeline
+        await self._ensure_session()
         await self._cancel_pipeline()
 
         logger.info(f"Starting text pipeline | text='{text[:60]}'")
@@ -571,6 +685,30 @@ class WebSocketHandler:
             self._voice_mode_handler.audio_pipeline.clear_buffer()
             logger.debug(f"Voice mode buffer cleared | session={self.session.session_id}")
 
+    async def _handle_ws_ack(self, data: dict) -> None:
+        """Handle client acknowledgment of received sequence IDs."""
+        if self._session_pending or not self.session.session_id:
+            return
+
+        ack_data = data.get("data", data)
+        raw_last_seq = ack_data.get("last_seq")
+        try:
+            last_seq = int(raw_last_seq)
+        except (TypeError, ValueError):
+            logger.debug(
+                f"[WS] Ignoring invalid ack payload | session={self.session.session_id} | raw={raw_last_seq}"
+            )
+            return
+
+        if last_seq < 0:
+            return
+
+        trimmed = await self.connection_manager.acknowledge(self.session.session_id, last_seq)
+        if trimmed > 0:
+            logger.debug(
+                f"[WS] Ack processed | session={self.session.session_id} | last_seq={last_seq} | trimmed={trimmed}"
+            )
+
     # ── New Protocol Message Handlers ─────────────────────────────────────────
 
     async def _handle_chat_user_message(self, msg: ChatUserMessage) -> None:
@@ -584,6 +722,8 @@ class WebSocketHandler:
             f"Chat user message | session={msg.session_id or self.session.session_id} | "
             f"message_id={msg.message_id} | text='{msg.text[:60]}'"
         )
+
+        await self._ensure_session()
 
         # Cancel any ongoing pipeline
         await self._cancel_pipeline()
@@ -650,7 +790,7 @@ class WebSocketHandler:
         error_msg = make_error(
             code=code,
             message=message,
-            session_id=session_id or self.session.session_id,
+            session_id=session_id or (self.session.session_id or None),
             message_id=message_id,
             details=details,
         )
@@ -667,6 +807,8 @@ class WebSocketHandler:
     async def _run_pipeline_audio(self, audio_buffer: AudioBuffer) -> None:
         """Run pipeline with audio input and forward events."""
         try:
+            if self.pipeline is None:
+                return
             async for event in self.pipeline.process_audio(audio_buffer):
                 if not self._connected:
                     break
@@ -684,6 +826,8 @@ class WebSocketHandler:
     async def _run_pipeline_text(self, text: str) -> None:
         """Run pipeline with text input and forward events."""
         try:
+            if self.pipeline is None:
+                return
             async for event in self.pipeline.process_text(text):
                 if not self._connected:
                     break
@@ -784,16 +928,42 @@ class WebSocketHandler:
 
     async def _send(self, message: ServerMessage) -> None:
         """Send message (raises exception on failure)."""
-        await self.ws.send_text(message.to_json())
+        envelope = {
+            "type": message.type.value,
+            "data": message.data,
+        }
+        if self._session_pending or not self.session.session_id:
+            serialized = json.dumps(envelope)
+            await self.ws.send_text(serialized)
+            return
+
+        serialized = await self.connection_manager.stamp_and_record(
+            self.session.session_id, envelope
+        )
+        await self.ws.send_text(serialized)
 
     async def _safe_send(self, message: ServerMessage) -> None:
         """Send message, ignore errors (used during cleanup)."""
         if not self._connected:
             return
         try:
-            await self.ws.send_text(message.to_json())
+            envelope = {
+                "type": message.type.value,
+                "data": message.data,
+            }
+            if self._session_pending or not self.session.session_id:
+                serialized = json.dumps(envelope)
+                await self.ws.send_text(serialized)
+                return
+
+            serialized = await self.connection_manager.stamp_and_record(
+                self.session.session_id, envelope
+            )
+            await self.ws.send_text(serialized)
         except Exception:
             pass
+
+    _PROTOCOL_MESSAGE_TYPES: dict[str, str] = {}
 
     async def _send_protocol_message(self, message: BaseModel) -> None:
         """
@@ -809,23 +979,14 @@ class WebSocketHandler:
             return
 
         try:
-            # Get the message type from the model class name
-            # e.g., ChatDelta -> chat.delta, PipelineState -> pipeline.state, TTSReady -> tts.ready
             class_name = message.__class__.__name__
 
-            # Convert CamelCase to snake_case with dots
-            # Handle consecutive capitals correctly (TTS -> tts, not t.t.s)
+            if class_name not in self._PROTOCOL_MESSAGE_TYPES:
+                snake_case = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", class_name)
+                snake_case = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", snake_case)
+                self._PROTOCOL_MESSAGE_TYPES[class_name] = snake_case.lower().replace("_", ".")
 
-            # Insert underscore before uppercase letters that follow lowercase letters or digits
-            # This handles: ChatDelta -> Chat_Delta, TTSReady -> TTS_Ready
-            snake_case = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", class_name)
-
-            # Insert underscore before uppercase letters that are followed by lowercase letters
-            # This handles: TTSReady -> TTS_Ready (already done), HTTPSConnection -> HTTPS_Connection
-            snake_case = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", snake_case)
-
-            # Convert to lowercase and replace underscores with dots
-            message_type = snake_case.lower().replace("_", ".")
+            message_type = self._PROTOCOL_MESSAGE_TYPES[class_name]
 
             # Create envelope with type and data
             envelope = {
@@ -833,7 +994,15 @@ class WebSocketHandler:
                 "data": message.model_dump(exclude_none=True),
             }
 
-            await self.ws.send_json(envelope)
+            if self._session_pending or not self.session.session_id:
+                serialized = json.dumps(envelope)
+                await self.ws.send_text(serialized)
+                return
+
+            serialized = await self.connection_manager.stamp_and_record(
+                self.session.session_id, envelope
+            )
+            await self.ws.send_text(serialized)
 
         except Exception as e:
             logger.error(f"Failed to send protocol message: {e}")
@@ -844,7 +1013,8 @@ class WebSocketHandler:
     async def _cancel_pipeline(self) -> None:
         """Cancel any running pipeline task."""
         if self._pipeline_task and not self._pipeline_task.done():
-            self.pipeline.abort()
+            if self.pipeline is not None:
+                self.pipeline.abort()
             self._pipeline_task.cancel()
             try:
                 await self._pipeline_task

@@ -26,10 +26,12 @@ dependencies = [
     # Logging
     "loguru==0.7.2",
     # Auth & Database
+    "bcrypt<4.0.0",
     "passlib[bcrypt]>=1.7.4",
     "python-jose[cryptography]>=3.3.0",
-    "sqlalchemy[asyncio]>=2.0",
-    "aiosqlite>=0.20.0",
+    "motor>=3.3.0",
+    "pymongo>=4.6.0",
+    "redis[hiredis]>=5.0.0",
     "httpx>=0.27.0,<0.29.0",
     "email-validator>=2.0.0",
 ]

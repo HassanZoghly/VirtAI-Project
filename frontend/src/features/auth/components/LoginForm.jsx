@@ -14,6 +14,10 @@ const loginSchema = z.object({
 export default function LoginForm({ onToggleMode }) {
   const { login, isLoading } = useLogin();
   const [showPassword, setShowPassword] = useState(false);
+  const inputClass =
+    'w-full rounded-xl border border-(--border-color)/80 bg-black/[0.22] px-4 py-2.5 text-sm text-(--text-primary) placeholder-(--text-muted) shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] outline-none transition-[border-color,box-shadow,background-color,transform] duration-200 focus:scale-[1.005] focus:border-(--accent-primary) focus:bg-black/30 focus:shadow-[0_0_0_3px_rgba(255,255,255,0.1)] disabled:cursor-not-allowed disabled:border-(--border-color)/55 disabled:bg-black/[0.16] disabled:opacity-60';
+  const labelClass =
+    'mb-1 block text-xs font-semibold text-(--text-secondary) uppercase tracking-wide';
 
   const {
     register,
@@ -32,22 +36,14 @@ export default function LoginForm({ onToggleMode }) {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35 }}
-      className="w-full max-w-md space-y-6"
+      transition={{ duration: 0.26 }}
+      className="w-full space-y-3"
     >
-      <div className="space-y-2 text-center">
-        <h2 className="text-2xl font-bold text-(--text-primary)">Welcome back</h2>
-        <p className="text-sm text-(--text-secondary)">Sign in to continue to VirtAI</p>
-      </div>
-
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
         {/* Email */}
-        <div className="space-y-1.5">
-          <label
-            htmlFor="login-email"
-            className="block text-sm font-medium text-(--text-secondary)"
-          >
-            Email
+        <div>
+          <label htmlFor="login-email" className={labelClass}>
+            Work email
           </label>
           <input
             id="login-email"
@@ -56,17 +52,16 @@ export default function LoginForm({ onToggleMode }) {
             placeholder="you@example.com"
             disabled={isLoading}
             {...register('email')}
-            className="w-full rounded-lg border border-(--border-color) bg-white/5 px-4 py-2.5 text-sm text-(--text-primary) placeholder-(--text-muted) outline-none transition-colors focus:border-(--accent-primary) disabled:opacity-50"
+            className={inputClass}
           />
-          {errors.email && <p className="text-xs text-(--error)">{errors.email.message}</p>}
+          {errors.email && (
+            <p className="mt-1.5 text-xs font-medium text-(--error)">{errors.email.message}</p>
+          )}
         </div>
 
         {/* Password */}
-        <div className="space-y-1.5">
-          <label
-            htmlFor="login-password"
-            className="block text-sm font-medium text-(--text-secondary)"
-          >
+        <div>
+          <label htmlFor="login-password" className={labelClass}>
             Password
           </label>
           <div className="relative">
@@ -77,13 +72,12 @@ export default function LoginForm({ onToggleMode }) {
               placeholder="••••••••"
               disabled={isLoading}
               {...register('password')}
-              className="w-full rounded-lg border border-(--border-color) bg-white/5 px-4 py-2.5 pr-10 text-sm text-(--text-primary) placeholder-(--text-muted) outline-none transition-colors focus:border-(--accent-primary) disabled:opacity-50"
+              className={`${inputClass} pr-11`}
             />
             <button
               type="button"
-              tabIndex={-1}
               onClick={() => setShowPassword((v) => !v)}
-              className="absolute top-1/2 right-3 -translate-y-1/2 text-(--text-muted) hover:text-(--text-secondary)"
+              className="absolute top-1/2 right-3 -translate-y-1/2 rounded-full p-1 text-(--text-muted) transition-[color,transform] duration-200 hover:text-(--text-secondary) active:scale-95 focus-visible:text-(--text-primary)"
               aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
               {showPassword ? (
@@ -120,7 +114,7 @@ export default function LoginForm({ onToggleMode }) {
             </button>
           </div>
           {errors.password && (
-            <p className="text-xs text-(--error)">{errors.password.message}</p>
+            <p className="mt-1.5 text-xs font-medium text-(--error)">{errors.password.message}</p>
           )}
         </div>
 
@@ -128,7 +122,7 @@ export default function LoginForm({ onToggleMode }) {
         <button
           type="submit"
           disabled={isLoading}
-          className="flex w-full items-center justify-center rounded-lg bg-(--accent-primary) px-4 py-2.5 text-sm font-semibold text-(--primary-bg) transition-colors hover:bg-(--accent-secondary) disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex w-full items-center justify-center rounded-xl bg-(--accent-primary) px-4 py-3 text-sm font-semibold text-[#121212] shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:bg-(--accent-secondary) hover:shadow-lg active:scale-[0.985] active:translate-y-0 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-(--accent-primary)/55 disabled:text-[#121212]/80 disabled:opacity-100 disabled:shadow-none"
         >
           {isLoading ? (
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-current/30 border-t-current" />
@@ -139,21 +133,21 @@ export default function LoginForm({ onToggleMode }) {
       </form>
 
       {/* Divider */}
-      <div className="flex items-center gap-3">
-        <div className="h-px flex-1 bg-(--border-color)" />
-        <span className="text-xs text-(--text-muted)">or continue with</span>
-        <div className="h-px flex-1 bg-(--border-color)" />
+      <div className="flex items-center gap-3 !mt-3">
+        <div className="h-px flex-1 bg-(--border-color)/70" />
+        <span className="text-xs text-(--text-muted)">or</span>
+        <div className="h-px flex-1 bg-(--border-color)/70" />
       </div>
 
       <GoogleAuthButton />
 
       {/* Toggle to signup */}
-      <p className="text-center text-sm text-(--text-secondary)">
+      <p className="text-center text-xs text-(--text-secondary) !mt-2">
         Don&apos;t have an account?{' '}
         <button
           type="button"
           onClick={onToggleMode}
-          className="font-medium text-(--accent-primary) hover:underline"
+          className="font-semibold text-(--accent-primary) transition-colors hover:text-(--accent-secondary) hover:underline"
         >
           Create one
         </button>

@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════════
-#  VirtAI — Start Docker Environment
+#  VirtAI — Start Docker Environment (Development)
 # ═══════════════════════════════════════════════════════════════════
 set -e
 
-# Navigate to project root (parent of scripts/)
 cd "$(dirname "$0")/.."
 
-echo "╔═══════════════════════════════════════════════╗"
-echo "║        VirtAI — Docker Start Script           ║"
-echo "╚═══════════════════════════════════════════════╝"
+echo "╔══════════════════════════════════════════════════╗"
+echo "║     VirtAI — Docker Start Script (DEV)           ║"
+echo "╚══════════════════════════════════════════════════╝"
 echo ""
 
-# ── Step 1: Check if Docker is installed ─────────────────────────
 if ! command -v docker &> /dev/null; then
     echo "❌ Docker is not installed. Please install Docker first."
     echo "   Download: https://www.docker.com/products/docker-desktop"
@@ -21,19 +19,15 @@ fi
 
 echo "✅ Docker is installed."
 
-# ── Step 2: Check if Docker daemon is running ────────────────────
 if ! docker info &> /dev/null; then
-    echo "⚠️  Docker is not running. Attempting to start Docker Desktop..."
+    echo "⚠️  Docker is not running. Attempting to start Docker..."
 
-    # Try to start Docker Desktop on macOS
     if [[ "$OSTYPE" == "darwin"* ]]; then
         open -a "Docker" 2>/dev/null || true
-    # Try to start Docker on Linux (systemd)
     elif command -v systemctl &> /dev/null; then
         sudo systemctl start docker 2>/dev/null || true
     fi
 
-    # Wait for Docker to become available (up to 60 seconds)
     echo "   Waiting for Docker to start..."
     TIMEOUT=60
     ELAPSED=0
@@ -41,8 +35,9 @@ if ! docker info &> /dev/null; then
         sleep 2
         ELAPSED=$((ELAPSED + 2))
         if [ $ELAPSED -ge $TIMEOUT ]; then
+            echo ""
             echo "❌ Docker did not start within ${TIMEOUT} seconds."
-            echo "   Please start Docker Desktop manually and try again."
+            echo "   Please start Docker manually and try again."
             exit 1
         fi
         printf "   ⏳ Waiting... (%ds/%ds)\r" "$ELAPSED" "$TIMEOUT"
@@ -53,9 +48,15 @@ else
     echo "✅ Docker is already running."
 fi
 
-# ── Step 3: Start the project ───────────────────────────────────
 echo ""
-echo "🚀 Starting VirtAI..."
+echo "🚀 Starting VirtAI in DEVELOPMENT mode..."
 echo ""
 
-docker compose up --build
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d
+
+echo ""
+echo "✅ VirtAI development environment is up."
+echo "- Website : http://localhost:3000"
+echo ""
+echo "To view logs:"
+echo "   docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f"

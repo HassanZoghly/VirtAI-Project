@@ -1,28 +1,69 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { eventBus } from '../../../shared/hooks/useEventBus';
 import { SESSION_TITLE_MAX_LENGTH, MAX_SESSIONS } from '../constants';
-import { loadFromStorage, saveToStorage } from '../services/sessionStorage';
+import {
+  consumeStartNewConversationFlag,
+  loadFromStorage,
+  saveToStorage,
+} from '../services/sessionStorage';
 
 function createSession(title = 'New chat') {
   return { id: crypto.randomUUID(), title, messages: [], createdAt: Date.now() };
 }
 
-export default function useSessionManager() {
-  const [sessions, setSessions] = useState(() => {
-    const saved = loadFromStorage();
-    if (saved && saved.length > 0) {
-      return saved;
-    }
-    return [createSession()];
-  });
+function clampSessionCount(items) {
+  if (items.length > MAX_SESSIONS) {
+    return items.slice(items.length - MAX_SESSIONS);
+  }
+  return items;
+}
 
-  const [currentSessionId, setCurrentSessionId] = useState(() => sessions[0].id);
-  const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
-  const [sessionToRename, setSessionToRename] = useState(null);
+function initializeSessionState() {
+  const saved = loadFromStorage();
+  const shouldStartFresh = consumeStartNewConversationFlag();
+
+  if (saved && saved.length > 0) {
+    if (shouldStartFresh) {
+      const fresh = createSession();
+      const sessions = clampSessionCount([fresh, ...saved]);
+      return { sessions, currentSessionId: fresh.id };
+    }
+    // Find the newest session by timestamp
+    const latest = [...saved].sort((a, b) => {
+      const aTime = a.messages?.[a.messages.length - 1]?.timestamp || a.createdAt || 0;
+      const bTime = b.messages?.[b.messages.length - 1]?.timestamp || b.createdAt || 0;
+      return bTime - aTime;
+    })[0];
+    return { sessions: saved, currentSessionId: latest.id };
+  }
+
+  // Return empty — let ClassroomShell detect this and auto-create via useEffect.
+  if (shouldStartFresh) {
+    const fresh = createSession();
+    return { sessions: [fresh], currentSessionId: fresh.id };
+  }
+
+  return { sessions: [], currentSessionId: null };
+}
+
+export default function useSessionManager() {
+  const initialState = useMemo(() => initializeSessionState(), []);
+  const [sessions, setSessions] = useState(() => initialState.sessions);
+  const [currentSessionId, setCurrentSessionId] = useState(() => initialState.currentSessionId);
+
+  // isReady = true means localStorage has been read and sessions are initialized.
+  // This is synchronous (localStorage is sync), so it's true from the first render.
+  // We keep it as an explicit flag so ClassroomShell can distinguish
+  // "sessions is [] because we haven't loaded yet" from "genuinely empty".
+  const [isReady] = useState(true);
 
   // Stable ref so addUserMessage / addAssistantMessage never change identity
   const currentSessionIdRef = useRef(currentSessionId);
   currentSessionIdRef.current = currentSessionId;
+  const setActiveSessionId = useCallback((id) => {
+    currentSessionIdRef.current = id;
+    setCurrentSessionId(id);
+  }, []);
 
   // Debounced save — persist sessions to localStorage on every change
   const saveTimerRef = useRef(null);
@@ -33,68 +74,61 @@ export default function useSessionManager() {
   }, [sessions]);
 
   const currentSession = useMemo(
-    () => sessions.find((s) => s.id === currentSessionId) || sessions[0],
+    () =>
+      sessions.find((s) => s.id === currentSessionId) ||
+      sessions[0] || { id: null, title: '', messages: [] },
     [sessions, currentSessionId]
   );
 
   const createNewSession = useCallback(() => {
     const s = createSession();
     setSessions((prev) => {
-      const next = [...prev, s];
-      // Prune oldest sessions beyond limit
-      if (next.length > MAX_SESSIONS) {
-        return next.slice(next.length - MAX_SESSIONS);
-      }
-      return next;
+      return clampSessionCount([s, ...prev]);
     });
-    setCurrentSessionId(s.id);
-  }, []);
+    setActiveSessionId(s.id);
+  }, [setActiveSessionId]);
 
-  const switchSession = useCallback((id) => {
-    setCurrentSessionId(id);
-    eventBus.emit('session:switched', { sessionId: id });
-  }, []);
+  const startNewConversation = useCallback(() => {
+    createNewSession();
+  }, [createNewSession]);
 
-  const deleteSession = useCallback((sessionId) => {
-    setSessions((prev) => {
-      const next = prev.filter((s) => s.id !== sessionId);
-      if (next.length === 0) {
-        return [createSession()];
-      }
-      if (sessionId === currentSessionIdRef.current) {
-        setCurrentSessionId(next[0].id);
-      }
-      return next;
-    });
-  }, []);
+  const switchSession = useCallback(
+    (id) => {
+      setActiveSessionId(id);
+      eventBus.emit('session:switched', { sessionId: id });
+    },
+    [setActiveSessionId]
+  );
 
-  const openRenameModal = useCallback(
+  const deleteSession = useCallback(
     (sessionId) => {
-      const session = sessions.find((s) => s.id === sessionId);
-      if (session) {
-        setSessionToRename(session);
-        setIsRenameModalOpen(true);
-      }
+      setSessions((prev) => {
+        const remaining = prev.filter((s) => s.id !== sessionId);
+        const deletedActive = sessionId === currentSessionIdRef.current;
+
+        if (remaining.length === 0) {
+          const fresh = createSession();
+          setActiveSessionId(fresh.id);
+          return clampSessionCount([fresh]);
+        }
+
+        if (deletedActive) {
+          const latest = [...remaining].sort((a, b) => {
+            const aTime = a.messages?.[a.messages.length - 1]?.timestamp || a.createdAt || 0;
+            const bTime = b.messages?.[b.messages.length - 1]?.timestamp || b.createdAt || 0;
+            return bTime - aTime;
+          })[0];
+          setActiveSessionId(latest.id);
+        }
+
+        return remaining;
+      });
     },
-    [sessions]
+    [setActiveSessionId]
   );
 
-  const handleRenameConfirm = useCallback(
-    (newTitle) => {
-      if (sessionToRename) {
-        setSessions((prev) =>
-          prev.map((s) => (s.id === sessionToRename.id ? { ...s, title: newTitle } : s))
-        );
-        setIsRenameModalOpen(false);
-        setSessionToRename(null);
-      }
-    },
-    [sessionToRename]
-  );
-
-  const handleRenameCancel = useCallback(() => {
-    setIsRenameModalOpen(false);
-    setSessionToRename(null);
+  const renameSession = useCallback((sessionId, newTitle) => {
+    setSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, title: newTitle } : s)));
   }, []);
 
   /** Append a user message to the active session (also auto-titles if first message). */
@@ -104,9 +138,11 @@ export default function useSessionManager() {
         s.id === currentSessionIdRef.current
           ? {
               ...s,
-              messages: [...s.messages, message],
+              messages: s.messages.some((m) => m.id === message.id)
+                ? s.messages
+                : [...s.messages, message],
               title:
-                s.messages.length === 0
+                s.messages.length === 0 && !s.messages.some((m) => m.id === message.id)
                   ? text.slice(0, SESSION_TITLE_MAX_LENGTH) +
                     (text.length > SESSION_TITLE_MAX_LENGTH ? '…' : '')
                   : s.title,
@@ -123,10 +159,12 @@ export default function useSessionManager() {
         s.id === currentSessionIdRef.current
           ? {
               ...s,
-              messages: [
-                ...s.messages,
-                { id: messageId, role: 'assistant', content: text, timestamp: Date.now() },
-              ],
+              messages: s.messages.some((m) => m.id === messageId)
+                ? s.messages
+                : [
+                    ...s.messages,
+                    { id: messageId, role: 'assistant', content: text, timestamp: Date.now() },
+                  ],
             }
           : s
       )
@@ -137,14 +175,12 @@ export default function useSessionManager() {
     sessions,
     currentSessionId,
     currentSession,
-    isRenameModalOpen,
-    sessionToRename,
+    isReady,
     createNewSession,
+    startNewConversation,
     switchSession,
     deleteSession,
-    openRenameModal,
-    handleRenameConfirm,
-    handleRenameCancel,
+    renameSession,
     addUserMessage,
     addAssistantMessage,
   };

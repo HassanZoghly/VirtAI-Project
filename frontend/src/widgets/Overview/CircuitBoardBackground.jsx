@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef } from 'react';
 /* ── colour constants ─────────────────────────────────────── */
 const TRACK_COLOR = 'rgba(109, 0, 26, 0.08)';
 const PULSE_PALETTE = [
-  { hex: '#B5AC8A', r: 181, g: 172, b: 138, weight: 0.6 },
+  { hex: '#B4AB8B', r: 180, g: 171, b: 139, weight: 0.6 },
   { hex: '#6D001A', r: 109, g: 0, b: 26, weight: 0.25 },
   { hex: '#F5F1EC', r: 245, g: 241, b: 236, weight: 0.15 },
 ];
@@ -334,7 +334,7 @@ function resetPulse(p, paths) {
 /* ════════════════════════════════════════════════════════════
    COMPONENT
    ════════════════════════════════════════════════════════════ */
-export default function CircuitBoardBackground({ pulseCount = 12, opacity = 0.5, className = '' }) {
+export default function CircuitBoardBackground({ pulseCount = 8, opacity = 0.5, className = '' }) {
   const canvasRef = useRef(null);
   const stateRef = useRef({
     paths: [],
@@ -391,6 +391,10 @@ export default function CircuitBoardBackground({ pulseCount = 12, opacity = 0.5,
     if (!canvas) {
       return;
     }
+    if (document.hidden) {
+      s.raf = requestAnimationFrame(draw);
+      return;
+    }
 
     const ctx = canvas.getContext('2d');
     if (!ctx) {
@@ -431,7 +435,7 @@ export default function CircuitBoardBackground({ pulseCount = 12, opacity = 0.5,
       const a = 0.15 + j.brightness * 0.45;
       ctx.beginPath();
       ctx.arc(j.x, j.y, 2, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(181, 172, 138, ${a})`;
+      ctx.fillStyle = `rgba(180, 171, 139, ${a})`;
       ctx.fill();
 
       if (j.brightness > 0) {
@@ -551,7 +555,7 @@ export default function CircuitBoardBackground({ pulseCount = 12, opacity = 0.5,
     const s = stateRef.current;
 
     function resize() {
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
       const w = window.innerWidth;
       const h = window.innerHeight;
       canvas.width = w * dpr;
@@ -566,12 +570,26 @@ export default function CircuitBoardBackground({ pulseCount = 12, opacity = 0.5,
     ro.observe(document.documentElement);
     resize();
 
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (s.raf) {
+          cancelAnimationFrame(s.raf);
+          s.raf = 0;
+        }
+      } else if (!s.raf) {
+        s.lastTime = 0;
+        s.raf = requestAnimationFrame(draw);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     s.lastTime = 0;
     s.raf = requestAnimationFrame(draw);
 
     return () => {
       cancelAnimationFrame(s.raf);
       ro.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [regenerate, draw]);
 

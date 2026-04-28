@@ -14,7 +14,8 @@ export default function AvatarTab({ selected, onSelect }) {
         {avatarList.map((avatar, idx) => {
           const isSelected = selected?.id === avatar.id;
           return (
-            <motion.div
+            <motion.button
+              type="button"
               key={avatar.id}
               className={`avatar-card${isSelected ? ' selected' : ''}`}
               onClick={() => onSelect(avatar)}
@@ -25,13 +26,6 @@ export default function AvatarTab({ selected, onSelect }) {
               role="radio"
               aria-checked={isSelected}
               aria-label={avatar.name}
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onSelect(avatar);
-                }
-              }}
             >
               <img
                 className="avatar-card-img"
@@ -59,7 +53,7 @@ export default function AvatarTab({ selected, onSelect }) {
                   </motion.span>
                 )}
               </AnimatePresence>
-            </motion.div>
+            </motion.button>
           );
         })}
       </div>

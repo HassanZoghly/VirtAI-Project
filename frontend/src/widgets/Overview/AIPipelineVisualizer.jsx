@@ -217,7 +217,7 @@ export default function AIPipelineVisualizer() {
 
   return (
     <section
-      id="workflow"
+      id="how-it-works"
       ref={containerRef}
       className="relative flex h-screen w-full select-none flex-col items-center justify-center overflow-hidden bg-dark px-6"
     >
@@ -253,9 +253,9 @@ export default function AIPipelineVisualizer() {
           >
             <defs>
               <linearGradient id="pipeGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#B5AC8A" />
+                <stop offset="0%" stopColor="#B4AB8B" />
                 <stop offset="50%" stopColor="#6D001A" />
-                <stop offset="100%" stopColor="#B5AC8A" />
+                <stop offset="100%" stopColor="#B4AB8B" />
               </linearGradient>
               <filter id="glowFilter">
                 <feGaussianBlur stdDeviation="3" result="blur" />
@@ -318,7 +318,7 @@ export default function AIPipelineVisualizer() {
                     cy={pos.cy}
                     r={NODE_R}
                     fill={active ? 'rgba(109,0,26,0.25)' : 'rgba(245,241,236,0.04)'}
-                    stroke={active ? '#B5AC8A' : 'rgba(245,241,236,0.12)'}
+                    stroke={active ? '#B4AB8B' : 'rgba(245,241,236,0.12)'}
                     strokeWidth={isCurrent ? 2.5 : 1.5}
                     style={{
                       transition: 'all 0.4s ease',
@@ -337,7 +337,7 @@ export default function AIPipelineVisualizer() {
                     height={20}
                     viewBox="0 0 24 24"
                     style={{
-                      color: active ? '#B5AC8A' : 'rgba(245,241,236,0.4)',
+                      color: active ? '#B4AB8B' : 'rgba(245,241,236,0.4)',
                       transition: 'color 0.4s ease',
                       pointerEvents: 'none',
                     }}
@@ -349,7 +349,7 @@ export default function AIPipelineVisualizer() {
                     x={pos.cx}
                     y={pos.cy + NODE_R + 16}
                     textAnchor="middle"
-                    fill={active ? '#B5AC8A' : 'rgba(245,241,236,0.35)'}
+                    fill={active ? '#B4AB8B' : 'rgba(245,241,236,0.35)'}
                     fontSize={10}
                     fontWeight={600}
                     letterSpacing={1}

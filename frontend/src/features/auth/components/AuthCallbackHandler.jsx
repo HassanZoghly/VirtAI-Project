@@ -1,17 +1,19 @@
 import { useGoogleCallback } from '@/features/auth/hooks/useAuth';
+import PageLoader from '@/shared/components/PageLoader';
 import { useEffect, useRef } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 export default function AuthCallbackHandler() {
   const [searchParams] = useSearchParams();
-  const { handleCallback, isLoading } = useGoogleCallback();
+  const { handleCallback } = useGoogleCallback();
   const navigate = useNavigate();
   const called = useRef(false);
 
   useEffect(() => {
     const code = searchParams.get('code');
-    if (!code) {
+    const state = searchParams.get('state');
+    if (!code || !state) {
       navigate('/auth', { replace: true });
       return;
     }
@@ -19,7 +21,7 @@ export default function AuthCallbackHandler() {
       return;
     }
     called.current = true;
-    handleCallback(code);
+    handleCallback(code, state);
   }, [searchParams, handleCallback, navigate]);
 
   return (
@@ -27,12 +29,7 @@ export default function AuthCallbackHandler() {
       <Helmet>
         <title>Signing in… — VirtAI</title>
       </Helmet>
-      <div className="flex flex-col items-center justify-center h-screen bg-(--primary-bg)">
-        <div className="w-12 h-12 border-4 border-(--accent-primary) border-t-transparent rounded-full animate-spin" />
-        {isLoading && (
-          <p className="mt-4 text-(--text-secondary) text-sm">Completing sign-in…</p>
-        )}
-      </div>
+      <PageLoader />
     </>
   );
 }

@@ -1,17 +1,15 @@
-import { lazy } from 'react';
+import { lazy, Suspense } from 'react';
 import { Route, Routes } from 'react-router-dom';
 
-import ProtectedRoute from '@/shared/components/ProtectedRoute';
+import Overview from '../pages/OverviewPage';
+import PageLoader from '@/shared/components/PageLoader';
 
-export const preloadClassroom = () => import('../pages/ClassroomPage');
-export const preloadSetup = () => import('../pages/SetupPage');
-
-const Classroom = lazy(preloadClassroom);
-const Setup = lazy(preloadSetup);
-const Overview = lazy(() => import('../pages/OverviewPage'));
+const Classroom = lazy(() => import('../pages/ClassroomPage'));
+const Setup = lazy(() => import('../pages/SetupPage'));
 const NotFound = lazy(() => import('../pages/NotFoundPage'));
 const AuthPage = lazy(() => import('../pages/AuthPage'));
 const AuthCallbackHandler = lazy(() => import('../pages/AuthCallbackPage'));
+const ProtectedRoute = lazy(() => import('@/shared/components/ProtectedRoute'));
 
 export default function AppRoutes() {
   return (
@@ -22,17 +20,21 @@ export default function AppRoutes() {
       <Route
         path="/setup"
         element={
-          <ProtectedRoute>
-            <Setup />
-          </ProtectedRoute>
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <Setup />
+            </ProtectedRoute>
+          </Suspense>
         }
       />
       <Route
         path="/classroom"
         element={
-          <ProtectedRoute>
-            <Classroom />
-          </ProtectedRoute>
+          <Suspense fallback={<PageLoader />}>
+            <ProtectedRoute>
+              <Classroom />
+            </ProtectedRoute>
+          </Suspense>
         }
       />
       <Route path="*" element={<NotFound />} />

@@ -1,26 +1,36 @@
-import { useAuthStore } from '@/features/auth/store/authStore';
-import { loadSetup } from '@/features/setup/services/setupStorage';
-import { Navigate } from 'react-router-dom';
+import { selectIsAuthenticated, useAuthStore } from '@/features/auth/store/authStore';
+import { Navigate, useLocation } from 'react-router-dom';
+import PageLoader from './PageLoader';
 
 export default function ProtectedRoute({ children }) {
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isInitializing = useAuthStore((s) => s.isInitializing);
+  const isInitialized = useAuthStore((s) => s.isInitialized);
+  const isAuthenticated = useAuthStore(selectIsAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
+  const user = useAuthStore((s) => s.user);
+  const location = useLocation();
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-(--primary-bg)">
-        <div className="w-10 h-10 border-4 border-(--accent-primary) border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+  // 1. Auth hasn't been attempted yet — wait (handled by App.jsx gate,
+  //    but keep as safety net for direct deep-link rendering)
+  if (isInitializing || !isInitialized || isLoading) {
+    return <PageLoader />;
   }
 
+  // 2. Auth resolved, user is not authenticated
   if (!isAuthenticated) {
     return <Navigate to="/auth" replace />;
   }
 
-  const setupDone = loadSetup() !== null;
+  // 3. Auth resolved, user loaded — check setup status
+  if (!user) {
+    return <PageLoader />;
+  }
 
-  if (!setupDone && !window.location.pathname.startsWith('/setup')) {
+  const setupDone = !!user?.setupComplete;
+
+  // Force users who haven't completed setup to the setup page,
+  // but do NOT block users who have completed it from revisiting /setup.
+  if (!setupDone && !location.pathname.startsWith('/setup')) {
     return <Navigate to="/setup" replace />;
   }
 

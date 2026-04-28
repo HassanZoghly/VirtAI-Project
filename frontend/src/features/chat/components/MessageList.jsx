@@ -1,4 +1,9 @@
-import { PiLightbulbFilament, PiRobotFill, PiUserCircleFill, PiWarningCircleFill } from 'react-icons/pi';
+import {
+  PiLightbulbFilament,
+  PiRobotFill,
+  PiUserCircleFill,
+  PiWarningCircleFill,
+} from 'react-icons/pi';
 import MessageBubble from './MessageBubble';
 
 /**
@@ -27,7 +32,14 @@ export default function MessageList({
   pipelineState,
 }) {
   return (
-    <div className="chat-messages" ref={chatScrollRef} onScroll={onScroll} role="log" aria-label="Chat messages">
+    <div
+      className="chat-messages"
+      ref={chatScrollRef}
+      onScroll={onScroll}
+      role="log"
+      aria-live="polite"
+      aria-label="Chat messages"
+    >
       {messages.length === 0 ? (
         <div className="welcome-state">
           <PiLightbulbFilament className="welcome-icon" />
@@ -41,7 +53,11 @@ export default function MessageList({
           ))}
           {/* Typing indicator when AI is thinking but not yet streaming */}
           {pipelineState === 'thinking' && !currentMessage && (
-            <div className="chat-message-wrapper ai-message-wrapper message-enter" role="status" aria-label="AI is typing">
+            <div
+              className="chat-message-wrapper ai-message-wrapper message-enter"
+              role="status"
+              aria-label="AI is typing"
+            >
               <div className="chat-message ai-message">
                 <div className="message-avatar">
                   <PiRobotFill aria-hidden="true" />
@@ -56,7 +72,11 @@ export default function MessageList({
           )}
           {/* Show interim ASR transcript as grayed/italic user bubble */}
           {interimTranscript && (
-            <div className="chat-message-wrapper user-message-wrapper" role="status" aria-live="polite">
+            <div
+              className="chat-message-wrapper user-message-wrapper"
+              role="status"
+              aria-live="polite"
+            >
               <div className="chat-message user-message interim-transcript">
                 <div className="message-bubble">{interimTranscript}</div>
                 <div className="message-avatar">
@@ -81,7 +101,11 @@ export default function MessageList({
           )}
           {/* Show error message if present */}
           {error && (
-            <div className="chat-message-wrapper ai-message-wrapper" role="alert" aria-live="assertive">
+            <div
+              className="chat-message-wrapper ai-message-wrapper"
+              role="alert"
+              aria-live="assertive"
+            >
               <div className="chat-message ai-message error-message">
                 <div className="message-avatar">
                   <PiWarningCircleFill aria-hidden="true" />
@@ -94,8 +118,7 @@ export default function MessageList({
           )}
           <div ref={messagesEndRef} />
         </div>
-      )
-      }
-    </div >
+      )}
+    </div>
   );
 }

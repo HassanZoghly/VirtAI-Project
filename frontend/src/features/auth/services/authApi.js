@@ -19,20 +19,20 @@ export async function getMe() {
   return data;
 }
 
+export async function updateSetupStatus(setupComplete = true) {
+  const { data } = await apiClient.patch('/auth/me/setup', {
+    setup_complete: setupComplete,
+  });
+  return data;
+}
+
 export async function getGoogleAuthUrl() {
   const { data } = await apiClient.get('/auth/google/url');
   return data.url;
 }
 
-export async function exchangeGoogleCode(code) {
-  const { data } = await apiClient.post('/auth/google/callback', { code });
-  return data;
-}
-
-export async function refreshAccessToken() {
-  const { data } = await apiClient.post('/auth/refresh', null, {
-    withCredentials: true,
-  });
+export async function exchangeGoogleCode(code, state) {
+  const { data } = await apiClient.post('/auth/google/callback', { code, state });
   return data;
 }
 

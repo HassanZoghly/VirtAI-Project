@@ -1,4 +1,4 @@
-import { team } from '@/features/overview';
+import team from '@/features/overview/data/team';
 import { motion } from 'motion/react';
 
 export default function Footer() {
@@ -34,7 +34,7 @@ export default function Footer() {
                 role="presentation"
                 width={80}
                 height={80}
-                className="h-20 w-20 rounded-full border-2 border-white/10 object-cover transition-all duration-300 group-hover:border-gold group-hover:shadow-[0_0_20px_rgba(181,172,138,0.3)]"
+                className="h-20 w-20 rounded-full border-2 border-white/10 object-cover transition-all duration-300 group-hover:border-gold group-hover:shadow-[0_0_20px_rgba(180, 171, 139, 0.3)]"
                 loading="lazy"
                 decoding="async"
               />

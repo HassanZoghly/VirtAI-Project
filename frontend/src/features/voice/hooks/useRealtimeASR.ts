@@ -7,7 +7,13 @@ import { useVoiceMode } from './useVoiceMode';
  */
 interface WSClient {
   isConnected: boolean;
+  // Reason: WebSocket client interface lacks generated type
+  // bindings from the Python/FastAPI backend schema
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   send: (message: any) => void;
+  // Reason: Pipeline state shape is defined by backend ASGI
+  // messages without a shared TypeScript contract
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onMessage: (type: string, handler: (data: any) => void) => () => void;
 }
 
@@ -67,7 +73,7 @@ export interface RealtimeASRHook {
 export function useRealtimeASR(
   wsClient: WSClient,
   pipelineState: 'idle' | 'thinking' | 'speaking' | 'error',
-  onFinalTranscript?: (text: string) => void,
+  onFinalTranscript?: (text: string) => void
 ): RealtimeASRHook {
   const [interimText, setInterimText] = useState('');
   const [finalText, setFinalText] = useState('');
@@ -86,23 +92,22 @@ export function useRealtimeASR(
    * registration, so this subscription is safe alongside ClassroomShell's.
    */
   useEffect(() => {
-    if (!wsClient) return;
+    if (!wsClient) {
+      return;
+    }
 
-    const unsubscribe = wsClient.onMessage(
-      'transcript',
-      (message: TranscriptMessage) => {
-        if (message.is_final) {
-          setFinalText(message.text);
-          setInterimText('');
-          setIsProcessing(false);
-          onFinalRef.current?.(message.text);
-          eventBus.emit('asr:final-result', { text: message.text });
-        } else {
-          setInterimText(message.text);
-          setIsProcessing(false);
-        }
-      },
-    );
+    const unsubscribe = wsClient.onMessage('transcript', (message: TranscriptMessage) => {
+      if (message.is_final) {
+        setFinalText(message.text);
+        setInterimText('');
+        setIsProcessing(false);
+        onFinalRef.current?.(message.text);
+        eventBus.emit('asr:final-result', { text: message.text });
+      } else {
+        setInterimText(message.text);
+        setIsProcessing(false);
+      }
+    });
 
     return unsubscribe;
   }, [wsClient]);

@@ -32,22 +32,25 @@ export default function ChatInput({
       e.target.style.height = 'auto';
       e.target.style.height = `${e.target.scrollHeight}px`;
     },
-    [onInputChange],
+    [onInputChange]
   );
 
   return (
     <div className="chat-input-wrapper">
       <div className="chat-input-bar">
-        <button className="input-icon-btn" title="Attach file" type="button" disabled aria-label="Attach file">
+        <button
+          className="input-icon-btn"
+          title="Attach file"
+          type="button"
+          disabled
+          aria-label="Attach file"
+        >
           <PiPaperclipFill />
         </button>
 
         {/* Voice Mode Button - Requirements 1.1, 1.4 */}
         <div style={{ marginBottom: '4px' }}>
-          <VoiceModeButton
-            wsClient={wsClient}
-            pipelineState={pipelineState}
-          />
+          <VoiceModeButton wsClient={wsClient} pipelineState={pipelineState} />
         </div>
 
         <textarea

@@ -1,10 +1,12 @@
-import { Component, Suspense, useEffect } from 'react';
+import { Component, Suspense, useEffect, useRef } from 'react';
 import { Helmet, HelmetProvider } from 'react-helmet-async';
 import { BrowserRouter as Router } from 'react-router-dom';
 import './App.css';
 
-import { useRestoreSession } from '@/features/auth/hooks/useAuth';
-import AppRoutes, { preloadClassroom, preloadSetup } from './routes';
+import { useAuthStore } from '@/features/auth/store/authStore';
+import PageLoader from '@/shared/components/PageLoader';
+import { Toaster } from 'sonner';
+import AppRoutes from './routes';
 
 const ROUTER_FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true };
 
@@ -26,7 +28,7 @@ class ErrorBoundary extends Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="error-fallback" role="alert">
+        <div className="error-fallback" role="alert" aria-live="assertive">
           <h2>Something went wrong</h2>
           <p>Please refresh the page or try again later.</p>
           <button onClick={() => window.location.reload()}>Refresh</button>
@@ -37,28 +39,36 @@ class ErrorBoundary extends Component {
   }
 }
 
-function PageLoader() {
-  return (
-    <div className="page-loader">
-      <div className="loader">
-        <span></span>
-        <span></span>
-        <span></span>
-      </div>
-    </div>
-  );
-}
-
 function App() {
-  const { restore } = useRestoreSession();
+  const isInitialized = useAuthStore((s) => s.isInitialized);
+  const isInitializing = useAuthStore((s) => s.isInitializing);
+  const bootstrapStartedRef = useRef(false);
 
+  // ALWAYS attempt a silent refresh on app boot — regardless of pathname.
+  // This ensures the auth state is resolved before any routing decisions.
   useEffect(() => {
-    if (!window.location.pathname.startsWith('/auth/callback')) {
-      restore();
+    if (bootstrapStartedRef.current) {
+      return;
     }
-    preloadSetup();
-    preloadClassroom();
-  }, [restore]);
+
+    bootstrapStartedRef.current = true;
+
+    const pathname = window.location.pathname;
+    // Skip for OAuth callback (it has its own flow)
+    if (pathname.startsWith('/auth/callback')) {
+      // Mark as initialized so the callback page can render
+      useAuthStore.setState({ isInitialized: true, isInitializing: false });
+      return;
+    }
+
+    void useAuthStore.getState().initAuth();
+  }, []);
+
+  // Block ALL route rendering until the auth check completes.
+  // This prevents the flash: "unauthenticated → redirect to /auth → actually authenticated"
+  if (isInitializing || !isInitialized) {
+    return <PageLoader />;
+  }
 
   return (
     <HelmetProvider>
@@ -69,6 +79,7 @@ function App() {
 
       <Router future={ROUTER_FUTURE}>
         <div className="app">
+          <Toaster richColors position="top-right" theme="dark" />
           <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
               <AppRoutes />

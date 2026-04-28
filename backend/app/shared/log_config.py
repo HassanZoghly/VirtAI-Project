@@ -24,6 +24,10 @@ def setup_logging() -> None:
     logger.remove()
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
+    effective_level = "DEBUG" if settings.DEBUG else settings.LOG_LEVEL.upper()
+    if settings.ENVIRONMENT == "production" and effective_level == "DEBUG":
+        effective_level = "INFO"
+
     fmt = (
         "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
         "<level>{level: <8}</level> | "
@@ -36,22 +40,23 @@ def setup_logging() -> None:
     logger.add(
         sys.stdout,
         format=fmt,
-        level="DEBUG" if settings.DEBUG else "INFO",
+        level=effective_level,
         colorize=True,
-        backtrace=True,
+        backtrace=settings.DEBUG,
         diagnose=settings.DEBUG,
+        enqueue=True,
     )
 
     logger.add(
         "logs/app_{time:YYYY-MM-DD}.log",
         format=fmt,
-        level="DEBUG" if settings.DEBUG else "INFO",
+        level=effective_level,
         rotation="50 MB",
         retention="30 days",
         compression="gz",
         encoding="utf-8",
         enqueue=True,
-        backtrace=True,
+        backtrace=settings.DEBUG,
         diagnose=settings.DEBUG,
     )
 
@@ -65,14 +70,16 @@ def setup_logging() -> None:
         encoding="utf-8",
         enqueue=True,
         backtrace=True,
-        diagnose=True,
+        diagnose=settings.DEBUG,
     )
 
-    if settings.ENVIRONMENT == "production":
+    if settings.ENVIRONMENT == "production" or settings.LOG_JSON:
+        json_dir = Path("logs/json")
+        json_dir.mkdir(parents=True, exist_ok=True)
         logger.add(
             "logs/json/app_{time:YYYY-MM-DD}.json",
-            format="{time} | {level} | {message}",
-            level="INFO",
+            format="{message}",
+            level=effective_level,
             rotation="100 MB",
             retention="7 days",
             compression="gz",
@@ -82,8 +89,10 @@ def setup_logging() -> None:
 
     logger.configure(patcher=_redact_secrets)
 
-    logger.info(f"[*] Logging initialized | ENV: {settings.ENVIRONMENT}")
-    logger.debug(f"Debug mode: {settings.DEBUG}")
+    logger.info(
+        f"[*] Logging initialized | env={settings.ENVIRONMENT} | level={effective_level} | json={settings.LOG_JSON}"
+    )
+    logger.debug(f"Debug mode enabled: {settings.DEBUG}")
 
 
 def get_logger(module_name: str):

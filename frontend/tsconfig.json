@@ -12,10 +12,9 @@
     "esModuleInterop": true,
     "allowJs": true,
     "resolveJsonModule": true,
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@components/*": ["src/components/*"]
+      "@/*": ["./src/*"],
+      "@components/*": ["./src/components/*"]
     },
     "types": ["vite/client"]
   },

@@ -11,6 +11,7 @@ const AvatarController = lazy(() => import('./AvatarController.jsx'));
  * @param {string} props.pipelineState - Current pipeline state
  * @param {string|null} props.audioUrl - TTS audio URL when speaking
  * @param {{ start: number, end: number, value: number }[]} props.mouthCues - Lip sync timeline
+ * @param {Array<object>} [props.animationTimeline] - Backend-provided animation timeline items
  * @param {() => void} props.onModelLoaded - Model loaded callback
  * @param {(error: Error) => void} props.onError
  * @param {object|null} props.emotionData - Emotion data from AI response - Error callback
@@ -22,6 +23,7 @@ export default function AvatarPanel({
   pipelineState,
   audioUrl,
   mouthCues,
+  animationTimeline,
   onModelLoaded,
   onError,
   emotionData,
@@ -51,6 +53,7 @@ export default function AvatarPanel({
             pipelineState={pipelineState}
             audioUrl={audioUrl}
             mouthCues={mouthCues}
+            animationTimeline={animationTimeline}
             onModelLoaded={onModelLoaded}
             onError={onError}
             emotionData={emotionData}

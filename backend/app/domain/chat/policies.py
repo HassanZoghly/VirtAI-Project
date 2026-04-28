@@ -11,6 +11,27 @@ Extracted from:
 from __future__ import annotations
 
 from app.domain.chat.entities import ConversationHistory
+import re
+
+class PromptSanitizer:
+    """Strips common jailbreak patterns from user input."""
+    
+    JAILBREAK_PATTERNS = [
+        r"(?i)\bignore\s+(all\s+)?(previous|prior)\s+instructions\b",
+        r"(?i)\bforget\s+(all\s+)?(previous|prior)\s+instructions\b",
+        r"(?i)\bignore\s+(the\s+)?above\s+instructions\b",
+        r"(?i)\byou\s+are\s+now\b",
+        r"(?i)\bdisregard\s+(all\s+)?previous\b",
+    ]
+    
+    @classmethod
+    def sanitize(cls, text: str) -> str:
+        if not text:
+            return text
+        sanitized = text
+        for pattern in cls.JAILBREAK_PATTERNS:
+            sanitized = re.sub(pattern, "[REDACTED]", sanitized)
+        return sanitized
 
 # ── Conversation Trimming ─────────────────────────────────────────────────────
 MAX_MESSAGES_DEFAULT = 20  # max user+assistant pairs to keep
@@ -18,20 +39,27 @@ MAX_MESSAGES_DEFAULT = 20  # max user+assistant pairs to keep
 # ── Emotion Instructions (appended to every avatar prompt) ────────────────────
 EMOTION_INSTRUCTIONS = """
 
-EMOTION TAGGING (mandatory):
-Prefix EVERY response with exactly one emotion tag: [emotion:NAME]
-Choose the most fitting emotion from this list:
+EMOTION TAGGING & OUTPUT FORMAT (mandatory):
+You MUST output your response in STRICT JSON format exactly as follows:
+{
+  "display": "[emotion:NAME] Your markdown formatted response here...",
+  "speech": "Your clean spoken text here, without any markdown or tags."
+}
+
+Rules for JSON generation:
+1. The "display" field MUST contain the emotion tag as its very first characters.
+2. The "speech" field MUST contain natural spoken text with NO formatting symbols (no ###, *, or backticks). Convert bullet points into natural sentences with pauses.
+3. Choose the most fitting emotion from this list to use in the display field tag:
 neutral, happy, sad, surprised, angry, thinking, confused, empathetic,
 excited, concerned, reassuring, proud, disappointed, sarcastic, grateful, curious.
+4. Use exactly the format [emotion:name] — lowercase, no spaces.
+5. Do NOT mention or explain the tag to the user; it is metadata only.
 
-Rules:
-- The tag MUST be the very first characters of your response.
-- Use exactly the format [emotion:name] — lowercase, no spaces.
-- Pick the emotion that best matches the TONE of your reply, not the topic.
-- Default to [emotion:neutral] when unsure.
-- Do NOT mention or explain the tag to the user; it is metadata only.
-
-Example: [emotion:happy] Great job! That's the correct answer."""
+Example:
+{
+  "display": "[emotion:happy] Great job! That's the correct answer.\\n* Point 1\\n* Point 2",
+  "speech": "Great job! That's the correct answer. Point one, point two."
+}"""
 
 # ── Avatar Personalities ──────────────────────────────────────────────────────
 AVATAR_PROMPTS: dict[str, str] = {

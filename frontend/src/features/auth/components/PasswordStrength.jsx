@@ -26,7 +26,7 @@ export default function PasswordStrength({ password = '' }) {
   const config = strengthConfig[passed - 1] ?? strengthConfig[0];
 
   return (
-    <div className="mt-2 space-y-2">
+    <div className="mt-1.5 space-y-1">
       {/* Strength bar */}
       <div className="flex gap-1">
         {strengthConfig.map((_, i) => (
@@ -39,41 +39,9 @@ export default function PasswordStrength({ password = '' }) {
           />
         ))}
       </div>
-
       <p className="text-xs text-(--text-secondary)">
         Strength: <span className="font-medium text-(--text-primary)">{config.label}</span>
       </p>
-
-      {/* Rule checklist */}
-      <ul className="space-y-1">
-        {rules.map((rule, i) => {
-          const ok = rule.test(password);
-          return (
-            <li
-              key={i}
-              className={cn(
-                'flex items-center gap-1.5 text-xs transition-colors',
-                ok ? 'text-green-400' : 'text-(--text-muted)'
-              )}
-            >
-              {ok ? (
-                <svg className="h-3 w-3 shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              ) : (
-                <svg className="h-3 w-3 shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                  <circle cx="10" cy="10" r="3" />
-                </svg>
-              )}
-              {rule.label}
-            </li>
-          );
-        })}
-      </ul>
     </div>
   );
 }

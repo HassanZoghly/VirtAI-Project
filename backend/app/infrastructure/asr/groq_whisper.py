@@ -17,8 +17,6 @@ import numpy as np
 from groq import AsyncGroq
 from loguru import logger
 
-from app.shared.config import get_settings
-from app.shared.errors import ASRException
 from app.domain.voice.entities import (
     ASRResult,
     ASRSegment,
@@ -26,6 +24,8 @@ from app.domain.voice.entities import (
     WordTimestamp,
 )
 from app.domain.voice.ports import BaseASRProvider, StreamingASRService
+from app.shared.config import get_settings
+from app.shared.errors import ASRException
 
 settings = get_settings()
 

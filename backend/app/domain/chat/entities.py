@@ -73,7 +73,9 @@ class ConversationHistory:
     _messages: list[ChatMessage] = field(default_factory=list)
 
     def add_user_message(self, content: str) -> None:
-        self._messages.append(ChatMessage(role=MessageRole.USER, content=content))
+        from app.domain.chat.policies import PromptSanitizer
+        sanitized_content = PromptSanitizer.sanitize(content)
+        self._messages.append(ChatMessage(role=MessageRole.USER, content=sanitized_content))
         self._trim()
 
     def add_assistant_message(self, content: str) -> None:

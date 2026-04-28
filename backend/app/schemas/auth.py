@@ -26,6 +26,11 @@ class SignupRequest(BaseModel):
 
 class GoogleCallbackRequest(BaseModel):
     code: str = Field(min_length=1)
+    state: str = Field(min_length=1)
+
+
+class SetupStatusRequest(BaseModel):
+    setup_complete: bool = True
 
 
 # ---------------------------------------------------------------------------

@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Optional
 from loguru import logger
 
 from app.application.voice.handle_voice_turn import ConversationPipeline
+from app.infrastructure.db.chat_repository import create_chat_session
 
 if TYPE_CHECKING:
     from app.domain.chat.ports import BaseLLMProvider
@@ -37,12 +38,14 @@ class ConversationSession:
     def __init__(
         self,
         session_id: str,
+        user_id: str,
         avatar_id: str = "avatar1",
         asr_service: Optional[StreamingASRService] = None,
         llm_service: Optional[BaseLLMProvider] = None,
         tts_service: Optional[BaseTTSProvider] = None,
     ):
         self.session_id: str = session_id
+        self.user_id: str = user_id
         self.avatar_id: str = avatar_id
         self.pipeline: ConversationPipeline = ConversationPipeline(
             asr=asr_service,
@@ -52,12 +55,24 @@ class ConversationSession:
         )
         self.created_at: datetime = datetime.now(timezone.utc)
         self.last_activity: datetime = datetime.now(timezone.utc)
+        self.connected: bool = True
+        self.disconnected_at: datetime | None = None
         self.background_tasks: set[asyncio.Task] = set()
         self.on_cleanup: Optional[Callable[[], None]] = None
 
     def touch(self) -> None:
         """Updates last_activity timestamp."""
         self.last_activity = datetime.now(timezone.utc)
+
+    def mark_connected(self) -> None:
+        self.connected = True
+        self.disconnected_at = None
+        self.touch()
+
+    def mark_disconnected(self) -> None:
+        self.connected = False
+        self.disconnected_at = datetime.now(timezone.utc)
+        self.touch()
 
     @property
     def idle_seconds(self) -> float:
@@ -117,6 +132,7 @@ class SessionManager:
 
     async def create_session(
         self,
+        user_id: str,
         session_id: str | None = None,
         avatar_id: str = "avatar1",
         voice_id: str | None = None,
@@ -126,6 +142,11 @@ class SessionManager:
         tts_service: Optional[BaseTTSProvider] = None,
     ) -> ConversationSession:
         sid = session_id or str(uuid.uuid4())
+        if sid in self._sessions:
+            # Guard accidental session-id reuse for new chats.
+            sid = str(uuid.uuid4())
+
+        await create_chat_session(user_id=user_id, session_id=sid)
 
         asr = asr_service or (self._asr_service_factory() if self._asr_service_factory else None)
         llm = llm_service or (self._llm_service_factory() if self._llm_service_factory else None)
@@ -133,6 +154,7 @@ class SessionManager:
 
         session = ConversationSession(
             session_id=sid,
+            user_id=user_id,
             avatar_id=avatar_id,
             asr_service=asr,
             llm_service=llm,
@@ -151,6 +173,7 @@ class SessionManager:
         logger.info(
             f"Session created | "
             f"id={sid} | "
+            f"user={user_id} | "
             f"avatar={avatar_id} | "
             f"voice={voice_id or 'default'} | "
             f"total_active={len(self._sessions)}"
@@ -163,11 +186,34 @@ class SessionManager:
             session.touch()
         return session
 
+    async def connect_existing_session(self, session_id: str) -> ConversationSession | None:
+        """Mark an existing session as connected (used for WS resume)."""
+        session = self._sessions.get(session_id)
+        if session:
+            session.mark_connected()
+        return session
+
+    def disconnect_session(self, session_id: str) -> None:
+        """Mark session disconnected but keep it alive for timeout-based resume."""
+        session = self._sessions.get(session_id)
+        if session is None:
+            return
+        session.pipeline.abort()
+        session.mark_disconnected()
+        logger.info(f"Session disconnected | id={session_id} | total_active={len(self._sessions)}")
+
     def remove_session(self, session_id: str) -> None:
         if session_id in self._sessions:
             session = self._sessions[session_id]
             session.cleanup()
             del self._sessions[session_id]
+
+            # Keep Redis chat context until TTL expiry to support reconnect warm-up
+            # and avoid losing cache immediately on normal WebSocket disconnect.
+            logger.debug(
+                f"[SessionManager] Preserving Redis context until TTL | session={session_id}"
+            )
+
             logger.info(f"Session removed | id={session_id} | total_active={len(self._sessions)}")
 
     async def cleanup_idle(self) -> int:
@@ -223,7 +269,9 @@ class SessionManager:
             "sessions": [
                 {
                     "id": sid,
+                    "user_id": s.user_id,
                     "avatar": s.avatar_id,
+                    "connected": s.connected,
                     "idle_sec": round(s.idle_seconds, 1),
                     "history_length": s.pipeline.history_length,
                 }

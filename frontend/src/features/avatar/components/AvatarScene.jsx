@@ -1,19 +1,98 @@
 /* eslint-disable no-console */
+import { logger } from '@/shared/utils/logger';
 import { ContactShadows, Environment, OrbitControls, useFBX, useGLTF } from '@react-three/drei';
 import { Canvas, useFrame } from '@react-three/fiber';
-import React, { Component, Suspense, useEffect, useMemo, useRef } from 'react';
+import React, { Component, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { AvatarFaceController } from '../AvatarFaceController';
-import {
-  ANIMATION_METADATA,
-  getTransitionFade,
-  MORPH_SMOOTHING,
-  pickWeightedRandom,
-} from '../constants';
+import { ANIMATION_METADATA, getTransitionFade, MORPH_SMOOTHING } from '../constants';
 import { useRealismEnhancements } from '../hooks/useRealismEnhancements';
+
+THREE.Cache.enabled = true;
 
 const CAMERA_CONFIG = { position: [0, 0.2, 3.6], fov: 45, near: 0.01, far: 100 };
 const GL_CONFIG = { antialias: true, alpha: true, preserveDrawingBuffer: false };
+const TIMELINE_FPS = 30;
+const AVATAR_BASE_POSITION = [0, -1.25, 0];
+const AVATAR_BASE_SCALE = 1.25;
+const SAFE_MIN_DELTA = 1 / 120;
+const SAFE_MAX_DELTA = 1 / 15; // tolerate up to ~66 ms spikes without huge motion jumps
+
+const TALK_VARIANT_PATTERN = /^talk\d\.\d$/i;
+const ROOT_TRANSLATION_NODE_PATTERN = /(hips|pelvis|root|armature)/i;
+const ROOT_TRANSLATION_PROPERTY_PATTERN = /\.position$/i;
+const ROOT_ROTATION_PROPERTY_PATTERN = /\.quaternion$/i;
+
+function parseTrackName(trackName) {
+  const parts = `${trackName}`.split('.');
+  if (parts.length === 1) {
+    return { nodeName: '', property: parts[0].toLowerCase() };
+  }
+  return {
+    nodeName: parts.slice(0, -1).join('.').toLowerCase(),
+    property: parts[parts.length - 1].toLowerCase(),
+  };
+}
+
+function isRootMotionTrack(trackName) {
+  const normalized = `${trackName}`.toLowerCase();
+
+  // Strip root translation (position) tracks
+  if (ROOT_TRANSLATION_PROPERTY_PATTERN.test(normalized)) {
+    if (normalized === '.position') {
+      return true;
+    }
+    const { nodeName, property } = parseTrackName(trackName);
+    if (!nodeName) {
+      return false;
+    }
+    if (property === 'position' && ROOT_TRANSLATION_NODE_PATTERN.test(nodeName)) {
+      return true;
+    }
+  }
+
+  // Strip root rotation (quaternion) tracks — prevents avatar flip during FBX talk animations
+  if (ROOT_ROTATION_PROPERTY_PATTERN.test(normalized)) {
+    const { nodeName, property } = parseTrackName(trackName);
+    if (nodeName && property === 'quaternion' && ROOT_TRANSLATION_NODE_PATTERN.test(nodeName)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function sanitizeClipRootMotion(clip, clipName) {
+  const sanitized = clip.clone();
+  const removedTrackNames = [];
+
+  sanitized.tracks = sanitized.tracks.filter((track) => {
+    const shouldStrip = isRootMotionTrack(track.name);
+    if (shouldStrip) {
+      removedTrackNames.push(track.name);
+    }
+    return !shouldStrip;
+  });
+
+  sanitized.resetDuration();
+
+  if (removedTrackNames.length > 0 && import.meta.env.DEV) {
+    console.debug(
+      `[AvatarScene] Root motion disabled for '${clipName}': ${removedTrackNames.join(', ')}`
+    );
+  }
+
+  return sanitized;
+}
+
+function isAnimationDirective(value) {
+  return !!value && typeof value === 'object' && typeof value.animation === 'string';
+}
+
+function frameToSeconds(frame) {
+  return Math.max(0, Number(frame || 0) / TIMELINE_FPS);
+}
 
 /**
  * Error boundary for the 3D avatar canvas. Shows fallback on render error.
@@ -52,14 +131,38 @@ const CACHE_BUST = import.meta.env.DEV ? `?v=${Date.now()}` : '';
 const ANIM = {
   greeting: [{ fbx: `/models/animations/Greeting/Greeting.fbx${CACHE_BUST}` }],
   idle: [{ fbx: `/models/animations/Idle/Idle.fbx${CACHE_BUST}` }],
-  talk1: [{ fbx: `/models/animations/Talk/Talk1.fbx${CACHE_BUST}` }],
-  talk2: [{ fbx: `/models/animations/Talk/Talk2.fbx${CACHE_BUST}` }],
-  talk3: [{ fbx: `/models/animations/Talk/Talk3.fbx${CACHE_BUST}` }],
-  talk4: [{ fbx: `/models/animations/Talk/Talk4.fbx${CACHE_BUST}` }],
-  talk5: [{ fbx: `/models/animations/Talk/Talk5.fbx${CACHE_BUST}` }],
-  talk6: [{ fbx: `/models/animations/Talk/Talk6.fbx${CACHE_BUST}` }],
-  talk7: [{ fbx: `/models/animations/Talk/Talk7.fbx${CACHE_BUST}` }],
+  talk11: [{ fbx: `/models/animations/Talk/Talk1.1.fbx${CACHE_BUST}` }],
+  talk12: [{ fbx: `/models/animations/Talk/Talk1.2.fbx${CACHE_BUST}` }],
+  talk21: [{ fbx: `/models/animations/Talk/Talk2.1.fbx${CACHE_BUST}` }],
+  talk22: [{ fbx: `/models/animations/Talk/Talk2.2.fbx${CACHE_BUST}` }],
+  talk31: [{ fbx: `/models/animations/Talk/Talk3.1.fbx${CACHE_BUST}` }],
+  talk32: [{ fbx: `/models/animations/Talk/Talk3.2.fbx${CACHE_BUST}` }],
+  talk41: [{ fbx: `/models/animations/Talk/Talk4.1.fbx${CACHE_BUST}` }],
+  talk42: [{ fbx: `/models/animations/Talk/Talk4.2.fbx${CACHE_BUST}` }],
+  talk51: [{ fbx: `/models/animations/Talk/Talk5.1.fbx${CACHE_BUST}` }],
+  talk52: [{ fbx: `/models/animations/Talk/Talk5.2.fbx${CACHE_BUST}` }],
+  talk61: [{ fbx: `/models/animations/Talk/Talk6.1.fbx${CACHE_BUST}` }],
+  talk62: [{ fbx: `/models/animations/Talk/Talk6.2.fbx${CACHE_BUST}` }],
+  talk71: [{ fbx: `/models/animations/Talk/Talk7.1.fbx${CACHE_BUST}` }],
+  talk72: [{ fbx: `/models/animations/Talk/Talk7.2.fbx${CACHE_BUST}` }],
 };
+
+const TALK_ANIMATIONS = [
+  { name: 'Talk1.1', fbx: ANIM.talk11[0].fbx },
+  { name: 'Talk1.2', fbx: ANIM.talk12[0].fbx },
+  { name: 'Talk2.1', fbx: ANIM.talk21[0].fbx },
+  { name: 'Talk2.2', fbx: ANIM.talk22[0].fbx },
+  { name: 'Talk3.1', fbx: ANIM.talk31[0].fbx },
+  { name: 'Talk3.2', fbx: ANIM.talk32[0].fbx },
+  { name: 'Talk4.1', fbx: ANIM.talk41[0].fbx },
+  { name: 'Talk4.2', fbx: ANIM.talk42[0].fbx },
+  { name: 'Talk5.1', fbx: ANIM.talk51[0].fbx },
+  { name: 'Talk5.2', fbx: ANIM.talk52[0].fbx },
+  { name: 'Talk6.1', fbx: ANIM.talk61[0].fbx },
+  { name: 'Talk6.2', fbx: ANIM.talk62[0].fbx },
+  { name: 'Talk7.1', fbx: ANIM.talk71[0].fbx },
+  { name: 'Talk7.2', fbx: ANIM.talk72[0].fbx },
+];
 
 // Animation fallback map for missing animations
 const ANIMATION_FALLBACK = {
@@ -70,14 +173,36 @@ const ANIMATION_FALLBACK = {
 
 // Fuzzy animation name matching
 export const ANIMATION_ALIASES = {
-  talk: ['talk1', 'talk2', 'talk3', 'talk4', 'talk5', 'talk6', 'talk7'],
-  talk1: ['talk1'],
-  talk2: ['talk2'],
-  talk3: ['talk3'],
-  talk4: ['talk4'],
-  talk5: ['talk5'],
-  talk6: ['talk6'],
-  talk7: ['talk7'],
+  talk: [
+    'talk1',
+    'talk2',
+    'talk3',
+    'talk4',
+    'talk5',
+    'talk6',
+    'talk7',
+    'talk1.1',
+    'talk1.2',
+    'talk2.1',
+    'talk2.2',
+    'talk3.1',
+    'talk3.2',
+    'talk4.1',
+    'talk4.2',
+    'talk5.1',
+    'talk5.2',
+    'talk6.1',
+    'talk6.2',
+    'talk7.1',
+    'talk7.2',
+  ],
+  talk1: ['talk1', 'talk1.1', 'talk1.2'],
+  talk2: ['talk2', 'talk2.1', 'talk2.2'],
+  talk3: ['talk3', 'talk3.1', 'talk3.2'],
+  talk4: ['talk4', 'talk4.1', 'talk4.2'],
+  talk5: ['talk5', 'talk5.1', 'talk5.2'],
+  talk6: ['talk6', 'talk6.1', 'talk6.2'],
+  talk7: ['talk7', 'talk7.1', 'talk7.2'],
   idle: ['idle', 'standing', 'neutral'],
   greeting: ['greeting', 'wave', 'hello'],
 };
@@ -122,8 +247,8 @@ export function resolveAnimationName(requestedName, availableClips) {
  * Handles model loading, animation playback, and morph target application.
  * @param {object} props
  * @param {string} props.modelPath - Path to GLB model file
- * @param {string} [props.currentAnimation] - Animation name ('idle','thinking','speaking','greeting')
- * @param {Record<string, number>} [props.morphTargets] - Viseme names → influence values (0-1)
+ * @param {string|object} [props.currentAnimation] - Animation name or timeline directive
+ * @param {React.MutableRefObject<Record<string, number>>} [props.morphTargetsRef] - Live viseme ref
  * @param {{ headBob: number, chestBob: number }} [props.bodyMotion] - Subtle body animation
  * @param {() => void} [props.onModelLoaded] - Callback when model is loaded
  * @param {React.RefObject<HTMLAudioElement>} [props.audioRef] - Ref to audio element
@@ -133,58 +258,43 @@ export function resolveAnimationName(requestedName, availableClips) {
 const AvatarRig = React.memo(function AvatarRig({
   modelPath,
   currentAnimation,
-  morphTargets = {},
+  morphTargetsRef,
   onModelLoaded,
   audioRef,
   mouthCues,
   isPlaying,
   emotionData,
+  audioGeneration,
 }) {
   const group = useRef();
+  const prefersReducedMotionRef = useRef(
+    typeof window !== 'undefined'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      : false
+  );
   const { scene } = useGLTF(modelPath);
 
-  // Load all animation FBX files (static hook calls — must always be the same count)
+  // Load only the critical animations during the initial render pass.
   const greetingFBX = useFBX(ANIM.greeting[0].fbx);
   const idleFBX = useFBX(ANIM.idle[0].fbx);
-  const talk1FBX = useFBX(ANIM.talk1[0].fbx);
-  const talk2FBX = useFBX(ANIM.talk2[0].fbx);
-  const talk3FBX = useFBX(ANIM.talk3[0].fbx);
-  const talk4FBX = useFBX(ANIM.talk4[0].fbx);
-  const talk5FBX = useFBX(ANIM.talk5[0].fbx);
-  const talk6FBX = useFBX(ANIM.talk6[0].fbx);
-  const talk7FBX = useFBX(ANIM.talk7[0].fbx);
-
-  const talkFBXs = useMemo(
-    () => [
-      { name: 'talk1', fbx: talk1FBX },
-      { name: 'talk2', fbx: talk2FBX },
-      { name: 'talk3', fbx: talk3FBX },
-      { name: 'talk4', fbx: talk4FBX },
-      { name: 'talk5', fbx: talk5FBX },
-      { name: 'talk6', fbx: talk6FBX },
-      { name: 'talk7', fbx: talk7FBX },
-    ],
-    [talk1FBX, talk2FBX, talk3FBX, talk4FBX, talk5FBX, talk6FBX, talk7FBX]
-  );
-
-  // Log loaded FBX data to verify animations are present
-  useEffect(() => {
-    if (import.meta.env.DEV) {
-      console.debug('[AvatarScene] FBX Load Status:');
-      console.debug('  - Greeting:', greetingFBX?.animations?.length || 0, 'clips');
-      console.debug('  - Idle:', idleFBX?.animations?.length || 0, 'clips');
-      talkFBXs.forEach(({ name, fbx }) => {
-        console.debug(`  - ${name}:`, fbx?.animations?.length || 0, 'clips');
-      });
-    }
-  }, [greetingFBX, idleFBX, talkFBXs]);
+  const loadedTalkAnimationsRef = useRef(new Map());
+  const talkPreloadStartedRef = useRef(false);
+  const [talkAnimationRevision, setTalkAnimationRevision] = useState(0);
 
   const mixerRef = useRef(null);
   const actionsRef = useRef({});
+  const stopInactiveTimerRef = useRef(null);
   const currentActionRef = useRef(null);
   const currentActionNameRef = useRef(null); // Track current action name to prevent re-triggers
+  const currentRangeRef = useRef(null);
   const clipNameCacheRef = useRef({}); // Cache resolved names
   const lastPlayedTalkRef = useRef(null); // Track last played talk variant for no-repeat
+  const stableSceneTransformRef = useRef({
+    initialized: false,
+    position: new THREE.Vector3(),
+    quaternion: new THREE.Quaternion(),
+  });
+  const visemeIndexCacheRef = useRef(new WeakMap());
 
   // Refs for morph target meshes
   const headMeshRef = useRef(null);
@@ -209,9 +319,9 @@ const AvatarRig = React.memo(function AvatarRig({
   const allMorphMeshesRef = useRef([]);
 
   // Use realism enhancements
-  const enhancedMorphTargets = useRealismEnhancements(
+  const enhancedMorphTargetsRef = useRealismEnhancements(
     scene,
-    morphTargets,
+    morphTargetsRef,
     isPlaying,
     audioRef,
     mouthCues,
@@ -330,43 +440,58 @@ const AvatarRig = React.memo(function AvatarRig({
     onModelLoaded?.();
   }, [scene, onModelLoaded]);
 
-  // Setup animation clips - only include animations that loaded successfully
-  const clips = useMemo(() => {
+  // Setup critical animation clips - only include animations that loaded successfully.
+  const criticalClips = useMemo(() => {
     const result = [];
     const normalizeClip = (clip, name) => {
       const c = clip.clone();
       c.name = name;
-      return c;
+      return sanitizeClipRootMotion(c, name);
     };
 
-    const g = greetingFBX?.animations?.[0];
-    const i = idleFBX?.animations?.[0];
+    const greetingClip = greetingFBX?.animations?.[0];
+    const idleClip = idleFBX?.animations?.[0];
 
-    if (g) {
-      result.push(normalizeClip(g, 'greeting'));
+    if (greetingClip) {
+      result.push(normalizeClip(greetingClip, 'greeting'));
     }
-    if (i) {
-      result.push(normalizeClip(i, 'idle'));
-    }
-
-    // Add all talk variants
-    for (const { name, fbx } of talkFBXs) {
-      const clip = fbx?.animations?.[0];
-      if (clip) {
-        result.push(normalizeClip(clip, name));
-      }
+    if (idleClip) {
+      result.push(normalizeClip(idleClip, 'idle'));
     }
 
     if (import.meta.env.DEV) {
-      console.debug('[AvatarScene] Loaded clips:', result.map((c) => c.name).join(', '));
+      console.debug('[AvatarScene] Loaded critical clips:', result.map((c) => c.name).join(', '));
     }
 
     return result;
-  }, [greetingFBX, idleFBX, talkFBXs]);
+  }, [greetingFBX, idleFBX]);
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.debug('[AvatarScene] FBX Load Status:');
+      console.debug('  - Greeting:', greetingFBX?.animations?.length || 0, 'clips');
+      console.debug('  - Idle:', idleFBX?.animations?.length || 0, 'clips');
+      console.debug(
+        '  - Talk:',
+        loadedTalkAnimationsRef.current.size,
+        'clips loaded in background'
+      );
+    }
+  }, [greetingFBX, idleFBX, talkAnimationRevision]);
+
+  useEffect(() => {
+    if (!scene || stableSceneTransformRef.current.initialized) {
+      return;
+    }
+
+    stableSceneTransformRef.current.position.copy(scene.position);
+    stableSceneTransformRef.current.quaternion.copy(scene.quaternion);
+    stableSceneTransformRef.current.initialized = true;
+  }, [scene]);
 
   // Setup animation mixer
   useEffect(() => {
-    if (!scene || clips.length === 0) {
+    if (!scene || criticalClips.length === 0) {
       return;
     }
 
@@ -374,7 +499,7 @@ const AvatarRig = React.memo(function AvatarRig({
     const mixer = mixerRef.current;
 
     const actions = {};
-    for (const clip of clips) {
+    for (const clip of criticalClips) {
       const action = mixer.clipAction(clip);
       action.enabled = true;
       action.clampWhenFinished = true;
@@ -386,108 +511,395 @@ const AvatarRig = React.memo(function AvatarRig({
     if (import.meta.env.DEV) {
       console.debug(
         '[AvatarScene] Available animation clips:',
-        clips.map((c) => `${c.name} (${c.duration.toFixed(2)}s)`).join(', ')
+        criticalClips.map((c) => `${c.name} (${c.duration.toFixed(2)}s)`).join(', ')
       );
     }
 
     return () => {
+      if (stopInactiveTimerRef.current) {
+        clearTimeout(stopInactiveTimerRef.current);
+        stopInactiveTimerRef.current = null;
+      }
       mixer.stopAllAction();
       mixer.uncacheRoot(scene);
       mixerRef.current = null;
       actionsRef.current = {};
       currentActionRef.current = null;
       currentActionNameRef.current = null; // Reset name tracking
+      currentRangeRef.current = null;
     };
-  }, [scene, clips]);
+  }, [scene, criticalClips]);
 
-  // Play animation with smooth transitions and fallback support
-  const playAction = (name, { loop = THREE.LoopRepeat, fade } = {}) => {
+  useEffect(() => {
+    if (talkPreloadStartedRef.current || criticalClips.length === 0) {
+      return;
+    }
+
+    talkPreloadStartedRef.current = true;
+    let cancelled = false;
+    const loader = new FBXLoader();
+
+    const loadTalkAnimations = async () => {
+      for (const { name, fbx } of TALK_ANIMATIONS) {
+        if (cancelled || loadedTalkAnimationsRef.current.has(name)) {
+          continue;
+        }
+
+        try {
+          const loaded = await loader.loadAsync(fbx);
+          if (cancelled) {
+            return;
+          }
+
+          loadedTalkAnimationsRef.current.set(name, loaded);
+          setTalkAnimationRevision((revision) => revision + 1);
+
+          if (import.meta.env.DEV) {
+            console.debug(`[AvatarScene] Background-loaded animation '${name}'`);
+          }
+        } catch (err) {
+          if (import.meta.env.DEV) {
+            console.warn(`[AvatarScene] Failed to lazy-load '${name}':`, err);
+          }
+        }
+      }
+    };
+
+    const scheduleLoad =
+      typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function'
+        ? window.requestIdleCallback(
+            () => {
+              void loadTalkAnimations();
+            },
+            { timeout: 1500 }
+          )
+        : window.setTimeout(() => {
+            void loadTalkAnimations();
+          }, 0);
+
+    return () => {
+      cancelled = true;
+      if (typeof window !== 'undefined' && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(scheduleLoad);
+      } else {
+        clearTimeout(scheduleLoad);
+      }
+    };
+  }, [criticalClips.length]);
+
+  useEffect(() => {
+    if (!mixerRef.current || loadedTalkAnimationsRef.current.size === 0) {
+      return;
+    }
+
+    for (const [name, fbx] of loadedTalkAnimationsRef.current.entries()) {
+      if (actionsRef.current[name]) {
+        continue;
+      }
+
+      const clip = fbx?.animations?.[0];
+      if (!clip) {
+        continue;
+      }
+
+      const normalizedClip = sanitizeClipRootMotion(clip.clone(), name);
+      normalizedClip.name = name;
+
+      const action = mixerRef.current.clipAction(normalizedClip);
+      action.enabled = true;
+      action.clampWhenFinished = true;
+      actionsRef.current[name] = action;
+    }
+  }, [scene, criticalClips, talkAnimationRevision]);
+
+  // Play animation with smooth transitions and backend timeline directive support.
+  const playAction = (request, { loop = THREE.LoopRepeat, fade } = {}) => {
+    const directive = isAnimationDirective(request) ? request : { animation: request };
+    const requestedNameRaw = `${directive.animation || 'idle'}`;
+    const requestedName = requestedNameRaw.toLowerCase();
+    const requestedAsset =
+      typeof directive.animationAsset === 'string' ? directive.animationAsset : null;
+
     const actions = actionsRef.current;
     const availableClips = Object.keys(actions);
-    let resolvedName;
+    let resolvedName = null;
 
-    // Weighted random selection for talk/speaking animations
-    const isTalkRequest = name === 'speaking' || name === 'talk';
-    if (isTalkRequest) {
-      const picked = pickWeightedRandom('talk', lastPlayedTalkRef.current);
-      if (picked && actions[picked]) {
-        resolvedName = picked;
+    if (requestedAsset) {
+      resolvedName = resolveAnimationName(requestedAsset, availableClips);
+    }
+
+    const isTalkRequest =
+      requestedName === 'speaking' || requestedName === 'talk' || /^talk\d$/.test(requestedName);
+
+    if (!resolvedName && isTalkRequest) {
+      let variantPool = availableClips.filter((clip) => TALK_VARIANT_PATTERN.test(clip));
+      if (/^talk\d$/.test(requestedName)) {
+        variantPool = variantPool.filter((clip) =>
+          clip.toLowerCase().startsWith(`${requestedName}.`)
+        );
+      }
+
+      if (variantPool.length > 0) {
+        const noRepeatPool =
+          variantPool.length > 1
+            ? variantPool.filter((clip) => clip !== lastPlayedTalkRef.current)
+            : variantPool;
+        const pickFrom = noRepeatPool.length > 0 ? noRepeatPool : variantPool;
+        resolvedName = pickFrom[Math.floor(Math.random() * pickFrom.length)];
       }
     }
 
-    // Standard resolution for non-talk or if random pick failed
     if (!resolvedName) {
-      resolvedName = clipNameCacheRef.current[name];
+      resolvedName = clipNameCacheRef.current[requestedName];
 
       if (!resolvedName) {
-        resolvedName = resolveAnimationName(name, availableClips);
+        resolvedName = resolveAnimationName(requestedName, availableClips);
 
-        if (!resolvedName && ANIMATION_FALLBACK[name]) {
-          resolvedName = resolveAnimationName(ANIMATION_FALLBACK[name], availableClips);
+        if (!resolvedName && ANIMATION_FALLBACK[requestedName]) {
+          resolvedName = resolveAnimationName(ANIMATION_FALLBACK[requestedName], availableClips);
         }
 
         if (resolvedName) {
-          clipNameCacheRef.current[name] = resolvedName;
+          clipNameCacheRef.current[requestedName] = resolvedName;
           if (import.meta.env.DEV) {
-            console.debug(`[AvatarScene] Resolved '${name}' → '${resolvedName}'`);
+            console.debug(`[AvatarScene] Resolved '${requestedName}' → '${resolvedName}'`);
           }
         }
       }
     }
 
-    // For talk requests, allow re-triggering with a different variant
-    if (!isTalkRequest && currentActionNameRef.current === resolvedName) {
+    if (!resolvedName) {
+      if (import.meta.env.DEV) {
+        console.warn(`[AvatarScene] Animation '${requestedNameRaw}' not found`);
+      }
       return;
     }
-    // For talk requests, still skip if same variant was picked
-    if (isTalkRequest && currentActionNameRef.current === resolvedName) {
+
+    const hasTimeRange =
+      Number.isFinite(directive.startTime) &&
+      Number.isFinite(directive.endTime) &&
+      directive.endTime > directive.startTime;
+    const hasFrameRange =
+      !hasTimeRange &&
+      Number.isFinite(directive.startFrame) &&
+      Number.isFinite(directive.endFrame) &&
+      directive.endFrame > directive.startFrame;
+
+    // Don't re-trigger if same animation is already playing
+    if (
+      currentActionNameRef.current === resolvedName &&
+      !hasTimeRange &&
+      !hasFrameRange &&
+      !requestedAsset &&
+      !isTalkRequest
+    ) {
+      return;
+    }
+
+    // CRITICAL: If a talk variant is already playing, don't switch to a new one
+    // mid-response — this prevents the jarring flip/angle-change during speaking.
+    const currentIsTalkVariant =
+      currentActionNameRef.current && TALK_VARIANT_PATTERN.test(currentActionNameRef.current);
+    if (
+      isTalkRequest &&
+      currentIsTalkVariant &&
+      !hasTimeRange &&
+      !hasFrameRange &&
+      !requestedAsset
+    ) {
       return;
     }
 
     const next = actions[resolvedName];
     if (!next) {
-      if (import.meta.env.DEV) {
-        console.warn(`[AvatarScene] Animation '${name}' not found (tried: ${resolvedName})`);
-      }
       return;
     }
 
-    // Compute cross-fade duration from transition type if not explicitly provided
-    const fromCategory = ANIMATION_METADATA[currentActionNameRef.current]?.category ?? 'idle';
-    const toCategory =
-      ANIMATION_METADATA[resolvedName]?.category ??
-      (resolvedName.startsWith('talk') ? 'talk' : resolvedName);
-    const fadeDuration = fade ?? getTransitionFade(fromCategory, toCategory);
+    const clip = next.getClip();
+    const startTime = hasTimeRange
+      ? THREE.MathUtils.clamp(directive.startTime, 0, Math.max(0, clip.duration - 0.001))
+      : hasFrameRange
+        ? THREE.MathUtils.clamp(
+            frameToSeconds(directive.startFrame),
+            0,
+            Math.max(0, clip.duration - 0.001)
+          )
+        : 0;
+    const endTime = hasTimeRange
+      ? THREE.MathUtils.clamp(
+          directive.endTime,
+          startTime + 1 / TIMELINE_FPS,
+          Math.max(startTime + 1 / TIMELINE_FPS, clip.duration)
+        )
+      : hasFrameRange
+        ? THREE.MathUtils.clamp(
+            frameToSeconds(directive.endFrame),
+            startTime + 1 / TIMELINE_FPS,
+            clip.duration
+          )
+        : clip.duration;
+
+    const loopStartTime = hasTimeRange
+      ? THREE.MathUtils.clamp(
+          Number.isFinite(directive.loopStartTime) ? directive.loopStartTime : startTime,
+          startTime,
+          endTime
+        )
+      : hasFrameRange
+        ? THREE.MathUtils.clamp(
+            Number.isFinite(directive.loopStartFrame)
+              ? frameToSeconds(directive.loopStartFrame)
+              : startTime,
+            startTime,
+            endTime
+          )
+        : 0;
+    const loopEndTime = hasTimeRange
+      ? THREE.MathUtils.clamp(
+          Number.isFinite(directive.loopEndTime) ? directive.loopEndTime : endTime,
+          loopStartTime + 1 / TIMELINE_FPS,
+          endTime
+        )
+      : hasFrameRange
+        ? THREE.MathUtils.clamp(
+            Number.isFinite(directive.loopEndFrame)
+              ? frameToSeconds(directive.loopEndFrame)
+              : endTime,
+            loopStartTime + 1 / TIMELINE_FPS,
+            endTime
+          )
+        : clip.duration;
+    const transitionOutTime = hasTimeRange
+      ? THREE.MathUtils.clamp(
+          Number.isFinite(directive.transitionOutTime) ? directive.transitionOutTime : endTime,
+          startTime + 1 / TIMELINE_FPS,
+          endTime
+        )
+      : hasFrameRange
+        ? THREE.MathUtils.clamp(
+            Number.isFinite(directive.transitionOutFrame)
+              ? frameToSeconds(directive.transitionOutFrame)
+              : endTime,
+            startTime + 1 / TIMELINE_FPS,
+            endTime
+          )
+        : clip.duration;
+
+    const blendFade = Number.isFinite(directive.blend)
+      ? THREE.MathUtils.clamp(0.12 + directive.blend * 0.38, 0.08, 0.5)
+      : null;
+
+    const playbackSpeed = Number.isFinite(directive.speed)
+      ? THREE.MathUtils.clamp(directive.speed, 0.65, 1.45)
+      : 1;
+
+    const transitionFadeBoost =
+      directive.transitionType === 'pause'
+        ? -0.05
+        : directive.transitionType === 'emphasis'
+          ? 0.06
+          : 0;
+
+    const categoryFromName = (name) => {
+      const lower = `${name || 'idle'}`.toLowerCase();
+      if (lower.startsWith('talk')) {
+        return 'talk';
+      }
+      return ANIMATION_METADATA[lower]?.category ?? lower;
+    };
+
+    const fromCategory = categoryFromName(currentActionNameRef.current);
+    const toCategory = categoryFromName(resolvedName);
+    const baseFadeDuration = THREE.MathUtils.clamp(
+      (fade ?? blendFade ?? getTransitionFade(fromCategory, toCategory)) + transitionFadeBoost,
+      0.08,
+      0.6
+    );
+    const idleTalkTransition =
+      (fromCategory === 'idle' && toCategory === 'talk') ||
+      (fromCategory === 'talk' && toCategory === 'idle');
+    const fadeDuration = idleTalkTransition ? 0.5 : baseFadeDuration;
 
     next.setLoop(loop, Infinity);
     next.reset();
     next.enabled = true;
-    next.play();
+    next.setEffectiveWeight(1);
+    next.setEffectiveTimeScale(playbackSpeed);
+    next.time = startTime;
+    next.fadeIn(fadeDuration).play();
 
     const cur = currentActionRef.current;
     if (cur && cur !== next) {
-      cur.crossFadeTo(next, fadeDuration, false);
-    } else {
-      next.fadeIn(fadeDuration);
+      cur.enabled = true;
+      cur.fadeOut(fadeDuration);
+    }
+
+    for (const action of Object.values(actions)) {
+      if (action !== next && action !== cur && action.isRunning()) {
+        action.fadeOut(fadeDuration);
+      }
+    }
+
+    if (stopInactiveTimerRef.current) {
+      clearTimeout(stopInactiveTimerRef.current);
+    }
+    stopInactiveTimerRef.current = window.setTimeout(
+      () => {
+        for (const action of Object.values(actionsRef.current)) {
+          if (action !== currentActionRef.current) {
+            action.stop();
+            action.enabled = false;
+          }
+        }
+      },
+      Math.max(100, fadeDuration * 1000 + 30)
+    );
+
+    if (import.meta.env.DEV) {
+      console.debug(
+        `[AvatarScene] Transition '${currentActionNameRef.current || 'none'}' → '${resolvedName}' (fade ${fadeDuration.toFixed(2)}s)`
+      );
     }
 
     currentActionRef.current = next;
     currentActionNameRef.current = resolvedName;
+    currentRangeRef.current = {
+      action: next,
+      hasFrameRange,
+      hasTimeRange,
+      startTime,
+      endTime,
+      loopStartTime,
+      loopEndTime,
+      transitionOutTime,
+    };
 
-    // Track last talk variant for no-repeat logic
-    if (isTalkRequest) {
+    if (isTalkRequest || TALK_VARIANT_PATTERN.test(resolvedName)) {
       lastPlayedTalkRef.current = resolvedName;
     }
   };
 
+  // When a new audio response starts, unlock the talk variant so a fresh one is selected.
+  // This allows variety between responses while preventing mid-response churn.
+  useEffect(() => {
+    if (!audioGeneration) {
+      return;
+    }
+    // Only clear if a talk variant is currently locked — idle/greeting don't need resetting
+    if (currentActionNameRef.current && TALK_VARIANT_PATTERN.test(currentActionNameRef.current)) {
+      currentActionNameRef.current = null;
+    }
+    lastPlayedTalkRef.current = currentActionNameRef.current; // keep anti-repeat hint
+  }, [audioGeneration]);
+
   // Handle animation changes
   useEffect(() => {
-    if (!actionsRef.current || !scene) {
+    if (!scene || Object.keys(actionsRef.current).length === 0) {
       return;
     }
 
     playAction(currentAnimation);
-  }, [currentAnimation, scene]);
+  }, [currentAnimation, scene, criticalClips, talkAnimationRevision]);
 
   // Apply emotion data from AI response to face controller
   useEffect(() => {
@@ -514,15 +926,40 @@ const AvatarRig = React.memo(function AvatarRig({
 
   // Update animation mixer and apply enhanced morph targets with realism
   useFrame((_, dt) => {
+    const safeDt = THREE.MathUtils.clamp(dt || 0, SAFE_MIN_DELTA, SAFE_MAX_DELTA);
+    const enhancedMorphTargets = enhancedMorphTargetsRef.current || {};
+    const currentAnimationName =
+      typeof currentAnimation === 'string' ? currentAnimation : currentAnimation?.animation;
+
     // Update animation mixer
     if (mixerRef.current) {
-      mixerRef.current.update(dt);
+      mixerRef.current.update(safeDt);
+    }
+
+    const currentRange = currentRangeRef.current;
+    if (
+      currentRange &&
+      currentActionRef.current === currentRange.action &&
+      (currentRange.hasFrameRange || currentRange.hasTimeRange)
+    ) {
+      const action = currentRange.action;
+      const now = action.time;
+
+      if (now < currentRange.startTime) {
+        action.time = currentRange.startTime;
+      } else if (now >= currentRange.transitionOutTime) {
+        const loopSpan = Math.max(
+          1 / TIMELINE_FPS,
+          currentRange.loopEndTime - currentRange.loopStartTime
+        );
+        action.time = currentRange.loopStartTime + ((now - currentRange.loopStartTime) % loopSpan);
+      }
     }
 
     // Compute face animation targets (blink, idle, emotion, speaking)
     let faceMorphs = {};
     if (faceControllerRef.current) {
-      faceMorphs = faceControllerRef.current.update(dt);
+      faceMorphs = faceControllerRef.current.update(safeDt);
     }
 
     // Apply face morphs directly to ALL morph meshes
@@ -546,7 +983,7 @@ const AvatarRig = React.memo(function AvatarRig({
             if (isVisemeRelated) {
               infl[idx] = Math.max(infl[idx], clamped);
             } else {
-              infl[idx] = THREE.MathUtils.lerp(infl[idx], clamped, Math.min(dt * 10, 1));
+              infl[idx] = THREE.MathUtils.lerp(infl[idx], clamped, Math.min(safeDt * 10, 1));
             }
           }
         }
@@ -555,30 +992,52 @@ const AvatarRig = React.memo(function AvatarRig({
 
     // Apply ENHANCED morph targets — lip-sync (with coarticulation, jaw coupling, etc.)
     if (headMeshRef.current && headMeshRef.current.morphTargetInfluences) {
-      applyMorphTargetsSmooth(headMeshRef.current, enhancedMorphTargets);
+      applyMorphTargetsSmooth(
+        headMeshRef.current,
+        enhancedMorphTargets,
+        visemeIndexCacheRef.current
+      );
     }
     if (teethMeshRef.current && teethMeshRef.current.morphTargetInfluences) {
-      applyMorphTargetsSmooth(teethMeshRef.current, enhancedMorphTargets);
+      applyMorphTargetsSmooth(
+        teethMeshRef.current,
+        enhancedMorphTargets,
+        visemeIndexCacheRef.current
+      );
     }
 
     // Apply subtle head motion ONLY (NO spine to prevent body deformation)
-    if (isPlaying && headBoneRef.current) {
-      applySubtleHeadMotion(
-        headBoneRef.current,
-        enhancedMorphTargets,
-        dt,
-        headMotionStateRef.current
-      );
-    } else if (currentAnimation === 'thinking' && headBoneRef.current) {
-      applyThinkingMotion(headBoneRef.current, dt, headMotionStateRef.current);
-    } else if (headBoneRef.current) {
-      // Return head to neutral when not speaking (slower for smoother transition)
-      applyReturnToNeutral(headBoneRef.current, dt, headMotionStateRef.current);
+    const prefersReducedMotion = prefersReducedMotionRef.current;
+
+    if (!prefersReducedMotion) {
+      if (isPlaying && headBoneRef.current) {
+        applySubtleHeadMotion(
+          headBoneRef.current,
+          enhancedMorphTargets,
+          safeDt,
+          headMotionStateRef.current
+        );
+      } else if (currentAnimationName === 'thinking' && headBoneRef.current) {
+        applyThinkingMotion(headBoneRef.current, safeDt, headMotionStateRef.current);
+      } else if (headBoneRef.current) {
+        // Return head to neutral when not speaking (slower for smoother transition)
+        applyReturnToNeutral(headBoneRef.current, safeDt, headMotionStateRef.current);
+      }
+    }
+
+    // Keep avatar grounded and forward-facing even if source clips contain root drift.
+    if (stableSceneTransformRef.current.initialized) {
+      scene.position.y = stableSceneTransformRef.current.position.y;
+      scene.quaternion.copy(stableSceneTransformRef.current.quaternion);
+    }
+
+    if (group.current) {
+      group.current.position.y = AVATAR_BASE_POSITION[1];
     }
   });
 
   return (
-    <group ref={group} position={[0, -1.25, 0]} scale={1.25}>
+    <group ref={group} position={AVATAR_BASE_POSITION} scale={AVATAR_BASE_SCALE}>
       <primitive object={scene} />
     </group>
   );
@@ -591,8 +1050,9 @@ const AvatarRig = React.memo(function AvatarRig({
  *
  * @param {THREE.Mesh} mesh - The mesh with morph targets (MUST be Head or Teeth only)
  * @param {Object} morphTargets - Object mapping viseme names to influence values (0-1)
+ * @param {WeakMap<THREE.Mesh, number[]>} [visemeIndexCache] - Cache for viseme index lookups
  */
-function applyMorphTargetsSmooth(mesh, morphTargets) {
+function applyMorphTargetsSmooth(mesh, morphTargets, visemeIndexCache) {
   if (!mesh || !mesh.morphTargetDictionary || !mesh.morphTargetInfluences) {
     return;
   }
@@ -600,17 +1060,21 @@ function applyMorphTargetsSmooth(mesh, morphTargets) {
   const smoothingFactor = MORPH_SMOOTHING;
   const resetSpeed = 0.15; // Slower reset to avoid jitter
 
-  // Get all viseme indices (morph targets that start with "viseme_" or contain "jaw"/"mouth")
-  const visemeIndices = [];
-  for (const [name, index] of Object.entries(mesh.morphTargetDictionary)) {
-    const nameLower = name.toLowerCase();
-    if (
-      nameLower.startsWith('viseme_') ||
-      nameLower.includes('jaw') ||
-      nameLower.includes('mouth')
-    ) {
-      visemeIndices.push(index);
+  // Cache viseme indices to avoid re-scanning the morph dictionary every frame.
+  let visemeIndices = visemeIndexCache?.get(mesh);
+  if (!visemeIndices) {
+    visemeIndices = [];
+    for (const [name, index] of Object.entries(mesh.morphTargetDictionary)) {
+      const nameLower = name.toLowerCase();
+      if (
+        nameLower.startsWith('viseme_') ||
+        nameLower.includes('jaw') ||
+        nameLower.includes('mouth')
+      ) {
+        visemeIndices.push(index);
+      }
     }
+    visemeIndexCache?.set(mesh, visemeIndices);
   }
 
   // STEP 1: Reset ALL visemes toward 0 first (prevents accumulation)
@@ -702,12 +1166,11 @@ function applySubtleHeadMotion(headBone, morphTargets, deltaTime, state) {
   const speechRoll = mouthOpenness * Math.sin(state.time * 0.25) * 0.003;
   const targetRoll = baseRoll + speechRoll;
 
-  // CRITICAL: Smooth interpolation using delta time for frame-rate independence
-  // This ensures motion is smooth regardless of FPS
-  const smoothness = 1.0 - Math.pow(0.001, deltaTime); // Exponential smoothing
-  const pitchSpeed = Math.min(smoothness * 0.05, 1.0);
-  const yawSpeed = Math.min(smoothness * 0.03, 1.0);
-  const rollSpeed = Math.min(smoothness * 0.02, 1.0);
+  // Frame-rate-independent exponential smoothing: 1 - e^(-speed * dt)
+  // Coefficients: pitch=4 converges in ~0.75s, yaw=2.5 in ~1.2s, roll=2 in ~1.5s
+  const pitchSpeed = 1.0 - Math.exp(-4.0 * deltaTime);
+  const yawSpeed = 1.0 - Math.exp(-2.5 * deltaTime);
+  const rollSpeed = 1.0 - Math.exp(-2.0 * deltaTime);
 
   // Update current state smoothly
   state.currentPitch = THREE.MathUtils.lerp(state.currentPitch, targetPitch, pitchSpeed);
@@ -743,19 +1206,18 @@ function applyReturnToNeutral(headBone, deltaTime, state) {
   const targetYaw = idleDrift;
   const targetRoll = 0;
 
-  // Slower return to neutral for smooth transition
-  const smoothness = 1.0 - Math.pow(0.001, deltaTime);
-  const returnSpeed = Math.min(smoothness * 0.02, 1.0); // Slower than speaking motion
+  // Slower return to neutral — exponential smoothing, coefficient 1.5 (converges in ~2s)
+  const returnSpeed = 1.0 - Math.exp(-1.5 * deltaTime);
 
   // Update current state smoothly
   state.currentPitch = THREE.MathUtils.lerp(state.currentPitch, targetPitch, returnSpeed);
   state.currentYaw = THREE.MathUtils.lerp(state.currentYaw, targetYaw, returnSpeed);
   state.currentRoll = THREE.MathUtils.lerp(state.currentRoll, targetRoll, returnSpeed);
 
-  // Apply to bone
-  headBone.rotation.x = state.currentPitch;
-  headBone.rotation.y = state.currentYaw;
-  headBone.rotation.z = state.currentRoll;
+  // Apply to bone (clamped for safety)
+  headBone.rotation.x = THREE.MathUtils.clamp(state.currentPitch, -0.02, 0.02);
+  headBone.rotation.y = THREE.MathUtils.clamp(state.currentYaw, -0.02, 0.02);
+  headBone.rotation.z = THREE.MathUtils.clamp(state.currentRoll, -0.015, 0.015);
 }
 
 /**
@@ -781,9 +1243,8 @@ function applyThinkingMotion(headBone, deltaTime, state) {
   // Subtle persistent tilt (head tilted slightly to one side)
   const thinkRoll = Math.sin(state.time * 0.08) * 0.012 + 0.008; // Slight tilt bias
 
-  // Smooth interpolation — slower than speaking, faster than idle return
-  const smoothness = 1.0 - Math.pow(0.001, deltaTime);
-  const speed = Math.min(smoothness * 0.03, 1.0);
+  // Smooth interpolation — exponential smoothing, coefficient 2.0
+  const speed = 1.0 - Math.exp(-2.0 * deltaTime);
 
   state.currentPitch = THREE.MathUtils.lerp(state.currentPitch, thinkPitch, speed);
   state.currentYaw = THREE.MathUtils.lerp(state.currentYaw, thinkYaw, speed);
@@ -799,25 +1260,27 @@ function applyThinkingMotion(headBone, deltaTime, state) {
  *
  * @param {object} props
  * @param {string} props.modelPath - Path to GLB model file
- * @param {string} [props.currentAnimation='idle'] - Animation name ('idle','thinking','speaking','greeting')
- * @param {Record<string, number>} [props.morphTargets] - Viseme names → influence values (0-1)
+ * @param {string|object} [props.currentAnimation='idle'] - Animation name or timeline directive
+ * @param {React.MutableRefObject<Record<string, number>>} [props.morphTargetsRef] - Live viseme ref
  * @param {{ headBob: number, chestBob: number }} [props.bodyMotion] - Subtle body animation
  * @param {() => void} [props.onModelLoaded] - Callback when model is loaded
  * @param {(err: Error) => void} [props.onError] - Callback for errors
  * @param {React.RefObject<HTMLAudioElement>} [props.audioRef] - Ref to audio element
  * @param {Array<{ start: number, end: number, value: string }>} [props.mouthCues] - Lip-sync timeline
  * @param {boolean} [props.isPlaying] - Whether audio is currently playing
+ * @param {number} [props.audioGeneration] - Increments on each new audio response
  */
 const AvatarScene = React.memo(function AvatarScene({
   modelPath,
   currentAnimation = 'idle',
-  morphTargets = {},
+  morphTargetsRef,
   onModelLoaded,
   onError,
   audioRef,
   mouthCues,
   isPlaying,
   emotionData,
+  audioGeneration = 0,
 }) {
   const loadStartRef = useRef(0);
 
@@ -827,7 +1290,7 @@ const AvatarScene = React.memo(function AvatarScene({
       // Preload model
       useGLTF.preload(modelPath);
     } catch (err) {
-      console.error('[AvatarScene] Failed to preload model:', err);
+      logger.error('[AvatarScene] Failed to preload model:', err);
       onError?.(err);
     }
   }, [modelPath, onError]);
@@ -868,12 +1331,13 @@ const AvatarScene = React.memo(function AvatarScene({
               <AvatarRig
                 modelPath={modelPath}
                 currentAnimation={currentAnimation}
-                morphTargets={morphTargets}
+                morphTargetsRef={morphTargetsRef}
                 onModelLoaded={handleModelReady}
                 audioRef={audioRef}
                 mouthCues={mouthCues}
                 isPlaying={isPlaying}
                 emotionData={emotionData}
+                audioGeneration={audioGeneration}
               />
             </AvatarErrorBoundary>
           </Suspense>
@@ -885,8 +1349,10 @@ const AvatarScene = React.memo(function AvatarScene({
             enableZoom
             minDistance={1.5}
             maxDistance={6.5}
-            minPolarAngle={Math.PI / 4}
-            maxPolarAngle={Math.PI / 2}
+            minPolarAngle={Math.PI / 5}
+            maxPolarAngle={Math.PI / 2.15}
+            minAzimuthAngle={-Math.PI / 2.5}
+            maxAzimuthAngle={Math.PI / 2.5}
           />
         </Canvas>
       </div>
@@ -895,3 +1361,15 @@ const AvatarScene = React.memo(function AvatarScene({
 });
 
 export default AvatarScene;
+
+// Preload the default avatar model as soon as this chunk is downloaded
+useGLTF.preload('/models/avatar1.glb');
+
+// Warm HTTP cache for critical animations
+// THREE.Cache.enabled = true (set above) ensures FBXLoader
+// will reuse these cached responses instead of re-downloading
+if (typeof window !== 'undefined') {
+  ['/models/animations/Idle/Idle.fbx', '/models/animations/Greeting/Greeting.fbx'].forEach((url) =>
+    fetch(url, { priority: 'low' }).catch(() => {})
+  );
+}

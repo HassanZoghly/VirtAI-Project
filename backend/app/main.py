@@ -11,17 +11,19 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from app.presentation.http.v1.dependencies import init_session_manager
+from app.application.chat.session_manager import SessionManager
+from app.infrastructure.cache.redis_client import close_redis, init_redis
+from app.infrastructure.db.mongodb import close_mongodb, init_mongodb
+from app.presentation.http.v1.dependencies import init_session_manager, init_ws_connection_manager
 from app.presentation.http.v1.router import router as api_v1_router
+from app.presentation.ws.connection_manager import WSConnectionManager
 from app.shared.config import get_settings
-from app.infrastructure.db.database import init_db
 from app.shared.errors import (
     AvatarBaseException,
     avatar_exception_handler,
     generic_exception_handler,
 )
 from app.shared.log_config import setup_logging
-from app.application.chat.session_manager import SessionManager
 
 settings = get_settings()
 
@@ -38,9 +40,12 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
 
-    # ── Database ──────────────────────────────────────────────────────────────
-    await init_db()
-    logger.info("Database initialised")
+    # ── Database & Cache ────────────────────────────────────────────────────────
+    await init_mongodb()
+    logger.info("MongoDB initialised")
+
+    await init_redis()
+    logger.info("Redis initialised")
 
     # Check for GROQ_API_KEY in development mode
     if not settings.GROQ_API_KEY:
@@ -96,6 +101,9 @@ async def lifespan(app: FastAPI):
     )
     init_session_manager(session_manager)
 
+    ws_connection_manager = WSConnectionManager(history_size=250)
+    init_ws_connection_manager(ws_connection_manager)
+
     # Background task: cleanup idle sessions at configured interval
     async def cleanup_task():
         try:
@@ -126,6 +134,8 @@ async def lifespan(app: FastAPI):
     for task in background_tasks:
         task.cancel()
     await asyncio.gather(*background_tasks, return_exceptions=True)
+    await close_redis()
+    await close_mongodb()
     logger.info("Server shutdown complete")
 
 
@@ -147,6 +157,10 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # ── CSRF ──────────────────────────────────────────────────────────────────
+    from app.shared.csrf import CSRFMiddleware
+    app.add_middleware(CSRFMiddleware)
 
     # ── Error Handlers ────────────────────────────────────────────────────────
     app.add_exception_handler(AvatarBaseException, avatar_exception_handler) # type: ignore

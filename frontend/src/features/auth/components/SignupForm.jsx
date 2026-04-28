@@ -32,6 +32,10 @@ export default function SignupForm({ onToggleMode }) {
   const { signup, isLoading } = useSignup();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const inputClass =
+    'w-full rounded-xl border border-(--border-color)/80 bg-black/[0.22] px-4 py-2.5 text-sm text-(--text-primary) placeholder-(--text-muted) shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] outline-none transition-[border-color,box-shadow,background-color,transform] duration-200 focus:scale-[1.005] focus:border-(--accent-primary) focus:bg-black/30 focus:shadow-[0_0_0_3px_rgba(255,255,255,0.1)] disabled:cursor-not-allowed disabled:border-(--border-color)/55 disabled:bg-black/[0.16] disabled:opacity-60';
+  const labelClass =
+    'mb-1 block text-xs font-semibold text-(--text-secondary) uppercase tracking-wide';
 
   const {
     register,
@@ -53,23 +57,13 @@ export default function SignupForm({ onToggleMode }) {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: 'easeOut' }}
-      className="w-full max-w-md px-6"
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      className="w-full space-y-3"
     >
-      <div className="mb-8 text-center">
-        <h2 className="text-3xl font-bold text-(--text-primary)">Create account</h2>
-        <p className="mt-2 text-sm text-(--text-secondary)">
-          Sign up to get started with VirtAI
-        </p>
-      </div>
-
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
         {/* Full Name */}
         <div>
-          <label
-            htmlFor="fullName"
-            className="mb-1 block text-sm font-medium text-(--text-secondary)"
-          >
+          <label htmlFor="fullName" className={labelClass}>
             Full Name
           </label>
           <input
@@ -79,20 +73,17 @@ export default function SignupForm({ onToggleMode }) {
             placeholder="Eren Yeager"
             disabled={isLoading}
             {...register('fullName')}
-            className="w-full rounded-lg border border-(--border-color) bg-white/5 px-4 py-2.5 text-sm text-(--text-primary) placeholder-(--text-muted) outline-none transition-colors focus:border-(--accent-primary) focus:ring-1 focus:ring-(--accent-primary) disabled:opacity-50"
+            className={inputClass}
           />
           {errors.fullName && (
-            <p className="mt-1 text-xs text-red-400">{errors.fullName.message}</p>
+            <p className="mt-1.5 text-xs font-medium text-(--error)">{errors.fullName.message}</p>
           )}
         </div>
 
         {/* Email */}
         <div>
-          <label
-            htmlFor="signup-email"
-            className="mb-1 block text-sm font-medium text-(--text-secondary)"
-          >
-            Email
+          <label htmlFor="signup-email" className={labelClass}>
+            Work email
           </label>
           <input
             id="signup-email"
@@ -101,17 +92,16 @@ export default function SignupForm({ onToggleMode }) {
             placeholder="you@example.com"
             disabled={isLoading}
             {...register('email')}
-            className="w-full rounded-lg border border-(--border-color) bg-white/5 px-4 py-2.5 text-sm text-(--text-primary) placeholder-(--text-muted) outline-none transition-colors focus:border-(--accent-primary) focus:ring-1 focus:ring-(--accent-primary) disabled:opacity-50"
+            className={inputClass}
           />
-          {errors.email && <p className="mt-1 text-xs text-red-400">{errors.email.message}</p>}
+          {errors.email && (
+            <p className="mt-1.5 text-xs font-medium text-(--error)">{errors.email.message}</p>
+          )}
         </div>
 
         {/* Password */}
         <div>
-          <label
-            htmlFor="signup-password"
-            className="mb-1 block text-sm font-medium text-(--text-secondary)"
-          >
+          <label htmlFor="signup-password" className={labelClass}>
             Password
           </label>
           <div className="relative">
@@ -122,13 +112,12 @@ export default function SignupForm({ onToggleMode }) {
               placeholder="••••••••"
               disabled={isLoading}
               {...register('password')}
-              className="w-full rounded-lg border border-(--border-color) bg-white/5 px-4 py-2.5 pr-10 text-sm text-(--text-primary) placeholder-(--text-muted) outline-none transition-colors focus:border-(--accent-primary) focus:ring-1 focus:ring-(--accent-primary) disabled:opacity-50"
+              className={`${inputClass} pr-11`}
             />
             <button
               type="button"
-              tabIndex={-1}
               onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-(--text-muted) hover:text-(--text-secondary)"
+              className="absolute top-1/2 right-3 -translate-y-1/2 rounded-full p-1 text-(--text-muted) transition-[color,transform] duration-200 hover:text-(--text-secondary) active:scale-95 focus-visible:text-(--text-primary)"
             >
               {showPassword ? (
                 <svg
@@ -169,17 +158,14 @@ export default function SignupForm({ onToggleMode }) {
             </button>
           </div>
           {errors.password && (
-            <p className="mt-1 text-xs text-red-400">{errors.password.message}</p>
+            <p className="mt-1.5 text-xs font-medium text-(--error)">{errors.password.message}</p>
           )}
           <PasswordStrength password={passwordValue} />
         </div>
 
         {/* Confirm Password */}
         <div>
-          <label
-            htmlFor="confirmPassword"
-            className="mb-1 block text-sm font-medium text-(--text-secondary)"
-          >
+          <label htmlFor="confirmPassword" className={labelClass}>
             Confirm Password
           </label>
           <div className="relative">
@@ -190,13 +176,12 @@ export default function SignupForm({ onToggleMode }) {
               placeholder="••••••••"
               disabled={isLoading}
               {...register('confirmPassword')}
-              className="w-full rounded-lg border border-(--border-color) bg-white/5 px-4 py-2.5 pr-10 text-sm text-(--text-primary) placeholder-(--text-muted) outline-none transition-colors focus:border-(--accent-primary) focus:ring-1 focus:ring-(--accent-primary) disabled:opacity-50"
+              className={`${inputClass} pr-11`}
             />
             <button
               type="button"
-              tabIndex={-1}
               onClick={() => setShowConfirm((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-(--text-muted) hover:text-(--text-secondary)"
+              className="absolute top-1/2 right-3 -translate-y-1/2 rounded-full p-1 text-(--text-muted) transition-[color,transform] duration-200 hover:text-(--text-secondary) active:scale-95 focus-visible:text-(--text-primary)"
             >
               {showConfirm ? (
                 <svg
@@ -237,7 +222,9 @@ export default function SignupForm({ onToggleMode }) {
             </button>
           </div>
           {errors.confirmPassword && (
-            <p className="mt-1 text-xs text-red-400">{errors.confirmPassword.message}</p>
+            <p className="mt-1.5 text-xs font-medium text-(--error)">
+              {errors.confirmPassword.message}
+            </p>
           )}
         </div>
 
@@ -245,7 +232,7 @@ export default function SignupForm({ onToggleMode }) {
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full rounded-lg bg-(--accent-primary) px-4 py-2.5 text-sm font-semibold text-(--primary-bg) transition-colors hover:bg-(--accent-secondary) disabled:cursor-not-allowed disabled:opacity-50"
+          className="w-full rounded-xl bg-(--accent-primary) px-4 py-3 text-sm font-semibold text-[#121212] shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:bg-(--accent-secondary) hover:shadow-lg active:scale-[0.985] active:translate-y-0 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-(--accent-primary)/55 disabled:text-[#121212]/80 disabled:opacity-100 disabled:shadow-none"
         >
           {isLoading ? (
             <span className="flex items-center justify-center gap-2">
@@ -259,21 +246,21 @@ export default function SignupForm({ onToggleMode }) {
       </form>
 
       {/* Divider */}
-      <div className="my-6 flex items-center gap-3">
-        <hr className="flex-1 border-(--border-color)" />
-        <span className="text-xs text-(--text-muted)">or continue with</span>
-        <hr className="flex-1 border-(--border-color)" />
+      <div className="flex items-center gap-3">
+        <hr className="flex-1 border-(--border-color)/70" />
+        <span className="text-xs text-(--text-muted)">or</span>
+        <hr className="flex-1 border-(--border-color)/70" />
       </div>
 
       <GoogleAuthButton label="Sign up with Google" />
 
       {/* Toggle to Login */}
-      <p className="mt-6 text-center text-sm text-(--text-secondary)">
+      <p className="text-center text-xs text-(--text-secondary)">
         Already have an account?{' '}
         <button
           type="button"
           onClick={onToggleMode}
-          className="font-medium text-(--accent-primary) hover:underline"
+          className="font-semibold text-(--accent-primary) transition-colors hover:text-(--accent-secondary) hover:underline"
         >
           Sign in
         </button>

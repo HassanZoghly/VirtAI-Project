@@ -59,11 +59,12 @@ logs/
 dist/
 build/
 *.whl
+.worktrees/
 
 # ═══════════════════════════════════════════
 #  Frontend (Node.js)
 # ═══════════════════════════════════════════
-frontend/node_modules/
+*node_modules/
 frontend/package-lock.json
 frontend/dist/
 frontend/.next/
@@ -85,3 +86,8 @@ frontend/.nuxt/
 .DS_Store
 Thumbs.db
 desktop.ini
+.agents/
+skills-lock.json
+.impeccable-live.json
+PRODUCT.md
+mcp.json

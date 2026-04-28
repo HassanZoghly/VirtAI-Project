@@ -1,4 +1,6 @@
 const STORAGE_KEY = 'virtai-sessions';
+const START_NEW_CONVERSATION_KEY = 'virtai-start-new-conversation';
+let startConversationFlagClearScheduled = false;
 
 /**
  * Load sessions array from localStorage.
@@ -32,4 +34,20 @@ export function saveToStorage(sessions) {
 /** Remove sessions from localStorage. */
 export function clearStorage() {
   localStorage.removeItem(STORAGE_KEY);
+}
+
+export function markStartNewConversation() {
+  localStorage.setItem(START_NEW_CONVERSATION_KEY, '1');
+}
+
+export function consumeStartNewConversationFlag() {
+  const shouldStart = localStorage.getItem(START_NEW_CONVERSATION_KEY) === '1';
+  if (shouldStart && !startConversationFlagClearScheduled) {
+    startConversationFlagClearScheduled = true;
+    queueMicrotask(() => {
+      localStorage.removeItem(START_NEW_CONVERSATION_KEY);
+      startConversationFlagClearScheduled = false;
+    });
+  }
+  return shouldStart;
 }

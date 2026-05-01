@@ -62,6 +62,7 @@ async def test_ws_does_not_create_session_on_connect_when_not_resuming(
     class FakeHandler:
         def __init__(self, **kwargs):
             created_handler["session"] = kwargs["session"]
+            created_handler["requested_session_id"] = kwargs.get("requested_session_id")
             self.session = kwargs["session"] or SimpleNamespace(session_id="")
 
         async def run(self):
@@ -85,6 +86,7 @@ async def test_ws_does_not_create_session_on_connect_when_not_resuming(
 
     assert fake_ws.accepted is True
     assert created_handler["session"] is None
+    assert created_handler["requested_session_id"] is None
     assert fake_sm.create_session_calls == 0
     assert fake_cm.unregister_calls == []
     assert fake_sm.disconnect_calls == []
@@ -112,6 +114,7 @@ async def test_ws_resume_uses_existing_session(monkeypatch: pytest.MonkeyPatch) 
     class FakeHandler:
         def __init__(self, **kwargs):
             created_handler["session"] = kwargs["session"]
+            created_handler["requested_session_id"] = kwargs.get("requested_session_id")
             self.session = kwargs["session"] or SimpleNamespace(session_id="")
 
         async def run(self):
@@ -135,6 +138,48 @@ async def test_ws_resume_uses_existing_session(monkeypatch: pytest.MonkeyPatch) 
 
     assert fake_ws.accepted is True
     assert created_handler["session"] is resumed_session
+    assert created_handler["requested_session_id"] is None
     assert fake_sm.create_session_calls == 0
     assert fake_cm.unregister_calls == ["resume-123"]
     assert fake_sm.disconnect_calls == ["resume-123"]
+
+
+@pytest.mark.asyncio
+async def test_ws_non_resume_forwards_requested_session_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_ws = _FakeWebSocket()
+    fake_sm = _FakeSessionManager()
+    fake_cm = _FakeConnectionManager()
+    created_handler = {}
+
+    async def _allow_rate_limit(**kwargs) -> bool:
+        return True
+
+    def _mock_verify_token(token: str, expected_type: str = "access"):
+        return ("mock-user", "mock-jti")
+
+    class FakeHandler:
+        def __init__(self, **kwargs):
+            created_handler["requested_session_id"] = kwargs.get("requested_session_id")
+            self.session = kwargs["session"] or SimpleNamespace(session_id="")
+
+        async def run(self):
+            return None
+
+    monkeypatch.setattr(v1_router, "check_rate_limit", _allow_rate_limit)
+    monkeypatch.setattr(v1_router, "verify_token", _mock_verify_token)
+    monkeypatch.setattr(v1_router, "WebSocketHandler", FakeHandler)
+
+    await v1_router.websocket_endpoint(
+        websocket=fake_ws,
+        avatar_id="avatar1",
+        token="valid.mock.token",
+        voice="en-US-AriaNeural",
+        session_id="persisted-session-123",
+        resume=False,
+        last_seq=0,
+        session_manager=fake_sm,
+        connection_manager=fake_cm,  # type: ignore
+    )
+
+    assert fake_ws.accepted is True
+    assert created_handler["requested_session_id"] == "persisted-session-123"

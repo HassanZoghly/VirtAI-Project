@@ -1,5 +1,5 @@
 import secrets
-from typing import Callable, Awaitable
+from collections.abc import Awaitable, Callable
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
@@ -28,7 +28,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             token = secrets.token_urlsafe(32)
             settings = get_settings()
             secure = settings.ENVIRONMENT == "production"
-            
+
             response.set_cookie(
                 key="csrf_token",
                 value=token,

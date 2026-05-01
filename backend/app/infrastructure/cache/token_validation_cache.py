@@ -6,8 +6,6 @@ Caches per-JTI validation results to reduce repeated Redis blacklist checks.
 
 from __future__ import annotations
 
-from typing import Optional
-
 from loguru import logger
 
 from app.infrastructure.cache.cache_keys import token_validation_key
@@ -39,7 +37,7 @@ def get_token_validation_cache_stats() -> dict[str, float | int]:
     }
 
 
-async def cache_token_status(jti: str, is_revoked: bool, ttl_seconds: Optional[int] = None) -> None:
+async def cache_token_status(jti: str, is_revoked: bool, ttl_seconds: int | None = None) -> None:
     """Cache token status by JTI for a short period."""
     try:
         settings = get_settings()
@@ -55,7 +53,7 @@ async def cache_token_status(jti: str, is_revoked: bool, ttl_seconds: Optional[i
         logger.warning(f"[TokenValidationCache] cache failed | jti={jti[:8]}... | {e}")
 
 
-async def get_token_status(jti: str) -> Optional[bool]:
+async def get_token_status(jti: str) -> bool | None:
     """
     Return cached status.
 

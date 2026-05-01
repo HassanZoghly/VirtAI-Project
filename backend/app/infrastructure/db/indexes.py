@@ -16,7 +16,6 @@ from loguru import logger
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from pymongo import ASCENDING, DESCENDING, IndexModel
 
-
 GOOGLE_ID_INDEX_NAME = "google_id_unique_string"
 GOOGLE_ID_PARTIAL_FILTER = {"google_id": {"$type": "string"}}
 

@@ -446,7 +446,7 @@ class AnimationIntelligenceService:
 
     def _score_intents(self, segment: str, previous_intent: str | None = None) -> dict[str, float]:
         lower = segment.lower()
-        base_scores: dict[str, float] = {key: 0.12 for key in self._INTENT_KEYWORDS}
+        base_scores: dict[str, float] = dict.fromkeys(self._INTENT_KEYWORDS, 0.12)
 
         for intent, keywords in self._INTENT_KEYWORDS.items():
             for keyword in keywords:

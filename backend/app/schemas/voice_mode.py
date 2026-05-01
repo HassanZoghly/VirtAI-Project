@@ -13,12 +13,12 @@ Message Flow:
 from __future__ import annotations
 
 import base64
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
 
-def _normalize_optional_identifier(value: Optional[str]) -> Optional[str]:
+def _normalize_optional_identifier(value: str | None) -> str | None:
     if value is None:
         return None
     normalized = value.strip()
@@ -54,7 +54,7 @@ class AudioChunkMessage(BaseModel):
     is_final: bool = Field(default=False, description="True when silence detected by VAD")
     timestamp: float = Field(..., ge=0.0, description="Client timestamp in milliseconds")
     format: Literal["webm", "opus", "wav"] = Field(default="webm", description="Audio codec format")
-    session_id: Optional[str] = Field(None, description="Session identifier")
+    session_id: str | None = Field(None, description="Session identifier")
 
     @field_validator("audio")
     @classmethod
@@ -79,7 +79,7 @@ class AudioChunkMessage(BaseModel):
 
     @field_validator("session_id")
     @classmethod
-    def validate_identifier_format(cls, v: Optional[str]) -> Optional[str]:
+    def validate_identifier_format(cls, v: str | None) -> str | None:
         """Validate that session_id is non-empty when provided."""
         return _normalize_optional_identifier(v)
 
@@ -179,14 +179,14 @@ class VoiceModeError(BaseModel):
     type: Literal["voice_mode_error"] = Field(
         default="voice_mode_error", description="Message type identifier"
     )
-    session_id: Optional[str] = Field(None, description="Session identifier (if applicable)")
+    session_id: str | None = Field(None, description="Session identifier (if applicable)")
     code: str = Field(..., description="Error code identifier")
     message: str = Field(..., description="Human-readable error message")
-    details: Optional[dict] = Field(None, description="Additional error context")
+    details: dict | None = Field(None, description="Additional error context")
 
     @field_validator("session_id")
     @classmethod
-    def validate_identifier_format(cls, v: Optional[str]) -> Optional[str]:
+    def validate_identifier_format(cls, v: str | None) -> str | None:
         """Validate identifier format when provided."""
         return _normalize_optional_identifier(v)
 
@@ -233,8 +233,8 @@ def make_transcript_message(
 def make_voice_mode_error(
     code: str,
     message: str,
-    session_id: Optional[str] = None,
-    details: Optional[dict] = None,
+    session_id: str | None = None,
+    details: dict | None = None,
 ) -> VoiceModeError:
     """Create a VoiceModeError message."""
     return VoiceModeError(

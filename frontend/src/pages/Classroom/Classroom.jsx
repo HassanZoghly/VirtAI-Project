@@ -5,13 +5,12 @@ const ClassroomShell = lazy(() => import('@/widgets/Classroom/ClassroomShell'));
 
 function ShellFallback() {
   return (
-    <div className="shell-fallback" role="status" aria-label="Loading classroom shell">
+    <div className="shell-fallback" role="status">
       <div className="loader">
         <span></span>
         <span></span>
         <span></span>
       </div>
-      <span className="fallback-text">Loading classroom...</span>
     </div>
   );
 }

@@ -8,7 +8,7 @@ Uses upsert so "create or update" is a single operation.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Literal, Optional
+from typing import Literal
 
 from bson import ObjectId
 from loguru import logger
@@ -22,7 +22,7 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-async def get_avatar_by_user(user_id: str) -> Optional[dict]:
+async def get_avatar_by_user(user_id: str) -> dict | None:
     """Fetch the avatar config for a given user."""
     try:
         doc = await avatars_col().find_one({"user_id": ObjectId(user_id)})
@@ -34,7 +34,7 @@ async def get_avatar_by_user(user_id: str) -> Optional[dict]:
 async def upsert_avatar(
     user_id: str,
     avatar_url: str = "",
-    voice_id: str = "en-US-AriaNeural",
+    voice_id: str = "aria",
     language: Language = "en",
     persona_prompt: str = "",
 ) -> dict:
@@ -74,7 +74,7 @@ def _serialise(doc: dict) -> dict:
         "id": str(doc["_id"]),
         "user_id": str(doc["user_id"]),
         "avatar_url": doc.get("avatar_url", ""),
-        "voice_id": doc.get("voice_id", "en-US-AriaNeural"),
+        "voice_id": doc.get("voice_id", "aria"),
         "language": doc.get("language", "en"),
         "persona_prompt": doc.get("persona_prompt", ""),
         "updated_at": doc.get("updated_at"),

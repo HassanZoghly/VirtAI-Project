@@ -4,7 +4,7 @@
  */
 export const voices = [
   {
-    id: 'en-US-AriaNeural',
+    id: 'aria',
     name: 'Aria',
     shortName: 'Aria',
     desc: 'Warm & Professional',
@@ -13,7 +13,7 @@ export const voices = [
     previewUrl: '/audio/previews/aria.mp3',
   },
   {
-    id: 'en-US-JennyNeural',
+    id: 'jenny',
     name: 'Jenny',
     shortName: 'Jenny',
     desc: 'Friendly & Energetic',
@@ -22,7 +22,7 @@ export const voices = [
     previewUrl: '/audio/previews/jenny.mp3',
   },
   {
-    id: 'en-GB-SoniaNeural',
+    id: 'sonia',
     name: 'Sonia',
     shortName: 'Sonia',
     desc: 'Elegant & Articulate',
@@ -32,7 +32,7 @@ export const voices = [
     previewUrl: '/audio/previews/sonia.mp3',
   },
   {
-    id: 'en-US-GuyNeural',
+    id: 'guy',
     name: 'Guy',
     shortName: 'Guy',
     desc: 'Deep & Calm',
@@ -41,7 +41,7 @@ export const voices = [
     previewUrl: '/audio/previews/guy.mp3',
   },
   {
-    id: 'en-US-ChristopherNeural',
+    id: 'christopher',
     name: 'Christopher',
     shortName: 'Chris',
     desc: 'Clear & Authoritative',
@@ -50,7 +50,7 @@ export const voices = [
     previewUrl: '/audio/previews/christopher.mp3',
   },
   {
-    id: 'en-GB-RyanNeural',
+    id: 'ryan',
     name: 'Ryan',
     shortName: 'Ryan',
     desc: 'Confident & Engaging',

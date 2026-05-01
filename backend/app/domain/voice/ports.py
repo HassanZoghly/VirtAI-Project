@@ -52,14 +52,14 @@ class StreamingASRService(ABC):
 
     @abstractmethod
     async def transcribe_stream(
-        self, audio_chunks: list[bytes] | Any, audio_format: str = "webm"
+        self, audio_data: Any, sample_rate: int = 16000
     ) -> StreamingASRResult:
         """
-        Transcribe accumulated audio chunks from streaming input.
+        Transcribe accumulated streaming audio data.
 
         Args:
-            audio_chunks: List of audio byte chunks
-            audio_format: Audio format (webm, opus, wav)
+            audio_data: Float32 PCM audio data (e.g., numpy array)
+            sample_rate: Sample rate in Hz (default 16000)
 
         Returns:
             StreamingASRResult with transcript and metadata

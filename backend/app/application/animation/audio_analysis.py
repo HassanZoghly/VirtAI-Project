@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from typing import Iterable
+from collections.abc import Iterable
 
 from app.domain.voice.entities import TTSResult
 from app.schemas.ws_messages import MouthCue

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Optional
 
 
 @dataclass
@@ -20,9 +19,9 @@ class UserEntity:
     email: str
     full_name: str
     username: str = ""
-    hashed_password: Optional[str] = None
+    hashed_password: str | None = None
     provider: str = "local"  # local | google
-    google_id: Optional[str] = None
+    google_id: str | None = None
     setup_complete: bool = False
     is_active: bool = True
     refresh_token_version: int = 0

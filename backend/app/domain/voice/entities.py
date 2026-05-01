@@ -9,7 +9,6 @@ Extracted from:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 # ── ASR Entities ──────────────────────────────────────────────────────────────
@@ -93,14 +92,14 @@ class TTSResult:
     audio_duration_ms: float = 0.0
     sample_rate: int = 24000
     format: str = "mp3"
-    file_path: Optional[str] = None  # Path to stored audio file
+    file_path: str | None = None  # Path to stored audio file
 
 
 @dataclass
 class TTSChunk:
     """Streaming chunk"""
 
-    audio_data: Optional[bytes] = None  # None if not audio
-    viseme: Optional[VisemeEvent] = None  # None if not viseme
-    word_boundary: Optional[WordBoundary] = None  # None if not word
+    audio_data: bytes | None = None  # None if not audio
+    viseme: VisemeEvent | None = None  # None if not viseme
+    word_boundary: WordBoundary | None = None  # None if not word
     is_done: bool = False

@@ -11,12 +11,12 @@ Message Flow:
 
 from __future__ import annotations
 
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
 
-def _normalize_optional_identifier(value: Optional[str]) -> Optional[str]:
+def _normalize_optional_identifier(value: str | None) -> str | None:
     if value is None:
         return None
     normalized = value.strip()
@@ -41,12 +41,12 @@ class WSMessageEnvelope(BaseModel):
 
     type: str = Field(..., description="Message type identifier")
     data: dict[str, Any] = Field(default_factory=dict, description="Message payload")
-    session_id: Optional[str] = Field(None, description="Session identifier")
-    message_id: Optional[str] = Field(None, description="Message identifier")
+    session_id: str | None = Field(None, description="Session identifier")
+    message_id: str | None = Field(None, description="Message identifier")
 
     @field_validator("session_id", "message_id")
     @classmethod
-    def validate_identifier_format(cls, v: Optional[str]) -> Optional[str]:
+    def validate_identifier_format(cls, v: str | None) -> str | None:
         """Validate that optional identifiers are non-empty when provided."""
         return _normalize_optional_identifier(v)
 
@@ -59,7 +59,7 @@ class ChatUserMessage(BaseModel):
     Triggers: LLM streaming -> TTS generation -> Viseme generation
     """
 
-    session_id: Optional[str] = Field(
+    session_id: str | None = Field(
         None, description="Session identifier (optional, server assigns if missing)"
     )
     message_id: str = Field(..., description="Unique message identifier")
@@ -67,7 +67,7 @@ class ChatUserMessage(BaseModel):
 
     @field_validator("session_id", "message_id")
     @classmethod
-    def validate_identifier_format(cls, v: Optional[str]) -> Optional[str]:
+    def validate_identifier_format(cls, v: str | None) -> str | None:
         """Validate identifier format."""
         return _normalize_optional_identifier(v)
 
@@ -107,9 +107,9 @@ class TTSRequest(BaseModel):
     session_id: str = Field(..., description="Session identifier")
     message_id: str = Field(..., description="Message identifier")
     text: str = Field(..., min_length=1, max_length=2000, description="Text to synthesize")
-    voice: Optional[str] = Field("en-US-AriaNeural", description="TTS voice identifier")
-    rate: Optional[str] = Field("+0%", description="Speech rate adjustment")
-    pitch: Optional[str] = Field("+0Hz", description="Pitch adjustment")
+    voice: str | None = Field("aria", description="TTS voice identifier")
+    rate: str | None = Field("+0%", description="Speech rate adjustment")
+    pitch: str | None = Field("+0Hz", description="Pitch adjustment")
 
     @field_validator("session_id", "message_id")
     @classmethod
@@ -149,7 +149,7 @@ class ChatFinal(BaseModel):
     session_id: str = Field(..., description="Session UUID")
     message_id: str = Field(..., description="Message UUID")
     text: str = Field(..., description="Complete response text")
-    emotion: Optional[str] = Field(None, description="Detected emotion from AI response")
+    emotion: str | None = Field(None, description="Detected emotion from AI response")
 
 
 class UserMessageEcho(BaseModel):
@@ -160,7 +160,7 @@ class UserMessageEcho(BaseModel):
     session_id: str = Field(..., description="Session UUID")
     message_id: str = Field(..., description="Message UUID")
     text: str = Field(..., description="User message text")
-    conversation_id: Optional[str] = Field(None, description="Conversation identifier")
+    conversation_id: str | None = Field(None, description="Conversation identifier")
 
 
 class PipelineState(BaseModel):
@@ -325,11 +325,11 @@ class ErrorMessage(BaseModel):
     - TIMEOUT: Operation timed out
     """
 
-    session_id: Optional[str] = Field(None, description="Session UUID (if applicable)")
-    message_id: Optional[str] = Field(None, description="Message UUID (if applicable)")
+    session_id: str | None = Field(None, description="Session UUID (if applicable)")
+    message_id: str | None = Field(None, description="Message UUID (if applicable)")
     code: str = Field(..., description="Error code identifier")
     message: str = Field(..., description="Human-readable error message")
-    details: Optional[dict[str, Any]] = Field(None, description="Additional error context")
+    details: dict[str, Any] | None = Field(None, description="Additional error context")
 
 
 # ── Helper Functions ──────────────────────────────────────────────────────────
@@ -339,7 +339,7 @@ def make_chat_delta(session_id: str, message_id: str, delta: str) -> ChatDelta:
 
 
 def make_chat_final(
-    session_id: str, message_id: str, text: str, emotion: Optional[str] = None
+    session_id: str, message_id: str, text: str, emotion: str | None = None
 ) -> ChatFinal:
     """Create a ChatFinal message."""
     return ChatFinal(session_id=session_id, message_id=message_id, text=text, emotion=emotion)
@@ -349,7 +349,7 @@ def make_user_message_echo(
     session_id: str,
     message_id: str,
     text: str,
-    conversation_id: Optional[str] = None,
+    conversation_id: str | None = None,
 ) -> UserMessageEcho:
     """Create a UserMessageEcho message."""
     return UserMessageEcho(
@@ -386,7 +386,7 @@ def make_animation_timeline(
     session_id: str,
     message_id: str,
     timeline: list[dict],
-    meta: Optional[dict[str, Any]] = None,
+    meta: dict[str, Any] | None = None,
 ) -> AnimationTimeline:
     """Create animation timeline message for frontend playback orchestration."""
     items = [AnimationTimelineItem(**item) for item in timeline]
@@ -402,7 +402,7 @@ def make_animation_timeline_v2(
     session_id: str,
     message_id: str,
     timeline: list[dict],
-    meta: Optional[dict[str, Any]] = None,
+    meta: dict[str, Any] | None = None,
 ) -> AnimationTimelineV2:
     """Create audio-synchronized timeline v2 message."""
     items = [AnimationTimelineV2Item(**item) for item in timeline]
@@ -417,9 +417,9 @@ def make_animation_timeline_v2(
 def make_error(
     code: str,
     message: str,
-    session_id: Optional[str] = None,
-    message_id: Optional[str] = None,
-    details: Optional[dict] = None,
+    session_id: str | None = None,
+    message_id: str | None = None,
+    details: dict | None = None,
 ) -> ErrorMessage:
     """Create an ErrorMessage."""
     return ErrorMessage(

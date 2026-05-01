@@ -12,7 +12,7 @@ import base64
 import re
 import time
 from collections.abc import AsyncGenerator, Callable
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from loguru import logger
 
@@ -27,6 +27,8 @@ from app.domain.chat.entities import (
 from app.domain.chat.policies import build_conversation
 from app.domain.chat.ports import BaseLLMProvider
 from app.domain.voice.ports import BaseTTSProvider, StreamingASRService
+from app.infrastructure.asr.audio_pipeline import pcm_bytes_to_float32
+from app.shared.config import get_settings
 from app.shared.errors import ASRException, LLMException, TTSException
 
 if TYPE_CHECKING:
@@ -130,21 +132,21 @@ class ConversationPipeline:
 
     def __init__(
         self,
-        asr: Optional[StreamingASRService] = None,
-        llm: Optional[BaseLLMProvider] = None,
-        tts: Optional[BaseTTSProvider] = None,
+        asr: StreamingASRService | None = None,
+        llm: BaseLLMProvider | None = None,
+        tts: BaseTTSProvider | None = None,
         avatar_id: str = "avatar1",
         max_sentence_queue_size: int = 5,
     ):
-        self._asr: Optional[StreamingASRService] = asr
-        self._llm: Optional[BaseLLMProvider] = llm
-        self._tts: Optional[BaseTTSProvider] = tts
+        self._asr: StreamingASRService | None = asr
+        self._llm: BaseLLMProvider | None = llm
+        self._tts: BaseTTSProvider | None = tts
         self.avatar_id = avatar_id
         self._history: ConversationHistory = build_conversation(avatar_id)
         self._aborted: bool = False
-        self._current_llm_task: Optional[asyncio.Task] = None
-        self._current_tts_task: Optional[asyncio.Task] = None
-        self._current_message_id: Optional[str] = None
+        self._current_llm_task: asyncio.Task | None = None
+        self._current_tts_task: asyncio.Task | None = None
+        self._current_message_id: str | None = None
         self._max_sentence_queue_size = max_sentence_queue_size
         self._animation_service = AnimationIntelligenceService()
         self._recent_animation_assets: list[str] = []
@@ -155,7 +157,7 @@ class ConversationPipeline:
     async def process_audio(
         self,
         audio_buffer: AudioBuffer,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
     ) -> AsyncGenerator[PipelineEvent, None]:
         """Full pipeline: Audio → ASR → LLM → TTS."""
         self._aborted = False
@@ -169,7 +171,7 @@ class ConversationPipeline:
     async def process_text(
         self,
         text: str,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
     ) -> AsyncGenerator[PipelineEvent, None]:
         """Shortcut pipeline: Text → LLM → TTS (skips ASR)."""
         self._aborted = False
@@ -343,7 +345,7 @@ class ConversationPipeline:
             self._history.add_assistant_message(full_response)
 
             # ── 5. Persist assistant message + update Redis context ────────────
-            tts_key: Optional[str] = None
+            tts_key: str | None = None
             try:
                 from app.infrastructure.cache.cache_keys import tts_cache_key as _tts_key
                 from app.shared.config import get_settings as _settings
@@ -498,12 +500,12 @@ class ConversationPipeline:
 
     async def _run_pipeline(
         self,
-        audio_buffer: Optional[AudioBuffer],
-        text_input: Optional[str],
-        session_id: Optional[str] = None,
+        audio_buffer: AudioBuffer | None,
+        text_input: str | None,
+        session_id: str | None = None,
     ) -> AsyncGenerator[PipelineEvent, None]:
         start = time.perf_counter()
-        user_text: Optional[str] = None
+        user_text: str | None = None
 
         # ASR step
         if audio_buffer is not None:
@@ -565,7 +567,7 @@ class ConversationPipeline:
         yield ev(PipelineEventType.THINKING)
 
         # Concurrent LLM + TTS
-        sentence_queue: asyncio.Queue[Optional[str]] = asyncio.Queue(
+        sentence_queue: asyncio.Queue[str | None] = asyncio.Queue(
             maxsize=self._max_sentence_queue_size,
         )
         event_queue: asyncio.Queue[PipelineEvent] = asyncio.Queue()
@@ -612,7 +614,7 @@ class ConversationPipeline:
             self._history.add_assistant_message(assistant_text)
 
             if session_id:
-                tts_key: Optional[str] = None
+                tts_key: str | None = None
                 try:
                     from app.infrastructure.cache.cache_keys import tts_cache_key as _tts_key
                     from app.infrastructure.db.chat_repository import save_message
@@ -651,7 +653,13 @@ class ConversationPipeline:
         )
         if not self._asr:
             raise ASRException("ASR service not configured")
-        result = await self._asr.transcribe_stream(audio_buffer.chunks)
+        settings = get_settings()
+        combined = b"".join(audio_buffer.chunks)
+        audio_data = pcm_bytes_to_float32(combined)
+        result = await self._asr.transcribe_stream(
+            audio_data=audio_data,
+            sample_rate=settings.AUDIO_SAMPLE_RATE,
+        )
         logger.info(f"ASR result | text='{result.transcript[:60]}'")
         return result.transcript
 
@@ -659,7 +667,7 @@ class ConversationPipeline:
         self,
         sentence_queue: asyncio.Queue,
         event_queue: asyncio.Queue,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
     ) -> None:
         logger.info(f"LLM worker started | session={session_id}")
         if not self._llm:
@@ -695,7 +703,7 @@ class ConversationPipeline:
         self,
         sentence_queue: asyncio.Queue,
         event_queue: asyncio.Queue,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
     ) -> None:
         logger.info(f"TTS worker started | session={session_id}")
         sentence_index = 0

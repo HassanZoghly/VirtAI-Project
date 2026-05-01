@@ -50,8 +50,6 @@ export default function VoiceModeButton({
     isProcessing,
     interimText,
     error,
-    canRetry,
-    clearError,
     startListening,
     stopListening,
   } = useRealtimeASR(wsClient, pipelineState);
@@ -149,25 +147,6 @@ export default function VoiceModeButton({
         </div>
       )}
 
-      {/* Error display — icon + retry only (Requirement 8.3, 8.4, 8.5) */}
-      {error && (
-        <div className="voice-status-indicator error" role="alert" aria-live="assertive">
-          <PiWarningCircleFill className="status-icon" />
-          {canRetry && (
-            <button
-              className="retry-button"
-              onClick={() => {
-                clearError();
-                startListening();
-              }}
-              type="button"
-              aria-label="Retry voice mode"
-            >
-              Try Again
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 }

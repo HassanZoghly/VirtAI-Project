@@ -59,7 +59,7 @@ class AnimationMapper:
     ) -> AnimationMappingDecision:
         """Return intent + tone using keyword-weighted softmax scoring."""
         lower = segment.lower()
-        base_scores: dict[str, float] = {intent: 0.12 for intent in self._INTENT_KEYWORDS}
+        base_scores: dict[str, float] = dict.fromkeys(self._INTENT_KEYWORDS, 0.12)
 
         for intent, keywords in self._INTENT_KEYWORDS.items():
             for keyword in keywords:

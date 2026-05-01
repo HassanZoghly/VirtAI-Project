@@ -8,7 +8,7 @@ Status lifecycle: processing → ready | failed
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Literal, Optional
+from typing import Literal
 
 from bson import ObjectId
 from loguru import logger
@@ -46,7 +46,7 @@ async def create_document(
     return doc
 
 
-async def get_document(document_id: str) -> Optional[dict]:
+async def get_document(document_id: str) -> dict | None:
     """Fetch a document by id."""
     try:
         doc = await documents_col().find_one({"_id": ObjectId(document_id)})
@@ -57,7 +57,7 @@ async def get_document(document_id: str) -> Optional[dict]:
 
 async def list_user_documents(
     user_id: str,
-    status: Optional[DocumentStatus] = None,
+    status: DocumentStatus | None = None,
     limit: int = 100,
 ) -> list[dict]:
     """List documents for a user, optionally filtered by status."""
@@ -74,7 +74,7 @@ async def update_document_status(
     status: DocumentStatus,
     chunk_count: int = 0,
     vector_collection: str = "",
-) -> Optional[dict]:
+) -> dict | None:
     """Update the processing status of a document."""
     update: dict = {"$set": {"status": status}}
     if chunk_count:

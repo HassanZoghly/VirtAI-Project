@@ -15,15 +15,13 @@ Key design decisions:
 
 from __future__ import annotations
 
-from typing import Optional
-
 from loguru import logger
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection, AsyncIOMotorDatabase
 
 from app.shared.config import get_settings
 
-_client: Optional[AsyncIOMotorClient] = None
-_database: Optional[AsyncIOMotorDatabase] = None
+_client: AsyncIOMotorClient | None = None
+_database: AsyncIOMotorDatabase | None = None
 
 
 async def init_mongodb() -> None:

@@ -1111,12 +1111,12 @@ function applyMorphTargetsSmooth(mesh, morphTargets, visemeIndexCache) {
       continue;
     }
 
-    // CRITICAL: Clamp target value to [0, 1] for safety
-    const clampedTarget = Math.max(0, Math.min(1, targetValue));
+    // CRITICAL: Clamp target value to [0, 1] for safety and reduce exaggeration
+    const clampedTarget = Math.max(0, Math.min(1, targetValue)) * 0.75;
 
     // Smooth interpolation
     const current = mesh.morphTargetInfluences[index];
-    const newValue = THREE.MathUtils.lerp(current, clampedTarget, smoothingFactor);
+    const newValue = THREE.MathUtils.lerp(current, clampedTarget, 0.15);
 
     // CRITICAL: Clamp final value to [0, 1]
     mesh.morphTargetInfluences[index] = Math.max(0, Math.min(1, newValue));

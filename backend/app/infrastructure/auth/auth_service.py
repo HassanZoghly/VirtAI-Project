@@ -18,7 +18,6 @@ from app.infrastructure.db.user_repository import MongoUserRepository
 from app.shared.config import get_settings
 from app.shared.security import hash_password, verify_password
 
-
 _user_repository = MongoUserRepository()
 
 def _repo() -> MongoUserRepository:

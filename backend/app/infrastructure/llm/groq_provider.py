@@ -152,7 +152,7 @@ class GroqLLMProvider(BaseLLMProvider):
 
         from app.infrastructure.llm.json_stream_parser import JsonStreamParser
         parser = JsonStreamParser()
-        
+
         # ── Process stream ────────────────────────────────────────────────────
         try:
             async for chunk in groq_stream:
@@ -237,7 +237,7 @@ class GroqLLMProvider(BaseLLMProvider):
             logger.error(f"Groq LLM complete failed: {e}")
             raise LLMException(f"LLM complete failed: {e!s}")
         elapsed_ms = (time.perf_counter() - start_time) * 1000
-        
+
         import json
         raw_text = response.choices[0].message.content or "{}"
         try:

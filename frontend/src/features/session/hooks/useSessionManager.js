@@ -52,18 +52,18 @@ export default function useSessionManager(urlSessionId, navigate) {
         const initialSessions = normalizeAndSortSessions(fetchedSessions);
 
         if (initialSessions.length === 0) {
-          const newSession = await sessionService.createSession();
-          const createdSession = normalizeSession({
-            ...newSession,
-            messages: [],
-            messages_loaded: true,
-          });
+          try {
+            const newSession = await sessionService.createSession();
+            const createdSession = normalizeSession({
+              ...newSession,
+              messages: [],
+              messages_loaded: true,
+            });
 
-          if (!createdSession.id) {
-            throw new Error('Created session is missing an id');
-          }
+            if (!createdSession.id) {
+              throw new Error('Created session is missing an id');
+            }
 
-          if (isMounted) {
             setSessions([createdSession]);
             setActiveSessionId(createdSession.id);
             setStatus('success');
@@ -71,6 +71,11 @@ export default function useSessionManager(urlSessionId, navigate) {
             if (navigate) {
               navigate(`/classroom/${createdSession.id}`, { replace: true });
             }
+          } catch (createError) {
+            console.error('Failed to auto-create session, falling back to empty state:', createError);
+            setSessions([]);
+            setActiveSessionId(null);
+            setStatus('success');
           }
           return;
         }
@@ -80,22 +85,19 @@ export default function useSessionManager(urlSessionId, navigate) {
           throw new Error('Failed to resolve initial session id');
         }
 
-        if (isMounted) {
-          setSessions(initialSessions);
-          setActiveSessionId(targetId);
-          setStatus('success');
-          if (navigate && targetId && targetId !== urlSessionId) {
-            navigate(`/classroom/${targetId}`, { replace: true });
-          }
+        setSessions(initialSessions);
+        setActiveSessionId(targetId);
+        setStatus('success');
+        if (navigate && targetId && targetId !== urlSessionId) {
+          navigate(`/classroom/${targetId}`, { replace: true });
         }
       } catch (error) {
         console.error('Session initialization failed:', error);
-        if (isMounted) {
-          setStatus('error');
-        }
+        setStatus('error');
       } finally {
         isInitializingRef.current = false;
         hasInitialized.current = true;
+        setStatus((prev) => (prev === 'loading' ? 'success' : prev));
       }
     }
 
@@ -166,7 +168,7 @@ export default function useSessionManager(urlSessionId, navigate) {
   const currentSession = useMemo(() => {
     const s =
       sessions.find((sessionItem) => sessionItem.id === currentSessionId) || sessions[0];
-    if (!s) return { id: null, title: '', messages: [], messages_loaded: false };
+    if (!s) return { id: null, title: '', messages: [], messages_loaded: true };
     return { ...s, messages: s.messages || [], messages_loaded: s.messages_loaded || false };
   }, [sessions, currentSessionId]);
 

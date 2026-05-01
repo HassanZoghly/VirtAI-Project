@@ -7,7 +7,7 @@ Reduces repeated database reads on access-token validation paths.
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 from loguru import logger
 
@@ -39,7 +39,7 @@ def get_auth_session_cache_stats() -> dict[str, float | int]:
 
 
 async def cache_auth_session(
-    user_id: str, payload: dict[str, Any], ttl_seconds: Optional[int] = None
+    user_id: str, payload: dict[str, Any], ttl_seconds: int | None = None
 ) -> None:
     """Store a minimal user payload for fast auth resolution."""
     try:
@@ -53,7 +53,7 @@ async def cache_auth_session(
         logger.warning(f"[AuthSessionCache] cache failed | user={user_id} | {e}")
 
 
-async def get_cached_auth_session(user_id: str) -> Optional[dict[str, Any]]:
+async def get_cached_auth_session(user_id: str) -> dict[str, Any] | None:
     """Return cached auth payload or None when missing/unavailable."""
     try:
         raw = await get_redis().get(auth_session_key(user_id))

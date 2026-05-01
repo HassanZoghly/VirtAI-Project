@@ -10,9 +10,9 @@ from loguru import logger
 from app.domain.user.entities import UserEntity
 from app.infrastructure.db.chat_repository import (
     create_chat_session,
+    delete_chat_session,
     get_session_messages,
     list_user_sessions,
-    delete_chat_session,
 )
 from app.presentation.http.v1.endpoints.auth import _current_user
 

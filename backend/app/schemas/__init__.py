@@ -39,9 +39,9 @@ from app.schemas.voice_mode import (
 
 # ── ws_messages (modern protocol) ────────────────────────────
 from app.schemas.ws_messages import (
-    AudioData,
     AnimationTimelineV2,
     AnimationTimelineV2Item,
+    AudioData,
     AvatarStatus,
     ChatAbort,
     # Server → Client (modern)
@@ -64,11 +64,11 @@ from app.schemas.ws_messages import (
     VisemesReady,
     # Envelope / base
     WSMessageEnvelope,
+    make_animation_timeline_v2,
     # Modern factory helpers
     make_chat_delta,
     make_chat_final,
     make_error,
-    make_animation_timeline_v2,
     # Legacy factory helpers
     make_error_msg,
     make_llm_chunk_msg,

@@ -65,7 +65,7 @@ async def lifespan(app: FastAPI):
     # Create service factories that use centralized settings
     from app.infrastructure.asr.groq_whisper import GroqWhisperASR
     from app.infrastructure.llm.groq_provider import GroqLLMProvider
-    from app.infrastructure.tts.edge_tts_provider import EdgeTTSProvider
+    from app.infrastructure.tts.openai_tts_provider import OpenAITTSProvider
 
     def create_asr_service() -> GroqWhisperASR:
         """Factory function to create ASR service."""
@@ -82,13 +82,12 @@ async def lifespan(app: FastAPI):
             api_key=settings.GROQ_API_KEY or "dummy-key-for-dev",
         )
 
-    def create_tts_service() -> EdgeTTSProvider:
+    def create_tts_service() -> OpenAITTSProvider:
         """Factory function to create TTS service with centralized settings."""
-        return EdgeTTSProvider(
-            voice=settings.TTS_VOICE,
-            rate=settings.TTS_RATE,
-            volume=settings.TTS_VOLUME,
-            pitch=settings.TTS_PITCH,
+        # Using Kokoro TTS default settings as per migration plan
+        return OpenAITTSProvider(
+            voice="aria",
+            speed=0.8,
         )
 
     # Initialize session manager with configuration and service factories
@@ -160,10 +159,11 @@ def create_app() -> FastAPI:
 
     # ── CSRF ──────────────────────────────────────────────────────────────────
     from app.shared.csrf import CSRFMiddleware
+
     app.add_middleware(CSRFMiddleware)
 
     # ── Error Handlers ────────────────────────────────────────────────────────
-    app.add_exception_handler(AvatarBaseException, avatar_exception_handler) # type: ignore
+    app.add_exception_handler(AvatarBaseException, avatar_exception_handler)  # type: ignore
     app.add_exception_handler(Exception, generic_exception_handler)
 
     # ── Routers ───────────────────────────────────────────────────────────────
@@ -179,8 +179,8 @@ if __name__ == "__main__":
 
     uvicorn.run(
         "app.main:app",
-        host=settings.HOST,
         port=settings.PORT,
         reload=settings.DEBUG,
         log_level="debug" if settings.DEBUG else "info",
+        ws_max_size=settings.WS_MAX_MESSAGE_SIZE,
     )

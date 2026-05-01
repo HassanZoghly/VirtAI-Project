@@ -23,10 +23,10 @@ export default function ClassroomShell() {
   const activeVoiceId = setupConfig?.voiceId || 'en-US-AriaNeural';
   const avatarModelPath = getAvatarModelPath(activeAvatarId);
   const wsAvatarId = avatarModelPath.split('/').pop().replace('.glb', '');
-  
+
   const [conversationState, dispatch] = useConversationReducer();
   const session = useSessionManager(urlSessionId, navigate);
-  
+
   const sessionList = session.sessions;
   const currentSessionId = session.currentSessionId;
   const currentSession = session.currentSession;
@@ -107,7 +107,7 @@ export default function ClassroomShell() {
   useEffect(() => {
     const unsubs = [
       onMessage('user.message.echo', (d) => {
-        if (!d?.message_id || !d?.text) return;
+        if (!d?.message_id || !d?.text) {return;}
         dispatch({ type: 'USER_MESSAGE', payload: { message_id: d.message_id, text: d.text } });
         sessionRef.current.addUserMessage(
           { id: d.message_id, role: 'user', content: d.text, timestamp: Date.now() },
@@ -130,7 +130,7 @@ export default function ClassroomShell() {
         setAnimationTimeline(Array.isArray(d.timeline) ? d.timeline : []);
       }),
       onMessage('animation.timeline', (d) => {
-        if (timelineProtocolRef.current === 'v2') return;
+        if (timelineProtocolRef.current === 'v2') {return;}
         timelineProtocolRef.current = 'v1';
         setAnimationTimeline(Array.isArray(d.timeline) ? d.timeline : []);
       }),
@@ -162,19 +162,19 @@ export default function ClassroomShell() {
 
   const handleChatScroll = useCallback(() => {
     const el = chatScrollRef.current;
-    if (!el) return;
+    if (!el) {return;}
     shouldStickToBottom.current =
       el.scrollHeight - el.scrollTop - el.clientHeight <= SCROLL_STICK_THRESHOLD_PX;
   }, []);
 
   useEffect(() => {
-    if (!shouldStickToBottom.current) return;
+    if (!shouldStickToBottom.current) {return;}
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [currentSession?.messages, conversationState.currentMessage, interimTranscript]);
 
   const handleSendMessage = useCallback(() => {
     const text = inputValue.trim();
-    if (!text) return;
+    if (!text) {return;}
     commitAndSend(text);
 
     setInputValue('');
@@ -215,14 +215,6 @@ export default function ClassroomShell() {
       [ConnectionState.ONLINE]: `${avatarName} Online`,
     }[connectionState] ||
     `${avatarName} — Offline`;
-
-  if (status === 'idle' || status === 'loading') {
-    return (
-      <div className="classroom-loading" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: '#fff', fontSize: '1.2rem' }}>
-        Loading Classroom...
-      </div>
-    );
-  }
 
   if (status === 'error') {
     return (

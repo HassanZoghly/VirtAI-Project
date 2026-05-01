@@ -43,7 +43,7 @@ async def websocket_endpoint(
 ):
     """
     WebSocket endpoint for real-time communication.
-    URL: ws://localhost:8000/api/v1/ws/{avatar_id}?voice=en-US-AriaNeural
+    URL: ws://localhost:8000/api/v1/ws/{avatar_id}?voice=aria
     Supported avatar_id: avatar1, avatar2, avatar3
     """
     voice_id = voice or settings.TTS_VOICE

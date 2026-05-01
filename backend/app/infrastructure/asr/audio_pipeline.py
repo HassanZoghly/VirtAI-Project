@@ -15,7 +15,6 @@ Key features:
 """
 
 import time
-from typing import Optional
 
 import numpy as np
 
@@ -95,8 +94,8 @@ class AudioPipeline:
         self.max_buffer_duration = max_buffer_duration
         self._buffer: bytearray = bytearray()
         self._is_final: bool = False
-        self._started_at: Optional[float] = None
-        self._last_chunk_at: Optional[float] = None
+        self._started_at: float | None = None
+        self._last_chunk_at: float | None = None
 
     def add_pcm_chunk(self, pcm_bytes: bytes, is_final: bool = False) -> None:
         """Append raw PCM bytes to buffer.

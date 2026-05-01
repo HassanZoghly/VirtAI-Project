@@ -10,7 +10,6 @@ ObjectId is stored as string in UserEntity.id for domain isolation.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
 
 from bson import ObjectId
 from loguru import logger
@@ -63,7 +62,7 @@ def _entity_to_doc(entity: UserEntity) -> dict:
 class MongoUserRepository(UserRepositoryPort):
     """UserRepositoryPort backed by MongoDB via Motor."""
 
-    async def get_by_id(self, user_id: str) -> Optional[UserEntity]:
+    async def get_by_id(self, user_id: str) -> UserEntity | None:
         try:
             doc = await users_col().find_one({"_id": ObjectId(user_id)})
         except Exception:
@@ -71,11 +70,11 @@ class MongoUserRepository(UserRepositoryPort):
             return None
         return _doc_to_entity(doc) if doc else None
 
-    async def get_by_email(self, email: str) -> Optional[UserEntity]:
+    async def get_by_email(self, email: str) -> UserEntity | None:
         doc = await users_col().find_one({"email": email})
         return _doc_to_entity(doc) if doc else None
 
-    async def get_by_google_id(self, google_id: str) -> Optional[UserEntity]:
+    async def get_by_google_id(self, google_id: str) -> UserEntity | None:
         doc = await users_col().find_one({"google_id": google_id})
         return _doc_to_entity(doc) if doc else None
 

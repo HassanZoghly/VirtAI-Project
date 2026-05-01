@@ -1,6 +1,6 @@
 import traceback
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import Request, WebSocket, status
 from fastapi.responses import JSONResponse
@@ -17,7 +17,7 @@ class AvatarBaseException(Exception):
         message: str,
         code: str = "UNKNOWN_ERROR",
         status_code: int = status.HTTP_400_BAD_REQUEST,
-        details: Optional[dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         self.message = message
         self.code = code
@@ -27,22 +27,22 @@ class AvatarBaseException(Exception):
 
 
 class ASRException(AvatarBaseException):
-    def __init__(self, message: str, details: Optional[dict] = None):
+    def __init__(self, message: str, details: dict | None = None):
         super().__init__(message=f"ASR Error: {message}", code="ASR_ERROR", details=details)
 
 
 class LLMException(AvatarBaseException):
-    def __init__(self, message: str, details: Optional[dict] = None):
+    def __init__(self, message: str, details: dict | None = None):
         super().__init__(message=f"LLM Error: {message}", code="LLM_ERROR", details=details)
 
 
 class TTSException(AvatarBaseException):
-    def __init__(self, message: str, details: Optional[dict] = None):
+    def __init__(self, message: str, details: dict | None = None):
         super().__init__(message=f"TTS Error: {message}", code="TTS_ERROR", details=details)
 
 
 class AudioException(AvatarBaseException):
-    def __init__(self, message: str, details: Optional[dict] = None):
+    def __init__(self, message: str, details: dict | None = None):
         super().__init__(message=f"Audio Error: {message}", code="AUDIO_ERROR", details=details)
 
 
@@ -57,7 +57,7 @@ class RateLimitException(AvatarBaseException):
 
 
 class ValidationException(AvatarBaseException):
-    def __init__(self, message: str, details: Optional[dict] = None):
+    def __init__(self, message: str, details: dict | None = None):
         super().__init__(
             message=f"Validation Error: {message}",
             code="VALIDATION_ERROR",

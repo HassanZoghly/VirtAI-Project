@@ -3,15 +3,15 @@ A lightweight streaming JSON parser that extracts string values on the fly.
 It processes raw token chunks and yields characters for specific string fields.
 """
 
-from typing import List, Tuple
+
 
 class JsonStreamParser:
     def __init__(self):
         self.state = "WAIT_KEY_START"
         self.current_key = ""
         self.in_escape = False
-        
-    def feed(self, token: str) -> List[Tuple[str, str]]:
+
+    def feed(self, token: str) -> list[tuple[str, str]]:
         """
         Feeds a chunk of raw JSON text.
         Returns a list of (key, character) pairs for currently parsed values.
@@ -35,7 +35,7 @@ class JsonStreamParser:
                     self.state = "READING_VALUE"
                 elif not char.isspace():
                     # If we encounter a boolean, number, or object `{`, this simple parser safely ignores it.
-                    pass 
+                    pass
             elif self.state == "READING_VALUE":
                 if self.in_escape:
                     if char == 'n':

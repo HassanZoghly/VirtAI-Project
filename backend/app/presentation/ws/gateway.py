@@ -132,7 +132,7 @@ class WebSocketHandler:
         self._session_manager = session_manager
         self._user_id = user_id
         self._avatar_id = avatar_id
-        self._voice_id = voice_id
+        self._voice_id = self._normalize_voice(voice_id)
         self._session_pending = session is None
         self._requested_session_id = requested_session_id
         self.session = session or SimpleNamespace(
@@ -163,6 +163,11 @@ class WebSocketHandler:
             f"resumed={resumed} | replay_after_seq={replay_after_seq}"
         )
 
+    def _normalize_voice(self, voice_id: str) -> str:
+        if not voice_id:
+            return "aria"
+        return voice_id
+
     async def _ensure_session(self) -> None:
         if not self._session_pending:
             return
@@ -186,6 +191,7 @@ class WebSocketHandler:
         2. Start ping/pong background task
         3. Listen for incoming messages
         """
+        settings = get_settings()
         replay_batch: list[str] = []
         if self.resumed and self.session.session_id:
             await self.connection_manager.register(self.session.session_id, self.ws)
@@ -259,6 +265,26 @@ class WebSocketHandler:
                         )
                         self._connected = False
                         break
+
+                    max_size = settings.WS_MAX_MESSAGE_SIZE
+                    if "text" in message:
+                        msg_size = len(message["text"].encode("utf-8"))
+                        if msg_size > max_size:
+                            await self._close_for_message_too_large(
+                                size=msg_size,
+                                max_size=max_size,
+                                frame_type="text",
+                            )
+                            break
+                    elif "bytes" in message:
+                        msg_size = len(message["bytes"])
+                        if msg_size > max_size:
+                            await self._close_for_message_too_large(
+                                size=msg_size,
+                                max_size=max_size,
+                                frame_type="binary",
+                            )
+                            break
 
                     # Handle normal message types
                     if "text" in message:
@@ -402,6 +428,9 @@ class WebSocketHandler:
             pcm_bytes: Raw binary frame from WebSocket (PCM + marker byte)
         """
         try:
+            self.session.touch()
+            self._last_pong_time = time.time()
+
             # Get or create voice mode handler
             voice_handler = await self._get_voice_mode_handler()
 
@@ -426,6 +455,29 @@ class WebSocketHandler:
             await self._safe_send(
                 make_error_msg(code="BINARY_FRAME_ERROR", message="Error processing audio data")
             )
+
+    async def _close_for_message_too_large(
+        self,
+        size: int,
+        max_size: int,
+        frame_type: str,
+    ) -> None:
+        logger.warning(
+            f"[WS] {frame_type} frame too large | "
+            f"session={self.session.session_id} | "
+            f"size={size:,}B | max_size={max_size:,}B"
+        )
+        await self._safe_send(
+            make_error_msg(
+                code="MESSAGE_TOO_LARGE",
+                message=f"WebSocket frame exceeds max size ({max_size} bytes)",
+            )
+        )
+        try:
+            await self.ws.close(code=1009)
+        except Exception:
+            pass
+        self._connected = False
 
     async def _route_message(self, raw: str, audio_buffer: AudioBuffer) -> None:
         """Parse incoming JSON and route to appropriate handler (supports both old and new protocols)."""
@@ -808,7 +860,9 @@ class WebSocketHandler:
 
     # ── Pipeline Runners ──────────────────────────────────────────────────────
 
-    async def _run_pipeline_audio(self, audio_buffer: AudioBuffer, session_id: str | None = None) -> None:
+    async def _run_pipeline_audio(
+        self, audio_buffer: AudioBuffer, session_id: str | None = None
+    ) -> None:
         """Run pipeline with audio input and forward events."""
         try:
             if self.pipeline is None:
@@ -1068,6 +1122,14 @@ class WebSocketHandler:
             except (TypeError, AttributeError):
                 # Handle mock objects or missing attributes in tests
                 pass
+
+            try:
+                await self._voice_mode_handler.shutdown()
+            except Exception as e:
+                logger.debug(
+                    f"[WS] Voice mode shutdown failed | "
+                    f"session={self.session.session_id} | error={e}"
+                )
 
             self._voice_mode_handler.audio_pipeline.clear_buffer()
             logger.debug(f"[WS] Voice mode handler cleaned up | session={self.session.session_id}")

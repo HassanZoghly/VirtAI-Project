@@ -18,7 +18,6 @@ TTL: REDIS_CHAT_CONTEXT_TTL seconds (refreshed on each push)
 from __future__ import annotations
 
 import json
-from typing import Optional
 
 from loguru import logger
 
@@ -66,7 +65,7 @@ async def push_message(
     session_id: str,
     role: str,
     content: str,
-    extra: Optional[dict] = None,
+    extra: dict | None = None,
 ) -> None:
     """
     Append a message to the context list and trim to MAX_MESSAGES.

@@ -11,6 +11,7 @@ Architecture:
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections import deque
 from typing import TYPE_CHECKING
@@ -105,6 +106,8 @@ class VoiceModeHandler:
             max_buffer_duration=max_buffer_duration,
         )
 
+        self._transcription_tasks: set[asyncio.Task] = set()
+
         # Rate limiting configuration
         self.rate_limit_chunks = rate_limit_chunks
         self.rate_limit_window = rate_limit_window
@@ -151,6 +154,19 @@ class VoiceModeHandler:
 
         # Add current timestamp
         self._chunk_timestamps.append(current_time)
+
+    def _track_transcription_task(self, task: asyncio.Task) -> None:
+        self._transcription_tasks.add(task)
+        task.add_done_callback(self._on_transcription_task_done)
+
+    def _on_transcription_task_done(self, task: asyncio.Task) -> None:
+        self._transcription_tasks.discard(task)
+        try:
+            task.result()
+        except asyncio.CancelledError:
+            logger.debug(f"Transcription task cancelled | session={self.session_id}")
+        except Exception:
+            logger.exception(f"Transcription task failed | session={self.session_id}")
 
     async def handle_audio_chunk(self, pcm_bytes: bytes, is_final: bool = False) -> None:
         """Handle incoming PCM audio chunk from client binary frame.
@@ -328,9 +344,55 @@ class VoiceModeHandler:
 
             # Convert PCM buffer to float32 numpy array for ASR
             audio_data = self.audio_pipeline.get_audio_for_asr()
+            self.audio_pipeline.clear_buffer()
 
-            # Transcribe audio using ASR service (now accepts numpy array directly)
-            result = await self.asr_service.transcribe_stream(audio_chunks=audio_data)
+            task = asyncio.create_task(
+                self._transcribe_and_send(audio_data, total_size),
+                name=f"voice_asr_{self.session_id}",
+            )
+            self._track_transcription_task(task)
+
+        except Exception as e:
+            # Comprehensive error logging for transcription failures (Requirement 10.3, 10.4)
+            logger.exception(
+                f"Transcription failed | "
+                f"session={self.session_id} | "
+                f"total_size={total_size:,}B | "
+                f"error_type={type(e).__name__}"
+            )
+
+            # Send detailed error message to client
+            error_message = {
+                "type": "error",
+                "code": "TRANSCRIPTION_FAILED",
+                "message": "Failed to transcribe audio. Please try again.",
+                "session_id": self.session_id,
+                "details": {},  # Always include details field
+            }
+
+            # Include error details if it's an ASRException with details (Requirement 13.5)
+            exc_details = getattr(e, "details", None)
+            if exc_details:
+                error_message["details"] = exc_details
+
+                # If it's a format conversion error, provide supported formats
+                if "supported_formats" in exc_details:
+                    error_message["message"] = (
+                        f"Audio format not supported. Supported formats: "
+                        f"{', '.join(exc_details['supported_formats'])}"
+                    )
+            else:
+                # For generic exceptions, include error type and message
+                error_message["details"] = {"error_type": type(e).__name__, "error": str(e)}
+
+            await self.websocket.send_json(error_message)
+
+            # Clear buffer to prepare for next attempt
+            self.audio_pipeline.clear_buffer()
+
+    async def _transcribe_and_send(self, audio_data, total_size: int) -> None:
+        try:
+            result = await self.asr_service.transcribe_stream(audio_data=audio_data)
 
             logger.info(
                 f"Transcription complete | "
@@ -346,9 +408,6 @@ class VoiceModeHandler:
                 confidence=result.confidence,
                 language=result.language,
             )
-
-            # Clear buffer after successful transcription
-            self.audio_pipeline.clear_buffer()
 
             # Pass transcript to conversation pipeline if not empty
             if result.transcript.strip():
@@ -400,8 +459,13 @@ class VoiceModeHandler:
 
             await self.websocket.send_json(error_message)
 
-            # Clear buffer to prepare for next attempt
-            self.audio_pipeline.clear_buffer()
+    async def shutdown(self) -> None:
+        if not self._transcription_tasks:
+            return
+        for task in list(self._transcription_tasks):
+            task.cancel()
+        await asyncio.gather(*self._transcription_tasks, return_exceptions=True)
+        self._transcription_tasks.clear()
 
     async def send_transcript(
         self,

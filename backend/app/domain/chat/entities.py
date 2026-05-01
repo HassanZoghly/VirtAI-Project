@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Optional
 
 
 # ── Message Roles ─────────────────────────────────────────────────────────────
@@ -144,7 +143,7 @@ class PipelineEventType(Enum):
 class PipelineEvent:
     type: PipelineEventType
     data: dict = field(default_factory=dict)
-    session_id: Optional[str] = None  # for tracking
+    session_id: str | None = None  # for tracking
 
 
 def ev(event_type: PipelineEventType, **kwargs) -> PipelineEvent:

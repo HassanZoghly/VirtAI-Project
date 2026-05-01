@@ -10,14 +10,12 @@ get_redis() returns the active client for use in cache modules.
 
 from __future__ import annotations
 
-from typing import Optional
-
 import redis.asyncio as aioredis
 from loguru import logger
 
 from app.shared.config import get_settings
 
-_redis: Optional[aioredis.Redis] = None
+_redis: aioredis.Redis | None = None
 
 
 async def init_redis() -> None:

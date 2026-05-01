@@ -7,7 +7,6 @@ Delegates to ConversationPipeline.process_text() and process_message().
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
-from typing import Optional
 
 from app.application.voice.handle_voice_turn import ConversationPipeline
 from app.domain.chat.entities import PipelineEvent
@@ -16,7 +15,7 @@ from app.domain.chat.entities import PipelineEvent
 async def handle_text_turn(
     pipeline: ConversationPipeline,
     text: str,
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
 ) -> AsyncGenerator[PipelineEvent, None]:
     """
     Process direct text input through LLM → TTS (no ASR).

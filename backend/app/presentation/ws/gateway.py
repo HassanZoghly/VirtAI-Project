@@ -34,7 +34,6 @@ import json
 import re
 import time
 from types import SimpleNamespace
-from typing import Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
 from loguru import logger
@@ -127,6 +126,7 @@ class WebSocketHandler:
         connection_manager: WSConnectionManager,
         resumed: bool = False,
         replay_after_seq: int = 0,
+        requested_session_id: str | None = None,
     ):
         self.ws = websocket
         self._session_manager = session_manager
@@ -134,8 +134,9 @@ class WebSocketHandler:
         self._avatar_id = avatar_id
         self._voice_id = voice_id
         self._session_pending = session is None
+        self._requested_session_id = requested_session_id
         self.session = session or SimpleNamespace(
-            session_id="",
+            session_id=requested_session_id or "",
             avatar_id=avatar_id,
             touch=lambda: None,
         )
@@ -153,7 +154,7 @@ class WebSocketHandler:
         self._last_pong_time = time.time()
 
         # Voice mode handler (lazy initialization)
-        self._voice_mode_handler: Optional[VoiceModeHandler] = None
+        self._voice_mode_handler: VoiceModeHandler | None = None
 
         logger.info(
             f"WebSocketHandler created | "
@@ -168,6 +169,7 @@ class WebSocketHandler:
 
         session = await self._session_manager.create_session(
             user_id=self._user_id,
+            session_id=self._requested_session_id,
             avatar_id=self._avatar_id,
             voice_id=self._voice_id,
         )
@@ -618,7 +620,8 @@ class WebSocketHandler:
         )
 
         self._pipeline_task = asyncio.create_task(
-            self._run_pipeline_audio(snapshot), name=f"pipeline_audio_{self.session.session_id}"
+            self._run_pipeline_audio(snapshot, session_id=self.session.session_id),
+            name=f"pipeline_audio_{self.session.session_id}",
         )
 
     async def _handle_text_input(self, data: dict) -> None:
@@ -635,7 +638,8 @@ class WebSocketHandler:
         logger.info(f"Starting text pipeline | text='{text[:60]}'")
 
         self._pipeline_task = asyncio.create_task(
-            self._run_pipeline_text(text), name=f"pipeline_text_{self.session.session_id}"
+            self._run_pipeline_text(text, session_id=self.session.session_id),
+            name=f"pipeline_text_{self.session.session_id}",
         )
 
     async def _handle_ping(self) -> None:
@@ -778,9 +782,9 @@ class WebSocketHandler:
         self,
         code: str,
         message: str,
-        session_id: Optional[str] = None,
-        message_id: Optional[str] = None,
-        details: Optional[dict] = None,
+        session_id: str | None = None,
+        message_id: str | None = None,
+        details: dict | None = None,
     ) -> None:
         """
         Send error message using new protocol ErrorMessage schema.
@@ -804,12 +808,12 @@ class WebSocketHandler:
 
     # ── Pipeline Runners ──────────────────────────────────────────────────────
 
-    async def _run_pipeline_audio(self, audio_buffer: AudioBuffer) -> None:
+    async def _run_pipeline_audio(self, audio_buffer: AudioBuffer, session_id: str | None = None) -> None:
         """Run pipeline with audio input and forward events."""
         try:
             if self.pipeline is None:
                 return
-            async for event in self.pipeline.process_audio(audio_buffer):
+            async for event in self.pipeline.process_audio(audio_buffer, session_id=session_id):
                 if not self._connected:
                     break
                 await self._forward_pipeline_event(event)
@@ -823,12 +827,12 @@ class WebSocketHandler:
             )
             await self._safe_send(make_status_msg(AvatarStatus.IDLE))
 
-    async def _run_pipeline_text(self, text: str) -> None:
+    async def _run_pipeline_text(self, text: str, session_id: str | None = None) -> None:
         """Run pipeline with text input and forward events."""
         try:
             if self.pipeline is None:
                 return
-            async for event in self.pipeline.process_text(text):
+            async for event in self.pipeline.process_text(text, session_id=session_id):
                 if not self._connected:
                     break
                 await self._forward_pipeline_event(event)

@@ -28,7 +28,7 @@ export default function AppRoutes() {
         }
       />
       <Route
-        path="/classroom"
+        path="/classroom/:sessionId?"
         element={
           <Suspense fallback={<PageLoader />}>
             <ProtectedRoute>

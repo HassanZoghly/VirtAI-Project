@@ -113,7 +113,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_REQUESTS: int = 60
     RATE_LIMIT_WINDOW: int = 60
     RATE_LIMIT_MESSAGES_PER_MINUTE: int = 60
-    RATE_LIMIT_CONNECTIONS_PER_IP: int = 5
+    RATE_LIMIT_CONNECTIONS_PER_IP: int = 60
     TRUST_PROXY_HEADERS: bool = False
 
     # Storage

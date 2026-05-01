@@ -100,8 +100,8 @@ const SessionList = memo(function SessionList({
 
   const filtered = useMemo(() => {
     return [...sessions].sort((a, b) => {
-      const aTime = a.messages?.[a.messages.length - 1]?.timestamp || a.createdAt || 0;
-      const bTime = b.messages?.[b.messages.length - 1]?.timestamp || b.createdAt || 0;
+      const aTime = new Date(a.updated_at || a.created_at || 0).getTime();
+      const bTime = new Date(b.updated_at || b.created_at || 0).getTime();
       return bTime - aTime;
     });
   }, [sessions]);
@@ -211,9 +211,9 @@ const SessionList = memo(function SessionList({
             </div>
           ) : (
             filtered.map((session) => {
-              const lastMsg = session.messages?.[session.messages.length - 1];
-              const displayTime = lastMsg?.timestamp || session.createdAt;
+              const displayTime = session.updated_at || session.created_at;
               const isEditing = editingId === session.id;
+              const msgCount = session.message_count || 0;
 
               return (
                 <div
@@ -252,7 +252,7 @@ const SessionList = memo(function SessionList({
                       {!isEditing && (
                         <div className="session-preview-row">
                           <span className="session-preview">
-                            {lastMsg ? lastMsg.content : `${session.messages?.length || 0} msg`}
+                            {msgCount} msg{msgCount !== 1 ? 's' : ''}
                           </span>
                         </div>
                       )}

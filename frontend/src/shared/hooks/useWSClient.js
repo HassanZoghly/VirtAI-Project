@@ -19,9 +19,9 @@ export const ConnectionState = Object.freeze({
 });
 
 /**
- * Exponential backoff: 1 s → 2 s → 4 s → 8 s → 16 s.
+ * Exponential backoff with jitter: 1 s → 2 s → 4 s → 8 s → 16 s + random(0-1000)ms
  */
-const backoffDelay = (attempt) => Math.min(1000 * 2 ** attempt, 16_000);
+const backoffDelay = (attempt) => Math.min(1000 * 2 ** attempt, 16_000) + Math.random() * 1000;
 
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_PAUSE_MESSAGE = 'Connection paused after 5 retries. Click Reconnect to try again.';
@@ -57,14 +57,20 @@ function useWSClient(url) {
   const reconnectPausedRef = useRef(false);
   const connectRef = useRef(() => {});
   const accessTokenRef = useRef(accessToken);
+  const urlRef = useRef(url);
 
   useEffect(() => {
     accessTokenRef.current = accessToken;
   }, [accessToken]);
 
   useEffect(() => {
+    urlRef.current = url;
+  }, [url]);
+
+  useEffect(() => {
     if (
       accessTokenRef.current &&
+      urlRef.current &&
       !wsRef.current &&
       !isConnectingRef.current &&
       !reconnectPausedRef.current &&
@@ -95,7 +101,14 @@ function useWSClient(url) {
   }, [clearReconnectTimer]);
 
   const scheduleReconnect = useCallback(
-    (reason) => {
+    (reason, expectedUrl = urlRef.current) => {
+      const latestUrl = urlRef.current;
+      if (!latestUrl || (expectedUrl && latestUrl !== expectedUrl)) {
+        clearReconnectTimer();
+        setConnectionState(ConnectionState.OFFLINE);
+        return;
+      }
+
       if (reconnectPausedRef.current) {
         return;
       }
@@ -126,7 +139,11 @@ function useWSClient(url) {
       clearReconnectTimer();
       reconnectTimeoutRef.current = setTimeout(() => {
         reconnectTimeoutRef.current = null;
-        connectRef.current();
+        const activeUrl = urlRef.current;
+        if (!activeUrl || activeUrl !== expectedUrl) {
+          return;
+        }
+        connectRef.current(expectedUrl);
       }, delay);
     },
     [clearReconnectTimer, pauseReconnect]
@@ -169,7 +186,18 @@ function useWSClient(url) {
     }, 80);
   }, [flushAck]);
 
-  const connect = useCallback(() => {
+  const connect = useCallback((overrideUrl = null) => {
+    const currentUrl = overrideUrl || urlRef.current;
+
+    if (!currentUrl) {
+      if (import.meta.env.DEV) {
+        console.debug('[WS] URL is null or undefined, skipping connection');
+      }
+      clearReconnectTimer();
+      setConnectionState(ConnectionState.OFFLINE);
+      return;
+    }
+
     if (reconnectPausedRef.current) {
       if (import.meta.env.DEV) {
         console.debug('[WS] Reconnect paused; waiting for manual retry');
@@ -227,9 +255,9 @@ function useWSClient(url) {
     }
 
     try {
-      let socketUrl = url;
+      let socketUrl = currentUrl;
       try {
-        const parsed = new URL(url);
+        const parsed = new URL(currentUrl);
         if (currentAccessToken) {
           parsed.searchParams.set('token', currentAccessToken);
         }
@@ -247,6 +275,7 @@ function useWSClient(url) {
       wsRef.current = socket;
       socket._mountId = currentMountId;
       socket._instanceId = instanceId;
+      socket._sourceUrl = currentUrl;
       isIntentionalCloseRef.current = false;
 
       if (import.meta.env.DEV) {
@@ -431,6 +460,13 @@ function useWSClient(url) {
           return;
         }
 
+        const latestUrl = urlRef.current;
+        if (!latestUrl || latestUrl !== socket._sourceUrl) {
+          clearReconnectTimer();
+          setConnectionState(ConnectionState.OFFLINE);
+          return;
+        }
+
         // Normal close — don't reconnect
         if (event.code === 1000 || event.code === 1001) {
           clearReconnectTimer();
@@ -440,7 +476,7 @@ function useWSClient(url) {
         }
 
         // Abnormal close — schedule reconnect with exponential backoff
-        scheduleReconnect(`Socket closed with code ${event.code}`);
+        scheduleReconnect(`Socket closed with code ${event.code}`, socket._sourceUrl);
       };
     } catch (err) {
       isConnectingRef.current = false;
@@ -456,10 +492,9 @@ function useWSClient(url) {
         lastErrorTimeRef.current = now;
       }
 
-      scheduleReconnect(err?.message || 'Failed to create WebSocket connection');
+      scheduleReconnect(err?.message || 'Failed to create WebSocket connection', currentUrl);
     }
   }, [
-    url,
     scheduleAck,
     clearReconnectState,
     clearReconnectTimer,
@@ -471,10 +506,18 @@ function useWSClient(url) {
     connectRef.current = connect;
   }, [connect]);
 
-  // Initialize connection on mount
+  // Reinitialize the socket lifecycle whenever URL changes.
   useEffect(() => {
     mountIdRef.current = Math.random();
-    connect();
+    if (!url) {
+      clearReconnectTimer();
+      setConnectionState(ConnectionState.OFFLINE);
+      return () => {
+        isIntentionalCloseRef.current = true;
+      };
+    }
+
+    connect(url);
 
     return () => {
       if (import.meta.env.DEV) {
@@ -497,31 +540,19 @@ function useWSClient(url) {
 
       if (wsRef.current) {
         const socket = wsRef.current;
-        const state = socket.readyState;
-
-        if (import.meta.env.DEV) {
-          console.debug(
-            '[WS] Cleanup: detaching handlers, state:',
-            ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][state]
-          );
-        }
 
         socket.onopen = null;
         socket.onmessage = null;
         socket.onerror = null;
         socket.onclose = null;
-
-        if (state === WebSocket.OPEN || state === WebSocket.CLOSING) {
-          socket.close(1000, 'Component unmount');
-        }
-
+        socket.close(1000);
         wsRef.current = null;
       }
 
       reconnectAttempts.current = 0;
       setReconnectError(null);
     };
-  }, [connect, clearReconnectTimer]);
+  }, [url, connect, clearReconnectTimer]);
 
   /**
    * Send a message through WebSocket.
@@ -585,8 +616,9 @@ function useWSClient(url) {
       initTimerRef.current = null;
     }
 
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.close();
+    if (wsRef.current) {
+      wsRef.current.onclose = null;
+      wsRef.current.close(1000);
       wsRef.current = null;
     }
 

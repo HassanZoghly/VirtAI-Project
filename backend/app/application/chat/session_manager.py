@@ -16,12 +16,12 @@ import asyncio
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from loguru import logger
 
 from app.application.voice.handle_voice_turn import ConversationPipeline
-from app.infrastructure.db.chat_repository import create_chat_session
+from app.infrastructure.db.chat_repository import create_chat_session, get_chat_session
 
 if TYPE_CHECKING:
     from app.domain.chat.ports import BaseLLMProvider
@@ -40,9 +40,9 @@ class ConversationSession:
         session_id: str,
         user_id: str,
         avatar_id: str = "avatar1",
-        asr_service: Optional[StreamingASRService] = None,
-        llm_service: Optional[BaseLLMProvider] = None,
-        tts_service: Optional[BaseTTSProvider] = None,
+        asr_service: StreamingASRService | None = None,
+        llm_service: BaseLLMProvider | None = None,
+        tts_service: BaseTTSProvider | None = None,
     ):
         self.session_id: str = session_id
         self.user_id: str = user_id
@@ -58,7 +58,7 @@ class ConversationSession:
         self.connected: bool = True
         self.disconnected_at: datetime | None = None
         self.background_tasks: set[asyncio.Task] = set()
-        self.on_cleanup: Optional[Callable[[], None]] = None
+        self.on_cleanup: Callable[[], None] | None = None
 
     def touch(self) -> None:
         """Updates last_activity timestamp."""
@@ -105,9 +105,9 @@ class SessionManager:
         self,
         session_timeout_sec: int = 300,
         session_cleanup_interval: int = 60,
-        asr_service_factory: Optional[Callable[[], StreamingASRService]] = None,
-        llm_service_factory: Optional[Callable[[], BaseLLMProvider]] = None,
-        tts_service_factory: Optional[Callable[[], BaseTTSProvider]] = None,
+        asr_service_factory: Callable[[], StreamingASRService] | None = None,
+        llm_service_factory: Callable[[], BaseLLMProvider] | None = None,
+        tts_service_factory: Callable[[], BaseTTSProvider] | None = None,
     ):
         if session_timeout_sec <= 0:
             raise ValueError("session_timeout_sec must be positive")
@@ -117,7 +117,7 @@ class SessionManager:
         self._sessions: dict[str, ConversationSession] = {}
         self._timeout = session_timeout_sec
         self._cleanup_interval = session_cleanup_interval
-        self._cleanup_task: Optional[asyncio.Task] = None
+        self._cleanup_task: asyncio.Task | None = None
         self._asr_service_factory = asr_service_factory
         self._llm_service_factory = llm_service_factory
         self._tts_service_factory = tts_service_factory
@@ -136,17 +136,30 @@ class SessionManager:
         session_id: str | None = None,
         avatar_id: str = "avatar1",
         voice_id: str | None = None,
-        on_cleanup: Optional[Callable[[], None]] = None,
-        asr_service: Optional[StreamingASRService] = None,
-        llm_service: Optional[BaseLLMProvider] = None,
-        tts_service: Optional[BaseTTSProvider] = None,
+        on_cleanup: Callable[[], None] | None = None,
+        asr_service: StreamingASRService | None = None,
+        llm_service: BaseLLMProvider | None = None,
+        tts_service: BaseTTSProvider | None = None,
     ) -> ConversationSession:
+        if session_id and session_id in self._sessions:
+            existing_session = self._sessions[session_id]
+            if existing_session.user_id != user_id:
+                raise PermissionError("Cannot attach to another user's session.")
+            existing_session.mark_connected()
+            return existing_session
+
         sid = session_id or str(uuid.uuid4())
-        if sid in self._sessions:
+
+        if session_id is None and sid in self._sessions:
             # Guard accidental session-id reuse for new chats.
             sid = str(uuid.uuid4())
 
-        await create_chat_session(user_id=user_id, session_id=sid)
+        persisted_session = await get_chat_session(sid)
+        if persisted_session is not None:
+            if persisted_session.get("user_id") != user_id:
+                raise PermissionError("Cannot attach to another user's session.")
+        else:
+            await create_chat_session(user_id=user_id, session_id=sid)
 
         asr = asr_service or (self._asr_service_factory() if self._asr_service_factory else None)
         llm = llm_service or (self._llm_service_factory() if self._llm_service_factory else None)

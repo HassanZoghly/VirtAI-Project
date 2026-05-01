@@ -1,4 +1,3 @@
-import { selectIsAuthenticated, useAuthStore } from '@/features/auth/store/authStore';
 import { AvatarPanel } from '@/features/avatar';
 import { getAvatarById, getAvatarModelPath } from '@/features/avatar/data/avatars';
 import { ChatInput, MessageList } from '@/features/chat';
@@ -10,29 +9,39 @@ import Toast from '@/shared/utils/toast';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { PiGearFill, PiWifiSlashFill } from 'react-icons/pi';
+import { useNavigate, useParams } from 'react-router-dom';
 import { SCROLL_STICK_THRESHOLD_PX } from './constants';
 
 const toast = new Toast('tr');
 
 export default function ClassroomShell() {
+  const { sessionId: urlSessionId } = useParams();
+  const navigate = useNavigate();
+
   const setupConfig = useMemo(() => loadSetup(), []);
   const activeAvatarId = setupConfig?.avatarId || 'omar';
   const activeVoiceId = setupConfig?.voiceId || 'en-US-AriaNeural';
   const avatarModelPath = getAvatarModelPath(activeAvatarId);
   const wsAvatarId = avatarModelPath.split('/').pop().replace('.glb', '');
-  const WS_URL = `ws://localhost:8000/api/v1/ws/${wsAvatarId}?voice=${encodeURIComponent(activeVoiceId)}`;
-  const { connectionState, isConnected, send, onMessage, reconnect, reconnectError } =
-    useWSClient(WS_URL);
+  
   const [conversationState, dispatch] = useConversationReducer();
-  const session = useSessionManager();
+  const session = useSessionManager(urlSessionId, navigate);
+  
   const sessionList = session.sessions;
   const currentSessionId = session.currentSessionId;
   const currentSession = session.currentSession;
-  const sessionIsReady = session.isReady;
+  const status = session.status;
   const createNewSession = session.createNewSession;
   const switchSession = session.switchSession;
   const deleteSession = session.deleteSession;
   const renameSession = session.renameSession;
+
+  const WS_URL = status === 'success' && currentSessionId
+    ? `ws://localhost:8000/api/v1/ws/${wsAvatarId}?voice=${encodeURIComponent(activeVoiceId)}&session_id=${currentSessionId}`
+    : null;
+
+  const { connectionState, isConnected, send, onMessage, reconnect, reconnectError } =
+    useWSClient(WS_URL);
 
   const [audioUrl, setAudioUrl] = useState(null);
   const [mouthCues, setMouthCues] = useState([]);
@@ -58,39 +67,6 @@ export default function ClassroomShell() {
     sessionRef.current = session;
   }, [session]);
 
-  // Auto-create a first chat session for new users with no history.
-  // Triple-gated to prevent race conditions:
-  // 1. Auth must be initialized and authenticated (no point creating chats if we'll redirect to /auth)
-  // 2. Session manager must be ready (localStorage has been read)
-  // 3. Sessions must genuinely be empty, or the active session still has zero messages
-  const isInitialized = useAuthStore((s) => s.isInitialized);
-  const isAuthenticated = useAuthStore(selectIsAuthenticated);
-
-  const hasAutoCreated = useRef(false);
-  useEffect(() => {
-    if (!isInitialized || !isAuthenticated || !sessionIsReady || hasAutoCreated.current) {
-      return;
-    }
-
-    const activeHasZeroMessages = (currentSession.messages?.length ?? 0) === 0;
-    const shouldCreateFreshSession = sessionList.length === 0 || activeHasZeroMessages;
-
-    if (shouldCreateFreshSession) {
-      hasAutoCreated.current = true;
-      createNewSession();
-    } else {
-      hasAutoCreated.current = true;
-    }
-  }, [
-    isInitialized,
-    isAuthenticated,
-    sessionList.length,
-    currentSessionId,
-    currentSession.messages.length,
-    sessionIsReady,
-    createNewSession,
-  ]);
-
   const commitAndSend = useCallback(
     (text) => {
       const message_id = crypto.randomUUID();
@@ -111,14 +87,12 @@ export default function ClassroomShell() {
     const prevId = prevSessionIdRef.current;
     const nextId = currentSessionId;
     if (prevId !== nextId) {
-      // Save scroll position of outgoing session
       if (chatScrollRef.current) {
         scrollPositionsRef.current.set(prevId, chatScrollRef.current.scrollTop);
       }
-      // Restore scroll position of incoming session (next tick after render)
       requestAnimationFrame(() => {
         const saved = scrollPositionsRef.current.get(nextId);
-        if (chatScrollRef.current && saved !== null) {
+        if (chatScrollRef.current && saved !== null && saved !== undefined) {
           chatScrollRef.current.scrollTop = saved;
           shouldStickToBottom.current = false;
         } else {
@@ -133,9 +107,7 @@ export default function ClassroomShell() {
   useEffect(() => {
     const unsubs = [
       onMessage('user.message.echo', (d) => {
-        if (!d?.message_id || !d?.text) {
-          return;
-        }
+        if (!d?.message_id || !d?.text) return;
         dispatch({ type: 'USER_MESSAGE', payload: { message_id: d.message_id, text: d.text } });
         sessionRef.current.addUserMessage(
           { id: d.message_id, role: 'user', content: d.text, timestamp: Date.now() },
@@ -158,9 +130,7 @@ export default function ClassroomShell() {
         setAnimationTimeline(Array.isArray(d.timeline) ? d.timeline : []);
       }),
       onMessage('animation.timeline', (d) => {
-        if (timelineProtocolRef.current === 'v2') {
-          return;
-        }
+        if (timelineProtocolRef.current === 'v2') return;
         timelineProtocolRef.current = 'v1';
         setAnimationTimeline(Array.isArray(d.timeline) ? d.timeline : []);
       }),
@@ -192,25 +162,19 @@ export default function ClassroomShell() {
 
   const handleChatScroll = useCallback(() => {
     const el = chatScrollRef.current;
-    if (!el) {
-      return;
-    }
+    if (!el) return;
     shouldStickToBottom.current =
       el.scrollHeight - el.scrollTop - el.clientHeight <= SCROLL_STICK_THRESHOLD_PX;
   }, []);
 
   useEffect(() => {
-    if (!shouldStickToBottom.current) {
-      return;
-    }
+    if (!shouldStickToBottom.current) return;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [currentSession.messages, conversationState.currentMessage, interimTranscript]);
+  }, [currentSession?.messages, conversationState.currentMessage, interimTranscript]);
 
   const handleSendMessage = useCallback(() => {
     const text = inputValue.trim();
-    if (!text) {
-      return;
-    }
+    if (!text) return;
     commitAndSend(text);
 
     setInputValue('');
@@ -251,6 +215,22 @@ export default function ClassroomShell() {
       [ConnectionState.ONLINE]: `${avatarName} Online`,
     }[connectionState] ||
     `${avatarName} — Offline`;
+
+  if (status === 'idle' || status === 'loading') {
+    return (
+      <div className="classroom-loading" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: '#fff', fontSize: '1.2rem' }}>
+        Loading Classroom...
+      </div>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <div className="classroom-error" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: '#ff6b6b', fontSize: '1.2rem' }}>
+        Failed to load sessions. Please refresh the page.
+      </div>
+    );
+  }
 
   return (
     <>
@@ -328,17 +308,23 @@ export default function ClassroomShell() {
           />
 
           <div className="chat-panel" key={currentSessionId}>
-            <MessageList
-              messages={currentSession.messages}
-              currentMessage={conversationState.currentMessage}
-              interimTranscript={interimTranscript}
-              error={conversationState.error}
-              avatarName={avatarName}
-              chatScrollRef={chatScrollRef}
-              messagesEndRef={messagesEndRef}
-              onScroll={handleChatScroll}
-              pipelineState={conversationState.pipelineState}
-            />
+            {currentSession && currentSession.messages_loaded !== true ? (
+              <div className="messages-loading" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#fff', fontSize: '1.1rem' }}>
+                Loading messages...
+              </div>
+            ) : (
+              <MessageList
+                messages={currentSession.messages}
+                currentMessage={conversationState.currentMessage}
+                interimTranscript={interimTranscript}
+                error={conversationState.error}
+                avatarName={avatarName}
+                chatScrollRef={chatScrollRef}
+                messagesEndRef={messagesEndRef}
+                onScroll={handleChatScroll}
+                pipelineState={conversationState.pipelineState}
+              />
+            )}
             <ChatInput
               inputValue={inputValue}
               onInputChange={setInputValue}

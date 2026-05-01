@@ -17,7 +17,6 @@ ID Strategy:
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
 
 from bson import ObjectId
 from loguru import logger
@@ -41,6 +40,10 @@ def _to_object_id(value: str) -> ObjectId | str:
         return value
 
 
+def _derive_session_title(content: str, max_len: int = 30) -> str:
+    return content.strip()[:max_len]
+
+
 # ── Chat Sessions ─────────────────────────────────────────────────────────────
 
 
@@ -58,18 +61,18 @@ async def create_chat_session(
         "user_id": _to_object_id(user_id),  # real Mongo ObjectId if user_id is a Mongo _id
         "title": title,
         "created_at": _now(),
-        "last_active": _now(),
+        "updated_at": _now(),
         "message_count": 0,
         "is_archived": False,
     }
     result = await chat_sessions_col().insert_one(doc)
-    doc["_id"] = str(result.inserted_id)
-    doc["user_id"] = str(user_id)
+    doc["_id"] = result.inserted_id
+    doc["user_id"] = user_id
     logger.debug(f"Chat session created | id={doc['_id']} | user={user_id}")
-    return doc
+    return _serialise_session(doc)
 
 
-async def get_chat_session(session_id: str) -> Optional[dict]:
+async def get_chat_session(session_id: str) -> dict | None:
     """Fetch a chat session by id."""
     sid = _to_object_id(session_id)
     doc = await chat_sessions_col().find_one({"_id": sid})
@@ -79,12 +82,12 @@ async def get_chat_session(session_id: str) -> Optional[dict]:
 
 
 async def touch_chat_session(session_id: str) -> None:
-    """Update last_active timestamp for an active session."""
+    """Update updated_at timestamp for an active session."""
     sid = _to_object_id(session_id)
     try:
         await chat_sessions_col().update_one(
             {"_id": sid},
-            {"$set": {"last_active": _now()}},
+            {"$set": {"updated_at": _now()}},
         )
     except Exception as e:
         logger.warning(f"Failed to touch session {session_id}: {e}")
@@ -95,12 +98,12 @@ async def list_user_sessions(
     archived: bool = False,
     limit: int = 50,
 ) -> list[dict]:
-    """Return sessions for a user, newest first (by last_active)."""
+    """Return sessions for a user, newest first (by updated_at)."""
     uid = _to_object_id(user_id)
     cursor = (
         chat_sessions_col()
         .find({"user_id": uid, "is_archived": archived})
-        .sort("last_active", -1)
+        .sort("updated_at", -1)
         .limit(limit)
     )
     return [_serialise_session(doc) async for doc in cursor]
@@ -115,14 +118,41 @@ async def archive_chat_session(session_id: str) -> None:
     )
 
 
+async def delete_chat_session(session_id: str) -> bool:
+    """
+    Physically delete a chat session and all its associated messages.
+    Returns True if a session was deleted.
+    """
+    sid = _to_object_id(session_id)
+
+    # Delete messages first
+    await messages_col().delete_many({"session_id": sid})
+
+    # Delete the session
+    result = await chat_sessions_col().delete_one({"_id": sid})
+
+    logger.info(f"Physically deleted session and messages | session_id={session_id} | deleted_count={result.deleted_count}")
+    return result.deleted_count > 0
+
+
+def _format_datetime(dt: datetime | None) -> str | None:
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt.isoformat().replace("+00:00", "Z")
+
+
 def _serialise_session(doc: dict) -> dict:
     """Stringify ObjectIds in a session document."""
     return {
         "id": str(doc["_id"]),
         "user_id": str(doc["user_id"]),
         "title": doc.get("title", ""),
-        "created_at": doc.get("created_at"),
-        "last_active": doc.get("last_active"),
+        "created_at": _format_datetime(doc.get("created_at")),
+        "updated_at": _format_datetime(doc.get("updated_at") or doc.get("last_active")),
         "message_count": doc.get("message_count", 0),
         "is_archived": doc.get("is_archived", False),
     }
@@ -136,8 +166,8 @@ async def save_message(
     role: str,
     content: str,
     input_type: str = "text",
-    tts_cache_key: Optional[str] = None,
-    sources: Optional[list[dict]] = None,
+    tts_cache_key: str | None = None,
+    sources: list[dict] | None = None,
 ) -> dict:
     """
     Insert a message and increment the parent session's message_count.
@@ -160,12 +190,20 @@ async def save_message(
     doc["_id"] = str(result.inserted_id)
     doc["session_id"] = session_id
 
+    if role == "user":
+        session_title = _derive_session_title(content)
+        if session_title:
+            await chat_sessions_col().update_one(
+                {"_id": sid, "title": "New Chat"},
+                {"$set": {"title": session_title}},
+            )
+
     # Increment session counters — use same sid type for consistency
     await chat_sessions_col().update_one(
         {"_id": sid},
         {
             "$inc": {"message_count": 1},
-            "$set": {"last_active": _now()},
+            "$set": {"updated_at": _now()},
         },
     )
 
@@ -204,5 +242,5 @@ def _serialise_message(doc: dict) -> dict:
         "input_type": doc.get("input_type", "text"),
         "tts_cache_key": doc.get("tts_cache_key"),
         "sources": doc.get("sources", []),
-        "timestamp": doc.get("timestamp"),
+        "timestamp": _format_datetime(doc.get("timestamp")),
     }

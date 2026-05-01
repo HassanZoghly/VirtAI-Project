@@ -11,6 +11,7 @@ from app.infrastructure.cache.rate_limiter import check_rate_limit
 from app.presentation.http.v1.dependencies import get_session_manager, get_ws_connection_manager
 from app.presentation.http.v1.endpoints.audio import router as audio_router
 from app.presentation.http.v1.endpoints.auth import router as auth_router
+from app.presentation.http.v1.endpoints.chat import router as chat_router
 from app.presentation.http.v1.endpoints.health import router as health_router
 from app.presentation.ws.connection_manager import WSConnectionManager
 from app.presentation.ws.gateway import WebSocketHandler
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/api/v1")
 # HTTP Endpoints
 router.include_router(health_router)
 router.include_router(audio_router)
+router.include_router(chat_router, prefix="/chat", tags=["chat"])
 router.include_router(auth_router, prefix="/auth", tags=["auth"])
 
 
@@ -131,6 +133,7 @@ async def websocket_endpoint(
         connection_manager=connection_manager,
         resumed=resumed,
         replay_after_seq=last_seq if resumed else 0,
+        requested_session_id=session_id if not resumed else None,
     )
 
     try:

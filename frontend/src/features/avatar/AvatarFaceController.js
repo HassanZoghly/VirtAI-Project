@@ -37,12 +37,14 @@ const BL_OPENING = 3;
 const VALID_EMOTIONS = new Set([
   'neutral',
   'happy',
+  'joyful',
   'sad',
   'surprised',
   'angry',
   'thinking',
   'confused',
   'empathetic',
+  'sympathetic',
   'excited',
   'concerned',
   'reassuring',
@@ -59,14 +61,16 @@ export class AvatarFaceController {
   static EMOTION_MAP = {
     neutral: {},
     happy: {
-      mouthSmileLeft: 0.65,
-      mouthSmileRight: 0.68,
-      eyeSquintLeft: 0.25,
-      eyeSquintRight: 0.25,
-      cheekSquintLeft: 0.35,
-      cheekSquintRight: 0.35,
-      mouthDimpleLeft: 0.15,
-      mouthDimpleRight: 0.15,
+      mouthSmileLeft: 0.8,
+      mouthSmileRight: 0.8,
+      cheekSquintLeft: 0.5,
+      cheekSquintRight: 0.5,
+    },
+    joyful: {
+      mouthSmileLeft: 0.8,
+      mouthSmileRight: 0.8,
+      cheekSquintLeft: 0.5,
+      cheekSquintRight: 0.5,
     },
     sad: {
       mouthFrownLeft: 0.55,
@@ -80,13 +84,11 @@ export class AvatarFaceController {
       eyeSquintRight: 0.15,
     },
     surprised: {
-      eyeWideLeft: 0.75,
-      eyeWideRight: 0.75,
-      browInnerUp: 0.55,
-      browOuterUpLeft: 0.45,
-      browOuterUpRight: 0.45,
-      jawOpen: 0.25,
-      mouthFunnel: 0.15,
+      browOuterUpLeft: 0.8,
+      browOuterUpRight: 0.8,
+      eyeWideLeft: 0.7,
+      eyeWideRight: 0.7,
+      jawOpen: 0.1,
     },
     angry: {
       browDownLeft: 0.65,
@@ -101,14 +103,10 @@ export class AvatarFaceController {
       mouthPressRight: 0.2,
     },
     thinking: {
-      browInnerUp: 0.35,
-      browDownLeft: 0.15,
-      eyeLookUpLeft: 0.45,
-      eyeLookUpRight: 0.45,
-      mouthLeft: 0.2,
-      mouthPressLeft: 0.25,
-      eyeSquintLeft: 0.2,
-      eyeSquintRight: 0.1,
+      browDownRight: 0.5,
+      browDownLeft: 0.5,
+      eyeSquintLeft: 0.4,
+      eyeSquintRight: 0.4,
     },
     confused: {
       browInnerUp: 0.5,
@@ -120,15 +118,16 @@ export class AvatarFaceController {
       jawOpen: 0.05,
     },
     empathetic: {
-      browInnerUp: 0.5,
+      browInnerUp: 0.7,
       mouthSmileLeft: 0.2,
       mouthSmileRight: 0.2,
-      eyeSquintLeft: 0.2,
-      eyeSquintRight: 0.2,
-      mouthFrownLeft: 0.15,
-      mouthFrownRight: 0.15,
-      mouthPressLeft: 0.1,
-      mouthPressRight: 0.1,
+      mouthRollLower: 0.3,
+    },
+    sympathetic: {
+      browInnerUp: 0.7,
+      mouthSmileLeft: 0.2,
+      mouthSmileRight: 0.2,
+      mouthRollLower: 0.3,
     },
     excited: {
       mouthSmileLeft: 0.8,
@@ -460,12 +459,11 @@ export class AvatarFaceController {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * Smoothly transition to a new emotion.
+   * Transition to a new emotion.
    * @param {string} name      One of VALID_EMOTIONS
    * @param {number} intensity 0-1
-   * @param {number} durationMs Transition time in milliseconds
    */
-  setEmotion(name, intensity = 1.0, durationMs = 600) {
+  setEmotion(name, intensity = 1.0) {
     if (!VALID_EMOTIONS.has(name)) {
       name = 'neutral';
     }
@@ -473,7 +471,6 @@ export class AvatarFaceController {
 
     const preset = AvatarFaceController.EMOTION_MAP[name] || {};
 
-    this._transFrom = { ...this._emotionValues };
     this._currentEmotion = name;
     this._emotionIntensity = intensity;
 
@@ -482,21 +479,8 @@ export class AvatarFaceController {
     for (const [k, v] of Object.entries(preset)) {
       this._transTo[k] = v * intensity;
     }
-    // Keys in "from" but not in "to" must lerp to 0
-    for (const k of Object.keys(this._transFrom)) {
-      if (!(k in this._transTo)) {
-        this._transTo[k] = 0;
-      }
-    }
-    // Keys in "to" but not in "from" start from 0
-    for (const k of Object.keys(this._transTo)) {
-      if (!(k in this._transFrom)) {
-        this._transFrom[k] = 0;
-      }
-    }
 
-    this._transElapsed = 0;
-    this._transDuration = durationMs / 1000;
+    // Ensure we start pulling towards new targets
     this._transitioning = true;
   }
 
@@ -515,9 +499,8 @@ export class AvatarFaceController {
       typeof emotionData.intensity === 'number'
         ? Math.max(0, Math.min(1, emotionData.intensity))
         : 0.5;
-    const duration = 600;
 
-    this.setEmotion(primary, intensity, duration);
+    this.setEmotion(primary, intensity);
 
     // Secondary emotion blended at 30 % of its own intensity
     this._secondaryValues = {};
@@ -549,8 +532,7 @@ export class AvatarFaceController {
         const timerId = setTimeout(() => {
           this.setEmotion(
             tr.emotion,
-            typeof tr.intensity === 'number' ? tr.intensity : 0.5,
-            typeof tr.duration_ms === 'number' ? tr.duration_ms : 600
+            typeof tr.intensity === 'number' ? tr.intensity : 0.5
           );
         }, delayMs);
         this._scheduledTimers.push(timerId);
@@ -563,21 +545,28 @@ export class AvatarFaceController {
       return;
     }
 
-    this._transElapsed += dt;
-    const t = Math.min(this._transElapsed / this._transDuration, 1);
-    const eased = easeInOutCubic(t);
+    // Continuous pull towards target values (asymptotic lerp)
+    // Roughly 0.1 at 60fps -> factor of 6
+    const lerpAlpha = Math.min(dt * 6, 1.0);
+    
+    const allKeys = new Set([...Object.keys(this._emotionValues), ...Object.keys(this._transTo)]);
+    let anySignificantDiff = false;
 
-    const merged = {};
-    const allKeys = new Set([...Object.keys(this._transFrom), ...Object.keys(this._transTo)]);
     for (const k of allKeys) {
-      const from = this._transFrom[k] || 0;
-      const to = this._transTo[k] || 0;
-      merged[k] = from + (to - from) * eased;
-    }
-    this._emotionValues = merged;
+      const current = this._emotionValues[k] || 0;
+      const target = this._transTo[k] || 0;
+      
+      const nextValue = current + (target - current) * lerpAlpha;
+      this._emotionValues[k] = nextValue;
 
-    if (t >= 1) {
+      if (Math.abs(target - nextValue) > 0.001) {
+        anySignificantDiff = true;
+      }
+    }
+
+    if (!anySignificantDiff) {
       this._transitioning = false;
+      // Cleanup near-zero values
       for (const k of Object.keys(this._emotionValues)) {
         if (Math.abs(this._emotionValues[k]) < 0.001) {
           delete this._emotionValues[k];

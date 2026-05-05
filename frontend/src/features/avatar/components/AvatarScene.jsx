@@ -254,6 +254,7 @@ export function resolveAnimationName(requestedName, availableClips) {
  * @param {React.RefObject<HTMLAudioElement>} [props.audioRef] - Ref to audio element
  * @param {Array<{ start: number, end: number, value: string }>} [props.mouthCues] - Lip-sync timeline
  * @param {boolean} [props.isPlaying] - Whether audio is currently playing
+ * @param {boolean} [props.isMovementEnabled] - Whether full body motion is enabled
  */
 const AvatarRig = React.memo(function AvatarRig({
   modelPath,
@@ -263,6 +264,7 @@ const AvatarRig = React.memo(function AvatarRig({
   audioRef,
   mouthCues,
   isPlaying,
+  isMovementEnabled = true,
   emotionData,
   audioGeneration,
 }) {
@@ -466,6 +468,35 @@ const AvatarRig = React.memo(function AvatarRig({
     return result;
   }, [greetingFBX, idleFBX]);
 
+  const forceIdleLoop = () => {
+    const actions = actionsRef.current;
+    if (!actions || !actions.idle) {
+      return;
+    }
+
+    const idleAction = actions.idle;
+    const isAlreadyIdle = currentActionRef.current === idleAction;
+
+    idleAction.enabled = true;
+    idleAction.setLoop(THREE.LoopRepeat, Infinity);
+    idleAction.setEffectiveWeight(1);
+    idleAction.setEffectiveTimeScale(1);
+    idleAction.paused = false;
+
+    if (!isAlreadyIdle || !idleAction.isRunning()) {
+      idleAction.reset();
+      idleAction.fadeIn(0.2).play();
+    }
+
+    if (currentActionRef.current && currentActionRef.current !== idleAction) {
+      currentActionRef.current.fadeOut(0.2);
+    }
+
+    currentActionRef.current = idleAction;
+    currentActionNameRef.current = 'idle';
+    currentRangeRef.current = null;
+  };
+
   useEffect(() => {
     if (import.meta.env.DEV) {
       console.debug('[AvatarScene] FBX Load Status:');
@@ -614,6 +645,11 @@ const AvatarRig = React.memo(function AvatarRig({
 
   // Play animation with smooth transitions and backend timeline directive support.
   const playAction = (request, { loop = THREE.LoopRepeat, fade } = {}) => {
+    if (!isMovementEnabled) {
+      forceIdleLoop();
+      return;
+    }
+
     const directive = isAnimationDirective(request) ? request : { animation: request };
     const requestedNameRaw = `${directive.animation || 'idle'}`;
     const requestedName = requestedNameRaw.toLowerCase();
@@ -898,8 +934,18 @@ const AvatarRig = React.memo(function AvatarRig({
       return;
     }
 
+    if (!isMovementEnabled) {
+      forceIdleLoop();
+      return;
+    }
+
+    for (const action of Object.values(actionsRef.current)) {
+      action.paused = false;
+      action.setEffectiveTimeScale(1);
+    }
+
     playAction(currentAnimation);
-  }, [currentAnimation, scene, criticalClips, talkAnimationRevision]);
+  }, [currentAnimation, scene, criticalClips, talkAnimationRevision, isMovementEnabled]);
 
   // Apply emotion data from AI response to face controller
   useEffect(() => {
@@ -925,7 +971,7 @@ const AvatarRig = React.memo(function AvatarRig({
   }, []);
 
   // Update animation mixer and apply enhanced morph targets with realism
-  useFrame((_, dt) => {
+  useFrame((state, dt) => {
     const safeDt = THREE.MathUtils.clamp(dt || 0, SAFE_MIN_DELTA, SAFE_MAX_DELTA);
     const enhancedMorphTargets = enhancedMorphTargetsRef.current || {};
     const currentAnimationName =
@@ -983,7 +1029,9 @@ const AvatarRig = React.memo(function AvatarRig({
             if (isVisemeRelated) {
               infl[idx] = Math.max(infl[idx], clamped);
             } else {
-              infl[idx] = THREE.MathUtils.lerp(infl[idx], clamped, Math.min(safeDt * 10, 1));
+              // Muscle feel lerp: slower transition for deeper human feel
+              // roughly 0.1 at 60fps -> factor of 6
+              infl[idx] = THREE.MathUtils.lerp(infl[idx], clamped, Math.min(safeDt * 6, 1));
             }
           }
         }
@@ -1009,19 +1057,22 @@ const AvatarRig = React.memo(function AvatarRig({
     // Apply subtle head motion ONLY (NO spine to prevent body deformation)
     const prefersReducedMotion = prefersReducedMotionRef.current;
 
-    if (!prefersReducedMotion) {
-      if (isPlaying && headBoneRef.current) {
+    if (!prefersReducedMotion && headBoneRef.current) {
+      // Natural behavior: Head ALWAYS tracks camera and has subtle motion
+      // even if body-heavy movement is disabled.
+      if (isPlaying) {
         applySubtleHeadMotion(
           headBoneRef.current,
           enhancedMorphTargets,
           safeDt,
-          headMotionStateRef.current
+          headMotionStateRef.current,
+          state.camera
         );
-      } else if (currentAnimationName === 'thinking' && headBoneRef.current) {
-        applyThinkingMotion(headBoneRef.current, safeDt, headMotionStateRef.current);
-      } else if (headBoneRef.current) {
-        // Return head to neutral when not speaking (slower for smoother transition)
-        applyReturnToNeutral(headBoneRef.current, safeDt, headMotionStateRef.current);
+      } else if (isMovementEnabled && currentAnimationName === 'thinking') {
+        applyThinkingMotion(headBoneRef.current, safeDt, headMotionStateRef.current, state.camera);
+      } else {
+        // Return head to neutral (which now includes camera tracking)
+        applyReturnToNeutral(headBoneRef.current, safeDt, headMotionStateRef.current, state.camera);
       }
     }
 
@@ -1123,6 +1174,56 @@ function applyMorphTargetsSmooth(mesh, morphTargets, visemeIndexCache) {
   }
 }
 
+// --- Configuration Constants ---
+const GAZE_VERTICAL_OFFSET = 1.5; // Adjust to lift head (positive = look head higher)
+
+/**
+ * Calculate target yaw and pitch to track the camera smoothly.
+ * Returns local rotation offsets.
+ *
+ * @param {THREE.Bone} headBone - Head bone reference
+ * @param {THREE.Camera} camera - Camera reference
+ * @returns {{ yaw: number, pitch: number }}
+ */
+function calculateCameraRotation(headBone, camera) {
+  if (!headBone || !camera) {
+    return { yaw: 0, pitch: 0 };
+  }
+
+  // Get world positions
+  const headPos = new THREE.Vector3();
+  headBone.getWorldPosition(headPos);
+
+  const cameraPos = new THREE.Vector3();
+  camera.getWorldPosition(cameraPos);
+
+  // Apply vertical offset to the target so the avatar looks "higher" (at eyes/lens level)
+  cameraPos.y += GAZE_VERTICAL_OFFSET;
+
+  // Direction from head to camera
+  const dir = new THREE.Vector3().subVectors(cameraPos, headPos).normalize();
+
+  // Convert to local space of the head's parent to find relative angles
+  // However, since we are setting .rotation (local), and assuming the avatar
+  // is generally oriented towards the camera, we can use a simpler approach
+  // or use a helper to get the local direction.
+  const localDir = dir.clone();
+  if (headBone.parent) {
+    const parentWorldInverse = new THREE.Matrix4().copy(headBone.parent.matrixWorld).invert();
+    localDir.applyMatrix4(parentWorldInverse);
+  }
+
+  // Calculate Yaw (y-axis rotation) and Pitch (x-axis rotation)
+  // In Three.js standard bone orientation (y-up):
+  // Yaw is atan2(x, z)
+  // Pitch is atan2(y, z) or similar
+  // NOTE: We clamp these to avoid the avatar turning its head too far.
+  const yaw = THREE.MathUtils.clamp(Math.atan2(localDir.x, localDir.z), -0.4, 0.4); // ±23 deg
+  const pitch = THREE.MathUtils.clamp(Math.atan2(-localDir.y, localDir.z), -0.3, 0.3); // ±17 deg
+
+  return { yaw, pitch };
+}
+
 /**
  * Apply subtle head motion ONLY (NO spine to prevent body deformation)
  * Creates natural head nodding during speech driven by mouth openness
@@ -1132,8 +1233,9 @@ function applyMorphTargetsSmooth(mesh, morphTargets, visemeIndexCache) {
  * @param {Object} morphTargets - Current morph targets (to derive motion from mouth openness)
  * @param {number} deltaTime - Time since last frame (for smooth animation)
  * @param {Object} state - Motion state object (for continuity between frames)
+ * @param {THREE.Camera} camera - Camera for tracking
  */
-function applySubtleHeadMotion(headBone, morphTargets, deltaTime, state) {
+function applySubtleHeadMotion(headBone, morphTargets, deltaTime, state, camera) {
   if (!headBone) {
     return;
   }
@@ -1141,6 +1243,10 @@ function applySubtleHeadMotion(headBone, morphTargets, deltaTime, state) {
   // Update time continuously (no jumps!)
   state.time += deltaTime;
 
+  // 1. Camera Tracking Base
+  const { yaw: trackYaw, pitch: trackPitch } = calculateCameraRotation(headBone, camera);
+
+  // 2. Speech-driven Motion
   // Calculate mouth openness from viseme influences (AA, E, I, O, U are open vowels)
   const openVowels = ['viseme_aa', 'viseme_E', 'viseme_I', 'viseme_O', 'viseme_U', 'jawOpen'];
   let mouthOpenness = 0;
@@ -1154,12 +1260,12 @@ function applySubtleHeadMotion(headBone, morphTargets, deltaTime, state) {
   // Pitch (up/down nod) - driven by speech intensity + breathing
   const speechNod = mouthOpenness * 0.015; // Max ~0.86 degrees
   const breathingNod = Math.sin(state.time * 0.3) * 0.008; // Slow breathing rhythm ±0.46 degrees
-  const targetPitch = speechNod + breathingNod;
+  const targetPitch = trackPitch + speechNod + breathingNod;
 
   // Yaw (left/right turn) - drift scales slightly with speech intensity
   const baseYaw = Math.sin(state.time * 0.2) * 0.012; // ±0.69 degrees
   const speechYaw = mouthOpenness * Math.sin(state.time * 0.35) * 0.005; // Subtle speech-driven sway
-  const targetYaw = baseYaw + speechYaw;
+  const targetYaw = trackYaw + baseYaw + speechYaw;
 
   // Roll (head tilt) - adds 3D realism, scales slightly with intensity
   const baseRoll = Math.sin(state.time * 0.15) * 0.008; // ±0.46 degrees
@@ -1178,9 +1284,9 @@ function applySubtleHeadMotion(headBone, morphTargets, deltaTime, state) {
   state.currentRoll = THREE.MathUtils.lerp(state.currentRoll, targetRoll, rollSpeed);
 
   // Apply clamped values to bone
-  headBone.rotation.x = THREE.MathUtils.clamp(state.currentPitch, -0.03, 0.03);
-  headBone.rotation.y = THREE.MathUtils.clamp(state.currentYaw, -0.025, 0.025);
-  headBone.rotation.z = THREE.MathUtils.clamp(state.currentRoll, -0.02, 0.02);
+  headBone.rotation.x = THREE.MathUtils.clamp(state.currentPitch, -0.4, 0.4);
+  headBone.rotation.y = THREE.MathUtils.clamp(state.currentYaw, -0.5, 0.5);
+  headBone.rotation.z = THREE.MathUtils.clamp(state.currentRoll, -0.2, 0.2);
 }
 
 /**
@@ -1189,8 +1295,9 @@ function applySubtleHeadMotion(headBone, morphTargets, deltaTime, state) {
  * @param {THREE.Bone} headBone - Head bone reference
  * @param {number} deltaTime - Time since last frame
  * @param {Object} state - Motion state object
+ * @param {THREE.Camera} camera - Camera for tracking
  */
-function applyReturnToNeutral(headBone, deltaTime, state) {
+function applyReturnToNeutral(headBone, deltaTime, state, camera) {
   if (!headBone) {
     return;
   }
@@ -1198,12 +1305,15 @@ function applyReturnToNeutral(headBone, deltaTime, state) {
   // Continue time for smooth transition
   state.time += deltaTime;
 
-  // Target is neutral (0, 0, 0) but keep subtle idle motion
+  // 1. Camera Tracking Base
+  const { yaw: trackYaw, pitch: trackPitch } = calculateCameraRotation(headBone, camera);
+
+  // Target is camera position but keep subtle idle motion
   const idleBreathing = Math.sin(state.time * 0.25) * 0.005; // Very subtle breathing
   const idleDrift = Math.sin(state.time * 0.18) * 0.008; // Very subtle drift
 
-  const targetPitch = idleBreathing;
-  const targetYaw = idleDrift;
+  const targetPitch = trackPitch + idleBreathing;
+  const targetYaw = trackYaw + idleDrift;
   const targetRoll = 0;
 
   // Slower return to neutral — exponential smoothing, coefficient 1.5 (converges in ~2s)
@@ -1215,9 +1325,9 @@ function applyReturnToNeutral(headBone, deltaTime, state) {
   state.currentRoll = THREE.MathUtils.lerp(state.currentRoll, targetRoll, returnSpeed);
 
   // Apply to bone (clamped for safety)
-  headBone.rotation.x = THREE.MathUtils.clamp(state.currentPitch, -0.02, 0.02);
-  headBone.rotation.y = THREE.MathUtils.clamp(state.currentYaw, -0.02, 0.02);
-  headBone.rotation.z = THREE.MathUtils.clamp(state.currentRoll, -0.015, 0.015);
+  headBone.rotation.x = THREE.MathUtils.clamp(state.currentPitch, -0.4, 0.4);
+  headBone.rotation.y = THREE.MathUtils.clamp(state.currentYaw, -0.5, 0.5);
+  headBone.rotation.z = THREE.MathUtils.clamp(state.currentRoll, -0.2, 0.2);
 }
 
 /**
@@ -1227,8 +1337,9 @@ function applyReturnToNeutral(headBone, deltaTime, state) {
  * @param {THREE.Bone} headBone - Head bone reference
  * @param {number} deltaTime - Time since last frame
  * @param {Object} state - Motion state object (for continuity between frames)
+ * @param {THREE.Camera} camera - Camera for tracking
  */
-function applyThinkingMotion(headBone, deltaTime, state) {
+function applyThinkingMotion(headBone, deltaTime, state, camera) {
   if (!headBone) {
     return;
   }
@@ -1236,6 +1347,10 @@ function applyThinkingMotion(headBone, deltaTime, state) {
   state.time += deltaTime;
 
   // Thinking: gentle persistent head tilt + slow deliberate drift
+  // Tracking is weakened during thinking to simulate "lost in thought"
+  const { yaw: trackYaw, pitch: trackPitch } = calculateCameraRotation(headBone, camera);
+  const trackingWeight = 0.3; // Only 30% tracking when thinking
+
   // Slight downward pitch (looking slightly down, as if contemplating)
   const thinkPitch = Math.sin(state.time * 0.15) * 0.01 + 0.012; // Slight downward bias
   // Slower, wider yaw drift (looking side to side slowly)
@@ -1243,16 +1358,20 @@ function applyThinkingMotion(headBone, deltaTime, state) {
   // Subtle persistent tilt (head tilted slightly to one side)
   const thinkRoll = Math.sin(state.time * 0.08) * 0.012 + 0.008; // Slight tilt bias
 
+  const targetPitch = trackPitch * trackingWeight + thinkPitch;
+  const targetYaw = trackYaw * trackingWeight + thinkYaw;
+  const targetRoll = thinkRoll;
+
   // Smooth interpolation — exponential smoothing, coefficient 2.0
   const speed = 1.0 - Math.exp(-2.0 * deltaTime);
 
-  state.currentPitch = THREE.MathUtils.lerp(state.currentPitch, thinkPitch, speed);
-  state.currentYaw = THREE.MathUtils.lerp(state.currentYaw, thinkYaw, speed);
-  state.currentRoll = THREE.MathUtils.lerp(state.currentRoll, thinkRoll, speed);
+  state.currentPitch = THREE.MathUtils.lerp(state.currentPitch, targetPitch, speed);
+  state.currentYaw = THREE.MathUtils.lerp(state.currentYaw, targetYaw, speed);
+  state.currentRoll = THREE.MathUtils.lerp(state.currentRoll, targetRoll, speed);
 
-  headBone.rotation.x = THREE.MathUtils.clamp(state.currentPitch, -0.03, 0.03);
-  headBone.rotation.y = THREE.MathUtils.clamp(state.currentYaw, -0.025, 0.025);
-  headBone.rotation.z = THREE.MathUtils.clamp(state.currentRoll, -0.02, 0.02);
+  headBone.rotation.x = THREE.MathUtils.clamp(state.currentPitch, -0.4, 0.4);
+  headBone.rotation.y = THREE.MathUtils.clamp(state.currentYaw, -0.5, 0.5);
+  headBone.rotation.z = THREE.MathUtils.clamp(state.currentRoll, -0.2, 0.2);
 }
 
 /**
@@ -1268,6 +1387,7 @@ function applyThinkingMotion(headBone, deltaTime, state) {
  * @param {React.RefObject<HTMLAudioElement>} [props.audioRef] - Ref to audio element
  * @param {Array<{ start: number, end: number, value: string }>} [props.mouthCues] - Lip-sync timeline
  * @param {boolean} [props.isPlaying] - Whether audio is currently playing
+ * @param {boolean} [props.isMovementEnabled] - Whether full body motion is enabled
  * @param {number} [props.audioGeneration] - Increments on each new audio response
  */
 const AvatarScene = React.memo(function AvatarScene({
@@ -1280,6 +1400,7 @@ const AvatarScene = React.memo(function AvatarScene({
   mouthCues,
   isPlaying,
   emotionData,
+  isMovementEnabled = true,
   audioGeneration = 0,
 }) {
   const loadStartRef = useRef(0);
@@ -1336,6 +1457,7 @@ const AvatarScene = React.memo(function AvatarScene({
                 audioRef={audioRef}
                 mouthCues={mouthCues}
                 isPlaying={isPlaying}
+                isMovementEnabled={isMovementEnabled}
                 emotionData={emotionData}
                 audioGeneration={audioGeneration}
               />

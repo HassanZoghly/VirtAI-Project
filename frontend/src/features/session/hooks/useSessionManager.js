@@ -3,6 +3,7 @@ import { useAuthStore, selectIsAuthenticated } from '@/features/auth/store/authS
 import { eventBus } from '../../../shared/hooks/useEventBus';
 import { SESSION_TITLE_MAX_LENGTH } from '../constants';
 import * as sessionService from '../services/sessionService';
+import { consumeStartNewConversationFlag } from '../services/sessionStorage';
 import {
   normalizeAndSortSessions,
   normalizeSession,
@@ -48,10 +49,11 @@ export default function useSessionManager(urlSessionId, navigate) {
     async function initializeSessions() {
       setStatus('loading');
       try {
+        const shouldForceNew = consumeStartNewConversationFlag();
         const fetchedSessions = await sessionService.fetchSessions();
         const initialSessions = normalizeAndSortSessions(fetchedSessions);
 
-        if (initialSessions.length === 0) {
+        if (shouldForceNew || initialSessions.length === 0) {
           try {
             const newSession = await sessionService.createSession();
             const createdSession = normalizeSession({
@@ -64,7 +66,7 @@ export default function useSessionManager(urlSessionId, navigate) {
               throw new Error('Created session is missing an id');
             }
 
-            setSessions([createdSession]);
+            setSessions(shouldForceNew ? [createdSession, ...initialSessions] : [createdSession]);
             setActiveSessionId(createdSession.id);
             setStatus('success');
 
@@ -73,8 +75,9 @@ export default function useSessionManager(urlSessionId, navigate) {
             }
           } catch (createError) {
             console.error('Failed to auto-create session, falling back to empty state:', createError);
-            setSessions([]);
-            setActiveSessionId(null);
+            setSessions(initialSessions);
+            const targetId = resolveInitialSessionId(initialSessions, urlSessionId);
+            setActiveSessionId(targetId);
             setStatus('success');
           }
           return;
@@ -112,43 +115,46 @@ export default function useSessionManager(urlSessionId, navigate) {
    * Fetch messages for the current session if they aren't loaded yet.
    */
   useEffect(() => {
-    if (status !== 'success' || !currentSessionId) return;
+    if (status !== 'success' || !currentSessionId) {
+      return;
+    }
 
-    const session = sessions.find(
-      (s) => s.id === currentSessionId || s._id === currentSessionId
-    );
-    if (!session) return;
+    const session = sessions.find((s) => s.id === currentSessionId || s._id === currentSessionId);
+    if (!session) {
+      return;
+    }
 
-    if (!session.messages_loaded && (session.message_count || 0) > 0) {
-      const abortController = new AbortController();
-      const targetId = currentSessionId;
+    const abortController = new AbortController();
+    const targetId = currentSessionId;
 
-      async function loadMessages() {
-        setIsLoadingMessages(true);
-        try {
-          const fetchedMessages = await sessionService.fetchSessionMessages(targetId, {
-            signal: abortController.signal,
-          });
+    async function loadMessages() {
+      setIsLoadingMessages(true);
+      try {
+        const fetchedMessages = await sessionService.fetchSessionMessages(targetId, {
+          signal: abortController.signal,
+        });
 
-          if (!abortController.signal.aborted) {
-            setSessions((prevSessions) =>
-              prevSessions.map((sessionItem) =>
-                sessionItem.id === targetId || sessionItem._id === targetId
-                  ? { ...sessionItem, messages: fetchedMessages, messages_loaded: true }
-                  : sessionItem
-              )
-            );
-          }
-        } catch (error) {
-          if (!abortController.signal.aborted) {
-            console.error('Failed to fetch messages:', error);
-          }
-        } finally {
-          if (!abortController.signal.aborted) {
-            setIsLoadingMessages(false);
-          }
+        if (!abortController.signal.aborted) {
+          setSessions((prevSessions) =>
+            prevSessions.map((sessionItem) =>
+              sessionItem.id === targetId || sessionItem._id === targetId
+                ? { ...sessionItem, messages: fetchedMessages, messages_loaded: true }
+                : sessionItem
+            )
+          );
+        }
+      } catch (error) {
+        if (!abortController.signal.aborted) {
+          console.error('Failed to fetch messages:', error);
+        }
+      } finally {
+        if (!abortController.signal.aborted) {
+          setIsLoadingMessages(false);
         }
       }
+    }
+
+    if (!session.messages_loaded && (session.message_count || 0) > 0) {
       loadMessages();
 
       return () => {
@@ -168,18 +174,18 @@ export default function useSessionManager(urlSessionId, navigate) {
   const currentSession = useMemo(() => {
     const s =
       sessions.find((sessionItem) => sessionItem.id === currentSessionId) || sessions[0];
-    if (!s) return { id: null, title: '', messages: [], messages_loaded: true };
+    if (!s) {return { id: null, title: '', messages: [], messages_loaded: true };}
     return { ...s, messages: s.messages || [], messages_loaded: s.messages_loaded || false };
   }, [sessions, currentSessionId]);
 
   const createNewSession = useCallback(async () => {
-    if (status !== 'success') return null;
+    if (status !== 'success') {return null;}
 
     const emptySession = sessions.find((s) => (s.message_count || 0) === 0);
 
     if (emptySession) {
       setActiveSessionId(emptySession.id);
-      if (navigate) navigate(`/classroom/${emptySession.id}`);
+      if (navigate) {navigate(`/classroom/${emptySession.id}`);}
       return emptySession.id;
     }
 
@@ -190,11 +196,11 @@ export default function useSessionManager(urlSessionId, navigate) {
         messages: [],
         messages_loaded: true,
       });
-      if (!sessionWithDefaults.id) return null;
+      if (!sessionWithDefaults.id) {return null;}
 
       setSessions((prev) => [sessionWithDefaults, ...prev]);
       setActiveSessionId(sessionWithDefaults.id);
-      if (navigate) navigate(`/classroom/${sessionWithDefaults.id}`);
+      if (navigate) {navigate(`/classroom/${sessionWithDefaults.id}`);}
       return sessionWithDefaults.id;
     } catch (error) {
       console.error('Failed to create session:', error);
@@ -221,7 +227,7 @@ export default function useSessionManager(urlSessionId, navigate) {
         setSessions((prev) => {
           const remaining = prev.filter((s) => s.id !== sessionId);
           if (remaining.length === 0) {
-            if (navigate) navigate('/classroom', { replace: true });
+            if (navigate) {navigate('/classroom', { replace: true });}
             return [];
           }
           if (sessionId === currentSessionIdRef.current) {
@@ -249,10 +255,10 @@ export default function useSessionManager(urlSessionId, navigate) {
   const addUserMessage = useCallback((message, text) => {
     setSessions((prev) =>
       prev.map((s) => {
-        if (s.id !== currentSessionIdRef.current) return s;
+        if (s.id !== currentSessionIdRef.current) {return s;}
         const existingMessages = s.messages || [];
         const isDuplicate = existingMessages.some((m) => m.id === message.id);
-        if (isDuplicate) return s;
+        if (isDuplicate) {return s;}
 
         return {
           ...s,
@@ -271,10 +277,10 @@ export default function useSessionManager(urlSessionId, navigate) {
   const addAssistantMessage = useCallback((messageId, text) => {
     setSessions((prev) =>
       prev.map((s) => {
-        if (s.id !== currentSessionIdRef.current) return s;
+        if (s.id !== currentSessionIdRef.current) {return s;}
         const existingMessages = s.messages || [];
         const isDuplicate = existingMessages.some((m) => m.id === messageId);
-        if (isDuplicate) return s;
+        if (isDuplicate) {return s;}
 
         return {
           ...s,

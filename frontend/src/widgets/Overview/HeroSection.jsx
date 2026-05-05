@@ -55,7 +55,7 @@ export default function HeroSection({ ctaLabel, ctaTo }) {
               src="/assets/images/image.webp"
               alt="VirtAI platform classroom preview"
               className="block w-full object-cover"
-              fetchPriority="high"
+              fetchpriority="high"
               width={896}
               height={504}
               loading="eager"

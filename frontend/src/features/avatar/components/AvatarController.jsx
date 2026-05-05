@@ -198,6 +198,7 @@ function useAnimationQueue(setAnimation, onDrain) {
  * @param {() => void} [props.onModelLoaded] - Callback when model is loaded
  * @param {(err: Error) => void} [props.onError] - Callback for errors
  * @param {() => void} [props.onAnimationComplete] - Callback when animation completes
+ * @param {boolean} [props.isMovementEnabled] - Whether full body motion is enabled
  */
 export default function AvatarController({
   pipelineState = 'idle',
@@ -209,6 +210,7 @@ export default function AvatarController({
   onError,
   onAnimationComplete,
   emotionData,
+  isMovementEnabled = true,
 }) {
   const [currentAnimation, setCurrentAnimation] = useState('idle');
   const audioRef = useRef(null);
@@ -268,6 +270,10 @@ export default function AvatarController({
   }, [animationTimeline]);
 
   const startTimelinePlayback = useCallback(() => {
+    if (!isMovementEnabled) {
+      pendingTimelineRef.current = [];
+      return false;
+    }
     const pending = [...pendingTimelineRef.current];
     if (!pending || pending.length === 0) {
       return false;
@@ -300,18 +306,25 @@ export default function AvatarController({
   }, [replace]);
 
   useEffect(() => {
-    if (!isPlayingAudio || hasActiveTimelineRef.current) {
+    if (!isPlayingAudio || hasActiveTimelineRef.current || !isMovementEnabled) {
       return;
     }
     if (pendingTimelineRef.current.length > 0) {
       startTimelinePlayback();
     }
-  }, [animationTimeline, isPlayingAudio, startTimelinePlayback]);
+  }, [animationTimeline, isPlayingAudio, startTimelinePlayback, isMovementEnabled]);
 
   // Map pipeline state to animation state — flushes queue on each state change
   useEffect(() => {
     // Skip if still in greeting sequence
     if (!hasGreetedRef.current) {
+      return;
+    }
+
+    if (!isMovementEnabled) {
+      pendingTimelineRef.current = [];
+      hasActiveTimelineRef.current = false;
+      flush('idle');
       return;
     }
 
@@ -334,7 +347,7 @@ export default function AvatarController({
     };
 
     flush(animationMap[pipelineState] || 'idle');
-  }, [pipelineState, isPlayingAudio, flush, startTimelinePlayback]);
+  }, [pipelineState, isPlayingAudio, flush, startTimelinePlayback, isMovementEnabled]);
 
   // Handle model loaded — queue greeting → idle sequence
   const handleModelLoaded = () => {
@@ -525,6 +538,7 @@ export default function AvatarController({
         isPlaying={isPlayingAudio}
         emotionData={emotionData}
         audioGeneration={audioGenerationRef.current}
+        isMovementEnabled={isMovementEnabled}
       />
     </Suspense>
   );

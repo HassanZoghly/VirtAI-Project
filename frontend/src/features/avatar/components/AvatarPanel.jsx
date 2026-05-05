@@ -14,6 +14,7 @@ const AvatarController = lazy(() => import('./AvatarController.jsx'));
  * @param {Array<object>} [props.animationTimeline] - Backend-provided animation timeline items
  * @param {() => void} props.onModelLoaded - Model loaded callback
  * @param {(error: Error) => void} props.onError
+ * @param {boolean} props.isMovementEnabled - Whether full body motion is enabled
  * @param {object|null} props.emotionData - Emotion data from AI response - Error callback
  */
 export default function AvatarPanel({
@@ -26,10 +27,13 @@ export default function AvatarPanel({
   animationTimeline,
   onModelLoaded,
   onError,
+  isMovementEnabled,
   emotionData,
 }) {
+  const panelClassName = `avatar-panel${avatarLoaded ? ' loaded' : ''}`;
+
   return (
-    <div className="avatar-panel" style={{ background: avatarLoaded ? '#333' : '' }}>
+    <div className={panelClassName} style={{ background: avatarLoaded ? '#333' : '' }}>
       {!avatarLoaded && !avatarError && (
         <div
           className="avatar-skeleton-container"
@@ -57,6 +61,7 @@ export default function AvatarPanel({
             onModelLoaded={onModelLoaded}
             onError={onError}
             emotionData={emotionData}
+            isMovementEnabled={isMovementEnabled}
           />
         </Suspense>
       </div>

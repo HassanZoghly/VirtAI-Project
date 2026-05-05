@@ -146,6 +146,12 @@ class SessionManager:
             if existing_session.user_id != user_id:
                 raise PermissionError("Cannot attach to another user's session.")
             existing_session.mark_connected()
+            if voice_id and hasattr(existing_session.pipeline._tts, "voice"):
+                try:
+                    existing_session.pipeline._tts.voice = voice_id  # type: ignore[union-attr]
+                    logger.info(f"Session TTS voice updated | id={session_id} | voice={voice_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to update TTS voice on reconnect: {e}")
             return existing_session
 
         sid = session_id or str(uuid.uuid4())

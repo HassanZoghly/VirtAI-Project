@@ -18,9 +18,10 @@ export default function ClassroomShell() {
   const { sessionId: urlSessionId } = useParams();
   const navigate = useNavigate();
 
-  const setupConfig = useMemo(() => loadSetup(), []);
+  const setupConfig = useMemo(() => loadSetup(), [urlSessionId]);
   const activeAvatarId = setupConfig?.avatarId || 'omar';
-  const activeVoiceId = setupConfig?.voiceId || 'en-US-AriaNeural';
+  const activeVoiceId = setupConfig?.voiceId || 'aria';
+  const movementEnabled = setupConfig?.movementEnabled ?? false;
   const avatarModelPath = getAvatarModelPath(activeAvatarId);
   const wsAvatarId = avatarModelPath.split('/').pop().replace('.glb', '');
 
@@ -36,9 +37,10 @@ export default function ClassroomShell() {
   const deleteSession = session.deleteSession;
   const renameSession = session.renameSession;
 
-  const WS_URL = status === 'success' && currentSessionId
-    ? `ws://localhost:8000/api/v1/ws/${wsAvatarId}?voice=${encodeURIComponent(activeVoiceId)}&session_id=${currentSessionId}`
-    : null;
+  const WS_URL =
+    status === 'success' && currentSessionId
+      ? `ws://localhost:8000/api/v1/ws/${wsAvatarId}?voice=${encodeURIComponent(activeVoiceId)}&session_id=${currentSessionId}`
+      : null;
 
   const { connectionState, isConnected, send, onMessage, reconnect, reconnectError } =
     useWSClient(WS_URL);
@@ -107,7 +109,9 @@ export default function ClassroomShell() {
   useEffect(() => {
     const unsubs = [
       onMessage('user.message.echo', (d) => {
-        if (!d?.message_id || !d?.text) {return;}
+        if (!d?.message_id || !d?.text) {
+          return;
+        }
         dispatch({ type: 'USER_MESSAGE', payload: { message_id: d.message_id, text: d.text } });
         sessionRef.current.addUserMessage(
           { id: d.message_id, role: 'user', content: d.text, timestamp: Date.now() },
@@ -130,7 +134,9 @@ export default function ClassroomShell() {
         setAnimationTimeline(Array.isArray(d.timeline) ? d.timeline : []);
       }),
       onMessage('animation.timeline', (d) => {
-        if (timelineProtocolRef.current === 'v2') {return;}
+        if (timelineProtocolRef.current === 'v2') {
+          return;
+        }
         timelineProtocolRef.current = 'v1';
         setAnimationTimeline(Array.isArray(d.timeline) ? d.timeline : []);
       }),
@@ -162,19 +168,25 @@ export default function ClassroomShell() {
 
   const handleChatScroll = useCallback(() => {
     const el = chatScrollRef.current;
-    if (!el) {return;}
+    if (!el) {
+      return;
+    }
     shouldStickToBottom.current =
       el.scrollHeight - el.scrollTop - el.clientHeight <= SCROLL_STICK_THRESHOLD_PX;
   }, []);
 
   useEffect(() => {
-    if (!shouldStickToBottom.current) {return;}
+    if (!shouldStickToBottom.current) {
+      return;
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [currentSession?.messages, conversationState.currentMessage, interimTranscript]);
 
   const handleSendMessage = useCallback(() => {
     const text = inputValue.trim();
-    if (!text) {return;}
+    if (!text) {
+      return;
+    }
     commitAndSend(text);
 
     setInputValue('');
@@ -218,7 +230,17 @@ export default function ClassroomShell() {
 
   if (status === 'error') {
     return (
-      <div className="classroom-error" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: '#ff6b6b', fontSize: '1.2rem' }}>
+      <div
+        className="classroom-error"
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100vh',
+          color: '#ff6b6b',
+          fontSize: '1.2rem',
+        }}
+      >
         Failed to load sessions. Please refresh the page.
       </div>
     );
@@ -297,11 +319,22 @@ export default function ClassroomShell() {
             onModelLoaded={handleAvatarLoaded}
             onError={handleAvatarError}
             emotionData={emotionData}
+            isMovementEnabled={movementEnabled}
           />
 
           <div className="chat-panel" key={currentSessionId}>
             {currentSession && currentSession.messages_loaded !== true ? (
-              <div className="messages-loading" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#fff', fontSize: '1.1rem' }}>
+              <div
+                className="messages-loading"
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  height: '100%',
+                  color: '#fff',
+                  fontSize: '1.1rem',
+                }}
+              >
                 Loading messages...
               </div>
             ) : (

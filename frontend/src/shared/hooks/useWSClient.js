@@ -58,6 +58,9 @@ function useWSClient(url) {
   const connectRef = useRef(() => {});
   const accessTokenRef = useRef(accessToken);
   const urlRef = useRef(url);
+  // Tracks the timestamp when the socket last transitioned to OPEN,
+  // used to detect fast-fail closes (session stale → clear resume state).
+  const connectedAtRef = useRef(0);
 
   useEffect(() => {
     accessTokenRef.current = accessToken;
@@ -258,9 +261,6 @@ function useWSClient(url) {
       let socketUrl = currentUrl;
       try {
         const parsed = new URL(currentUrl);
-        if (currentAccessToken) {
-          parsed.searchParams.set('token', currentAccessToken);
-        }
         if (sessionIdRef.current) {
           parsed.searchParams.set('resume', 'true');
           parsed.searchParams.set('session_id', sessionIdRef.current);
@@ -271,7 +271,8 @@ function useWSClient(url) {
         // Keep original URL for non-standard runtimes.
       }
 
-      const socket = new WebSocket(socketUrl);
+      const protocols = currentAccessToken ? ["access_token", currentAccessToken] : [];
+      const socket = new WebSocket(socketUrl, protocols);
       wsRef.current = socket;
       socket._mountId = currentMountId;
       socket._instanceId = instanceId;
@@ -293,6 +294,7 @@ function useWSClient(url) {
         }
 
         isConnectingRef.current = false;
+        connectedAtRef.current = Date.now();
 
         if (import.meta.env.DEV) {
           console.debug('[WS] State transition: → INITIALIZING');
@@ -467,6 +469,41 @@ function useWSClient(url) {
           return;
         }
 
+        // 4403 = auth failure — don't reconnect automatically
+        if (event.code === 4403) {
+          clearReconnectTimer();
+          setConnectionState(ConnectionState.OFFLINE);
+          setReconnectError('Session authorization failed. Please log in again.');
+          return;
+        }
+
+        // 4404 = session not found (backend already gracefully falls back, but
+        // handle it defensively here too). Clear resume state so the retry
+        // connects fresh without injecting stale resume params.
+        if (event.code === 4404) {
+          if (import.meta.env.DEV) {
+            console.warn('[WS] Session not found (4404) — clearing resume state before retry');
+          }
+          sessionIdRef.current = null;
+          lastSeqRef.current = 0;
+          lastAckedSeqRef.current = 0;
+        }
+
+        // Fast-fail detection: if the connection opened and then closed within 2s
+        // while we had a stale session_id, the session has expired. Clear it so
+        // the reconnect attempt goes in as a fresh connection (no resume=true).
+        const openDuration = Date.now() - connectedAtRef.current;
+        if (openDuration < 2000 && sessionIdRef.current && connectedAtRef.current > 0) {
+          if (import.meta.env.DEV) {
+            console.warn(
+              `[WS] Fast-fail detected (closed after ${openDuration}ms with active session_id) — clearing resume state`
+            );
+          }
+          sessionIdRef.current = null;
+          lastSeqRef.current = 0;
+          lastAckedSeqRef.current = 0;
+        }
+
         // Normal close — don't reconnect
         if (event.code === 1000 || event.code === 1001) {
           clearReconnectTimer();
@@ -527,6 +564,13 @@ function useWSClient(url) {
       isIntentionalCloseRef.current = true;
       isConnectingRef.current = false;
       reconnectPausedRef.current = false;
+
+      // Wipe session/seq state on URL change so the next connection
+      // never injects stale resume params into a different session's URL.
+      sessionIdRef.current = null;
+      lastSeqRef.current = 0;
+      lastAckedSeqRef.current = 0;
+      connectedAtRef.current = 0;
 
       clearReconnectTimer();
       if (ackTimerRef.current) {

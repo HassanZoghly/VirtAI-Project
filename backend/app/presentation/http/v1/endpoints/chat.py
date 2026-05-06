@@ -11,6 +11,7 @@ from app.domain.user.entities import UserEntity
 from app.infrastructure.db.chat_repository import (
     create_chat_session,
     delete_chat_session,
+    get_chat_session,
     get_session_messages,
     list_user_sessions,
 )
@@ -56,6 +57,9 @@ async def get_messages(
     # Note: In a production app, we'd verify session ownership here.
     # For now, list_user_sessions and get_chat_session already use user_id filters where possible.
     try:
+        db_session = await get_chat_session(session_id)
+        if not db_session or db_session.get("user_id") != str(user.id):
+            raise HTTPException(status_code=404, detail="Session not found")
         messages = await get_session_messages(session_id=session_id, limit=limit)
         return messages
     except Exception as e:
@@ -71,6 +75,10 @@ async def delete_session(
     """Physically delete a session and its messages."""
     try:
         # Ideally verify ownership here before deleting
+        db_session = await get_chat_session(session_id)
+        if not db_session or db_session.get("user_id") != str(user.id):
+            raise HTTPException(status_code=404, detail="Session not found")
+
         deleted = await delete_chat_session(session_id=session_id)
         if not deleted:
             # Optionally throw 404, but idempotent is fine

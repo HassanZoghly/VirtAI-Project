@@ -1,20 +1,20 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useRef, useState, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { FiCheck, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { HiOutlineSparkles, HiOutlineSpeakerWave, HiOutlineUser } from 'react-icons/hi2';
 import { useNavigate } from 'react-router-dom';
 
+import { avatarImages } from '@/features/avatar/data/avatars';
 import '@/pages/Setup/Setup.css';
 import { cn } from '@/shared/utils/cn';
 import CircuitBoardBackground from '@/widgets/Overview/CircuitBoardBackground';
+import { voices as VOICES } from '../data/voices';
+import { loadSetup } from '../services/setupStorage';
 import AllSetTab from './AllSetTab';
 import AvatarPreview from './AvatarPreview';
 import AvatarTab from './AvatarTab';
 import VoiceTab from './VoiceTab';
-import { loadSetup } from '../services/setupStorage';
-import { avatarImages } from '@/features/avatar/data/avatars';
-import { voices as VOICES } from '../data/voices';
 
 const TABS = [
   { key: 'avatar', label: 'Avatar', icon: HiOutlineUser },
@@ -27,22 +27,27 @@ export default function SetupPage() {
   const [activeTab, setActiveTab] = useState(0);
   const [selectedAvatar, setSelectedAvatar] = useState(null);
   const [selectedVoice, setSelectedVoice] = useState(null);
+  const [isMovementEnabled, setIsMovementEnabled] = useState(false);
 
   useEffect(() => {
     const saved = loadSetup();
     if (saved) {
       const AVATARS = Object.values(avatarImages);
-      if (saved.avatarId && AVATARS) {
-        const a = AVATARS.find((av) => av.id === saved.avatarId);
-        if (a) {
-          setSelectedAvatar(a);
-        }
+      const nextAvatar = saved.avatarId
+        ? (AVATARS.find((av) => av.id === saved.avatarId) ?? null)
+        : null;
+      let nextVoice = saved.voiceId ? (VOICES.find((vo) => vo.id === saved.voiceId) ?? null) : null;
+
+      if (nextAvatar && nextVoice && nextAvatar.gender !== nextVoice.gender) {
+        nextVoice = null;
       }
-      if (saved.voiceId && VOICES) {
-        const v = VOICES.find((vo) => vo.id === saved.voiceId);
-        if (v) {
-          setSelectedVoice(v);
-        }
+
+      setSelectedAvatar(nextAvatar);
+      setSelectedVoice(nextVoice);
+      if (typeof saved.movementEnabled === 'boolean') {
+        setIsMovementEnabled(saved.movementEnabled);
+      } else {
+        setIsMovementEnabled(false);
       }
     }
   }, []);
@@ -52,6 +57,11 @@ export default function SetupPage() {
     (avatar) => {
       if (selectedAvatar && avatar.gender !== selectedAvatar.gender) {
         setSelectedVoice(null);
+        if (audioRef.current) {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+        }
+        setIsPlaying(false);
       }
       setSelectedAvatar(avatar);
     },
@@ -237,7 +247,13 @@ export default function SetupPage() {
                       isPlaying={isPlaying}
                     />
                   )}
-                  {activeTab === 2 && <AllSetTab avatar={selectedAvatar} voice={selectedVoice} />}
+                  {activeTab === 2 && (
+                    <AllSetTab
+                      avatar={selectedAvatar}
+                      voice={selectedVoice}
+                      movementEnabled={isMovementEnabled}
+                    />
+                  )}
                 </motion.div>
               </AnimatePresence>
             </div>
@@ -270,6 +286,8 @@ export default function SetupPage() {
               isPlaying={isPlaying}
               onPlayPreview={playPreview}
               onStopPreview={stopAudio}
+              movementEnabled={isMovementEnabled}
+              onMovementToggle={setIsMovementEnabled}
             />
           </div>
         </div>

@@ -8,6 +8,7 @@ Key Features:
 - Returns MouthCue objects compatible with RPM morph targets
 """
 
+import asyncio
 import os
 import re
 
@@ -174,4 +175,4 @@ class VisemeGenerator:
             logger.error(f"Audio file not found: {audio_path}")
             return []
 
-        return self._generate_cues(audio_path)
+        return await asyncio.to_thread(self._generate_cues, audio_path)

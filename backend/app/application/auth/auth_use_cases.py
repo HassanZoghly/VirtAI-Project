@@ -1,9 +1,5 @@
 """
-Authentication business-logic: user CRUD, credential verification, Google OAuth.
-
-Rewritten to use MongoDB (Motor) via MongoUserRepository.
-All function signatures match the original — only the internal
-storage layer changed.
+Authentication business logic use cases: user CRUD, credential verification, Google OAuth.
 """
 
 from __future__ import annotations
@@ -11,6 +7,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import httpx
+import pymongo.errors
 from bson import ObjectId
 
 from app.domain.user.entities import UserEntity
@@ -18,29 +15,26 @@ from app.infrastructure.db.user_repository import MongoUserRepository
 from app.shared.config import get_settings
 from app.shared.security import hash_password, verify_password
 
+# For simplicity in this refactor, we still instantiate the Mongo repo here.
+# In a pure clean architecture, this would be injected.
 _user_repository = MongoUserRepository()
 
 def _repo() -> MongoUserRepository:
     """Factory for the user repository (no DI container needed)."""
     return _user_repository
 
-
 def _now() -> datetime:
     return datetime.now(timezone.utc)
-
 
 # ---------------------------------------------------------------------------
 # Local auth helpers
 # ---------------------------------------------------------------------------
 
-
 async def get_user_by_id(user_id: str) -> UserEntity | None:
     return await _repo().get_by_id(user_id)
 
-
 async def get_user_by_email(email: str) -> UserEntity | None:
     return await _repo().get_by_email(email)
-
 
 async def set_user_setup_complete(user_id: str, setup_complete: bool) -> UserEntity | None:
     """Update setup completion status for an existing user."""
@@ -52,7 +46,6 @@ async def set_user_setup_complete(user_id: str, setup_complete: bool) -> UserEnt
     user.setup_complete = setup_complete
     user.updated_at = _now()
     return await repo.update(user)
-
 
 async def register_user(
     full_name: str,
@@ -77,7 +70,6 @@ async def register_user(
     )
     return await _repo().create(entity)
 
-
 async def authenticate_user(email: str, password: str) -> UserEntity | None:
     """Verify credentials. Returns UserEntity on success, None on failure."""
     user = await _repo().get_by_email(email)
@@ -87,14 +79,12 @@ async def authenticate_user(email: str, password: str) -> UserEntity | None:
         return None
     return user
 
-
 # ---------------------------------------------------------------------------
 # Google OAuth helpers
 # ---------------------------------------------------------------------------
 
 _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 _GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
-
 
 def build_google_auth_url(state: str = "") -> str:
     settings = get_settings()
@@ -109,7 +99,6 @@ def build_google_auth_url(state: str = "") -> str:
     if state:
         params += f"&state={state}"
     return f"https://accounts.google.com/o/oauth2/v2/auth?{params}"
-
 
 async def exchange_google_code(code: str) -> dict:
     """Exchange the Google authorisation code for user info."""
@@ -134,7 +123,6 @@ async def exchange_google_code(code: str) -> dict:
         )
         info_resp.raise_for_status()
         return info_resp.json()
-
 
 async def get_or_create_google_user(google_info: dict) -> UserEntity:
     """Find or create a user from Google OAuth info."""

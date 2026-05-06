@@ -144,14 +144,10 @@ class GroqLLMProvider(BaseLLMProvider):
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
                 stream=True,
-                response_format={"type": "json_object"},
             )
         except Exception as e:
             logger.error(f"Groq LLM stream init failed: {e}")
             raise LLMException(f"LLM stream failed: {e!s}")
-
-        from app.infrastructure.llm.json_stream_parser import JsonStreamParser
-        parser = JsonStreamParser()
 
         # ── Process stream ────────────────────────────────────────────────────
         try:
@@ -167,27 +163,23 @@ class GroqLLMProvider(BaseLLMProvider):
                     continue
 
                 token_count += 1
+                full_text.append(token)
 
-                # Parse JSON incrementally and route
-                parsed_events = parser.feed(token)
-                for key, char in parsed_events:
-                    if key == "display":
-                        full_text.append(char)
-                        # Yield token immediately → frontend typing indicator
-                        yield LLMChunk(token=char)
-                    elif key == "speech":
-                        # Feed into sentence splitter
-                        sentence = splitter.feed(char)
-                        if sentence:
-                            sentence_count += 1
-                            logger.debug(f"Sentence ready | len={len(sentence)} | '{sentence[:40]}...'")
+                # Yield every token immediately → frontend typing indicator
+                yield LLMChunk(token=token)
 
-                            # Optional callback
-                            if on_sentence:
-                                on_sentence(sentence)
+                # Feed into sentence splitter — yields complete sentences for TTS
+                for char in token:
+                    sentence = splitter.feed(char)
+                    if sentence:
+                        sentence_count += 1
+                        logger.debug(f"Sentence ready | len={len(sentence)} | '{sentence[:40]}...'")
 
-                            # Yield sentence → pipeline triggers TTS
-                            yield LLMChunk(token="", sentence=sentence)
+                        if on_sentence:
+                            on_sentence(sentence)
+
+                        yield LLMChunk(token="", sentence=sentence)
+
         except Exception as e:
             logger.error(f"LLM stream error during iteration: {e}")
             raise LLMException(f"LLM stream error: {e!s}")
@@ -231,20 +223,13 @@ class GroqLLMProvider(BaseLLMProvider):
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
                 stream=False,
-                response_format={"type": "json_object"},
             )
         except Exception as e:
             logger.error(f"Groq LLM complete failed: {e}")
             raise LLMException(f"LLM complete failed: {e!s}")
         elapsed_ms = (time.perf_counter() - start_time) * 1000
 
-        import json
-        raw_text = response.choices[0].message.content or "{}"
-        try:
-            parsed = json.loads(raw_text)
-            full_text = parsed.get("display", raw_text)
-        except Exception:
-            full_text = raw_text
+        full_text = response.choices[0].message.content or ""
 
         # Split into sentences for convenience
         splitter = SentenceSplitter()

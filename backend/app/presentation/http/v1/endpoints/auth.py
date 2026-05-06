@@ -16,8 +16,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.domain.user.entities import UserEntity
-from app.infrastructure.auth.auth_service import (
+from app.application.auth.auth_use_cases import (
     authenticate_user,
     build_google_auth_url,
     exchange_google_code,
@@ -27,6 +26,7 @@ from app.infrastructure.auth.auth_service import (
     register_user,
     set_user_setup_complete,
 )
+from app.domain.user.entities import UserEntity
 from app.infrastructure.cache.auth_session_cache import (
     cache_auth_session,
     get_cached_auth_session,
@@ -60,9 +60,9 @@ def _extract_client_ip(request: Request) -> str:
     if settings.TRUST_PROXY_HEADERS:
         forwarded_for = request.headers.get("x-forwarded-for", "")
         if forwarded_for:
-            last_hop = forwarded_for.split(",")[-1].strip()
-            if last_hop:
-                return last_hop
+            first_hop = forwarded_for.split(",")[0].strip()
+            if first_hop:
+                return first_hop
     return request.client.host if request.client else "unknown"
 
 

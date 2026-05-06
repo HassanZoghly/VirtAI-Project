@@ -2,7 +2,15 @@ import { AnimatePresence, motion } from 'motion/react';
 import { HiOutlineUser, HiPlay, HiStop } from 'react-icons/hi2';
 import SoundWaveAnimation from './SoundWaveAnimation';
 
-export default function AvatarPreview({ avatar, voice, isPlaying, onPlayPreview, onStopPreview }) {
+export default function AvatarPreview({
+  avatar,
+  voice,
+  isPlaying,
+  onPlayPreview,
+  onStopPreview,
+  movementEnabled,
+  onMovementToggle,
+}) {
   const handlePlayToggle = () => {
     if (isPlaying) {
       onStopPreview();
@@ -11,16 +19,20 @@ export default function AvatarPreview({ avatar, voice, isPlaying, onPlayPreview,
     }
   };
 
+  const handleMovementChange = (event) => {
+    onMovementToggle?.(event.target.checked);
+  };
+
   return (
     <div className="preview-panel">
       <span className="preview-label">Preview</span>
 
-      <div className="preview-avatar-wrap">
+      <div className={`preview-avatar-wrap${movementEnabled ? '' : ' static'}`}>
         <AnimatePresence mode="wait">
           {avatar ? (
             <motion.img
               key={avatar.id}
-              className="preview-avatar-img"
+              className={`preview-avatar-img${movementEnabled ? '' : ' static'}`}
               src={avatar.image}
               alt={avatar.name}
               draggable={false}
@@ -62,15 +74,34 @@ export default function AvatarPreview({ avatar, voice, isPlaying, onPlayPreview,
 
       {voice && <span className="preview-voice">Voice: {voice.name}</span>}
 
-      <button
-        className="preview-voice-btn"
-        onClick={handlePlayToggle}
-        disabled={!voice}
-        aria-label={isPlaying ? 'Stop voice preview' : 'Preview voice'}
-      >
-        {isPlaying ? <HiStop size={14} /> : <HiPlay size={14} />}
-        {isPlaying ? 'Stop' : 'Preview Voice'}
-      </button>
+      <div className="preview-actions">
+        <button
+          className="preview-voice-btn"
+          onClick={handlePlayToggle}
+          disabled={!voice}
+          aria-label={isPlaying ? 'Stop voice preview' : 'Preview voice'}
+        >
+          {isPlaying ? <HiStop size={14} /> : <HiPlay size={14} />}
+          {isPlaying ? 'Stop' : 'Preview Voice'}
+        </button>
+
+        <label className="movement-toggle">
+          <span className="movement-label">
+            Movement <span className="beta-badge">Beta</span>
+          </span>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={!!movementEnabled}
+            onChange={handleMovementChange}
+            aria-checked={!!movementEnabled}
+            aria-label="Toggle avatar movement"
+          />
+          <span className="movement-switch" aria-hidden="true">
+            <span className="movement-thumb" />
+          </span>
+        </label>
+      </div>
     </div>
   );
 }

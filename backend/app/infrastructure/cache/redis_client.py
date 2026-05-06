@@ -26,7 +26,8 @@ async def init_redis() -> None:
     global _redis
 
     settings = get_settings()
-    logger.info(f"Connecting to Redis | url={settings.REDIS_URL}")
+    url_safe = settings.REDIS_URL.split("@")[-1] if "@" in settings.REDIS_URL else "redacted"
+    logger.info(f"Connecting to Redis | url={url_safe}")
 
     _redis = aioredis.from_url(
         settings.REDIS_URL,

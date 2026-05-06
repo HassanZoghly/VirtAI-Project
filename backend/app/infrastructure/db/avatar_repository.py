@@ -59,6 +59,8 @@ async def upsert_avatar(
         upsert=True,
         return_document=True,
     )
+    if result is None:
+        raise ValueError(f"Failed to upsert avatar for user {user_id}")
     logger.debug(f"Avatar upserted | user={user_id}")
     return _serialise(result)
 

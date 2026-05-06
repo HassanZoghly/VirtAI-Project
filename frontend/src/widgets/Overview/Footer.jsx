@@ -7,6 +7,7 @@ export default function Footer() {
       <div className="mx-auto max-w-5xl">
         <motion.h2
           className="mb-12 text-center text-3xl font-bold text-offwhite sm:text-4xl"
+          style={{ fontFamily: 'var(--font-display)' }}
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.3 }}
@@ -34,7 +35,7 @@ export default function Footer() {
                 role="presentation"
                 width={80}
                 height={80}
-                className="h-20 w-20 rounded-full border-2 border-white/10 object-cover transition-all duration-300 group-hover:border-gold group-hover:shadow-[0_0_20px_rgba(180, 171, 139, 0.3)]"
+                className="h-20 w-20 rounded-full border-2 border-white/10 object-cover transition-colors transition-shadow duration-300 group-hover:border-gold group-hover:shadow-[0_0_20px_rgba(180, 171, 139, 0.3)]"
                 loading="lazy"
                 decoding="async"
               />

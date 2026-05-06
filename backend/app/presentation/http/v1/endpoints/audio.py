@@ -56,8 +56,8 @@ async def get_audio_file(
         raise HTTPException(status_code=400, detail=f"Invalid message_id format: {message_id}")
 
     db_session = await get_chat_session(session_id)
-    if db_session is None:
-        logger.warning(f"Session not found for session {session_id}")
+    if db_session is None or db_session.get("user_id") != str(user.id):
+        logger.warning(f"Session not found or unauthorized for session {session_id}")
         raise HTTPException(status_code=404, detail="Audio file not found")
 
     file_path = AUDIO_STORAGE_PATH / session_id / f"{message_id}.mp3"

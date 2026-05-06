@@ -38,7 +38,7 @@ function PipelineBadge({ activeIndex }) {
             role="listitem"
             className={[
               'flex items-center gap-1 rounded-full border px-2.5 py-0.5',
-              'text-[10px] font-bold uppercase tracking-widest transition-all duration-300',
+              'text-[10px] font-bold uppercase tracking-widest transition-colors duration-300',
               isActive
                 ? 'border-crimson/55 bg-crimson/16 text-offwhite'
                 : isDone
@@ -106,7 +106,7 @@ function TimelineStep({ step, index, isActive, isDone, isLast, stepRef, reduced 
       <span
         className={[
           'absolute left-0 top-0 flex items-center justify-center rounded-full border',
-          'text-sm font-bold transition-all duration-300',
+          'text-sm font-bold transition-colors duration-300',
           isActive
             ? 'border-crimson/55 bg-crimson/16 text-offwhite'
             : isDone
@@ -174,11 +174,11 @@ function TimelineStep({ step, index, isActive, isDone, isLast, stepRef, reduced 
         <AnimatePresence>
           {isActive && (
             <motion.p
-              initial={reduced ? false : { opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={reduced ? undefined : { opacity: 0, height: 0 }}
+              initial={reduced ? false : { opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reduced ? undefined : { opacity: 0, y: -6 }}
               transition={{ duration: reduced ? 0 : 0.2 }}
-              className="mt-2 overflow-hidden text-xs leading-relaxed font-mono text-gold/70"
+              className="mt-2 text-xs leading-relaxed font-mono text-gold/70"
             >
               OUT → {step.output}
             </motion.p>
@@ -234,7 +234,10 @@ export default function HowItWorks() {
         viewport={{ once: true, amount: 0.3 }}
         transition={{ duration: 0.6 }}
       >
-        <h2 className="text-4xl font-bold text-offwhite sm:text-5xl">
+        <h2
+          className="text-4xl font-bold text-offwhite sm:text-5xl"
+          style={{ fontFamily: 'var(--font-display)' }}
+        >
           How It <span className="text-gold">Works</span>
         </h2>
         <p className="mx-auto mt-4 max-w-lg text-offwhite/70">

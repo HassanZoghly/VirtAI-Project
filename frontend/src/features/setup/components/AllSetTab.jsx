@@ -12,7 +12,7 @@ import SuccessAnimation from './SuccessAnimation';
 
 const toast = new Toast();
 
-export default function AllSetTab({ avatar, voice }) {
+export default function AllSetTab({ avatar, voice, movementEnabled }) {
   const navigate = useNavigate();
   const setUser = useAuthStore((s) => s.setUser);
   const isInitializing = useAuthStore((s) => s.isInitializing);
@@ -33,6 +33,7 @@ export default function AllSetTab({ avatar, voice }) {
       saveSetup({
         avatarId: avatar.id,
         voiceId: voice.id,
+        movementEnabled: !!movementEnabled,
       });
 
       markStartNewConversation();

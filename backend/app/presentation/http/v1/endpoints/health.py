@@ -65,7 +65,7 @@ async def sessions_info(
     """Returns active session statistics (development only)."""
     if settings.ENVIRONMENT != "development":
         return JSONResponse(status_code=403, content={"error": "Not available in production"})
-    stats = session_manager.get_stats()
+    stats = await session_manager.get_stats()
     stats["active_ws_connections"] = ws_connection_manager.active_count
     return JSONResponse(content=stats)
 

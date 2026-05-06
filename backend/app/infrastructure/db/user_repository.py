@@ -104,12 +104,14 @@ class MongoUserRepository(UserRepositoryPort):
                 "full_name": entity.full_name,
                 "password_hash": entity.hashed_password,
                 "provider": entity.provider,
-                "google_id": entity.google_id,
                 "setup_complete": entity.setup_complete,
                 "is_active": entity.is_active,
+                "refresh_token_version": entity.refresh_token_version,
                 "updated_at": _now(),
             }
         }
+        if entity.google_id is not None:
+            update_doc["$set"]["google_id"] = entity.google_id
         result = await users_col().find_one_and_update(
             {"_id": oid},
             update_doc,

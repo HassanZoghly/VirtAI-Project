@@ -20,8 +20,9 @@ from datetime import datetime, timezone
 
 from bson import ObjectId
 from loguru import logger
+from pymongo.errors import OperationFailure
 
-from app.infrastructure.db.mongodb import chat_sessions_col, messages_col
+from app.infrastructure.db.mongodb import chat_sessions_col, get_database, messages_col
 
 
 def _now() -> datetime:
@@ -186,26 +187,54 @@ async def save_message(
         "sources": sources or [],
         "timestamp": _now(),
     }
-    result = await messages_col().insert_one(doc)
-    doc["_id"] = str(result.inserted_id)
-    doc["session_id"] = session_id
 
-    if role == "user":
-        session_title = _derive_session_title(content)
-        if session_title:
-            await chat_sessions_col().update_one(
-                {"_id": sid, "title": "New Chat"},
-                {"$set": {"title": session_title}},
-            )
+    try:
+        async with await get_database().client.start_session() as session:
+            async with session.start_transaction():
+                result = await messages_col().insert_one(doc, session=session)
+                doc["_id"] = str(result.inserted_id)
+                doc["session_id"] = session_id
 
-    # Increment session counters — use same sid type for consistency
-    await chat_sessions_col().update_one(
-        {"_id": sid},
-        {
-            "$inc": {"message_count": 1},
-            "$set": {"updated_at": _now()},
-        },
-    )
+                if role == "user":
+                    session_title = _derive_session_title(content)
+                    if session_title:
+                        await chat_sessions_col().update_one(
+                            {"_id": sid, "title": "New Chat"},
+                            {"$set": {"title": session_title}},
+                            session=session
+                        )
+
+                # Increment session counters
+                await chat_sessions_col().update_one(
+                    {"_id": sid},
+                    {
+                        "$inc": {"message_count": 1},
+                        "$set": {"updated_at": _now()},
+                    },
+                    session=session
+                )
+    except OperationFailure:
+        # Fallback without transaction
+        result = await messages_col().insert_one(doc)
+        doc["_id"] = str(result.inserted_id)
+        doc["session_id"] = session_id
+
+        if role == "user":
+            session_title = _derive_session_title(content)
+            if session_title:
+                await chat_sessions_col().update_one(
+                    {"_id": sid, "title": "New Chat"},
+                    {"$set": {"title": session_title}},
+                )
+
+        # Increment session counters
+        await chat_sessions_col().update_one(
+            {"_id": sid},
+            {
+                "$inc": {"message_count": 1},
+                "$set": {"updated_at": _now()},
+            },
+        )
 
     return doc
 
@@ -244,3 +273,37 @@ def _serialise_message(doc: dict) -> dict:
         "sources": doc.get("sources", []),
         "timestamp": _format_datetime(doc.get("timestamp")),
     }
+
+
+from app.domain.chat.ports import ChatRepositoryPort
+
+
+class MongoChatRepository(ChatRepositoryPort):
+    """Concrete implementation of ChatRepositoryPort using MongoDB."""
+
+    async def create_chat_session(self, user_id: str, title: str = "New Chat", session_id: str | None = None) -> dict:
+        return await create_chat_session(user_id=user_id, title=title, session_id=session_id)
+
+    async def get_chat_session(self, session_id: str) -> dict | None:
+        return await get_chat_session(session_id=session_id)
+
+    async def touch_chat_session(self, session_id: str) -> None:
+        return await touch_chat_session(session_id=session_id)
+
+    async def list_user_sessions(self, user_id: str, archived: bool = False, limit: int = 50) -> list[dict]:
+        return await list_user_sessions(user_id=user_id, archived=archived, limit=limit)
+
+    async def archive_chat_session(self, session_id: str) -> None:
+        return await archive_chat_session(session_id=session_id)
+
+    async def delete_chat_session(self, session_id: str) -> bool:
+        return await delete_chat_session(session_id=session_id)
+
+    async def save_message(self, session_id: str, role: str, content: str, input_type: str = "text", tts_cache_key: str | None = None, sources: list[dict] | None = None) -> dict:
+        return await save_message(session_id=session_id, role=role, content=content, input_type=input_type, tts_cache_key=tts_cache_key, sources=sources)
+
+    async def get_session_messages(self, session_id: str, limit: int = 50) -> list[dict]:
+        return await get_session_messages(session_id=session_id, limit=limit)
+
+    async def get_message_count(self, session_id: str) -> int:
+        return await get_message_count(session_id=session_id)

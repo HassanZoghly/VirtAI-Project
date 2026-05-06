@@ -21,10 +21,9 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from app.application.voice.handle_voice_turn import ConversationPipeline
-from app.infrastructure.db.chat_repository import create_chat_session, get_chat_session
 
 if TYPE_CHECKING:
-    from app.domain.chat.ports import BaseLLMProvider
+    from app.domain.chat.ports import BaseLLMProvider, ChatRepositoryPort
     from app.domain.voice.ports import BaseTTSProvider, StreamingASRService
 
 
@@ -103,6 +102,7 @@ class SessionManager:
 
     def __init__(
         self,
+        chat_repository: ChatRepositoryPort,
         session_timeout_sec: int = 300,
         session_cleanup_interval: int = 60,
         asr_service_factory: Callable[[], StreamingASRService] | None = None,
@@ -114,6 +114,7 @@ class SessionManager:
         if session_cleanup_interval <= 0:
             raise ValueError("session_cleanup_interval must be positive")
 
+        self._chat_repository = chat_repository
         self._sessions: dict[str, ConversationSession] = {}
         self._timeout = session_timeout_sec
         self._cleanup_interval = session_cleanup_interval
@@ -146,6 +147,12 @@ class SessionManager:
             if existing_session.user_id != user_id:
                 raise PermissionError("Cannot attach to another user's session.")
             existing_session.mark_connected()
+            if voice_id and hasattr(existing_session.pipeline._tts, "voice"):
+                try:
+                    existing_session.pipeline._tts.voice = voice_id  # type: ignore[union-attr]
+                    logger.info(f"Session TTS voice updated | id={session_id} | voice={voice_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to update TTS voice on reconnect: {e}")
             return existing_session
 
         sid = session_id or str(uuid.uuid4())
@@ -154,12 +161,12 @@ class SessionManager:
             # Guard accidental session-id reuse for new chats.
             sid = str(uuid.uuid4())
 
-        persisted_session = await get_chat_session(sid)
+        persisted_session = await self._chat_repository.get_chat_session(sid)
         if persisted_session is not None:
             if persisted_session.get("user_id") != user_id:
                 raise PermissionError("Cannot attach to another user's session.")
         else:
-            await create_chat_session(user_id=user_id, session_id=sid)
+            await self._chat_repository.create_chat_session(user_id=user_id, session_id=sid)
 
         asr = asr_service or (self._asr_service_factory() if self._asr_service_factory else None)
         llm = llm_service or (self._llm_service_factory() if self._llm_service_factory else None)
@@ -178,7 +185,7 @@ class SessionManager:
 
         if voice_id and hasattr(session.pipeline._tts, "voice"):
             try:
-                session.pipeline._tts.voice = voice_id  # type: ignore[union-attr]
+                session.pipeline._tts.voice = voice_id
                 logger.info(f"Session TTS voice set | id={sid} | voice={voice_id}")
             except Exception as e:
                 logger.warning(f"Failed to set TTS voice: {e}")
@@ -206,7 +213,7 @@ class SessionManager:
             session.mark_connected()
         return session
 
-    def disconnect_session(self, session_id: str) -> None:
+    async def disconnect_session(self, session_id: str) -> None:
         """Mark session disconnected but keep it alive for timeout-based resume."""
         session = self._sessions.get(session_id)
         if session is None:
@@ -215,19 +222,22 @@ class SessionManager:
         session.mark_disconnected()
         logger.info(f"Session disconnected | id={session_id} | total_active={len(self._sessions)}")
 
-    def remove_session(self, session_id: str) -> None:
-        if session_id in self._sessions:
-            session = self._sessions[session_id]
-            session.cleanup()
-            del self._sessions[session_id]
+    async def remove_session(self, session_id: str) -> None:
+        async with self._lock:
+            if session_id in self._sessions:
+                session = self._sessions[session_id]
+                session.cleanup()
+                del self._sessions[session_id]
+            else:
+                return
 
-            # Keep Redis chat context until TTL expiry to support reconnect warm-up
-            # and avoid losing cache immediately on normal WebSocket disconnect.
-            logger.debug(
-                f"[SessionManager] Preserving Redis context until TTL | session={session_id}"
-            )
+        # Keep Redis chat context until TTL expiry to support reconnect warm-up
+        # and avoid losing cache immediately on normal WebSocket disconnect.
+        logger.debug(
+            f"[SessionManager] Preserving Redis context until TTL | session={session_id}"
+        )
 
-            logger.info(f"Session removed | id={session_id} | total_active={len(self._sessions)}")
+        logger.info(f"Session removed | id={session_id}")
 
     async def cleanup_idle(self) -> int:
         idle_ids = [
@@ -276,10 +286,10 @@ class SessionManager:
     def active_count(self) -> int:
         return len(self._sessions)
 
-    def get_stats(self) -> dict:
-        return {
-            "active_sessions": self.active_count,
-            "sessions": [
+    async def get_stats(self) -> dict:
+        async with self._lock:
+            active_sessions = len(self._sessions)
+            sessions_info = [
                 {
                     "id": sid,
                     "user_id": s.user_id,
@@ -289,5 +299,9 @@ class SessionManager:
                     "history_length": s.pipeline.history_length,
                 }
                 for sid, s in self._sessions.items()
-            ],
+            ]
+
+        return {
+            "active_sessions": active_sessions,
+            "sessions": sessions_info,
         }

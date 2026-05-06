@@ -12,14 +12,17 @@ class CSRFMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         # Check CSRF token for state-changing methods
         if request.method in ("POST", "PUT", "PATCH", "DELETE"):
-            csrf_cookie = request.cookies.get("csrf_token")
-            csrf_header = request.headers.get("x-csrf-token")
+            if request.url.path.endswith("/auth/login") or request.url.path.endswith("/auth/signup"):
+                pass
+            else:
+                csrf_cookie = request.cookies.get("csrf_token")
+                csrf_header = request.headers.get("x-csrf-token")
 
-            if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
-                return JSONResponse(
-                    status_code=403,
-                    content={"detail": "CSRF token validation failed"}
-                )
+                if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
+                    return JSONResponse(
+                        status_code=403,
+                        content={"detail": "CSRF token validation failed"}
+                    )
 
         response = await call_next(request)
 

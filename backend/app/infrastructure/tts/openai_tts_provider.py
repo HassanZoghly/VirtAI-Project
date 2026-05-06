@@ -2,6 +2,7 @@ import asyncio
 import re
 from collections.abc import AsyncGenerator
 from pathlib import Path
+from typing import ClassVar
 
 import httpx
 from loguru import logger
@@ -20,7 +21,7 @@ class OpenAITTSProvider(BaseTTSProvider):
     Uses a local Kokoro TTS container (openedai-speech) for high-fidelity audio.
     """
 
-    VOICE_MAPPING = {
+    VOICE_MAPPING: ClassVar[dict[str, str]] = {
         "aria": "nova",
         "jenny": "shimmer",
         "sonia": "alloy",
@@ -28,16 +29,27 @@ class OpenAITTSProvider(BaseTTSProvider):
         "christopher": "echo",
         "ryan": "fable",
     }
+    
+    SUPPORTED_VOICES: ClassVar[set[str]] = {
+        "alloy", "echo", "fable", "onyx", "nova", "shimmer"
+    }
 
-    def __init__(self, voice: str = "aria", speed: float = 0.8):
+    def __init__(self, voice: str = "aria", speed: float = 0.8, model: str = "tts-1", **kwargs):
         self.voice = voice
         self.speed = speed
+        self.model = model if model in ("tts-1", "tts-1-hd") else "tts-1"
         self.api_url = "http://tts:8000/v1/audio/speech"
-        logger.info(f"OpenAITTSProvider initialized | voice={self.voice}")
+        logger.info(f"OpenAITTSProvider initialized | voice={self.voice} | model={self.model}")
 
     @property
     def api_voice(self) -> str:
-        return self.VOICE_MAPPING.get(getattr(self, "voice", "").lower(), "nova")
+        v = getattr(self, "voice", None)
+        if not v or not isinstance(v, str):
+            return "nova"
+        v = v.lower()
+        if v in self.SUPPORTED_VOICES:
+            return v
+        return self.VOICE_MAPPING.get(v, "nova")
 
     def get_voice_settings(self) -> dict:
         return {"voice": self.voice, "speed": getattr(self, "speed", 1.0)}
@@ -114,7 +126,7 @@ class OpenAITTSProvider(BaseTTSProvider):
             logger.error(f"Failed to save audio: {e}")
             raise TTSException(f"Failed to save audio: {e!s}")
 
-        result.file_path = str(audio_file_path)
+        result.audio_ref = str(audio_file_path)
         return result
 
     async def synthesize(self, text: str) -> TTSResult:
@@ -127,7 +139,7 @@ class OpenAITTSProvider(BaseTTSProvider):
                 response = await client.post(
                     self.api_url,
                     json={
-                        "model": "tts-1",
+                        "model": self.model,
                         "input": text,
                         "voice": self.api_voice,
                         "response_format": "mp3",
@@ -160,15 +172,16 @@ class OpenAITTSProvider(BaseTTSProvider):
         text = self._sanitize_for_tts(text)
         if not text.strip():
             raise TTSException("Empty text provided")
-
+            
+        settings = get_settings()
         for attempt in range(max_retries):
             try:
-                async with httpx.AsyncClient(timeout=60.0) as client:
+                async with httpx.AsyncClient(timeout=settings.TTS_TIMEOUT_SEC) as client:
                     async with client.stream(
                         "POST",
                         self.api_url,
                         json={
-                            "model": "tts-1",
+                            "model": self.model,
                             "input": text,
                             "voice": self.api_voice,
                             "response_format": "mp3",

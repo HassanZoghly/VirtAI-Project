@@ -6,6 +6,7 @@ export default function TechStackSection() {
     <section id="tech-stack" className="relative mx-auto max-w-5xl px-6 py-28">
       <motion.h2
         className="mb-14 text-center text-4xl font-bold text-offwhite sm:text-5xl"
+        style={{ fontFamily: 'var(--font-display)' }}
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, amount: 0.3 }}
@@ -20,7 +21,7 @@ export default function TechStackSection() {
           return (
             <motion.div
               key={t.id}
-              className="group flex items-center gap-3 opacity-60 transition-all duration-300 hover:opacity-100 hover:scale-105"
+              className="group flex items-center gap-3 opacity-60 transition-opacity transition-transform duration-300 hover:opacity-100 hover:scale-105"
               initial={{ opacity: 0, y: 15 }}
               whileInView={{ opacity: 0.6, y: 0 }}
               viewport={{ once: true, amount: 0.3 }}

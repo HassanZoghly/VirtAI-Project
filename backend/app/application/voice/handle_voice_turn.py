@@ -12,6 +12,7 @@ import base64
 import re
 import time
 from collections.abc import AsyncGenerator, Callable
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -83,15 +84,16 @@ class TTSProcessor:
             elif tts_chunk.audio_data is not None:
                 b64_audio = base64.b64encode(tts_chunk.audio_data).decode("utf-8")
                 self.audio_chunks.append(b64_audio)
-                if self.chunk_index == 0 and self.viseme_events:
+                if self.chunk_index == 0:
                     await self.event_queue.put(
                         ev(
                             PipelineEventType.TTS_VISEMES,
                             sentence_index=self.sentence_index,
-                            events=self.viseme_events,
+                            events=list(self.viseme_events),
                             audio_duration_ms=self._estimate_duration(),
                         )
                     )
+                    self.viseme_events.clear()
                 await self.event_queue.put(
                     ev(
                         PipelineEventType.TTS_AUDIO,
@@ -102,15 +104,16 @@ class TTSProcessor:
                 )
                 self.chunk_index += 1
             elif tts_chunk.is_done:
-                if self.viseme_events and self.chunk_index == 0:
+                if self.viseme_events:
                     await self.event_queue.put(
                         ev(
                             PipelineEventType.TTS_VISEMES,
                             sentence_index=self.sentence_index,
-                            events=self.viseme_events,
+                            events=list(self.viseme_events),
                             audio_duration_ms=0.0,
                         )
                     )
+                    self.viseme_events.clear()
                 break
 
     def _estimate_duration(self) -> float:
@@ -150,6 +153,8 @@ class ConversationPipeline:
         self._max_sentence_queue_size = max_sentence_queue_size
         self._animation_service = AnimationIntelligenceService()
         self._recent_animation_assets: list[str] = []
+        self._profile_usage: dict[str, int] = defaultdict(int)
+        self._intent_history: list[str] = []
         logger.info(f"ConversationPipeline created | avatar={avatar_id}")
 
     # ── Public API ────────────────────────────────────────────────────────────
@@ -402,7 +407,7 @@ class ConversationPipeline:
             # ── 7. Visemes ────────────────────────────────────────────────────
             viseme_generator = VisemeGenerator()
             mouth_cues = await viseme_generator.generate_from_audio(
-                audio_path=tts_result.file_path or "",
+                audio_path=tts_result.audio_ref or "",
                 text=full_response,
                 session_id=session_id,
                 message_id=message_id,
@@ -424,6 +429,8 @@ class ConversationPipeline:
                 audio_features=audio_features,
                 recent_assets=self._recent_animation_assets,
                 emotion=emotion,
+                profile_usage=self._profile_usage,
+                intent_history=self._intent_history,
             )
 
             audio_url = f"/api/v1/audio/{session_id}/{message_id}.mp3"

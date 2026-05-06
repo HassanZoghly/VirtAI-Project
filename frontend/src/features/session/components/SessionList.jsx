@@ -196,9 +196,9 @@ const SessionList = memo(function SessionList({
       {/* 2. Chats Section */}
       <div className="sidebar-chats-section">
         <div className="sidebar-chats-header">
-          <h3 className="sidebar-section-title">
+          <h2 className="sidebar-section-title">
             <PiChatsFill /> Chats
-          </h3>
+          </h2>
           <button className="sidebar-new-chat-btn" onClick={onNewSession} aria-label="New chat">
             <PiPlusFill size={14} /> New Chat
           </button>

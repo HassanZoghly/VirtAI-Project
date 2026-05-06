@@ -33,7 +33,6 @@ router.include_router(auth_router, prefix="/auth", tags=["auth"])
 async def websocket_endpoint(
     websocket: WebSocket,
     avatar_id: str,
-    token: str | None = Query(default=None),
     voice: str = Query(default=""),
     session_id: str | None = Query(default=None),
     resume: bool = Query(default=False),
@@ -70,15 +69,17 @@ async def websocket_endpoint(
         await websocket.close(code=4004, reason="Invalid avatar ID")
         return
 
-    # Accept connection
-    try:
-        await websocket.accept()
-        logger.info(f"[WS] Connection accepted | avatar={avatar_id} | client={websocket.client}")
-    except Exception as e:
-        logger.error(f"[WS] Failed to accept connection: {e}")
-        return
-
     # WebSocket Auth (S1-01)
+    token = None
+    subprotocols = websocket.scope.get("subprotocols", [])
+    if "access_token" in subprotocols:
+        try:
+            idx = subprotocols.index("access_token")
+            if idx + 1 < len(subprotocols):
+                token = subprotocols[idx + 1]
+        except ValueError:
+            pass
+
     if not token:
         logger.warning("[WS] Missing token")
         await websocket.close(code=4401, reason="Missing token")
@@ -90,6 +91,14 @@ async def websocket_endpoint(
         await websocket.close(code=4401, reason="Invalid token")
         return
 
+    # Accept connection
+    try:
+        await websocket.accept(subprotocol="access_token")
+        logger.info(f"[WS] Connection accepted | avatar={avatar_id} | client={websocket.client}")
+    except Exception as e:
+        logger.error(f"[WS] Failed to accept connection: {e}")
+        return
+
     user_id, _ = verified
 
     # Create or resume session
@@ -99,17 +108,25 @@ async def websocket_endpoint(
         if resume and session_id:
             session = await session_manager.connect_existing_session(session_id)
             if session is None:
-                await websocket.close(code=4404, reason="Session not found for resume")
-                return
-            # Session Fixation (S1-06)
-            if session.user_id != user_id:
+                # Graceful fallback: session expired or not found — don't close the
+                # connection. Instead, drop into lazy-session mode so the client
+                # gets a fresh session on its first message. This prevents the
+                # frontend from looping on 4404 → retry → 4404.
                 logger.warning(
-                    f"[WS] Unauthorized session resume attempt by user {user_id} for session {session_id}"
+                    f"[WS] Resume requested for session {session_id} but not found "
+                    f"— falling back to new-session mode for user {user_id}"
                 )
-                await websocket.close(code=4403, reason="Unauthorized session resume")
-                return
-            resumed = True
-            logger.info(f"[WS] Session resumed | session_id={session.session_id}")
+                resumed = False
+            else:
+                # Session Fixation (S1-06)
+                if session.user_id != user_id:
+                    logger.warning(
+                        f"[WS] Unauthorized session resume attempt by user {user_id} for session {session_id}"
+                    )
+                    await websocket.close(code=4403, reason="Unauthorized session resume")
+                    return
+                resumed = True
+                logger.info(f"[WS] Session resumed | session_id={session.session_id}")
         else:
             logger.info(
                 f"[WS] Lazy session mode | avatar={avatar_id} | voice={voice_id} | session will be created on first message"
@@ -149,9 +166,9 @@ async def websocket_endpoint(
             exc_info=True,
         )
     finally:
-        if handler.session.session_id:
+        if handler and getattr(handler, 'session', None) and handler.session.session_id:
             await connection_manager.unregister(handler.session.session_id, websocket)
-            session_manager.disconnect_session(handler.session.session_id)
+            await session_manager.disconnect_session(handler.session.session_id)
             logger.info(
                 f"[WS] Session disconnected (kept for resume) | id={handler.session.session_id}"
             )

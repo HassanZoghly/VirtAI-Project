@@ -13,6 +13,37 @@ from collections.abc import AsyncGenerator, Callable
 from app.domain.chat.entities import ConversationHistory, LLMChunk, LLMResult
 
 
+class ChatRepositoryPort(ABC):
+    """Abstract interface for chat session and message persistence."""
+
+    @abstractmethod
+    async def create_chat_session(self, user_id: str, title: str = "New Chat", session_id: str | None = None) -> dict: ...
+
+    @abstractmethod
+    async def get_chat_session(self, session_id: str) -> dict | None: ...
+
+    @abstractmethod
+    async def touch_chat_session(self, session_id: str) -> None: ...
+
+    @abstractmethod
+    async def list_user_sessions(self, user_id: str, archived: bool = False, limit: int = 50) -> list[dict]: ...
+
+    @abstractmethod
+    async def archive_chat_session(self, session_id: str) -> None: ...
+
+    @abstractmethod
+    async def delete_chat_session(self, session_id: str) -> bool: ...
+
+    @abstractmethod
+    async def save_message(self, session_id: str, role: str, content: str, input_type: str = "text", tts_cache_key: str | None = None, sources: list[dict] | None = None) -> dict: ...
+
+    @abstractmethod
+    async def get_session_messages(self, session_id: str, limit: int = 50) -> list[dict]: ...
+
+    @abstractmethod
+    async def get_message_count(self, session_id: str) -> int: ...
+
+
 class BaseLLMProvider(ABC):
     """Abstract LLM provider interface."""
 
@@ -62,4 +93,16 @@ class PromptBuilderPort(ABC):
         max_messages: int = 20,
     ) -> ConversationHistory:
         """Creates a fresh ConversationHistory for the given avatar."""
+        ...
+
+
+class ChatRepositoryPort(ABC):
+    """Abstract interface for chat persistence."""
+
+    @abstractmethod
+    async def create_chat_session(self, user_id: str, session_id: str | None = None) -> dict:
+        ...
+
+    @abstractmethod
+    async def get_chat_session(self, session_id: str) -> dict | None:
         ...

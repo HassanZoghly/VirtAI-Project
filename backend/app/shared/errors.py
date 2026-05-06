@@ -141,7 +141,11 @@ async def avatar_exception_handler(request: Request, exc: AvatarBaseException) -
 
 
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    logger.exception(f"Unhandled exception: {exc}")
+    settings = get_settings()
+    if settings.DEBUG:
+        logger.exception(f"Unhandled exception: {exc}")
+    else:
+        logger.error(f"Unhandled exception: {exc!s}")
 
     response_content: dict[str, Any] = {
         "error": "INTERNAL_ERROR",

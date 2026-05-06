@@ -321,7 +321,8 @@ export default function AIPipelineVisualizer() {
                     stroke={active ? '#B4AB8B' : 'rgba(245,241,236,0.12)'}
                     strokeWidth={isCurrent ? 2.5 : 1.5}
                     style={{
-                      transition: 'all 0.4s ease',
+                      transition:
+                        'fill 0.4s ease, stroke 0.4s ease, stroke-width 0.4s ease, filter 0.4s ease',
                       filter: isCurrent
                         ? 'drop-shadow(0 0 16px rgba(109,0,26,0.6))'
                         : active

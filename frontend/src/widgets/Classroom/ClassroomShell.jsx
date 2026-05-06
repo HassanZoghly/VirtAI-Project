@@ -283,6 +283,24 @@ export default function ClassroomShell() {
         <title>{avatarName} — VirtAI Classroom</title>
       </Helmet>
       <div className="classroom-shell">
+        <h1 
+          className="classroom-watermark"
+          style={{
+            position: 'absolute',
+            bottom: '1.5rem',
+            left: '1.5rem',
+            fontSize: 'var(--h1)',
+            fontWeight: '700',
+            letterSpacing: '-0.02em',
+            color: 'var(--text-primary)',
+            opacity: 0.05,
+            pointerEvents: 'none',
+            zIndex: 10,
+            margin: 0
+          }}
+        >
+          VirtAI
+        </h1>
         <SettingsDrawer
           isOpen={isSettingsOpen}
           onClose={closeSettings}

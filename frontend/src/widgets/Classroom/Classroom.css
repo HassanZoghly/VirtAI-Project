@@ -212,20 +212,19 @@
 .avatar-status-badge.offline {
   background: linear-gradient(135deg, rgba(220, 38, 38, 0.15) 0%, rgba(185, 28, 28, 0.15) 100%);
   border-color: rgba(220, 38, 38, 0.45);
-  box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
   animation: offlinePulse 2s ease-in-out infinite;
 }
 
 @keyframes offlinePulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
     border-color: rgba(220, 38, 38, 0.45);
+    background: linear-gradient(135deg, rgba(220, 38, 38, 0.15) 0%, rgba(185, 28, 28, 0.15) 100%);
   }
 
   50% {
-    box-shadow: 0 0 18px 2px rgba(220, 38, 38, 0.18);
     border-color: rgba(220, 38, 38, 0.75);
+    background: linear-gradient(135deg, rgba(220, 38, 38, 0.25) 0%, rgba(185, 28, 28, 0.25) 100%);
   }
 }
 
@@ -450,7 +449,7 @@
 
 .char-count {
   font-size: 0.75rem;
-  color: var(--text-tertiary, #6b6b6b);
+  color: var(--text-muted, #8c8c8c);
   text-align: right;
   padding: 0 1.5rem 0.5rem;
   margin-top: -0.5rem;

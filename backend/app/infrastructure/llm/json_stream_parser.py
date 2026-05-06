@@ -7,9 +7,13 @@ It processes raw token chunks and yields characters for specific string fields.
 
 class JsonStreamParser:
     def __init__(self):
+        self.reset()
+
+    def reset(self):
         self.state = "WAIT_KEY_START"
         self.current_key = ""
         self.in_escape = False
+        self.unicode_buffer = ""
 
     def feed(self, token: str) -> list[tuple[str, str]]:
         """
@@ -38,18 +42,33 @@ class JsonStreamParser:
                     pass
             elif self.state == "READING_VALUE":
                 if self.in_escape:
-                    if char == 'n':
+                    if self.unicode_buffer:
+                        self.unicode_buffer += char
+                        if len(self.unicode_buffer) == 4:
+                            try:
+                                emissions.append((self.current_key, chr(int(self.unicode_buffer, 16))))
+                            except ValueError:
+                                emissions.append((self.current_key, f"\\u{self.unicode_buffer}"))
+                            self.in_escape = False
+                            self.unicode_buffer = ""
+                    elif char == 'n':
                         emissions.append((self.current_key, "\n"))
+                        self.in_escape = False
                     elif char == 't':
                         emissions.append((self.current_key, "\t"))
+                        self.in_escape = False
                     elif char == 'r':
                         emissions.append((self.current_key, "\r"))
+                        self.in_escape = False
+                    elif char == 'u':
+                        self.unicode_buffer = "u"
                     elif char == '\\' or char == '"':
                         emissions.append((self.current_key, char))
+                        self.in_escape = False
                     else:
                         # For other escaped characters, just pass them
                         emissions.append((self.current_key, char))
-                    self.in_escape = False
+                        self.in_escape = False
                 elif char == '\\':
                     self.in_escape = True
                 elif char == '"':

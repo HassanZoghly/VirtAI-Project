@@ -50,8 +50,6 @@ class AnimationIntelligenceService:
 
     def __init__(self) -> None:
         self._profiles = self._build_profiles()
-        self._profile_usage: dict[str, int] = defaultdict(int)
-        self._intent_history: list[str] = []
         self._mapper = AnimationMapper()
 
     @staticmethod
@@ -63,17 +61,23 @@ class AnimationIntelligenceService:
         text: str,
         recent_assets: list[str] | None = None,
         emotion: str | None = None,
+        profile_usage: dict[str, int] | None = None,
+        intent_history: list[str] | None = None,
     ) -> dict:
         """
         Build animation timeline from response text.
 
         Output contract is optimized for frontend AnimationMixer-based playback.
         """
+        if profile_usage is None:
+            profile_usage = defaultdict(int)
+        if intent_history is None:
+            intent_history = []
         recent = recent_assets or []
         segments = self._segment_text(text)
         timeline: list[dict] = []
         recent_window = list(recent[-6:])
-        previous_intent = self._intent_history[-1] if self._intent_history else None
+        previous_intent = intent_history[-1] if intent_history else None
         intent_trace: list[str] = []
 
         for segment in segments:
@@ -89,6 +93,7 @@ class AnimationIntelligenceService:
                 intent=intent,
                 tone=tone,
                 recent_assets=recent_window,
+                profile_usage=profile_usage,
                 previous_intent=previous_intent,
             )
             blend = self._blend_for_transition(
@@ -113,13 +118,13 @@ class AnimationIntelligenceService:
             )
             recent_window.append(profile.asset_name)
             recent_window = recent_window[-6:]
-            self._profile_usage[profile.asset_name] += 1
+            profile_usage[profile.asset_name] += 1
             previous_intent = intent
             intent_trace.append(intent)
 
         if intent_trace:
-            self._intent_history.extend(intent_trace)
-            self._intent_history = self._intent_history[-24:]
+            intent_history.extend(intent_trace)
+            intent_history[:] = intent_history[-24:]
 
         return {
             "timeline": timeline,
@@ -137,6 +142,8 @@ class AnimationIntelligenceService:
         audio_features: dict[str, Any],
         recent_assets: list[str] | None = None,
         emotion: str | None = None,
+        profile_usage: dict[str, int] | None = None,
+        intent_history: list[str] | None = None,
     ) -> dict[str, Any]:
         """
         Build an audio-synchronized timeline by fusing semantic intent and speech features.
@@ -148,6 +155,11 @@ class AnimationIntelligenceService:
         - energy_curve: [{time, value}]
         - pause_segments: [{start_time, end_time}]
         """
+        if profile_usage is None:
+            profile_usage = defaultdict(int)
+        if intent_history is None:
+            intent_history = []
+
         duration_s = float(audio_features.get("duration_s") or 0.0)
         duration_s = max(0.2, duration_s)
 
@@ -166,7 +178,7 @@ class AnimationIntelligenceService:
 
         timeline: list[dict[str, Any]] = []
         recent_window = list((recent_assets or [])[-6:])
-        previous_intent = self._intent_history[-1] if self._intent_history else None
+        previous_intent = intent_history[-1] if intent_history else None
         intent_trace: list[str] = []
 
         for segment, (start_time, end_time) in zip(semantic_segments, windows, strict=False):
@@ -185,6 +197,7 @@ class AnimationIntelligenceService:
                 intent=intent,
                 tone=tone,
                 recent_assets=recent_window,
+                profile_usage=profile_usage,
                 previous_intent=previous_intent,
             )
 
@@ -235,7 +248,7 @@ class AnimationIntelligenceService:
 
             recent_window.append(profile.asset_name)
             recent_window = recent_window[-6:]
-            self._profile_usage[profile.asset_name] += 1
+            profile_usage[profile.asset_name] += 1
             previous_intent = intent
             intent_trace.append(intent)
 
@@ -270,8 +283,8 @@ class AnimationIntelligenceService:
         timeline = self._normalize_timeline_ranges(timeline, duration_s)
 
         if intent_trace:
-            self._intent_history.extend(intent_trace)
-            self._intent_history = self._intent_history[-24:]
+            intent_history.extend(intent_trace)
+            intent_history[:] = intent_history[-24:]
 
         return {
             "timeline": timeline,
@@ -495,6 +508,7 @@ class AnimationIntelligenceService:
         intent: str,
         tone: str,
         recent_assets: list[str],
+        profile_usage: dict[str, int],
         previous_intent: str | None = None,
     ) -> AnimationProfile:
         candidates: list[tuple[AnimationProfile, float]] = []
@@ -519,7 +533,7 @@ class AnimationIntelligenceService:
                 if asset == profile.asset_name:
                     score -= max(0.08, 0.62 / recency_index)
 
-            usage_penalty = min(1.2, self._profile_usage[profile.asset_name] * 0.12)
+            usage_penalty = min(1.2, profile_usage[profile.asset_name] * 0.12)
             score -= usage_penalty
 
             if last_asset == profile.asset_name:

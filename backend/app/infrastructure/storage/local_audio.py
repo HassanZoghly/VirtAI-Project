@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from app.shared.config import get_settings
@@ -14,15 +15,15 @@ class LocalAudioStorage:
         settings = get_settings()
         self._base = Path(base_path or settings.AUDIO_STORAGE_PATH)
 
-    def save(self, session_id: str, filename: str, data: bytes) -> Path:
+    async def save(self, session_id: str, filename: str, data: bytes) -> Path:
         dest = self._base / session_id
-        dest.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(dest.mkdir, parents=True, exist_ok=True)
         path = dest / filename
-        path.write_bytes(data)
+        await asyncio.to_thread(path.write_bytes, data)
         return path
 
-    def load(self, session_id: str, filename: str) -> bytes:
-        return (self._base / session_id / filename).read_bytes()
+    async def load(self, session_id: str, filename: str) -> bytes:
+        return await asyncio.to_thread((self._base / session_id / filename).read_bytes)
 
-    def exists(self, session_id: str, filename: str) -> bool:
-        return (self._base / session_id / filename).exists()
+    async def exists(self, session_id: str, filename: str) -> bool:
+        return await asyncio.to_thread((self._base / session_id / filename).exists)

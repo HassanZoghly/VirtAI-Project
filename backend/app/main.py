@@ -27,14 +27,13 @@ from app.shared.log_config import setup_logging
 
 settings = get_settings()
 
-background_tasks = set()
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Startup and shutdown logic.
     """
+    background_tasks = set()
+
     # ── Startup ───────────────────────────────────────────────────────────────
     setup_logging()
     logger.info(f"Starting {settings.APP_NAME} v{settings.APP_VERSION}")
@@ -64,6 +63,7 @@ async def lifespan(app: FastAPI):
 
     # Create service factories that use centralized settings
     from app.infrastructure.asr.groq_whisper import GroqWhisperASR
+    from app.infrastructure.db.chat_repository import MongoChatRepository
     from app.infrastructure.llm.groq_provider import GroqLLMProvider
     from app.infrastructure.tts.openai_tts_provider import OpenAITTSProvider
 
@@ -90,8 +90,11 @@ async def lifespan(app: FastAPI):
             speed=0.8,
         )
 
+    chat_repository = MongoChatRepository()
+
     # Initialize session manager with configuration and service factories
     session_manager = SessionManager(
+        chat_repository=chat_repository,
         session_timeout_sec=settings.SESSION_TIMEOUT_SEC,
         session_cleanup_interval=settings.SESSION_CLEANUP_INTERVAL,
         asr_service_factory=create_asr_service,
@@ -163,7 +166,7 @@ def create_app() -> FastAPI:
     app.add_middleware(CSRFMiddleware)
 
     # ── Error Handlers ────────────────────────────────────────────────────────
-    app.add_exception_handler(AvatarBaseException, avatar_exception_handler)  # type: ignore
+    app.add_exception_handler(AvatarBaseException, avatar_exception_handler)
     app.add_exception_handler(Exception, generic_exception_handler)
 
     # ── Routers ───────────────────────────────────────────────────────────────

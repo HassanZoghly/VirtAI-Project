@@ -32,7 +32,8 @@ async def init_mongodb() -> None:
     global _client, _database
 
     settings = get_settings()
-    logger.info(f"Connecting to MongoDB | url={settings.MONGODB_URL} | db={settings.MONGODB_DB_NAME}")
+    url_safe = settings.MONGODB_URL.split("@")[-1] if "@" in settings.MONGODB_URL else "redacted"
+    logger.info(f"Connecting to MongoDB | url={url_safe} | db={settings.MONGODB_DB_NAME}")
 
     _client = AsyncIOMotorClient(
         settings.MONGODB_URL,

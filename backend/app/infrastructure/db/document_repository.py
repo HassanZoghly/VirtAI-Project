@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from bson import ObjectId
+from bson.errors import InvalidId
 from loguru import logger
 
 from app.infrastructure.db.mongodb import documents_col
@@ -30,8 +31,13 @@ async def create_document(
     vector_collection: str = "",
 ) -> dict:
     """Insert a new document record with status='processing'."""
+    try:
+        user_oid = ObjectId(user_id)
+    except InvalidId:
+        raise ValueError(f"Invalid user_id format: {user_id}")
+
     doc = {
-        "user_id": ObjectId(user_id),
+        "user_id": user_oid,
         "filename": filename,
         "file_type": file_type,
         "upload_date": _now(),

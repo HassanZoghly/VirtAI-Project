@@ -258,9 +258,6 @@ function useWSClient(url) {
       let socketUrl = currentUrl;
       try {
         const parsed = new URL(currentUrl);
-        if (currentAccessToken) {
-          parsed.searchParams.set('token', currentAccessToken);
-        }
         if (sessionIdRef.current) {
           parsed.searchParams.set('resume', 'true');
           parsed.searchParams.set('session_id', sessionIdRef.current);
@@ -271,7 +268,8 @@ function useWSClient(url) {
         // Keep original URL for non-standard runtimes.
       }
 
-      const socket = new WebSocket(socketUrl);
+      const protocols = currentAccessToken ? ["access_token", currentAccessToken] : [];
+      const socket = new WebSocket(socketUrl, protocols);
       wsRef.current = socket;
       socket._mountId = currentMountId;
       socket._instanceId = instanceId;

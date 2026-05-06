@@ -58,7 +58,8 @@ class VoiceModeHandler:
         websocket: WebSocket,
         session_id: str,
         asr_service: StreamingASRService,
-        conversation_pipeline: ConversationPipeline,
+        conversation_pipeline: ConversationPipeline | None = None,
+        turn_callback=None,
         max_buffer_size: int = 10 * 1024 * 1024,
         max_chunk_size: int = 1 * 1024 * 1024,
         buffer_timeout: float = 30.0,
@@ -72,7 +73,9 @@ class VoiceModeHandler:
             websocket: WebSocket connection for this session
             session_id: Unique session identifier (UUID)
             asr_service: ASR service instance for transcription
-            conversation_pipeline: Conversation pipeline instance
+            conversation_pipeline: Optional conversation pipeline instance (legacy)
+            turn_callback: Optional async callable(text: str) invoked after transcription.
+                If provided, takes priority over conversation_pipeline for text routing.
             max_buffer_size: Maximum audio buffer size in bytes (default 10MB)
             max_chunk_size: Maximum single chunk size in bytes (default 1MB)
             buffer_timeout: Maximum buffer accumulation time in seconds (default 30s)
@@ -84,7 +87,7 @@ class VoiceModeHandler:
             - websocket is connected and active
             - session_id is valid UUID string
             - asr_service is initialized and ready
-            - conversation_pipeline is initialized
+            - At least one of conversation_pipeline or turn_callback must be provided
             - max_buffer_size is positive integer
             - rate_limit_chunks is positive integer
             - rate_limit_window is positive float
@@ -99,6 +102,8 @@ class VoiceModeHandler:
         self.session_id = session_id
         self.asr_service = asr_service
         self.conversation_pipeline = conversation_pipeline
+        # turn_callback takes priority; fall back to pipeline.process_text if available
+        self.turn_callback = turn_callback
         self.audio_pipeline = AudioPipeline(
             max_buffer_size=max_buffer_size,
             max_chunk_size=max_chunk_size,
@@ -412,15 +417,13 @@ class VoiceModeHandler:
             # Pass transcript to conversation pipeline if not empty
             if result.transcript.strip():
                 # Trigger conversation pipeline with the transcript
-                # The pipeline will handle LLM processing and TTS generation
                 logger.info(
                     f"Triggering conversation pipeline | "
                     f"session={self.session_id} | "
                     f"transcript='{result.transcript[:60]}'"
                 )
-                # Note: The conversation pipeline processing will be handled by the
-                # WebSocket handler which will receive the transcript message and
-                # call process_text() or process_message() as appropriate
+                if self.turn_callback:
+                    await self.turn_callback(result.transcript)
             else:
                 logger.warning(f"Empty transcript received | session={self.session_id}")
 

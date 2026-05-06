@@ -6,7 +6,7 @@ Delegates to ConversationPipeline.process_text() and process_message().
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 
 from app.application.voice.handle_voice_turn import ConversationPipeline
 from app.domain.chat.entities import PipelineEvent
@@ -37,7 +37,7 @@ async def handle_message(
     message_id: str,
     text: str,
     session_id: str,
-    send_callback: callable, # type: ignore
+    send_callback: Callable,
 ) -> None:
     """
     Process user message through LLM → TTS → Visemes with callback-based delivery.

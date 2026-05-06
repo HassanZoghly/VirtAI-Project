@@ -1,3 +1,5 @@
+from __future__ import annotations
+from collections import defaultdict
 """
 WebSocket Gateway — Main real-time communication handler.
 
@@ -26,13 +28,12 @@ Message Flow:
         error        : something went wrong
 """
 
-from __future__ import annotations
-
 import asyncio
 import base64
 import json
 import re
 import time
+import uuid
 from types import SimpleNamespace
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -41,7 +42,6 @@ from pydantic import BaseModel, ValidationError
 
 from app.application.chat.session_manager import Session
 from app.domain.chat.entities import PipelineEvent, PipelineEventType
-from app.infrastructure.asr.groq_whisper import GroqWhisperASR
 from app.presentation.ws.connection_manager import WSConnectionManager
 from app.presentation.ws.voice_mode_handler import VoiceModeHandler
 from app.schemas.audio import AudioBuffer
@@ -402,19 +402,57 @@ class WebSocketHandler:
         await self._ensure_session()
         if self._voice_mode_handler is None:
             # Initialize ASR service (lazy loading)
-            asr_service = GroqWhisperASR()
+            asr_service = self.pipeline._asr
+            if asr_service is None:
+                raise ValueError("ASR service not injected into pipeline")
 
             # Create voice mode handler
             self._voice_mode_handler = VoiceModeHandler(
                 websocket=self.ws,
                 session_id=self.session.session_id,
                 asr_service=asr_service,
-                conversation_pipeline=self.pipeline,
+                turn_callback=self._run_text_turn,
             )
 
             logger.info(f"VoiceModeHandler created | session={self.session.session_id}")
 
         return self._voice_mode_handler
+
+    async def _run_text_turn(self, text: str) -> None:
+        """
+        Callback invoked by VoiceModeHandler after ASR produces a transcript.
+
+        Routes the transcript through the full conversation pipeline
+        (LLM → TTS → visemes) using process_message so the frontend
+        receives chat deltas, audio, and animation data.
+
+        Args:
+            text: Transcribed text from ASR to send through the pipeline.
+        """
+        if not text or not text.strip():
+            logger.warning(f"[WS] _run_text_turn called with empty text | session={self.session.session_id}")
+            return
+
+        await self._ensure_session()
+        await self._cancel_pipeline()
+
+        message_id = str(uuid.uuid4())
+        session_id = self.session.session_id
+
+        logger.info(
+            f"[WS] Voice turn → pipeline | session={session_id} | "
+            f"message_id={message_id} | text='{text[:60]}'"
+        )
+
+        self._pipeline_task = asyncio.create_task(
+            self.pipeline.process_message(
+                message_id=message_id,
+                text=text,
+                session_id=session_id,
+                send_callback=self._send_protocol_message,
+            ),
+            name=f"pipeline_voice_{session_id}",
+        )
 
     async def _handle_binary_frame(self, pcm_bytes: bytes) -> None:
         """Handle incoming binary frame containing raw PCM audio data.

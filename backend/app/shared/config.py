@@ -91,12 +91,13 @@ class Settings(BaseSettings):
         "Your answers are concise and helpful."
     )
 
-    # TTS (Edge TTS)
+    # TTS
     TTS_VOICE: str = "en-US-GuyNeural"
     TTS_RATE: str = "+0%"
     TTS_VOLUME: str = "+0%"
     TTS_PITCH: str = "+0Hz"
     TTS_VISEME_DEFAULT_DURATION_MS: float = 60.0
+    TTS_TIMEOUT_SEC: float = 60.0
 
     # WebSocket
     WS_HEARTBEAT_INTERVAL: int = 30  # seconds

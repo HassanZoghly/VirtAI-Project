@@ -33,7 +33,6 @@ router.include_router(auth_router, prefix="/auth", tags=["auth"])
 async def websocket_endpoint(
     websocket: WebSocket,
     avatar_id: str,
-    token: str | None = Query(default=None),
     voice: str = Query(default=""),
     session_id: str | None = Query(default=None),
     resume: bool = Query(default=False),
@@ -70,15 +69,17 @@ async def websocket_endpoint(
         await websocket.close(code=4004, reason="Invalid avatar ID")
         return
 
-    # Accept connection
-    try:
-        await websocket.accept()
-        logger.info(f"[WS] Connection accepted | avatar={avatar_id} | client={websocket.client}")
-    except Exception as e:
-        logger.error(f"[WS] Failed to accept connection: {e}")
-        return
-
     # WebSocket Auth (S1-01)
+    token = None
+    subprotocols = websocket.scope.get("subprotocols", [])
+    if "access_token" in subprotocols:
+        try:
+            idx = subprotocols.index("access_token")
+            if idx + 1 < len(subprotocols):
+                token = subprotocols[idx + 1]
+        except ValueError:
+            pass
+
     if not token:
         logger.warning("[WS] Missing token")
         await websocket.close(code=4401, reason="Missing token")
@@ -88,6 +89,14 @@ async def websocket_endpoint(
     if not verified:
         logger.warning("[WS] Invalid token")
         await websocket.close(code=4401, reason="Invalid token")
+        return
+
+    # Accept connection
+    try:
+        await websocket.accept(subprotocol="access_token")
+        logger.info(f"[WS] Connection accepted | avatar={avatar_id} | client={websocket.client}")
+    except Exception as e:
+        logger.error(f"[WS] Failed to accept connection: {e}")
         return
 
     user_id, _ = verified
@@ -149,9 +158,9 @@ async def websocket_endpoint(
             exc_info=True,
         )
     finally:
-        if handler.session.session_id:
+        if handler and getattr(handler, 'session', None) and handler.session.session_id:
             await connection_manager.unregister(handler.session.session_id, websocket)
-            session_manager.disconnect_session(handler.session.session_id)
+            await session_manager.disconnect_session(handler.session.session_id)
             logger.info(
                 f"[WS] Session disconnected (kept for resume) | id={handler.session.session_id}"
             )

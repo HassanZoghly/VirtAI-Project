@@ -129,6 +129,8 @@ class GroqLLMProvider(BaseLLMProvider):
         start_time = time.perf_counter()
         token_count = 0
         sentence_count = 0
+        has_speech = False
+        has_display = False
         logger.info(
             f"LLM stream start | "
             f"model={self.model} | "
@@ -172,10 +174,12 @@ class GroqLLMProvider(BaseLLMProvider):
                 parsed_events = parser.feed(token)
                 for key, char in parsed_events:
                     if key == "display":
+                        has_display = True
                         full_text.append(char)
                         # Yield token immediately → frontend typing indicator
                         yield LLMChunk(token=char)
                     elif key == "speech":
+                        has_speech = True
                         # Feed into sentence splitter
                         sentence = splitter.feed(char)
                         if sentence:
@@ -200,6 +204,12 @@ class GroqLLMProvider(BaseLLMProvider):
             if on_sentence:
                 on_sentence(remainder)
             yield LLMChunk(token="", sentence=remainder)
+
+        if token_count > 0:
+            if not has_speech:
+                logger.warning("LLM response stream lacked 'speech' key in JSON payload.")
+            if not has_display:
+                logger.warning("LLM response stream lacked 'display' key in JSON payload.")
 
         # ── Done ──────────────────────────────────────────────────────────────
         elapsed_ms = (time.perf_counter() - start_time) * 1000

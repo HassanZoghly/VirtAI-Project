@@ -92,7 +92,7 @@ class TTSResult:
     audio_duration_ms: float = 0.0
     sample_rate: int = 24000
     format: str = "mp3"
-    file_path: str | None = None  # Path to stored audio file
+    audio_ref: str | None = None  # Reference to stored audio (e.g. file path or URL)
 
 
 @dataclass

@@ -28,9 +28,22 @@ export default function ChatInput({
 }) {
   const handleChange = useCallback(
     (e) => {
-      onInputChange(e.target.value);
-      e.target.style.height = 'auto';
-      e.target.style.height = `${e.target.scrollHeight}px`;
+      const el = e.target;
+      onInputChange(el.value);
+      el.style.height = 'auto';
+
+      const computed = window.getComputedStyle(el);
+      const maxHeight = Number.parseFloat(computed.maxHeight);
+      const effectiveMaxHeight = Number.isFinite(maxHeight) ? maxHeight : 0;
+      const nextHeight = effectiveMaxHeight
+        ? Math.min(el.scrollHeight, effectiveMaxHeight)
+        : el.scrollHeight;
+
+      el.style.height = `${nextHeight}px`;
+
+      const shouldScroll = effectiveMaxHeight > 0 && el.scrollHeight > effectiveMaxHeight + 1;
+      el.classList.toggle('is-scrollable', shouldScroll);
+      el.style.overflowY = shouldScroll ? 'auto' : 'hidden';
     },
     [onInputChange]
   );
@@ -55,7 +68,7 @@ export default function ChatInput({
 
         <textarea
           ref={textareaRef}
-          className="chat-input"
+          className="chat-input chat-input-textarea"
           aria-label="Message input"
           placeholder={
             backendStatus === 'offline' ? 'Type a message (offline mode)…' : 'Type a message…'
@@ -80,11 +93,15 @@ export default function ChatInput({
         </button>
       </div>
 
-      {inputValue.length > 0 && (
-        <div className={`char-count${inputValue.length >= MAX_CHARS ? ' char-count--limit' : ''}`}>
-          {inputValue.length}/{MAX_CHARS}
-        </div>
-      )}
+      <div
+        className={`char-count${inputValue.length >= MAX_CHARS ? ' char-count--limit' : ''}`}
+        style={{
+          visibility: inputValue.length > 0 ? 'visible' : 'hidden',
+          opacity: inputValue.length > 0 ? 1 : 0,
+        }}
+      >
+        {inputValue.length}/{MAX_CHARS}
+      </div>
     </div>
   );
 }

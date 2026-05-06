@@ -518,7 +518,9 @@
   text-align: right;
   padding: 0 1.5rem 0.5rem;
   margin-top: -0.5rem;
-  transition: color var(--transition-fast, 0.2s) ease;
+  transition:
+    color var(--transition-fast, 0.2s) ease,
+    opacity 0.2s ease;
 }
 
 .char-count--limit {
@@ -562,6 +564,7 @@
   flex: 1;
   min-width: 0;
   padding: 0.85rem 1.15rem;
+  padding-right: 1.5rem;
   background: var(--card-bg, #1e1e1e);
   border: 1px solid var(--border-color, #333);
   border-radius: 20px;
@@ -569,21 +572,41 @@
   font-size: 0.95rem;
   font-family: inherit;
   line-height: 1.4;
+  box-sizing: border-box;
+  height: calc(1.4em + 1.7rem);
+  min-height: calc(1.4em + 1.7rem);
   resize: none;
   max-height: 100px;
-  overflow-y: auto;
+  overflow-y: hidden;
   transition:
     border-color var(--transition-normal, 0.3s) var(--ease-smooth, ease),
     box-shadow var(--transition-normal, 0.3s) var(--ease-smooth, ease);
 }
 
-.chat-input::-webkit-scrollbar {
+.chat-input.is-scrollable {
+  overflow-y: auto !important;
+}
+
+.chat-input-textarea {
+  scrollbar-width: thin;
+  scrollbar-color: #4b4b4b transparent;
+}
+
+.chat-input-textarea::-webkit-scrollbar {
   width: 6px;
 }
 
-.chat-input::-webkit-scrollbar-thumb {
-  background-color: var(--border-color, #333);
+.chat-input-textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-input-textarea::-webkit-scrollbar-thumb {
+  background-color: #4b4b4b;
   border-radius: 10px;
+}
+
+.chat-input-textarea::-webkit-scrollbar-thumb:hover {
+  background-color: #6b6b6b;
 }
 
 .chat-input:focus {

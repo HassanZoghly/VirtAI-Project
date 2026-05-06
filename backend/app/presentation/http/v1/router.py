@@ -108,17 +108,25 @@ async def websocket_endpoint(
         if resume and session_id:
             session = await session_manager.connect_existing_session(session_id)
             if session is None:
-                await websocket.close(code=4404, reason="Session not found for resume")
-                return
-            # Session Fixation (S1-06)
-            if session.user_id != user_id:
+                # Graceful fallback: session expired or not found — don't close the
+                # connection. Instead, drop into lazy-session mode so the client
+                # gets a fresh session on its first message. This prevents the
+                # frontend from looping on 4404 → retry → 4404.
                 logger.warning(
-                    f"[WS] Unauthorized session resume attempt by user {user_id} for session {session_id}"
+                    f"[WS] Resume requested for session {session_id} but not found "
+                    f"— falling back to new-session mode for user {user_id}"
                 )
-                await websocket.close(code=4403, reason="Unauthorized session resume")
-                return
-            resumed = True
-            logger.info(f"[WS] Session resumed | session_id={session.session_id}")
+                resumed = False
+            else:
+                # Session Fixation (S1-06)
+                if session.user_id != user_id:
+                    logger.warning(
+                        f"[WS] Unauthorized session resume attempt by user {user_id} for session {session_id}"
+                    )
+                    await websocket.close(code=4403, reason="Unauthorized session resume")
+                    return
+                resumed = True
+                logger.info(f"[WS] Session resumed | session_id={session.session_id}")
         else:
             logger.info(
                 f"[WS] Lazy session mode | avatar={avatar_id} | voice={voice_id} | session will be created on first message"

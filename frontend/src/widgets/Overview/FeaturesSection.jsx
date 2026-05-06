@@ -11,7 +11,10 @@ export default function FeaturesSection() {
         viewport={{ once: true, amount: 0.3 }}
         transition={{ duration: 0.6 }}
       >
-        <h2 className="text-4xl font-bold text-offwhite sm:text-5xl">
+        <h2
+          className="text-4xl font-bold text-offwhite sm:text-5xl"
+          style={{ fontFamily: 'var(--font-display)' }}
+        >
           Core <span className="text-gold">Features</span>
         </h2>
         <p className="mt-5 text-lg leading-relaxed text-offwhite/70">

@@ -283,7 +283,7 @@ export default function ClassroomShell() {
         <title>{avatarName} — VirtAI Classroom</title>
       </Helmet>
       <div className="classroom-shell">
-        <h1 
+        <h1
           className="classroom-watermark"
           style={{
             position: 'absolute',
@@ -296,7 +296,7 @@ export default function ClassroomShell() {
             opacity: 0.05,
             pointerEvents: 'none',
             zIndex: 10,
-            margin: 0
+            margin: 0,
           }}
         >
           VirtAI
@@ -312,48 +312,43 @@ export default function ClassroomShell() {
           onRenameSession={renameSession}
         />
 
-        <button
-          className="avatar-settings-btn"
-          onClick={openSettings}
-          title="Settings"
-          aria-label="Open settings"
-        >
-          <PiGearFill />
-        </button>
+        <div className="classroom-top-controls">
+          <button
+            className="avatar-settings-btn"
+            onClick={openSettings}
+            title="Settings"
+            aria-label="Open settings"
+          >
+            <PiGearFill />
+          </button>
 
-        <div className={`avatar-status-badge ${statusBadgeClass}`} role="status" aria-live="polite">
-          {connectionState === ConnectionState.OFFLINE ? (
-            <PiWifiSlashFill className="status-icon-offline" />
-          ) : (
-            <span
-              className={`status-dot${
-                connectionState === ConnectionState.RECONNECTING
-                  ? ' status-dot-reconnecting'
-                  : connectionState === ConnectionState.INITIALIZING
-                    ? ' status-dot-initializing'
-                    : ''
-              }`}
-            />
-          )}
-          <span className="status-text">{statusLabel}</span>
-          {reconnectError ? (
-            <button
-              type="button"
-              onClick={reconnect}
-              style={{
-                marginLeft: '0.75rem',
-                border: '1px solid rgba(255, 255, 255, 0.18)',
-                borderRadius: '999px',
-                background: 'rgba(255, 255, 255, 0.08)',
-                color: 'inherit',
-                cursor: 'pointer',
-                font: 'inherit',
-                padding: '0.35rem 0.75rem',
-              }}
-            >
-              Reconnect
-            </button>
-          ) : null}
+          <div
+            className={`avatar-status-badge ${statusBadgeClass}`}
+            role="status"
+            aria-live="polite"
+          >
+            {connectionState === ConnectionState.OFFLINE ? (
+              <PiWifiSlashFill className="status-icon-offline" />
+            ) : (
+              <span
+                className={`status-dot${
+                  connectionState === ConnectionState.RECONNECTING
+                    ? ' status-dot-reconnecting'
+                    : connectionState === ConnectionState.INITIALIZING
+                      ? ' status-dot-initializing'
+                      : ''
+                }`}
+              />
+            )}
+            <span key={statusLabel} className="status-text">
+              {statusLabel}
+            </span>
+            {reconnectError ? (
+              <button type="button" onClick={reconnect} className="status-reconnect-btn">
+                Reconnect
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <div className="split-container" id="main-content">

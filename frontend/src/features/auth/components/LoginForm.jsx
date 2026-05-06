@@ -122,7 +122,7 @@ export default function LoginForm({ onToggleMode }) {
         <button
           type="submit"
           disabled={isLoading}
-          className="flex w-full items-center justify-center rounded-xl bg-(--accent-primary) px-4 py-3 text-sm font-semibold text-[#121212] shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:bg-(--accent-secondary) hover:shadow-lg active:scale-[0.985] active:translate-y-0 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-(--accent-primary)/55 disabled:text-[#121212]/80 disabled:opacity-100 disabled:shadow-none"
+          className="flex w-full items-center justify-center rounded-xl bg-(--accent-primary) px-4 py-3 text-sm font-semibold text-[#121212] shadow-md transition-colors transition-transform transition-shadow duration-200 hover:-translate-y-0.5 hover:bg-(--accent-secondary) hover:shadow-lg active:scale-[0.985] active:translate-y-0 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-(--accent-primary)/55 disabled:text-[#121212]/80 disabled:opacity-100 disabled:shadow-none"
         >
           {isLoading ? (
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-current/30 border-t-current" />

@@ -56,7 +56,7 @@
 }
 
 .setup-step-indicator .step-text {
-  font-family: var(--font-display, 'Space Grotesk', sans-serif);
+  font-family: var(--font-display, 'Outfit', sans-serif);
   font-size: 14px;
   font-weight: 600;
   color: var(--text-secondary, #b0b0b0);
@@ -79,7 +79,12 @@
   height: 8px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.15);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: scaleX(1);
+  transform-origin: left center;
+  transition:
+    background 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    border-radius 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .step-dot.completed {
@@ -88,8 +93,8 @@
 
 .step-dot.active {
   background: var(--color-crimson, #6d001a);
-  width: 20px;
   border-radius: 4px;
+  transform: scaleX(2.5);
 }
 
 /* ── Content split ────────────────────────────────────────── */
@@ -207,7 +212,12 @@
   cursor: pointer;
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-primary, #ffffff);
-  transition: all 0.25s ease;
+  transition:
+    background 0.25s ease,
+    border-color 0.25s ease,
+    color 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.25s ease;
 }
 
 .setup-nav-btn:hover:not(:disabled) {
@@ -271,7 +281,11 @@
   border: 1px solid transparent;
   border-radius: 12px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
   min-height: 160px;
   justify-content: center;
 }
@@ -314,7 +328,7 @@
 }
 
 .avatar-card-name {
-  font-family: var(--font-display, 'Space Grotesk', sans-serif);
+  font-family: var(--font-display, 'Outfit', sans-serif);
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary, #ffffff);
@@ -379,7 +393,11 @@
   border: 1px solid var(--border-color, #333);
   border-radius: 10px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
   text-align: left;
 }
 
@@ -399,7 +417,7 @@
 }
 
 .voice-card-name {
-  font-family: var(--font-display, 'Space Grotesk', sans-serif);
+  font-family: var(--font-display, 'Outfit', sans-serif);
   font-size: 15px;
   font-weight: 600;
   color: var(--text-primary, #ffffff);
@@ -455,7 +473,11 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease;
   flex-shrink: 0;
   font-size: 14px;
 }
@@ -639,7 +661,7 @@
 }
 
 .preview-name {
-  font-family: var(--font-display, 'Space Grotesk', sans-serif);
+  font-family: var(--font-display, 'Outfit', sans-serif);
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary, #ffffff);
@@ -665,7 +687,12 @@
   cursor: pointer;
   background: rgba(255, 255, 255, 0.06);
   color: var(--text-primary, #ffffff);
-  transition: all 0.25s ease;
+  transition:
+    background 0.25s ease,
+    border-color 0.25s ease,
+    color 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.25s ease;
   margin-top: 0;
 }
 
@@ -969,13 +996,14 @@
   padding: 12px 28px;
   font-size: 14px;
   font-weight: 600;
-  font-family: var(--font-display, 'Space Grotesk', sans-serif);
+  font-family: var(--font-display, 'Outfit', sans-serif);
   color: var(--primary-bg, #121212);
   background: var(--color-gold, #b4ab8b);
   border: none;
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.2s ease;
+  letter-spacing: 0.01em;
 }
 
 .shiny-save-btn:hover:not(:disabled) {
@@ -988,15 +1016,20 @@
 
 /* ── Section headers ──────────────────────────────────────── */
 .setup-section-title {
-  font-family: var(--font-display, 'Space Grotesk', sans-serif);
+  font-family: var(--font-display, 'Outfit', sans-serif);
   font-size: 22px;
-  font-weight: 700;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
   color: var(--text-primary, #ffffff);
   margin: 0;
 }
 
 .setup-section-subtitle {
   font-size: 14px;
+  font-weight: 400;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
   color: var(--text-muted, #808080);
   margin: 6px 0 0;
 }

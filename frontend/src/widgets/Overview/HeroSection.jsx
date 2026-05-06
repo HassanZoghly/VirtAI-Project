@@ -9,7 +9,10 @@ export default function HeroSection({ ctaLabel, ctaTo }) {
             Trusted AI infrastructure for education
           </p>
 
-          <h1 className="mt-6 max-w-[16ch] text-5xl font-black leading-[1.02] text-offwhite sm:text-6xl lg:text-7xl">
+          <h1
+            className="mt-6 max-w-[16ch] text-5xl font-black leading-[1.02] text-offwhite sm:text-6xl lg:text-7xl"
+            style={{ fontFamily: 'var(--font-display)' }}
+          >
             Deploy an AI teaching assistant your institution can rely on.
           </h1>
 

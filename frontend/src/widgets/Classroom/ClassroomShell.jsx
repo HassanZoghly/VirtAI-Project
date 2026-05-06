@@ -123,7 +123,12 @@ export default function ClassroomShell() {
         dispatch({ type: 'CHAT_FINAL', payload: d });
         sessionRef.current.addAssistantMessage(`${d.message_id}-assistant`, d.text);
         if (d.emotion) {
-          setEmotionData({ emotion: d.emotion, timestamp: Date.now() });
+          // Shape expected by AvatarFaceController.applyAIResponse(): { primary, intensity }
+          setEmotionData({
+            primary: d.emotion,
+            intensity: 0.85,
+            timestamp: Date.now(),
+          });
         }
       }),
       onMessage('pipeline.state', (d) => dispatch({ type: 'PIPELINE_STATE', payload: d })),

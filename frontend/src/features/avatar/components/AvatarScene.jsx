@@ -2,11 +2,19 @@
 import { logger } from '@/shared/utils/logger';
 import { ContactShadows, Environment, OrbitControls, useFBX, useGLTF } from '@react-three/drei';
 import { Canvas, useFrame } from '@react-three/fiber';
-import React, { Component, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  Component,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { AvatarFaceController } from '../AvatarFaceController';
-import { ANIMATION_METADATA, getTransitionFade, MORPH_SMOOTHING } from '../constants';
+import { ANIMATION_METADATA, getTransitionFade } from '../constants';
 import { useRealismEnhancements } from '../hooks/useRealismEnhancements';
 
 THREE.Cache.enabled = true;
@@ -269,6 +277,7 @@ const AvatarRig = React.memo(function AvatarRig({
   audioGeneration,
 }) {
   const group = useRef();
+  const isFirstFrame = useRef(true);
   const prefersReducedMotionRef = useRef(
     typeof window !== 'undefined'
       ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -468,7 +477,7 @@ const AvatarRig = React.memo(function AvatarRig({
     return result;
   }, [greetingFBX, idleFBX]);
 
-  const forceIdleLoop = () => {
+  const forceIdleLoop = useCallback(() => {
     const actions = actionsRef.current;
     if (!actions || !actions.idle) {
       return;
@@ -495,7 +504,7 @@ const AvatarRig = React.memo(function AvatarRig({
     currentActionRef.current = idleAction;
     currentActionNameRef.current = 'idle';
     currentRangeRef.current = null;
-  };
+  }, []);
 
   useEffect(() => {
     if (import.meta.env.DEV) {
@@ -644,276 +653,279 @@ const AvatarRig = React.memo(function AvatarRig({
   }, [scene, criticalClips, talkAnimationRevision]);
 
   // Play animation with smooth transitions and backend timeline directive support.
-  const playAction = (request, { loop = THREE.LoopRepeat, fade } = {}) => {
-    if (!isMovementEnabled) {
-      forceIdleLoop();
-      return;
-    }
-
-    const directive = isAnimationDirective(request) ? request : { animation: request };
-    const requestedNameRaw = `${directive.animation || 'idle'}`;
-    const requestedName = requestedNameRaw.toLowerCase();
-    const requestedAsset =
-      typeof directive.animationAsset === 'string' ? directive.animationAsset : null;
-
-    const actions = actionsRef.current;
-    const availableClips = Object.keys(actions);
-    let resolvedName = null;
-
-    if (requestedAsset) {
-      resolvedName = resolveAnimationName(requestedAsset, availableClips);
-    }
-
-    const isTalkRequest =
-      requestedName === 'speaking' || requestedName === 'talk' || /^talk\d$/.test(requestedName);
-
-    if (!resolvedName && isTalkRequest) {
-      let variantPool = availableClips.filter((clip) => TALK_VARIANT_PATTERN.test(clip));
-      if (/^talk\d$/.test(requestedName)) {
-        variantPool = variantPool.filter((clip) =>
-          clip.toLowerCase().startsWith(`${requestedName}.`)
-        );
+  const playAction = useCallback(
+    (request, { loop = THREE.LoopRepeat, fade } = {}) => {
+      if (!isMovementEnabled) {
+        forceIdleLoop();
+        return;
       }
 
-      if (variantPool.length > 0) {
-        const noRepeatPool =
-          variantPool.length > 1
-            ? variantPool.filter((clip) => clip !== lastPlayedTalkRef.current)
-            : variantPool;
-        const pickFrom = noRepeatPool.length > 0 ? noRepeatPool : variantPool;
-        resolvedName = pickFrom[Math.floor(Math.random() * pickFrom.length)];
+      const directive = isAnimationDirective(request) ? request : { animation: request };
+      const requestedNameRaw = `${directive.animation || 'idle'}`;
+      const requestedName = requestedNameRaw.toLowerCase();
+      const requestedAsset =
+        typeof directive.animationAsset === 'string' ? directive.animationAsset : null;
+
+      const actions = actionsRef.current;
+      const availableClips = Object.keys(actions);
+      let resolvedName = null;
+
+      if (requestedAsset) {
+        resolvedName = resolveAnimationName(requestedAsset, availableClips);
       }
-    }
 
-    if (!resolvedName) {
-      resolvedName = clipNameCacheRef.current[requestedName];
+      const isTalkRequest =
+        requestedName === 'speaking' || requestedName === 'talk' || /^talk\d$/.test(requestedName);
 
-      if (!resolvedName) {
-        resolvedName = resolveAnimationName(requestedName, availableClips);
-
-        if (!resolvedName && ANIMATION_FALLBACK[requestedName]) {
-          resolvedName = resolveAnimationName(ANIMATION_FALLBACK[requestedName], availableClips);
+      if (!resolvedName && isTalkRequest) {
+        let variantPool = availableClips.filter((clip) => TALK_VARIANT_PATTERN.test(clip));
+        if (/^talk\d$/.test(requestedName)) {
+          variantPool = variantPool.filter((clip) =>
+            clip.toLowerCase().startsWith(`${requestedName}.`)
+          );
         }
 
-        if (resolvedName) {
-          clipNameCacheRef.current[requestedName] = resolvedName;
-          if (import.meta.env.DEV) {
-            console.debug(`[AvatarScene] Resolved '${requestedName}' → '${resolvedName}'`);
+        if (variantPool.length > 0) {
+          const noRepeatPool =
+            variantPool.length > 1
+              ? variantPool.filter((clip) => clip !== lastPlayedTalkRef.current)
+              : variantPool;
+          const pickFrom = noRepeatPool.length > 0 ? noRepeatPool : variantPool;
+          resolvedName = pickFrom[Math.floor(Math.random() * pickFrom.length)];
+        }
+      }
+
+      if (!resolvedName) {
+        resolvedName = clipNameCacheRef.current[requestedName];
+
+        if (!resolvedName) {
+          resolvedName = resolveAnimationName(requestedName, availableClips);
+
+          if (!resolvedName && ANIMATION_FALLBACK[requestedName]) {
+            resolvedName = resolveAnimationName(ANIMATION_FALLBACK[requestedName], availableClips);
+          }
+
+          if (resolvedName) {
+            clipNameCacheRef.current[requestedName] = resolvedName;
+            if (import.meta.env.DEV) {
+              console.debug(`[AvatarScene] Resolved '${requestedName}' → '${resolvedName}'`);
+            }
           }
         }
       }
-    }
 
-    if (!resolvedName) {
-      if (import.meta.env.DEV) {
-        console.warn(`[AvatarScene] Animation '${requestedNameRaw}' not found`);
+      if (!resolvedName) {
+        if (import.meta.env.DEV) {
+          console.warn(`[AvatarScene] Animation '${requestedNameRaw}' not found`);
+        }
+        return;
       }
-      return;
-    }
 
-    const hasTimeRange =
-      Number.isFinite(directive.startTime) &&
-      Number.isFinite(directive.endTime) &&
-      directive.endTime > directive.startTime;
-    const hasFrameRange =
-      !hasTimeRange &&
-      Number.isFinite(directive.startFrame) &&
-      Number.isFinite(directive.endFrame) &&
-      directive.endFrame > directive.startFrame;
+      const hasTimeRange =
+        Number.isFinite(directive.startTime) &&
+        Number.isFinite(directive.endTime) &&
+        directive.endTime > directive.startTime;
+      const hasFrameRange =
+        !hasTimeRange &&
+        Number.isFinite(directive.startFrame) &&
+        Number.isFinite(directive.endFrame) &&
+        directive.endFrame > directive.startFrame;
 
-    // Don't re-trigger if same animation is already playing
-    if (
-      currentActionNameRef.current === resolvedName &&
-      !hasTimeRange &&
-      !hasFrameRange &&
-      !requestedAsset &&
-      !isTalkRequest
-    ) {
-      return;
-    }
+      // Don't re-trigger if same animation is already playing
+      if (
+        currentActionNameRef.current === resolvedName &&
+        !hasTimeRange &&
+        !hasFrameRange &&
+        !requestedAsset &&
+        !isTalkRequest
+      ) {
+        return;
+      }
 
-    // CRITICAL: If a talk variant is already playing, don't switch to a new one
-    // mid-response — this prevents the jarring flip/angle-change during speaking.
-    const currentIsTalkVariant =
-      currentActionNameRef.current && TALK_VARIANT_PATTERN.test(currentActionNameRef.current);
-    if (
-      isTalkRequest &&
-      currentIsTalkVariant &&
-      !hasTimeRange &&
-      !hasFrameRange &&
-      !requestedAsset
-    ) {
-      return;
-    }
+      // CRITICAL: If a talk variant is already playing, don't switch to a new one
+      // mid-response — this prevents the jarring flip/angle-change during speaking.
+      const currentIsTalkVariant =
+        currentActionNameRef.current && TALK_VARIANT_PATTERN.test(currentActionNameRef.current);
+      if (
+        isTalkRequest &&
+        currentIsTalkVariant &&
+        !hasTimeRange &&
+        !hasFrameRange &&
+        !requestedAsset
+      ) {
+        return;
+      }
 
-    const next = actions[resolvedName];
-    if (!next) {
-      return;
-    }
+      const next = actions[resolvedName];
+      if (!next) {
+        return;
+      }
 
-    const clip = next.getClip();
-    const startTime = hasTimeRange
-      ? THREE.MathUtils.clamp(directive.startTime, 0, Math.max(0, clip.duration - 0.001))
-      : hasFrameRange
+      const clip = next.getClip();
+      const startTime = hasTimeRange
+        ? THREE.MathUtils.clamp(directive.startTime, 0, Math.max(0, clip.duration - 0.001))
+        : hasFrameRange
+          ? THREE.MathUtils.clamp(
+              frameToSeconds(directive.startFrame),
+              0,
+              Math.max(0, clip.duration - 0.001)
+            )
+          : 0;
+      const endTime = hasTimeRange
         ? THREE.MathUtils.clamp(
-            frameToSeconds(directive.startFrame),
-            0,
-            Math.max(0, clip.duration - 0.001)
-          )
-        : 0;
-    const endTime = hasTimeRange
-      ? THREE.MathUtils.clamp(
-          directive.endTime,
-          startTime + 1 / TIMELINE_FPS,
-          Math.max(startTime + 1 / TIMELINE_FPS, clip.duration)
-        )
-      : hasFrameRange
-        ? THREE.MathUtils.clamp(
-            frameToSeconds(directive.endFrame),
+            directive.endTime,
             startTime + 1 / TIMELINE_FPS,
-            clip.duration
+            Math.max(startTime + 1 / TIMELINE_FPS, clip.duration)
           )
-        : clip.duration;
+        : hasFrameRange
+          ? THREE.MathUtils.clamp(
+              frameToSeconds(directive.endFrame),
+              startTime + 1 / TIMELINE_FPS,
+              clip.duration
+            )
+          : clip.duration;
 
-    const loopStartTime = hasTimeRange
-      ? THREE.MathUtils.clamp(
-          Number.isFinite(directive.loopStartTime) ? directive.loopStartTime : startTime,
-          startTime,
-          endTime
-        )
-      : hasFrameRange
+      const loopStartTime = hasTimeRange
         ? THREE.MathUtils.clamp(
-            Number.isFinite(directive.loopStartFrame)
-              ? frameToSeconds(directive.loopStartFrame)
-              : startTime,
+            Number.isFinite(directive.loopStartTime) ? directive.loopStartTime : startTime,
             startTime,
             endTime
           )
-        : 0;
-    const loopEndTime = hasTimeRange
-      ? THREE.MathUtils.clamp(
-          Number.isFinite(directive.loopEndTime) ? directive.loopEndTime : endTime,
-          loopStartTime + 1 / TIMELINE_FPS,
-          endTime
-        )
-      : hasFrameRange
+        : hasFrameRange
+          ? THREE.MathUtils.clamp(
+              Number.isFinite(directive.loopStartFrame)
+                ? frameToSeconds(directive.loopStartFrame)
+                : startTime,
+              startTime,
+              endTime
+            )
+          : 0;
+      const loopEndTime = hasTimeRange
         ? THREE.MathUtils.clamp(
-            Number.isFinite(directive.loopEndFrame)
-              ? frameToSeconds(directive.loopEndFrame)
-              : endTime,
+            Number.isFinite(directive.loopEndTime) ? directive.loopEndTime : endTime,
             loopStartTime + 1 / TIMELINE_FPS,
             endTime
           )
-        : clip.duration;
-    const transitionOutTime = hasTimeRange
-      ? THREE.MathUtils.clamp(
-          Number.isFinite(directive.transitionOutTime) ? directive.transitionOutTime : endTime,
-          startTime + 1 / TIMELINE_FPS,
-          endTime
-        )
-      : hasFrameRange
+        : hasFrameRange
+          ? THREE.MathUtils.clamp(
+              Number.isFinite(directive.loopEndFrame)
+                ? frameToSeconds(directive.loopEndFrame)
+                : endTime,
+              loopStartTime + 1 / TIMELINE_FPS,
+              endTime
+            )
+          : clip.duration;
+      const transitionOutTime = hasTimeRange
         ? THREE.MathUtils.clamp(
-            Number.isFinite(directive.transitionOutFrame)
-              ? frameToSeconds(directive.transitionOutFrame)
-              : endTime,
+            Number.isFinite(directive.transitionOutTime) ? directive.transitionOutTime : endTime,
             startTime + 1 / TIMELINE_FPS,
             endTime
           )
-        : clip.duration;
+        : hasFrameRange
+          ? THREE.MathUtils.clamp(
+              Number.isFinite(directive.transitionOutFrame)
+                ? frameToSeconds(directive.transitionOutFrame)
+                : endTime,
+              startTime + 1 / TIMELINE_FPS,
+              endTime
+            )
+          : clip.duration;
 
-    const blendFade = Number.isFinite(directive.blend)
-      ? THREE.MathUtils.clamp(0.12 + directive.blend * 0.38, 0.08, 0.5)
-      : null;
+      const blendFade = Number.isFinite(directive.blend)
+        ? THREE.MathUtils.clamp(0.12 + directive.blend * 0.38, 0.08, 0.5)
+        : null;
 
-    const playbackSpeed = Number.isFinite(directive.speed)
-      ? THREE.MathUtils.clamp(directive.speed, 0.65, 1.45)
-      : 1;
+      const playbackSpeed = Number.isFinite(directive.speed)
+        ? THREE.MathUtils.clamp(directive.speed, 0.65, 1.45)
+        : 1;
 
-    const transitionFadeBoost =
-      directive.transitionType === 'pause'
-        ? -0.05
-        : directive.transitionType === 'emphasis'
-          ? 0.06
-          : 0;
+      const transitionFadeBoost =
+        directive.transitionType === 'pause'
+          ? -0.05
+          : directive.transitionType === 'emphasis'
+            ? 0.06
+            : 0;
 
-    const categoryFromName = (name) => {
-      const lower = `${name || 'idle'}`.toLowerCase();
-      if (lower.startsWith('talk')) {
-        return 'talk';
-      }
-      return ANIMATION_METADATA[lower]?.category ?? lower;
-    };
-
-    const fromCategory = categoryFromName(currentActionNameRef.current);
-    const toCategory = categoryFromName(resolvedName);
-    const baseFadeDuration = THREE.MathUtils.clamp(
-      (fade ?? blendFade ?? getTransitionFade(fromCategory, toCategory)) + transitionFadeBoost,
-      0.08,
-      0.6
-    );
-    const idleTalkTransition =
-      (fromCategory === 'idle' && toCategory === 'talk') ||
-      (fromCategory === 'talk' && toCategory === 'idle');
-    const fadeDuration = idleTalkTransition ? 0.5 : baseFadeDuration;
-
-    next.setLoop(loop, Infinity);
-    next.reset();
-    next.enabled = true;
-    next.setEffectiveWeight(1);
-    next.setEffectiveTimeScale(playbackSpeed);
-    next.time = startTime;
-    next.fadeIn(fadeDuration).play();
-
-    const cur = currentActionRef.current;
-    if (cur && cur !== next) {
-      cur.enabled = true;
-      cur.fadeOut(fadeDuration);
-    }
-
-    for (const action of Object.values(actions)) {
-      if (action !== next && action !== cur && action.isRunning()) {
-        action.fadeOut(fadeDuration);
-      }
-    }
-
-    if (stopInactiveTimerRef.current) {
-      clearTimeout(stopInactiveTimerRef.current);
-    }
-    stopInactiveTimerRef.current = window.setTimeout(
-      () => {
-        for (const action of Object.values(actionsRef.current)) {
-          if (action !== currentActionRef.current) {
-            action.stop();
-            action.enabled = false;
-          }
+      const categoryFromName = (name) => {
+        const lower = `${name || 'idle'}`.toLowerCase();
+        if (lower.startsWith('talk')) {
+          return 'talk';
         }
-      },
-      Math.max(100, fadeDuration * 1000 + 30)
-    );
+        return ANIMATION_METADATA[lower]?.category ?? lower;
+      };
 
-    if (import.meta.env.DEV) {
-      console.debug(
-        `[AvatarScene] Transition '${currentActionNameRef.current || 'none'}' → '${resolvedName}' (fade ${fadeDuration.toFixed(2)}s)`
+      const fromCategory = categoryFromName(currentActionNameRef.current);
+      const toCategory = categoryFromName(resolvedName);
+      const baseFadeDuration = THREE.MathUtils.clamp(
+        (fade ?? blendFade ?? getTransitionFade(fromCategory, toCategory)) + transitionFadeBoost,
+        0.08,
+        0.6
       );
-    }
+      const idleTalkTransition =
+        (fromCategory === 'idle' && toCategory === 'talk') ||
+        (fromCategory === 'talk' && toCategory === 'idle');
+      const fadeDuration = idleTalkTransition ? 0.5 : baseFadeDuration;
 
-    currentActionRef.current = next;
-    currentActionNameRef.current = resolvedName;
-    currentRangeRef.current = {
-      action: next,
-      hasFrameRange,
-      hasTimeRange,
-      startTime,
-      endTime,
-      loopStartTime,
-      loopEndTime,
-      transitionOutTime,
-    };
+      next.setLoop(loop, Infinity);
+      next.reset();
+      next.enabled = true;
+      next.setEffectiveWeight(1);
+      next.setEffectiveTimeScale(playbackSpeed);
+      next.time = startTime;
+      next.fadeIn(fadeDuration).play();
 
-    if (isTalkRequest || TALK_VARIANT_PATTERN.test(resolvedName)) {
-      lastPlayedTalkRef.current = resolvedName;
-    }
-  };
+      const cur = currentActionRef.current;
+      if (cur && cur !== next) {
+        cur.enabled = true;
+        cur.fadeOut(fadeDuration);
+      }
+
+      for (const action of Object.values(actions)) {
+        if (action !== next && action !== cur && action.isRunning()) {
+          action.fadeOut(fadeDuration);
+        }
+      }
+
+      if (stopInactiveTimerRef.current) {
+        clearTimeout(stopInactiveTimerRef.current);
+      }
+      stopInactiveTimerRef.current = window.setTimeout(
+        () => {
+          for (const action of Object.values(actionsRef.current)) {
+            if (action !== currentActionRef.current) {
+              action.stop();
+              action.enabled = false;
+            }
+          }
+        },
+        Math.max(100, fadeDuration * 1000 + 30)
+      );
+
+      if (import.meta.env.DEV) {
+        console.debug(
+          `[AvatarScene] Transition '${currentActionNameRef.current || 'none'}' → '${resolvedName}' (fade ${fadeDuration.toFixed(2)}s)`
+        );
+      }
+
+      currentActionRef.current = next;
+      currentActionNameRef.current = resolvedName;
+      currentRangeRef.current = {
+        action: next,
+        hasFrameRange,
+        hasTimeRange,
+        startTime,
+        endTime,
+        loopStartTime,
+        loopEndTime,
+        transitionOutTime,
+      };
+
+      if (isTalkRequest || TALK_VARIANT_PATTERN.test(resolvedName)) {
+        lastPlayedTalkRef.current = resolvedName;
+      }
+    },
+    [forceIdleLoop, isMovementEnabled]
+  );
 
   // When a new audio response starts, unlock the talk variant so a fresh one is selected.
   // This allows variety between responses while preventing mid-response churn.
@@ -945,7 +957,15 @@ const AvatarRig = React.memo(function AvatarRig({
     }
 
     playAction(currentAnimation);
-  }, [currentAnimation, scene, criticalClips, talkAnimationRevision, isMovementEnabled]);
+  }, [
+    currentAnimation,
+    scene,
+    criticalClips,
+    talkAnimationRevision,
+    isMovementEnabled,
+    playAction,
+    forceIdleLoop,
+  ]);
 
   // Apply emotion data from AI response to face controller
   useEffect(() => {
@@ -1076,6 +1096,38 @@ const AvatarRig = React.memo(function AvatarRig({
       }
     }
 
+    // Context-Aware Mobile Camera Framing (Omnichannel Fluidity)
+    const aspect = state.camera.aspect;
+    const isMobile = aspect < 1;
+    const isTalkingOrIdle =
+      ['idle', 'thinking', 'greeting'].includes(currentAnimationName) ||
+      (currentAnimationName && currentAnimationName.startsWith('talk'));
+    const isPlayingAction = isMovementEnabled && !isTalkingOrIdle;
+
+    let targetY = 0.9;
+    let targetZ = 2.8;
+
+    if (isMobile) {
+      if (isPlayingAction) {
+        targetY = 0.4;
+        targetZ = 5.2;
+      } else {
+        targetY = 1.0;
+        targetZ = 2.8;
+      }
+    }
+
+    if (isFirstFrame.current) {
+      // Zero-latency snap for the initial load
+      state.camera.position.y = targetY;
+      state.camera.position.z = targetZ;
+      isFirstFrame.current = false;
+    } else {
+      // Silky smooth interpolation for all subsequent state changes
+      state.camera.position.y = THREE.MathUtils.lerp(state.camera.position.y, targetY, 0.05);
+      state.camera.position.z = THREE.MathUtils.lerp(state.camera.position.z, targetZ, 0.05);
+    }
+
     // Keep avatar grounded and forward-facing even if source clips contain root drift.
     if (stableSceneTransformRef.current.initialized) {
       scene.position.y = stableSceneTransformRef.current.position.y;
@@ -1108,7 +1160,6 @@ function applyMorphTargetsSmooth(mesh, morphTargets, visemeIndexCache) {
     return;
   }
 
-  const smoothingFactor = MORPH_SMOOTHING;
   const resetSpeed = 0.15; // Slower reset to avoid jitter
 
   // Cache viseme indices to avoid re-scanning the morph dictionary every frame.

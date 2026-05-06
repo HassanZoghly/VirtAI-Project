@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import SessionList from './SessionList';
 
 /**
@@ -24,6 +25,14 @@ export default function SettingsDrawer({
   onRenameSession,
 }) {
   const drawerRef = useRef(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 1024);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // Escape key handler
   useEffect(() => {
@@ -65,36 +74,69 @@ export default function SettingsDrawer({
     }
   }, []);
 
-  if (!isOpen) {
-    return null;
-  }
-
   return (
-    <div className="settings-drawer open">
-      <div className="drawer-overlay" onClick={onClose} role="presentation" />
-      <div
-        className="drawer-content sidebar-minimal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="settings-drawer-title"
-        ref={drawerRef}
-        onKeyDown={handleKeyDown}
-      >
-        <div
-          className="drawer-body"
-          style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1rem 0' }}
-        >
-          <SessionList
-            sessions={sessions}
-            currentSessionId={currentSessionId}
-            onSessionSelect={onSessionSelect}
-            onNewSession={onNewSession}
-            onDeleteSession={onDeleteSession}
-            onRenameSession={onRenameSession}
-            onCloseDrawer={onClose}
+    <AnimatePresence>
+      {isOpen && (
+        <div className="settings-drawer open">
+          <motion.div
+            className="drawer-overlay"
+            onClick={onClose}
+            role="presentation"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
           />
+          <motion.div
+            className="drawer-content sidebar-minimal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-drawer-title"
+            ref={drawerRef}
+            onKeyDown={handleKeyDown}
+            drag={isMobile ? 'y' : false}
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={0.2}
+            onDragEnd={(e, info) => {
+              if (isMobile && info.offset.y > 100) {
+                onClose();
+              }
+            }}
+            initial={isMobile ? { y: '100%' } : { x: '100%' }}
+            animate={isMobile ? { y: 0 } : { x: 0 }}
+            exit={isMobile ? { y: '100%' } : { x: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+          >
+            {isMobile && (
+              <div
+                className="drawer-drag-handle"
+                style={{
+                  width: '40px',
+                  height: '5px',
+                  background: 'var(--border-color)',
+                  margin: '12px auto 0',
+                  borderRadius: '4px',
+                  flexShrink: 0,
+                }}
+              />
+            )}
+            <div
+              className="drawer-body"
+              style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1rem 0', minHeight: 0 }}
+            >
+              <SessionList
+                sessions={sessions}
+                currentSessionId={currentSessionId}
+                onSessionSelect={onSessionSelect}
+                onNewSession={onNewSession}
+                onDeleteSession={onDeleteSession}
+                onRenameSession={onRenameSession}
+                onCloseDrawer={onClose}
+              />
+            </div>
+          </motion.div>
         </div>
-      </div>
-    </div>
+      )}
+    </AnimatePresence>
   );
 }

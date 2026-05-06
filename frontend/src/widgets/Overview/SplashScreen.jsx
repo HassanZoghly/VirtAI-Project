@@ -41,7 +41,7 @@ export default function SplashScreen({ onComplete }) {
 
           {/* title */}
           <motion.h1
-            className="absolute mt-164 text-4xl font-bold tracking-wide text-offwhite"
+            className="absolute mt-164 text-center px-6 text-4xl font-bold tracking-wide text-offwhite"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.7 }}

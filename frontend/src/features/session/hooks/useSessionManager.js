@@ -1,5 +1,5 @@
+import { selectIsAuthenticated, useAuthStore } from '@/features/auth/store/authStore';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useAuthStore, selectIsAuthenticated } from '@/features/auth/store/authStore';
 import { eventBus } from '../../../shared/hooks/useEventBus';
 import { SESSION_TITLE_MAX_LENGTH } from '../constants';
 import * as sessionService from '../services/sessionService';
@@ -43,7 +43,6 @@ export default function useSessionManager(urlSessionId, navigate) {
       return;
     }
 
-    let isMounted = true;
     isInitializingRef.current = true;
 
     async function initializeSessions() {
@@ -74,7 +73,10 @@ export default function useSessionManager(urlSessionId, navigate) {
               navigate(`/classroom/${createdSession.id}`, { replace: true });
             }
           } catch (createError) {
-            console.error('Failed to auto-create session, falling back to empty state:', createError);
+            console.error(
+              'Failed to auto-create session, falling back to empty state:',
+              createError
+            );
             setSessions(initialSessions);
             const targetId = resolveInitialSessionId(initialSessions, urlSessionId);
             setActiveSessionId(targetId);
@@ -105,10 +107,6 @@ export default function useSessionManager(urlSessionId, navigate) {
     }
 
     initializeSessions();
-
-    return () => {
-      isMounted = false;
-    };
   }, [isAuthInitialized, isAuthenticated, urlSessionId, setActiveSessionId, navigate]);
 
   /**
@@ -172,20 +170,25 @@ export default function useSessionManager(urlSessionId, navigate) {
   }, [currentSessionId, status, sessions]);
 
   const currentSession = useMemo(() => {
-    const s =
-      sessions.find((sessionItem) => sessionItem.id === currentSessionId) || sessions[0];
-    if (!s) {return { id: null, title: '', messages: [], messages_loaded: true };}
+    const s = sessions.find((sessionItem) => sessionItem.id === currentSessionId) || sessions[0];
+    if (!s) {
+      return { id: null, title: '', messages: [], messages_loaded: true };
+    }
     return { ...s, messages: s.messages || [], messages_loaded: s.messages_loaded || false };
   }, [sessions, currentSessionId]);
 
   const createNewSession = useCallback(async () => {
-    if (status !== 'success') {return null;}
+    if (status !== 'success') {
+      return null;
+    }
 
     const emptySession = sessions.find((s) => (s.message_count || 0) === 0);
 
     if (emptySession) {
       setActiveSessionId(emptySession.id);
-      if (navigate) {navigate(`/classroom/${emptySession.id}`);}
+      if (navigate) {
+        navigate(`/classroom/${emptySession.id}`);
+      }
       return emptySession.id;
     }
 
@@ -196,11 +199,15 @@ export default function useSessionManager(urlSessionId, navigate) {
         messages: [],
         messages_loaded: true,
       });
-      if (!sessionWithDefaults.id) {return null;}
+      if (!sessionWithDefaults.id) {
+        return null;
+      }
 
       setSessions((prev) => [sessionWithDefaults, ...prev]);
       setActiveSessionId(sessionWithDefaults.id);
-      if (navigate) {navigate(`/classroom/${sessionWithDefaults.id}`);}
+      if (navigate) {
+        navigate(`/classroom/${sessionWithDefaults.id}`);
+      }
       return sessionWithDefaults.id;
     } catch (error) {
       console.error('Failed to create session:', error);
@@ -224,10 +231,10 @@ export default function useSessionManager(urlSessionId, navigate) {
     async (sessionId) => {
       try {
         await sessionService.deleteSession(sessionId);
-        
+
         setSessions((prev) => {
           const remaining = prev.filter((s) => s.id !== sessionId);
-          
+
           if (remaining.length === 0) {
             // Auto-create a new session to prevent empty state
             setTimeout(async () => {
@@ -244,16 +251,18 @@ export default function useSessionManager(urlSessionId, navigate) {
                   navigate(`/classroom/${sessionWithDefaults.id}`, { replace: true });
                 }
               } catch (e) {
-                console.error("Failed to auto-create session", e);
+                console.error('Failed to auto-create session', e);
               }
             }, 0);
-            
+
             // Temporarily clear active session ID while creating
             setActiveSessionId(null);
-            if (navigate) {navigate('/classroom', { replace: true });}
+            if (navigate) {
+              navigate('/classroom', { replace: true });
+            }
             return [];
           }
-          
+
           if (sessionId === currentSessionIdRef.current) {
             // Guarantee we pick the newest remaining session
             const sortedRemaining = sortSessionsByRecency(remaining);
@@ -279,10 +288,14 @@ export default function useSessionManager(urlSessionId, navigate) {
   const addUserMessage = useCallback((message, text) => {
     setSessions((prev) =>
       prev.map((s) => {
-        if (s.id !== currentSessionIdRef.current) {return s;}
+        if (s.id !== currentSessionIdRef.current) {
+          return s;
+        }
         const existingMessages = s.messages || [];
         const isDuplicate = existingMessages.some((m) => m.id === message.id);
-        if (isDuplicate) {return s;}
+        if (isDuplicate) {
+          return s;
+        }
 
         return {
           ...s,
@@ -301,10 +314,14 @@ export default function useSessionManager(urlSessionId, navigate) {
   const addAssistantMessage = useCallback((messageId, text) => {
     setSessions((prev) =>
       prev.map((s) => {
-        if (s.id !== currentSessionIdRef.current) {return s;}
+        if (s.id !== currentSessionIdRef.current) {
+          return s;
+        }
         const existingMessages = s.messages || [];
         const isDuplicate = existingMessages.some((m) => m.id === messageId);
-        if (isDuplicate) {return s;}
+        if (isDuplicate) {
+          return s;
+        }
 
         return {
           ...s,

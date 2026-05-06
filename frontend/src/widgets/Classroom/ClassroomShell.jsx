@@ -18,7 +18,7 @@ export default function ClassroomShell() {
   const { sessionId: urlSessionId } = useParams();
   const navigate = useNavigate();
 
-  const setupConfig = useMemo(() => loadSetup(), [urlSessionId]);
+  const setupConfig = useMemo(() => loadSetup(), []);
   const activeAvatarId = setupConfig?.avatarId || 'omar';
   const activeVoiceId = setupConfig?.voiceId || 'aria';
   const movementEnabled = setupConfig?.movementEnabled ?? false;

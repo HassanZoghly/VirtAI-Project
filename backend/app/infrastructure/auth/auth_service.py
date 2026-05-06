@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import httpx
+import pymongo
 from bson import ObjectId
 
 from app.domain.user.entities import UserEntity

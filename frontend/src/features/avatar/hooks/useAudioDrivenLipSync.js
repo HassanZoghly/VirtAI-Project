@@ -200,7 +200,7 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
         sourceRef.current = null;
       }
     };
-  }, [isPlaying, audioRef.current]); // Now explicitly tracking audioRef.current as well
+  }, [isPlaying, audioRef]);
 
   // Close AudioContext on unmount to prevent memory leak
   useEffect(() => {

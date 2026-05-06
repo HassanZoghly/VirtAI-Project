@@ -4,7 +4,7 @@ export default function HeroSection({ ctaLabel, ctaTo }) {
   return (
     <section className="relative flex min-h-[88vh] items-center px-6 py-20 sm:px-10 lg:px-16 lg:py-24">
       <div className="mx-auto grid w-full max-w-7xl gap-14 lg:grid-cols-12 lg:items-center">
-        <div className="lg:col-span-7">
+        <div className="lg:col-span-7 flex flex-col items-center text-center md:items-start md:text-left">
           <p className="text-sm font-medium tracking-[0.03em] text-gold/90">
             Trusted AI infrastructure for education
           </p>
@@ -21,7 +21,7 @@ export default function HeroSection({ ctaLabel, ctaTo }) {
             delivery in one production-ready platform.
           </p>
 
-          <div className="mt-10 flex flex-wrap items-center gap-4">
+          <div className="mt-10 flex flex-wrap justify-center md:justify-start items-center gap-4">
             <Link
               to={ctaTo}
               className="inline-flex cursor-pointer items-center justify-center rounded-full bg-offwhite px-7 py-3 text-sm font-semibold tracking-wide text-dark transition-colors duration-200 hover:bg-offwhite/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark"
@@ -36,7 +36,7 @@ export default function HeroSection({ ctaLabel, ctaTo }) {
             </a>
           </div>
 
-          <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-3 text-sm text-offwhite/65">
+          <ul className="mt-8 flex flex-wrap justify-center md:justify-start gap-x-6 gap-y-3 text-sm text-offwhite/65">
             <li className="inline-flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-gold/85" />
               Privacy-first
@@ -58,7 +58,7 @@ export default function HeroSection({ ctaLabel, ctaTo }) {
               src="/assets/images/image.webp"
               alt="VirtAI platform classroom preview"
               className="block w-full object-cover"
-              fetchpriority="high"
+              fetchPriority="high"
               width={896}
               height={504}
               loading="eager"

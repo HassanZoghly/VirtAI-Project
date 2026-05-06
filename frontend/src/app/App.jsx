@@ -5,6 +5,7 @@ import './App.css';
 
 import { useAuthStore } from '@/features/auth/store/authStore';
 import PageLoader from '@/shared/components/PageLoader';
+import useVisualViewport from '@/shared/hooks/useVisualViewport';
 import { Toaster } from 'sonner';
 import AppRoutes from './routes';
 
@@ -40,6 +41,7 @@ class ErrorBoundary extends Component {
 }
 
 function App() {
+  useVisualViewport();
   const isInitialized = useAuthStore((s) => s.isInitialized);
   const isInitializing = useAuthStore((s) => s.isInitializing);
   const bootstrapStartedRef = useRef(false);

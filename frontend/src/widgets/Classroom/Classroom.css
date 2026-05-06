@@ -640,9 +640,11 @@
     filter var(--transition-normal, 0.3s) var(--ease-smooth, ease);
 }
 
-.send-btn:hover {
-  transform: scale(1.05);
-  filter: brightness(1.03);
+@media (hover: hover) {
+  .send-btn:hover {
+    transform: scale(1.05);
+    filter: brightness(1.03);
+  }
 }
 
 .send-btn:active {
@@ -1400,17 +1402,33 @@
   }
 
   .avatar-panel {
-    height: 40vh;
+    flex: 0 0 40vh; /* Fixed height for avatar panel on mobile to avoid collapsing */
+    min-height: 250px;
     border-right: none;
     border-bottom: 1px solid var(--border-color, #333);
   }
 
   .chat-panel {
-    height: 60vh;
+    flex: 1; /* Allow chat panel to take remaining space up to --vv-height */
   }
 
   .classroom-top-controls {
     left: 0.9rem;
+  }
+
+  .drawer-content.sidebar-minimal {
+    top: auto;
+    bottom: 0;
+    right: 0;
+    left: 0;
+    width: 100%;
+    max-width: 100vw;
+    height: 80vh;
+    border-left: none;
+    border-top: 1px solid var(--border-color, #333);
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5);
   }
 }
 

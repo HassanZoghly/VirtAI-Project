@@ -303,7 +303,7 @@ export default function AvatarController({
     replace(queueItems);
     pendingTimelineRef.current = [];
     return true;
-  }, [replace]);
+  }, [replace, isMovementEnabled]);
 
   useEffect(() => {
     if (!isPlayingAudio || hasActiveTimelineRef.current || !isMovementEnabled) {

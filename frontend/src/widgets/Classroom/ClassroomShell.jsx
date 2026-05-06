@@ -70,7 +70,17 @@ export default function ClassroomShell() {
   }, [session]);
 
   const commitAndSend = useCallback(
-    (text) => {
+    async (text) => {
+      let activeId = currentSessionId;
+      if (!activeId) {
+        toast.show('info', 'Starting chat', 'Initializing conversation...', 2000);
+        activeId = await createNewSession();
+        if (!activeId) {
+          toast.show('error', 'Error', 'Failed to initialize session');
+          return;
+        }
+      }
+
       const message_id = crypto.randomUUID();
       timelineProtocolRef.current = null;
       setAnimationTimeline([]);
@@ -81,7 +91,23 @@ export default function ClassroomShell() {
       );
       send({ type: 'chat.user_message', data: { message_id, text } });
     },
-    [dispatch, send]
+    [dispatch, send, currentSessionId, createNewSession]
+  );
+
+  const safeSend = useCallback(
+    async (message) => {
+      let activeId = currentSessionId;
+      if (!activeId) {
+        toast.show('info', 'Starting chat', 'Initializing conversation...', 2000);
+        activeId = await createNewSession();
+        if (!activeId) {
+          toast.show('error', 'Error', 'Failed to initialize session');
+          return;
+        }
+      }
+      send(message);
+    },
+    [currentSessionId, createNewSession, send]
   );
 
   // Save / restore scroll position on session switch
@@ -327,8 +353,8 @@ export default function ClassroomShell() {
             isMovementEnabled={movementEnabled}
           />
 
-          <div className="chat-panel" key={currentSessionId}>
-            {currentSession && currentSession.messages_loaded !== true ? (
+          <div className="chat-panel" key={currentSessionId || 'empty'}>
+            {!currentSessionId ? (
               <div
                 className="messages-loading"
                 style={{
@@ -338,33 +364,53 @@ export default function ClassroomShell() {
                   height: '100%',
                   color: '#fff',
                   fontSize: '1.1rem',
+                  flexDirection: 'column',
+                  gap: '1rem',
                 }}
               >
-                Loading messages...
+                Initializing session...
               </div>
             ) : (
-              <MessageList
-                messages={currentSession.messages}
-                currentMessage={conversationState.currentMessage}
-                interimTranscript={interimTranscript}
-                error={conversationState.error}
-                avatarName={avatarName}
-                chatScrollRef={chatScrollRef}
-                messagesEndRef={messagesEndRef}
-                onScroll={handleChatScroll}
-                pipelineState={conversationState.pipelineState}
-              />
+              <>
+                {currentSession && currentSession.messages_loaded !== true ? (
+                  <div
+                    className="messages-loading"
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      height: '100%',
+                      color: '#fff',
+                      fontSize: '1.1rem',
+                    }}
+                  >
+                    Loading messages...
+                  </div>
+                ) : (
+                  <MessageList
+                    messages={currentSession.messages}
+                    currentMessage={conversationState.currentMessage}
+                    interimTranscript={interimTranscript}
+                    error={conversationState.error}
+                    avatarName={avatarName}
+                    chatScrollRef={chatScrollRef}
+                    messagesEndRef={messagesEndRef}
+                    onScroll={handleChatScroll}
+                    pipelineState={conversationState.pipelineState}
+                  />
+                )}
+                <ChatInput
+                  inputValue={inputValue}
+                  onInputChange={setInputValue}
+                  onSend={handleSendMessage}
+                  onKeyDown={onKeyDown}
+                  textareaRef={textareaRef}
+                  backendStatus={connectionState}
+                  wsClient={{ connectionState, isConnected, send: safeSend, onMessage }}
+                  pipelineState={conversationState.pipelineState}
+                />
+              </>
             )}
-            <ChatInput
-              inputValue={inputValue}
-              onInputChange={setInputValue}
-              onSend={handleSendMessage}
-              onKeyDown={onKeyDown}
-              textareaRef={textareaRef}
-              backendStatus={connectionState}
-              wsClient={{ connectionState, isConnected, send, onMessage }}
-              pipelineState={conversationState.pipelineState}
-            />
           </div>
         </div>
       </div>

@@ -224,12 +224,36 @@ export default function useSessionManager(urlSessionId, navigate) {
     async (sessionId) => {
       try {
         await sessionService.deleteSession(sessionId);
+        
         setSessions((prev) => {
           const remaining = prev.filter((s) => s.id !== sessionId);
+          
           if (remaining.length === 0) {
+            // Auto-create a new session to prevent empty state
+            setTimeout(async () => {
+              try {
+                const newSession = await sessionService.createSession();
+                const sessionWithDefaults = normalizeSession({
+                  ...newSession,
+                  messages: [],
+                  messages_loaded: true,
+                });
+                setSessions([sessionWithDefaults]);
+                setActiveSessionId(sessionWithDefaults.id);
+                if (navigate) {
+                  navigate(`/classroom/${sessionWithDefaults.id}`, { replace: true });
+                }
+              } catch (e) {
+                console.error("Failed to auto-create session", e);
+              }
+            }, 0);
+            
+            // Temporarily clear active session ID while creating
+            setActiveSessionId(null);
             if (navigate) {navigate('/classroom', { replace: true });}
             return [];
           }
+          
           if (sessionId === currentSessionIdRef.current) {
             // Guarantee we pick the newest remaining session
             const sortedRemaining = sortSessionsByRecency(remaining);

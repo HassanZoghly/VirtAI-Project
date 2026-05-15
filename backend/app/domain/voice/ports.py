@@ -1,10 +1,10 @@
 """Voice domain ports — abstract interfaces for ASR, TTS, and viseme generation."""
 
 from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 from typing import Any
+import numpy as np
 
 from app.domain.voice.entities import (
     ASRResult,
@@ -45,7 +45,7 @@ class StreamingASRService(ABC):
 
     @abstractmethod
     async def transcribe_stream(
-        self, audio_data: Any, sample_rate: int = 16000
+        self, audio_data: np.ndarray, sample_rate: int = 16000
     ) -> StreamingASRResult:
         """
         Transcribe accumulated streaming audio data.
@@ -95,27 +95,3 @@ class BaseTTSProvider(ABC):
     async def get_voice_settings(self, voice_name: str) -> dict[str, Any]:
         """Get available settings for a specific voice."""
         ...
-
-
-class VisemePort(ABC):
-    """Abstract interface for viseme generation from audio."""
-
-    @abstractmethod
-    async def generate_from_audio(
-        self,
-        session_id: str,
-        message_id: str,
-        audio_path: str,
-    ) -> list[dict]:
-        """
-        Generate viseme timeline from an audio file.
-
-        Returns list of mouth cue dicts with start, end, and value fields.
-        """
-        ...
-
-
-# Hexagonal aliases
-ASRPort = BaseASRProvider
-StreamingASRPort = StreamingASRService
-TTSPort = BaseTTSProvider

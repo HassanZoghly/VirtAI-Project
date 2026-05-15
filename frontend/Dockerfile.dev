@@ -1,0 +1,31 @@
+# ─────────────────────────────────────────────────────────────
+# VirtAI Frontend — React + Vite dev server
+# ─────────────────────────────────────────────────────────────
+
+FROM node:20-bookworm-slim
+
+WORKDIR /app
+
+# ── Install dependencies first (better caching) ────────────
+COPY package*.json ./
+
+RUN npm config set fetch-retries 5 && \
+    npm config set fetch-retry-mintimeout 20000 && \
+    npm config set fetch-retry-maxtimeout 120000 && \
+    npm config set fetch-timeout 300000 && \
+    npm config set maxsockets 5 && \
+    npm install --no-audit --no-fund --legacy-peer-deps
+
+# ── Copy only needed files ─────────────────────────────────
+COPY public ./public
+COPY src ./src
+COPY index.html ./
+COPY vite.config.* ./
+COPY tsconfig*.json ./
+COPY package.json ./
+
+# ── Expose port ────────────────────────────────────────────
+EXPOSE 3000
+
+# ── Start Vite ─────────────────────────────────────────────
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]

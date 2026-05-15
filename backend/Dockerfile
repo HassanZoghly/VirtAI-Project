@@ -1,34 +1,48 @@
-# ── Backend Dockerfile ─────────────────────────────────────────────
-# Python 3.10 slim image for FastAPI + Uvicorn
-# ───────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# VirtAI Backend — FastAPI
+# Optimized Development Dockerfile
+# ─────────────────────────────────────────────────────────────
 
-FROM python:3.10-slim AS base
+FROM python:3.10-slim
 
-# Prevent Python from writing .pyc files and enable unbuffered output
+# ── Environment ─────────────────────────────────────────────
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
 
-# ── Install system dependencies ──────────────────────────────────
+# ── System dependencies ────────────────────────────────────
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg && \
+    apt-get install -y --no-install-recommends \
+    ffmpeg \
+    curl && \
     rm -rf /var/lib/apt/lists/*
 
-# ── Install Python dependencies ──────────────────────────────────
-# Copy only dependency files first to leverage Docker layer caching
+# ── Install Python dependencies first (cache optimization) ─
+# Copy only the dependency manifest so pip install is cached
+# independently of application source changes.
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir .
 
-# ── Copy application source code ────────────────────────────────
-COPY app/ ./app/
+# Minimal stub so "pip install ." can resolve the package
+# without copying the full source tree yet.
+RUN mkdir -p app && touch app/__init__.py && \
+    pip install --upgrade pip && \
+    pip install .
 
-# ── Create data directory for audio files ────────────────────────
+# ── Copy application source (invalidates less often) ───────
+COPY app ./app
+
+# ── Runtime directories ────────────────────────────────────
 RUN mkdir -p /app/.data/sessions
 
-# ── Expose backend port ─────────────────────────────────────────
+# ── Expose port ────────────────────────────────────────────
 EXPOSE 8000
 
-# ── Start the server ─────────────────────────────────────────────
+# ── Healthcheck ────────────────────────────────────────────
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8000/api/v1/health || exit 1
+
+# ── Start server ───────────────────────────────────────────
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

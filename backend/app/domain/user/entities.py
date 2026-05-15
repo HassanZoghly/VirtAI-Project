@@ -4,6 +4,7 @@ User domain entity — pure dataclass representation of a user.
 This is the domain entity; the ORM model lives in infrastructure/db/models.py.
 """
 
+from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum

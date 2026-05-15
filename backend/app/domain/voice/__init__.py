@@ -10,30 +10,18 @@ from app.domain.voice.entities import (
     WordBoundary,
     WordTimestamp,
 )
-from app.domain.voice.ports import (
-    ASRPort,
-    BaseASRProvider,
-    BaseTTSProvider,
-    StreamingASRPort,
-    StreamingASRService,
-    TTSPort,
-    VisemePort,
-)
+from app.domain.voice.ports import BaseASRProvider, BaseTTSProvider, StreamingASRService
 
 __all__ = [
-    "ASRPort",
     "ASRResult",
     "ASRSegment",
     "BaseASRProvider",
     "BaseTTSProvider",
-    "StreamingASRPort",
     "StreamingASRResult",
     "StreamingASRService",
     "TTSChunk",
-    "TTSPort",
     "TTSResult",
     "VisemeEvent",
-    "VisemePort",
     "WordBoundary",
     "WordTimestamp",
 ]

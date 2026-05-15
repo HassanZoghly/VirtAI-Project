@@ -14,6 +14,7 @@ Security layers (PromptSanitizer):
     7. Length enforcement + truncation
 """
 
+from __future__ import annotations
 import base64
 import logging
 import re

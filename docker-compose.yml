@@ -1,25 +1,23 @@
-# ═══════════════════════════════════════════════════════════════════
-#  VirtAI — Docker Compose
-#  Start everything: docker compose up --build
-#  Stop everything:  docker compose down
-# ═══════════════════════════════════════════════════════════════════
-
 services:
-  # ── MongoDB ─────────────────────────────────────────────────────
   mongodb:
     image: mongo:7
     container_name: virtai-mongodb
     restart: unless-stopped
+
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGODB_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_ROOT_PASSWORD}
       MONGO_INITDB_DATABASE: ${MONGODB_DB_NAME:-virtai}
+
     ports:
       - '127.0.0.1:27017:27017'
+
     volumes:
       - mongodb-data:/data/db
+
     networks:
       - virtai-network
+
     healthcheck:
       test:
         [
@@ -38,104 +36,116 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 15s
 
-  # ── Redis ────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: virtai-redis
     restart: unless-stopped
-    command: redis-server --requirepass ${REDIS_PASSWORD} --save 60 1 --loglevel warning
+
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --save 60 1
+      --loglevel warning
+
     ports:
       - '127.0.0.1:6379:6379'
+
     volumes:
       - redis-data:/data
+
     networks:
       - virtai-network
+
     healthcheck:
       test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 5s
 
-  # ── Backend (FastAPI) ───────────────────────────────────────────
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+
     container_name: virtai-backend
+
+    restart: unless-stopped
+
     ports:
       - '8000:8000'
+
     env_file:
       - ./backend/.env
+
     volumes:
       - backend-data:/app/.data
+
     networks:
       - virtai-network
-    restart: unless-stopped
+
     depends_on:
       mongodb:
         condition: service_healthy
+
       redis:
         condition: service_healthy
+
     healthcheck:
-      test:
-        [
-          'CMD',
-          'python',
-          '-c',
-          "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')",
-        ]
+      test: ['CMD', 'curl', '-f', 'http://localhost:8000/api/v1/health']
       interval: 15s
       timeout: 5s
-      retries: 5
       start_period: 15s
+      retries: 5
 
-  # ── TTS (Kokoro openedai-speech) ────────────────────────────────
-  tts:
-    image: ghcr.io/matatonic/openedai-speech
-    container_name: virtai-tts
-    ports:
-      - "8080:8000"
-    volumes:
-      - tts_voices:/app/voices
-      - tts_config:/app/config
-    environment:
-      - TTS_HOME=/app/voices
-    networks:
-      - virtai-network
-    restart: unless-stopped
-
-  # ── Frontend (React + Vite) ────────────────────────────────────
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
+
     container_name: virtai-frontend
+
+    restart: unless-stopped
+
     ports:
       - '3000:3000'
+
     environment:
-      - VITE_API_TARGET=http://backend:8000
+      VITE_API_TARGET: http://backend:8000
+
     depends_on:
       backend:
         condition: service_healthy
+
     networks:
       - virtai-network
+
+  tts:
+    image: ghcr.io/matatonic/openedai-speech
+    container_name: virtai-tts
+
     restart: unless-stopped
 
-# ── Volumes ──────────────────────────────────────────────────────
+    ports:
+      - '8080:8000'
+
+    environment:
+      TTS_HOME: /app/voices
+
+    volumes:
+      - tts_voices:/app/voices
+      - tts_config:/app/config
+
+    networks:
+      - virtai-network
+
 volumes:
   mongodb-data:
-    driver: local
   redis-data:
-    driver: local
   backend-data:
-    driver: local
   tts_voices:
   tts_config:
 
-# ── Networks ─────────────────────────────────────────────────────
 networks:
   virtai-network:
     driver: bridge

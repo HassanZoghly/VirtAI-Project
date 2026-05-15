@@ -82,18 +82,6 @@ async def get_chat_session(session_id: str) -> dict | None:
     return _serialise_session(doc)
 
 
-async def touch_chat_session(session_id: str) -> None:
-    """Update updated_at timestamp for an active session."""
-    sid = _to_object_id(session_id)
-    try:
-        await chat_sessions_col().update_one(
-            {"_id": sid},
-            {"$set": {"updated_at": _now()}},
-        )
-    except Exception as e:
-        logger.warning(f"Failed to touch session {session_id}: {e}")
-
-
 async def list_user_sessions(
     user_id: str,
     archived: bool = False,
@@ -108,15 +96,6 @@ async def list_user_sessions(
         .limit(limit)
     )
     return [_serialise_session(doc) async for doc in cursor]
-
-
-async def archive_chat_session(session_id: str) -> None:
-    """Soft-delete a session by marking it archived."""
-    sid = _to_object_id(session_id)
-    await chat_sessions_col().update_one(
-        {"_id": sid},
-        {"$set": {"is_archived": True}},
-    )
 
 
 async def delete_chat_session(session_id: str) -> bool:
@@ -287,14 +266,8 @@ class MongoChatRepository(ChatRepositoryPort):
     async def get_chat_session(self, session_id: str) -> dict | None:
         return await get_chat_session(session_id=session_id)
 
-    async def touch_chat_session(self, session_id: str) -> None:
-        return await touch_chat_session(session_id=session_id)
-
     async def list_user_sessions(self, user_id: str, archived: bool = False, limit: int = 50) -> list[dict]:
         return await list_user_sessions(user_id=user_id, archived=archived, limit=limit)
-
-    async def archive_chat_session(self, session_id: str) -> None:
-        return await archive_chat_session(session_id=session_id)
 
     async def delete_chat_session(self, session_id: str) -> bool:
         return await delete_chat_session(session_id=session_id)

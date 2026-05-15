@@ -63,10 +63,17 @@ _LLM_DONE_SENTINEL = None
 class TTSProcessor:
     """Processes a single sentence through TTS, emitting viseme + audio events."""
 
-    def __init__(self, tts: BaseTTSProvider, event_queue: asyncio.Queue, sentence_index: int):
+    def __init__(
+        self,
+        tts: BaseTTSProvider,
+        event_queue: asyncio.Queue,
+        sentence_index: int,
+        session_id: str | None = None,
+    ):
         self.tts = tts
         self.event_queue = event_queue
         self.sentence_index = sentence_index
+        self.session_id = session_id
         self.viseme_events: list[dict] = []
         self.audio_chunks: list[str] = []
         self.chunk_index = 0
@@ -88,6 +95,7 @@ class TTSProcessor:
                     await self.event_queue.put(
                         ev(
                             PipelineEventType.TTS_VISEMES,
+                            session_id=self.session_id,
                             sentence_index=self.sentence_index,
                             events=list(self.viseme_events),
                             audio_duration_ms=self._estimate_duration(),
@@ -97,6 +105,7 @@ class TTSProcessor:
                 await self.event_queue.put(
                     ev(
                         PipelineEventType.TTS_AUDIO,
+                        session_id=self.session_id,
                         audio=b64_audio,
                         chunk_index=self.chunk_index,
                         sentence_index=self.sentence_index,
@@ -108,6 +117,7 @@ class TTSProcessor:
                     await self.event_queue.put(
                         ev(
                             PipelineEventType.TTS_VISEMES,
+                            session_id=self.session_id,
                             sentence_index=self.sentence_index,
                             events=list(self.viseme_events),
                             audio_duration_ms=0.0,
@@ -516,22 +526,22 @@ class ConversationPipeline:
 
         # ASR step
         if audio_buffer is not None:
-            yield ev(PipelineEventType.PROCESSING)
+            yield ev(PipelineEventType.PROCESSING, session_id=session_id)
             try:
                 user_text = await self._run_asr(audio_buffer)
-                yield ev(PipelineEventType.TRANSCRIPT, text=user_text)
+                yield ev(PipelineEventType.TRANSCRIPT, session_id=session_id, text=user_text)
             except ASRException as e:
                 logger.error(f"ASR failed: {e}")
-                yield ev(PipelineEventType.ERROR, code="ASR_ERROR", message=str(e))
-                yield ev(PipelineEventType.IDLE)
+                yield ev(PipelineEventType.ERROR, session_id=session_id, code="ASR_ERROR", message=str(e))
+                yield ev(PipelineEventType.IDLE, session_id=session_id)
                 return
 
         if text_input is not None:
             user_text = text_input.strip()
 
         if not user_text:
-            yield ev(PipelineEventType.ERROR, code="EMPTY_INPUT", message="No input")
-            yield ev(PipelineEventType.IDLE)
+            yield ev(PipelineEventType.ERROR, session_id=session_id, code="EMPTY_INPUT", message="No input")
+            yield ev(PipelineEventType.IDLE, session_id=session_id)
             return
 
         history_was_empty = self._history.is_empty
@@ -571,7 +581,7 @@ class ConversationPipeline:
                 logger.warning(f"[Pipeline] Failed to update Redis user context: {e}")
 
         self._history.add_user_message(user_text)
-        yield ev(PipelineEventType.THINKING)
+        yield ev(PipelineEventType.THINKING, session_id=session_id)
 
         # Concurrent LLM + TTS
         sentence_queue: asyncio.Queue[str | None] = asyncio.Queue(
@@ -592,13 +602,13 @@ class ConversationPipeline:
             for t in (self._current_llm_task, self._current_tts_task):
                 if t and not t.done():
                     t.cancel()
-            yield ev(PipelineEventType.ABORT)
-            yield ev(PipelineEventType.IDLE)
+            yield ev(PipelineEventType.ABORT, session_id=session_id)
+            yield ev(PipelineEventType.IDLE, session_id=session_id)
             return
         except Exception as e:
             logger.error(f"Pipeline error: {e}")
-            yield ev(PipelineEventType.ERROR, code="PIPELINE_ERROR", message=str(e))
-            yield ev(PipelineEventType.IDLE)
+            yield ev(PipelineEventType.ERROR, session_id=session_id, code="PIPELINE_ERROR", message=str(e))
+            yield ev(PipelineEventType.IDLE, session_id=session_id)
             return
 
         # Drain event queue
@@ -652,7 +662,7 @@ class ConversationPipeline:
 
         elapsed = time.perf_counter() - start
         logger.info(f"Pipeline done | {elapsed:.2f}s | session={session_id}")
-        yield ev(PipelineEventType.IDLE)
+        yield ev(PipelineEventType.IDLE, session_id=session_id)
 
     async def _run_asr(self, audio_buffer: AudioBuffer) -> str:
         logger.info(
@@ -679,7 +689,12 @@ class ConversationPipeline:
         logger.info(f"LLM worker started | session={session_id}")
         if not self._llm:
             await event_queue.put(
-                ev(PipelineEventType.ERROR, code="LLM_ERROR", message="LLM service not configured")
+                ev(
+                    PipelineEventType.ERROR,
+                    session_id=session_id,
+                    code="LLM_ERROR",
+                    message="LLM service not configured",
+                )
             )
             return
         try:
@@ -687,7 +702,9 @@ class ConversationPipeline:
                 if self._aborted:
                     break
                 if chunk.token:
-                    await event_queue.put(ev(PipelineEventType.LLM_TOKEN, token=chunk.token))
+                    await event_queue.put(
+                        ev(PipelineEventType.LLM_TOKEN, session_id=session_id, token=chunk.token)
+                    )
                 if chunk.sentence:
                     clean = _clean_text_for_tts(chunk.sentence)
                     if clean:
@@ -695,7 +712,9 @@ class ConversationPipeline:
                 if chunk.is_done:
                     break
         except LLMException as e:
-            await event_queue.put(ev(PipelineEventType.ERROR, code="LLM_ERROR", message=str(e)))
+            await event_queue.put(
+                ev(PipelineEventType.ERROR, session_id=session_id, code="LLM_ERROR", message=str(e))
+            )
         except asyncio.CancelledError:
             logger.info(f"LLM worker cancelled | session={session_id}")
             raise
@@ -704,7 +723,7 @@ class ConversationPipeline:
                 await sentence_queue.put(_LLM_DONE_SENTINEL)
             except asyncio.CancelledError:
                 pass
-            await event_queue.put(ev(PipelineEventType.LLM_DONE))
+            await event_queue.put(ev(PipelineEventType.LLM_DONE, session_id=session_id))
 
     async def _tts_worker(
         self,
@@ -722,24 +741,28 @@ class ConversationPipeline:
                 if sentence is _LLM_DONE_SENTINEL:
                     break
                 sentence_index += 1
-                await event_queue.put(ev(PipelineEventType.SPEAKING))
+                await event_queue.put(ev(PipelineEventType.SPEAKING, session_id=session_id))
                 if not self._tts:
                     await event_queue.put(
                         ev(
                             PipelineEventType.ERROR,
+                            session_id=session_id,
                             code="TTS_ERROR",
                             message="TTS service not configured",
                         )
                     )
                     break
                 try:
-                    processor = TTSProcessor(self._tts, event_queue, sentence_index)
+                    processor = TTSProcessor(
+                        self._tts, event_queue, sentence_index, session_id=session_id
+                    )
                     await processor.process(sentence)
                 except TTSException as e:
                     logger.error(f"TTS error on sentence {sentence_index}: {e}")
                     await event_queue.put(
                         ev(
                             PipelineEventType.ERROR,
+                            session_id=session_id,
                             code="TTS_ERROR",
                             message=str(e),
                             sentence_index=sentence_index,
@@ -752,7 +775,7 @@ class ConversationPipeline:
             logger.info(f"TTS worker cancelled | session={session_id}")
             raise
         finally:
-            await event_queue.put(ev(PipelineEventType.TTS_DONE))
+            await event_queue.put(ev(PipelineEventType.TTS_DONE, session_id=session_id))
 
 
 # ── Private helpers ───────────────────────────────────────────────────────────
@@ -760,10 +783,9 @@ class ConversationPipeline:
 
 def _clean_text_for_tts(text: str) -> str:
     """Minimal TTS text cleanup (no infrastructure dependency)."""
-    import re as _re
 
-    text = _re.sub(r"\*{1,3}(.+?)\*{1,3}", r"\1", text)
-    text = _re.sub(r"`{1,3}[^`]*`{1,3}", "", text)
-    text = _re.sub(r"http[s]?://\S+", "", text)
-    text = _re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\*{1,3}(.+?)\*{1,3}", r"\1", text)
+    text = re.sub(r"`{1,3}[^`]*`{1,3}", "", text)
+    text = re.sub(r"http[s]?://\S+", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
     return text

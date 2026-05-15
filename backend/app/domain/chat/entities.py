@@ -1,15 +1,8 @@
-"""
-Chat domain entities — pure data classes with no external dependencies.
-
-Extracted from:
-  - app.services.llm.base (MessageRole, ChatMessage, LLMChunk, LLMResult, ConversationHistory)
-  - app.services.pipeline.events (PipelineEventType, PipelineEvent, ev)
-"""
-
-from __future__ import annotations
+"""Chat domain entities — pure data classes with no external dependencies."""
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
+from typing import Callable
 
 
 # ── Message Roles ─────────────────────────────────────────────────────────────
@@ -70,10 +63,23 @@ class ConversationHistory:
     system_prompt: str
     max_messages: int = 20  # max user+assistant pairs to keep
     _messages: list[ChatMessage] = field(default_factory=list)
+    sanitizer: Callable[[str], str] | None = None
 
     def add_user_message(self, content: str) -> None:
-        from app.domain.chat.policies import PromptSanitizer
-        sanitized_content = PromptSanitizer.sanitize(content)
+        """Add a user message, applying the configured sanitizer if present.
+
+        If no sanitizer was injected, fall back to the existing behavior and
+        import `PromptSanitizer` lazily for backwards compatibility.
+        """
+        if self.sanitizer is not None:
+            sanitized_content = self.sanitizer(content)
+        else:
+            # Backwards-compatibility fallback: lazy import to avoid circular
+            # imports at module import time. Callers constructed via
+            from app.domain.chat.policies import PromptSanitizer
+
+            sanitized_content = PromptSanitizer.sanitize(content)
+
         self._messages.append(ChatMessage(role=MessageRole.USER, content=sanitized_content))
         self._trim()
 
@@ -146,6 +152,6 @@ class PipelineEvent:
     session_id: str | None = None  # for tracking
 
 
-def ev(event_type: PipelineEventType, **kwargs) -> PipelineEvent:
-    """Shorthand to create a PipelineEvent"""
-    return PipelineEvent(type=event_type, data=kwargs)
+def ev(event_type: PipelineEventType, session_id: str | None = None, **kwargs) -> PipelineEvent:
+    """Shorthand to create a PipelineEvent."""
+    return PipelineEvent(type=event_type, data=kwargs, session_id=session_id)

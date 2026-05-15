@@ -1,8 +1,4 @@
-"""
-User domain ports — abstract interface for user persistence.
-"""
-
-from __future__ import annotations
+"""User domain ports — abstract interface for user persistence."""
 
 from abc import ABC, abstractmethod
 

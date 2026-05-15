@@ -1,11 +1,4 @@
-"""
-Voice domain ports — abstract interfaces for ASR, TTS, and viseme generation.
-
-Extracted from:
-  - app.services.asr.base (BaseASRProvider → ASRPort, StreamingASRService → StreamingASRPort)
-  - app.services.tts.base (BaseTTSProvider → TTSPort)
-  - app.services.tts.viseme_generator (→ VisemePort)
-"""
+"""Voice domain ports — abstract interfaces for ASR, TTS, and viseme generation."""
 
 from __future__ import annotations
 

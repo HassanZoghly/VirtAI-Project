@@ -14,12 +14,13 @@ import httpx
 import pymongo
 from bson import ObjectId
 
-from app.domain.user.entities import UserEntity
+from app.domain.user.entities import AuthProvider, UserEntity
 from app.infrastructure.db.user_repository import MongoUserRepository
 from app.shared.config import get_settings
 from app.shared.security import hash_password, verify_password
 
 _user_repository = MongoUserRepository()
+
 
 def _repo() -> MongoUserRepository:
     """Factory for the user repository (no DI container needed)."""
@@ -59,7 +60,7 @@ async def register_user(
     full_name: str,
     email: str,
     password: str,
-    username: str = "",
+    username: str | None = None,
 ) -> UserEntity:
     """Create a new local user. Raises ValueError if email already exists."""
     existing = await _repo().get_by_email(email)
@@ -71,8 +72,8 @@ async def register_user(
         email=email,
         full_name=full_name,
         username=username or full_name.split()[0].lower(),
-        hashed_password=hash_password(password),
-        provider="local",
+        password_hash=hash_password(password),
+        provider=AuthProvider.LOCAL,
         created_at=_now(),
         updated_at=_now(),
     )
@@ -82,9 +83,9 @@ async def register_user(
 async def authenticate_user(email: str, password: str) -> UserEntity | None:
     """Verify credentials. Returns UserEntity on success, None on failure."""
     user = await _repo().get_by_email(email)
-    if user is None or user.hashed_password is None:
+    if user is None or user.password_hash is None:
         return None
-    if not verify_password(password, user.hashed_password):
+    if not verify_password(password, user.password_hash):
         return None
     return user
 
@@ -154,7 +155,7 @@ async def get_or_create_google_user(google_info: dict) -> UserEntity:
     if user is not None:
         if not user.google_id:
             user.google_id = google_id
-            user.provider = "google"
+            user.provider = AuthProvider.GOOGLE
             user.updated_at = _now()
             user = await repo.update(user)
         return user
@@ -165,8 +166,8 @@ async def get_or_create_google_user(google_info: dict) -> UserEntity:
         email=email,
         full_name=name,
         username=name.split()[0].lower() + str(ObjectId())[:4],
-        hashed_password=None,
-        provider="google",
+        password_hash=None,
+        provider=AuthProvider.GOOGLE,
         google_id=google_id,
         created_at=_now(),
         updated_at=_now(),

@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from bson import ObjectId
 from loguru import logger
 
-from app.domain.user.entities import UserEntity
+from app.domain.user.entities import AuthProvider, UserEntity
 from app.domain.user.ports import UserRepositoryPort
 from app.infrastructure.db.mongodb import users_col
 
@@ -23,15 +23,27 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _coerce_provider(value: str | AuthProvider | None) -> AuthProvider:
+    if isinstance(value, AuthProvider):
+        return value
+    if not value:
+        return AuthProvider.LOCAL
+    try:
+        return AuthProvider(value)
+    except ValueError:
+        return AuthProvider.LOCAL
+
+
 def _doc_to_entity(doc: dict) -> UserEntity:
     """Convert a MongoDB document to UserEntity."""
+    provider = _coerce_provider(doc.get("provider"))
     return UserEntity(
         id=str(doc["_id"]),
         email=doc["email"],
-        username=doc.get("username", ""),
+        username=doc.get("username"),
         full_name=doc.get("full_name", ""),
-        hashed_password=doc.get("password_hash"),
-        provider=doc.get("provider", "local"),
+        password_hash=doc.get("password_hash"),
+        provider=provider,
         google_id=doc.get("google_id"),
         setup_complete=doc.get("setup_complete", False),
         is_active=doc.get("is_active", True),
@@ -46,8 +58,8 @@ def _entity_to_doc(entity: UserEntity) -> dict:
         "email": entity.email,
         "username": entity.username or "",
         "full_name": entity.full_name,
-        "password_hash": entity.hashed_password,
-        "provider": entity.provider,
+        "password_hash": entity.password_hash,
+        "provider": entity.provider.value,
         "setup_complete": entity.setup_complete,
         "is_active": entity.is_active,
         "refresh_token_version": entity.refresh_token_version,
@@ -102,8 +114,8 @@ class MongoUserRepository(UserRepositoryPort):
                 "email": entity.email,
                 "username": entity.username or "",
                 "full_name": entity.full_name,
-                "password_hash": entity.hashed_password,
-                "provider": entity.provider,
+                "password_hash": entity.password_hash,
+                "provider": entity.provider.value,
                 "setup_complete": entity.setup_complete,
                 "is_active": entity.is_active,
                 "refresh_token_version": entity.refresh_token_version,

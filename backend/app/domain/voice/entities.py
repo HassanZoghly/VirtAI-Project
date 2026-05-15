@@ -1,12 +1,4 @@
-"""
-Voice domain entities — pure data classes with no external dependencies.
-
-Extracted from:
-  - app.services.asr.base (WordTimestamp, ASRSegment, ASRResult, StreamingASRResult)
-  - app.services.tts.base (VisemeEvent, WordBoundary, TTSResult, TTSChunk)
-"""
-
-from __future__ import annotations
+"""Voice domain entities — pure data classes with no external dependencies."""
 
 from dataclasses import dataclass, field
 

@@ -26,7 +26,7 @@ from app.application.auth.auth_use_cases import (
     register_user,
     set_user_setup_complete,
 )
-from app.domain.user.entities import UserEntity
+from app.domain.user.entities import AuthProvider, UserEntity
 from app.infrastructure.cache.auth_session_cache import (
     cache_auth_session,
     get_cached_auth_session,
@@ -72,7 +72,7 @@ def _serialize_user_for_cache(user: UserEntity) -> dict:
         "email": user.email,
         "full_name": user.full_name,
         "username": user.username,
-        "provider": user.provider,
+        "provider": user.provider.value,
         "google_id": user.google_id,
         "setup_complete": user.setup_complete,
         "is_active": user.is_active,
@@ -90,14 +90,25 @@ def _parse_dt(raw: str | None) -> datetime:
         return datetime.now(timezone.utc)
 
 
+def _coerce_provider(value: str | AuthProvider | None) -> AuthProvider:
+    if isinstance(value, AuthProvider):
+        return value
+    if not value:
+        return AuthProvider.LOCAL
+    try:
+        return AuthProvider(value)
+    except ValueError:
+        return AuthProvider.LOCAL
+
+
 def _deserialize_cached_user(data: dict) -> UserEntity:
     return UserEntity(
         id=data["id"],
         email=data["email"],
         full_name=data.get("full_name", ""),
-        username=data.get("username", ""),
-        hashed_password=None,
-        provider=data.get("provider", "local"),
+        username=data.get("username"),
+        password_hash=None,
+        provider=_coerce_provider(data.get("provider")),
         google_id=data.get("google_id"),
         setup_complete=data.get("setup_complete", False),
         is_active=data.get("is_active", True),

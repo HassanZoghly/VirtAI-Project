@@ -9,9 +9,15 @@ FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    XDG_CACHE_HOME=/app/.cache \
+    HF_HOME=/app/.cache/huggingface \
+    FASTEMBED_CACHE_DIR=/app/.cache/fastembed
 
 WORKDIR /app
+
+ARG EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+ENV EMBEDDING_MODEL=${EMBEDDING_MODEL}
 
 # ── System dependencies ────────────────────────────────────
 RUN apt-get update && \
@@ -31,11 +37,17 @@ RUN mkdir -p app && touch app/__init__.py && \
     pip install --upgrade pip && \
     pip install .
 
+# Pre-download FastEmbed model into an image layer so production startup does
+# not fetch model files dynamically. A named Docker volume can persist this
+# cache across container replacements.
+RUN mkdir -p /app/.cache/fastembed /app/.cache/huggingface && \
+    python -c "import os; from fastembed import TextEmbedding; model=os.environ.get('EMBEDDING_MODEL', 'BAAI/bge-small-en-v1.5'); list(TextEmbedding(model_name=model).embed(['warmup']))"
+
 # ── Copy application source (invalidates less often) ───────
 COPY app ./app
 
 # ── Runtime directories ────────────────────────────────────
-RUN mkdir -p /app/.data/sessions
+RUN mkdir -p /app/.data/sessions /app/.data/uploads
 
 # ── Expose port ────────────────────────────────────────────
 EXPOSE 8000

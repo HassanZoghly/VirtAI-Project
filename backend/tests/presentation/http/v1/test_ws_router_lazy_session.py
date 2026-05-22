@@ -1,19 +1,36 @@
+"""
+Tests for WebSocket router lazy-session logic.
+
+Updated to match the current auth flow: the router reads the token from
+WebSocket subprotocols (not a query/kwarg parameter). Tests mock token decoding
+and user lookup at the module level in router.py to bypass cryptographic checks.
+"""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 
 from app.presentation.http.v1 import router as v1_router
 
+MOCK_TOKEN = "valid.mock.token"
+MOCK_USER_ID = str(uuid4())
+MOCK_SESSION_ID = str(uuid4())
+
 
 class _FakeWebSocket:
-    def __init__(self) -> None:
+    """Simulates a WebSocket that carries the auth token in subprotocols."""
+
+    def __init__(self, token: str = MOCK_TOKEN) -> None:
         self.client = SimpleNamespace(host="127.0.0.1")
         self.accepted = False
         self.closed = False
+        # Router reads token from subprotocols: ["access_token", "<token_value>"]
+        self.scope = {"subprotocols": ["access_token", token]}
 
-    async def accept(self) -> None:
+    async def accept(self, subprotocol: str | None = None) -> None:
         self.accepted = True
 
     async def close(self, code: int | None = None, reason: str | None = None) -> None:
@@ -32,16 +49,33 @@ class _FakeSessionManager:
         self.create_session_calls += 1
         return SimpleNamespace(session_id="created-session", avatar_id="avatar1")
 
-    def disconnect_session(self, session_id: str) -> None:
+    async def disconnect_session(self, session_id: str) -> None:
         self.disconnect_calls.append(session_id)
 
 
 class _FakeConnectionManager:
     def __init__(self) -> None:
         self.unregister_calls: list[str] = []
+        self.active_count = 0
 
     async def unregister(self, session_id: str, websocket) -> None:
         self.unregister_calls.append(session_id)
+
+
+def _mock_decode_token(token: str, expected_type: str = "access"):
+    return SimpleNamespace(user_id=MOCK_USER_ID, jti="mock-jti", token_version=0)
+
+
+async def _mock_get_user_by_id(*args, **kwargs):
+    return SimpleNamespace(id=MOCK_USER_ID, is_active=True, refresh_token_version=0)
+
+
+async def _not_blacklisted(*args, **kwargs) -> bool:
+    return False
+
+
+async def _allow_rate_limit(**kwargs) -> bool:
+    return True
 
 
 @pytest.mark.asyncio
@@ -53,12 +87,6 @@ async def test_ws_does_not_create_session_on_connect_when_not_resuming(
     fake_cm = _FakeConnectionManager()
     created_handler = {}
 
-    async def _allow_rate_limit(**kwargs) -> bool:
-        return True
-
-    def _mock_verify_token(token: str, expected_type: str = "access"):
-        return ("mock-user", "mock-jti")
-
     class FakeHandler:
         def __init__(self, **kwargs):
             created_handler["session"] = kwargs["session"]
@@ -69,19 +97,21 @@ async def test_ws_does_not_create_session_on_connect_when_not_resuming(
             return None
 
     monkeypatch.setattr(v1_router, "check_rate_limit", _allow_rate_limit)
-    monkeypatch.setattr(v1_router, "verify_token", _mock_verify_token)
+    monkeypatch.setattr(v1_router, "decode_auth_token", _mock_decode_token)
+    monkeypatch.setattr(v1_router, "is_blacklisted", _not_blacklisted)
+    monkeypatch.setattr(v1_router, "get_user_by_id", _mock_get_user_by_id)
     monkeypatch.setattr(v1_router, "WebSocketHandler", FakeHandler)
 
     await v1_router.websocket_endpoint(
         websocket=fake_ws,
         avatar_id="avatar1",
-        token="valid.mock.token",
         voice="en-US-AriaNeural",
         session_id=None,
         resume=False,
         last_seq=0,
         session_manager=fake_sm,
         connection_manager=fake_cm,  # type: ignore
+        db=None,  # type: ignore
     )
 
     assert fake_ws.accepted is True
@@ -97,19 +127,15 @@ async def test_ws_resume_uses_existing_session(monkeypatch: pytest.MonkeyPatch) 
     fake_ws = _FakeWebSocket()
     fake_sm = _FakeSessionManager()
     fake_cm = _FakeConnectionManager()
-    resumed_session = SimpleNamespace(session_id="resume-123", avatar_id="avatar1", user_id="mock-user")
+    resumed_session = SimpleNamespace(
+        session_id=MOCK_SESSION_ID,
+        avatar_id="avatar1",
+        user_id=MOCK_USER_ID,
+    )
     created_handler = {}
 
-    async def _allow_rate_limit(**kwargs) -> bool:
-        return True
-
-    def _mock_verify_token(token: str, expected_type: str = "access"):
-        return ("mock-user", "mock-jti")
-
-    monkeypatch.setattr(v1_router, "verify_token", _mock_verify_token)
-
     async def _connect_existing(session_id: str):
-        return resumed_session if session_id == "resume-123" else None
+        return resumed_session if session_id == MOCK_SESSION_ID else None
 
     class FakeHandler:
         def __init__(self, **kwargs):
@@ -121,27 +147,30 @@ async def test_ws_resume_uses_existing_session(monkeypatch: pytest.MonkeyPatch) 
             return None
 
     monkeypatch.setattr(v1_router, "check_rate_limit", _allow_rate_limit)
+    monkeypatch.setattr(v1_router, "decode_auth_token", _mock_decode_token)
+    monkeypatch.setattr(v1_router, "is_blacklisted", _not_blacklisted)
+    monkeypatch.setattr(v1_router, "get_user_by_id", _mock_get_user_by_id)
     monkeypatch.setattr(v1_router, "WebSocketHandler", FakeHandler)
     monkeypatch.setattr(fake_sm, "connect_existing_session", _connect_existing)
 
     await v1_router.websocket_endpoint(
         websocket=fake_ws,
         avatar_id="avatar1",
-        token="valid.mock.token",
         voice="en-US-AriaNeural",
-        session_id="resume-123",
+        session_id=MOCK_SESSION_ID,
         resume=True,
         last_seq=2,
         session_manager=fake_sm,
         connection_manager=fake_cm,  # type: ignore
+        db=None,  # type: ignore
     )
 
     assert fake_ws.accepted is True
     assert created_handler["session"] is resumed_session
     assert created_handler["requested_session_id"] is None
     assert fake_sm.create_session_calls == 0
-    assert fake_cm.unregister_calls == ["resume-123"]
-    assert fake_sm.disconnect_calls == ["resume-123"]
+    assert fake_cm.unregister_calls == [MOCK_SESSION_ID]
+    assert fake_sm.disconnect_calls == [MOCK_SESSION_ID]
 
 
 @pytest.mark.asyncio
@@ -150,12 +179,6 @@ async def test_ws_non_resume_forwards_requested_session_id(monkeypatch: pytest.M
     fake_sm = _FakeSessionManager()
     fake_cm = _FakeConnectionManager()
     created_handler = {}
-
-    async def _allow_rate_limit(**kwargs) -> bool:
-        return True
-
-    def _mock_verify_token(token: str, expected_type: str = "access"):
-        return ("mock-user", "mock-jti")
 
     class FakeHandler:
         def __init__(self, **kwargs):
@@ -166,20 +189,22 @@ async def test_ws_non_resume_forwards_requested_session_id(monkeypatch: pytest.M
             return None
 
     monkeypatch.setattr(v1_router, "check_rate_limit", _allow_rate_limit)
-    monkeypatch.setattr(v1_router, "verify_token", _mock_verify_token)
+    monkeypatch.setattr(v1_router, "decode_auth_token", _mock_decode_token)
+    monkeypatch.setattr(v1_router, "is_blacklisted", _not_blacklisted)
+    monkeypatch.setattr(v1_router, "get_user_by_id", _mock_get_user_by_id)
     monkeypatch.setattr(v1_router, "WebSocketHandler", FakeHandler)
 
     await v1_router.websocket_endpoint(
         websocket=fake_ws,
         avatar_id="avatar1",
-        token="valid.mock.token",
         voice="en-US-AriaNeural",
-        session_id="persisted-session-123",
+        session_id=MOCK_SESSION_ID,
         resume=False,
         last_seq=0,
         session_manager=fake_sm,
         connection_manager=fake_cm,  # type: ignore
+        db=None,  # type: ignore
     )
 
     assert fake_ws.accepted is True
-    assert created_handler["requested_session_id"] == "persisted-session-123"
+    assert created_handler["requested_session_id"] == MOCK_SESSION_ID

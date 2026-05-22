@@ -11,8 +11,8 @@ import asyncio
 import base64
 import re
 import time
-from collections.abc import AsyncGenerator, Callable
 from collections import defaultdict
+from collections.abc import AsyncGenerator, Callable
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -33,6 +33,7 @@ from app.shared.config import get_settings
 from app.shared.errors import ASRException, LLMException, TTSException
 
 if TYPE_CHECKING:
+    from app.application.rag.retrieval_use_case import RetrievalUseCase
     from app.schemas.audio import AudioBuffer
 
 _EMOTION_RE = re.compile(r"^\[emotion:(\w+)]\s*")
@@ -148,12 +149,14 @@ class ConversationPipeline:
         asr: StreamingASRService | None = None,
         llm: BaseLLMProvider | None = None,
         tts: BaseTTSProvider | None = None,
+        retrieval: RetrievalUseCase | None = None,
         avatar_id: str = "avatar1",
         max_sentence_queue_size: int = 5,
     ):
         self._asr: StreamingASRService | None = asr
         self._llm: BaseLLMProvider | None = llm
         self._tts: BaseTTSProvider | None = tts
+        self._retrieval = retrieval
         self.avatar_id = avatar_id
         self._history: ConversationHistory = build_conversation(avatar_id)
         self._aborted: bool = False
@@ -208,21 +211,23 @@ class ConversationPipeline:
         Process user message through LLM → TTS → Visemes pipeline.
 
         Flow:
-          1. Persist user message to MongoDB
+          1. Persist user message to PostgreSQL via ChatRepository
           2. Push user message to Redis context
-          3. Warm up in-memory history from Redis if empty (cache miss → rebuild from MongoDB)
+          3. Warm up in-memory history from Redis if empty (cache miss → rebuild from PostgreSQL)
           4. LLM streams tokens
-          5. Persist assistant message to MongoDB + push to Redis context
+          5. Persist assistant message to PostgreSQL + push to Redis context
           6. TTS generation
           7. Viseme generation
         """
+        from app.infrastructure.cache.cache_keys import tts_cache_key as _tts_key
         from app.infrastructure.cache.chat_context_cache import (
             get_or_rebuild_context,
         )
         from app.infrastructure.cache.chat_context_cache import (
             push_message as push_ctx,
         )
-        from app.infrastructure.db.chat_repository import save_message
+        from app.infrastructure.db.database import AsyncSessionLocal
+        from app.infrastructure.db.repositories.chat_repository import ChatRepository
         from app.infrastructure.tts.viseme_generator import VisemeGenerator
         from app.schemas.ws_messages import (
             make_animation_timeline_v2,
@@ -234,6 +239,7 @@ class ConversationPipeline:
             make_user_message_echo,
             make_visemes_ready,
         )
+        from app.shared.config import get_settings as _settings
 
         self._aborted = False
         self._current_message_id = message_id
@@ -250,14 +256,17 @@ class ConversationPipeline:
                 )
                 return
 
-            # ── 1. Persist user message to MongoDB ────────────────────────────
+            # ── 1. Persist user message ────────────────────────────────────────
             try:
-                await save_message(
-                    session_id=session_id,
-                    role="user",
-                    content=text,
-                    input_type="text",
-                )
+                async with AsyncSessionLocal() as db:
+                    repo = ChatRepository(db)
+                    await repo.save_message(
+                        session_id=session_id,
+                        role="user",
+                        content=text,
+                        input_type="text",
+                    )
+                    await db.commit()
             except Exception as e:
                 logger.warning(f"[Pipeline] Failed to persist user message: {e}")
 
@@ -289,9 +298,20 @@ class ConversationPipeline:
                 await send_callback(make_pipeline_state(session_id, "idle"))
                 return
 
+            # ── 3.5 RAG Context Injection ──────────────────────────────────────
+            original_sys_prompt = self._history.system_prompt
+            if self._retrieval:
+                try:
+                    context = await self._retrieval.execute(text)
+                    if context:
+                        self._history.system_prompt = f"{original_sys_prompt}\n\nUse the following retrieved context to answer the query:\n{context}"
+                except Exception as e:
+                    logger.error(f"RAG retrieval failed: {e}")
+
             # ── 4. Stream LLM tokens ──────────────────────────────────────────
             full_response_parts: list[str] = []
             if not self._llm:
+                self._history.system_prompt = original_sys_prompt
                 raise LLMException("LLM service not configured")
             try:
                 async for chunk in self._llm.stream(self._history):
@@ -320,6 +340,8 @@ class ConversationPipeline:
                 )
                 await send_callback(make_pipeline_state(session_id, "idle"))
                 return
+            finally:
+                self._history.system_prompt = original_sys_prompt
 
             if self._aborted:
                 await send_callback(make_pipeline_state(session_id, "idle"))
@@ -362,17 +384,17 @@ class ConversationPipeline:
             # ── 5. Persist assistant message + update Redis context ────────────
             tts_key: str | None = None
             try:
-                from app.infrastructure.cache.cache_keys import tts_cache_key as _tts_key
-                from app.shared.config import get_settings as _settings
-
                 tts_key = _tts_key(full_response, _settings().TTS_VOICE)
-                await save_message(
-                    session_id=session_id,
-                    role="assistant",
-                    content=full_response,
-                    input_type="text",
-                    tts_cache_key=tts_key,
-                )
+                async with AsyncSessionLocal() as db:
+                    repo = ChatRepository(db)
+                    await repo.save_message(
+                        session_id=session_id,
+                        role="assistant",
+                        content=full_response,
+                        input_type="text",
+                        tts_cache_key=tts_key,
+                    )
+                    await db.commit()
             except Exception as e:
                 logger.warning(f"[Pipeline] Failed to persist assistant message: {e}")
 
@@ -532,7 +554,9 @@ class ConversationPipeline:
                 yield ev(PipelineEventType.TRANSCRIPT, session_id=session_id, text=user_text)
             except ASRException as e:
                 logger.error(f"ASR failed: {e}")
-                yield ev(PipelineEventType.ERROR, session_id=session_id, code="ASR_ERROR", message=str(e))
+                yield ev(
+                    PipelineEventType.ERROR, session_id=session_id, code="ASR_ERROR", message=str(e)
+                )
                 yield ev(PipelineEventType.IDLE, session_id=session_id)
                 return
 
@@ -540,7 +564,12 @@ class ConversationPipeline:
             user_text = text_input.strip()
 
         if not user_text:
-            yield ev(PipelineEventType.ERROR, session_id=session_id, code="EMPTY_INPUT", message="No input")
+            yield ev(
+                PipelineEventType.ERROR,
+                session_id=session_id,
+                code="EMPTY_INPUT",
+                message="No input",
+            )
             yield ev(PipelineEventType.IDLE, session_id=session_id)
             return
 
@@ -548,18 +577,24 @@ class ConversationPipeline:
 
         # Persist/warm cache for legacy protocol flows as well.
         if session_id:
+            # Save user message to PostgreSQL
             try:
-                from app.infrastructure.db.chat_repository import save_message
+                from app.infrastructure.db.database import AsyncSessionLocal
+                from app.infrastructure.db.repositories.chat_repository import ChatRepository
 
-                await save_message(
-                    session_id=session_id,
-                    role="user",
-                    content=user_text,
-                    input_type="text",
-                )
+                async with AsyncSessionLocal() as db:
+                    repo = ChatRepository(db)
+                    await repo.save_message(
+                        session_id=session_id,
+                        role="user",
+                        content=user_text,
+                        input_type="text",
+                    )
+                    await db.commit()
             except Exception as e:
                 logger.warning(f"[Pipeline] Failed to persist user message: {e}")
 
+            # Update Redis context
             try:
                 from app.infrastructure.cache.chat_context_cache import (
                     get_or_rebuild_context,
@@ -582,6 +617,16 @@ class ConversationPipeline:
 
         self._history.add_user_message(user_text)
         yield ev(PipelineEventType.THINKING, session_id=session_id)
+
+        # ── 3.5 RAG Context Injection ──────────────────────────────────────
+        original_sys_prompt = self._history.system_prompt
+        if self._retrieval:
+            try:
+                context = await self._retrieval.execute(user_text)
+                if context:
+                    self._history.system_prompt = f"{original_sys_prompt}\n\nUse the following retrieved context to answer the query:\n{context}"
+            except Exception as e:
+                logger.error(f"RAG retrieval failed: {e}")
 
         # Concurrent LLM + TTS
         sentence_queue: asyncio.Queue[str | None] = asyncio.Queue(
@@ -607,9 +652,16 @@ class ConversationPipeline:
             return
         except Exception as e:
             logger.error(f"Pipeline error: {e}")
-            yield ev(PipelineEventType.ERROR, session_id=session_id, code="PIPELINE_ERROR", message=str(e))
+            yield ev(
+                PipelineEventType.ERROR,
+                session_id=session_id,
+                code="PIPELINE_ERROR",
+                message=str(e),
+            )
             yield ev(PipelineEventType.IDLE, session_id=session_id)
             return
+        finally:
+            self._history.system_prompt = original_sys_prompt
 
         # Drain event queue
         while not event_queue.empty():
@@ -634,17 +686,21 @@ class ConversationPipeline:
                 tts_key: str | None = None
                 try:
                     from app.infrastructure.cache.cache_keys import tts_cache_key as _tts_key
-                    from app.infrastructure.db.chat_repository import save_message
+                    from app.infrastructure.db.database import AsyncSessionLocal
+                    from app.infrastructure.db.repositories.chat_repository import ChatRepository
                     from app.shared.config import get_settings as _settings
 
                     tts_key = _tts_key(assistant_text, _settings().TTS_VOICE)
-                    await save_message(
-                        session_id=session_id,
-                        role="assistant",
-                        content=assistant_text,
-                        input_type="text",
-                        tts_cache_key=tts_key,
-                    )
+                    async with AsyncSessionLocal() as db:
+                        repo = ChatRepository(db)
+                        await repo.save_message(
+                            session_id=session_id,
+                            role="assistant",
+                            content=assistant_text,
+                            input_type="text",
+                            tts_cache_key=tts_key,
+                        )
+                        await db.commit()
                 except Exception as e:
                     logger.warning(f"[Pipeline] Failed to persist assistant message: {e}")
 

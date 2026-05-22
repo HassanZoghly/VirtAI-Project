@@ -1,5 +1,7 @@
 /* eslint-disable no-console */
 import { useAuthStore } from '@/features/auth/store/authStore';
+import { clearBrowserAuthState } from '@/features/auth/services/authStateCleanup';
+import { refreshAccessTokenSingleFlight } from '@/features/auth/services/refreshService';
 import { logger } from '@/shared/utils/logger';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -61,6 +63,7 @@ function useWSClient(url) {
   // Tracks the timestamp when the socket last transitioned to OPEN,
   // used to detect fast-fail closes (session stale → clear resume state).
   const connectedAtRef = useRef(0);
+  const authRefreshAttemptsRef = useRef(0);
 
   useEffect(() => {
     accessTokenRef.current = accessToken;
@@ -189,236 +192,364 @@ function useWSClient(url) {
     }, 80);
   }, [flushAck]);
 
-  const connect = useCallback((overrideUrl = null) => {
-    const currentUrl = overrideUrl || urlRef.current;
+  const connect = useCallback(
+    (overrideUrl = null) => {
+      const currentUrl = overrideUrl || urlRef.current;
 
-    if (!currentUrl) {
-      if (import.meta.env.DEV) {
-        console.debug('[WS] URL is null or undefined, skipping connection');
-      }
-      clearReconnectTimer();
-      setConnectionState(ConnectionState.OFFLINE);
-      return;
-    }
-
-    if (reconnectPausedRef.current) {
-      if (import.meta.env.DEV) {
-        console.debug('[WS] Reconnect paused; waiting for manual retry');
-      }
-      return;
-    }
-
-    if (reconnectAttempts.current >= MAX_RECONNECT_ATTEMPTS) {
-      pauseReconnect();
-      if (import.meta.env.DEV) {
-        console.debug('[WS] Reconnect limit reached; waiting for manual retry');
-      }
-      return;
-    }
-
-    const currentAccessToken = accessTokenRef.current;
-    if (!currentAccessToken) {
-      clearReconnectTimer();
-      setConnectionState(ConnectionState.OFFLINE);
-      if (import.meta.env.DEV) {
-        console.debug('[WS] Waiting for access token before connecting');
-      }
-      return;
-    }
-
-    // STRICT CONNECTION GUARD: Never create new WS if one exists in CONNECTING/OPEN
-    if (wsRef.current) {
-      const state = wsRef.current.readyState;
-      if (state === WebSocket.CONNECTING || state === WebSocket.OPEN) {
+      if (!currentUrl) {
         if (import.meta.env.DEV) {
-          console.debug(
-            '[WS] Socket already exists in state:',
-            ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][state]
-          );
+          console.debug('[WS] URL is null or undefined, skipping connection');
+        }
+        clearReconnectTimer();
+        setConnectionState(ConnectionState.OFFLINE);
+        return;
+      }
+
+      if (reconnectPausedRef.current) {
+        if (import.meta.env.DEV) {
+          console.debug('[WS] Reconnect paused; waiting for manual retry');
         }
         return;
       }
-    }
 
-    // Prevent multiple simultaneous connection attempts
-    if (isConnectingRef.current) {
-      if (import.meta.env.DEV) {
-        console.debug('[WS] Connection already in progress, skipping');
-      }
-      return;
-    }
-
-    isConnectingRef.current = true;
-    const currentMountId = mountIdRef.current;
-    const instanceId = Math.random().toString(36).substring(7);
-
-    // Only show "reconnecting" if this is a retry (not the very first connect)
-    if (reconnectAttempts.current > 0) {
-      setConnectionState(ConnectionState.RECONNECTING);
-    }
-
-    try {
-      let socketUrl = currentUrl;
-      try {
-        const parsed = new URL(currentUrl);
-        if (sessionIdRef.current) {
-          parsed.searchParams.set('resume', 'true');
-          parsed.searchParams.set('session_id', sessionIdRef.current);
-          parsed.searchParams.set('last_seq', String(lastSeqRef.current));
-        }
-        socketUrl = parsed.toString();
-      } catch {
-        // Keep original URL for non-standard runtimes.
-      }
-
-      const protocols = currentAccessToken ? ["access_token", currentAccessToken] : [];
-      const socket = new WebSocket(socketUrl, protocols);
-      wsRef.current = socket;
-      socket._mountId = currentMountId;
-      socket._instanceId = instanceId;
-      socket._sourceUrl = currentUrl;
-      isIntentionalCloseRef.current = false;
-
-      if (import.meta.env.DEV) {
-        console.debug('[WS] Creating new WebSocket, state: CONNECTING');
-      }
-
-      socket.onopen = () => {
-        if (socket._instanceId !== instanceId) {
-          socket.close();
-          return;
-        }
-        if (socket._mountId !== mountIdRef.current) {
-          socket.close();
-          return;
-        }
-
-        isConnectingRef.current = false;
-        connectedAtRef.current = Date.now();
-
+      if (reconnectAttempts.current >= MAX_RECONNECT_ATTEMPTS) {
+        pauseReconnect();
         if (import.meta.env.DEV) {
-          console.debug('[WS] State transition: → INITIALIZING');
+          console.debug('[WS] Reconnect limit reached; waiting for manual retry');
         }
+        return;
+      }
 
-        // Enter brief "initializing" phase so the UI can show a handshake state
-        setConnectionState(ConnectionState.INITIALIZING);
-
-        // Transition to ONLINE after a short delay (lets the server send 'ready')
-        // If we receive a 'ready' message earlier, we promote immediately.
-        initTimerRef.current = setTimeout(() => {
-          initTimerRef.current = null;
-          setConnectionState((prev) =>
-            prev === ConnectionState.INITIALIZING ? ConnectionState.ONLINE : prev
-          );
-        }, 800);
-
-        reconnectAttempts.current = 0;
-
+      const currentAccessToken = accessTokenRef.current;
+      if (!currentAccessToken) {
+        clearReconnectTimer();
+        setConnectionState(ConnectionState.OFFLINE);
         if (import.meta.env.DEV) {
-          console.log('[WS] ✅ Connected to backend');
+          console.debug('[WS] Waiting for access token before connecting');
         }
+        return;
+      }
 
-        // Flush message queue
-        while (messageQueue.current.length > 0) {
-          const msg = messageQueue.current.shift();
-          try {
-            socket.send(JSON.stringify(msg));
-          } catch (err) {
-            logger.error('[WS] Failed to send queued message:', err);
-          }
-        }
-      };
-
-      socket.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data);
-
-          if (Number.isFinite(message.seq_id)) {
-            const nextSeq = Number(message.seq_id);
-            if (nextSeq > lastSeqRef.current) {
-              lastSeqRef.current = nextSeq;
-            }
-            scheduleAck();
-          }
-
-          if (!message.type) {
-            if (import.meta.env.DEV) {
-              console.warn('[WS] Invalid message: missing type field', message);
-            }
-            return;
-          }
-
-          const messageData = message.data || {};
-          if (
-            typeof messageData.session_id === 'string' &&
-            messageData.session_id.length > 0 &&
-            !sessionIdRef.current
-          ) {
-            sessionIdRef.current = messageData.session_id;
-          }
-
-          // 'ready' / 'pong' are control messages — use 'ready' to promote to ONLINE early
-          if (message.type === 'ready') {
-            const readyData = message.data || {};
-            if (typeof readyData.session_id === 'string' && readyData.session_id.length > 0) {
-              sessionIdRef.current = readyData.session_id;
-            }
-            if (Number.isFinite(readyData.last_seq)) {
-              lastSeqRef.current = Math.max(lastSeqRef.current, Number(readyData.last_seq));
-            }
-
-            if (initTimerRef.current) {
-              clearTimeout(initTimerRef.current);
-              initTimerRef.current = null;
-            }
-            setConnectionState(ConnectionState.ONLINE);
-            scheduleAck();
-            clearReconnectState();
-            if (import.meta.env.DEV) {
-              console.debug('[WS] Received ready — promoted to ONLINE');
-            }
-            return;
-          }
-
-          if (message.type === 'pong') {
-            if (import.meta.env.DEV) {
-              console.debug('[WS] Received pong');
-            }
-            return;
-          }
-
-          // Dispatch to registered handlers
-          const typeHandlers = handlers.current[message.type];
-          if (typeHandlers && typeHandlers.size > 0) {
-            const data = message.data || message;
-            typeHandlers.forEach((handler) => handler(data));
-          } else if (import.meta.env.DEV) {
-            console.warn('[WS] Unknown message type:', message.type);
-          }
-        } catch (err) {
-          logger.error('[WS] Failed to parse message:', err);
-        }
-      };
-
-      socket.onerror = () => {
-        const state = socket.readyState;
-
-        if (isIntentionalCloseRef.current) {
+      // STRICT CONNECTION GUARD: Never create new WS if one exists in CONNECTING/OPEN
+      if (wsRef.current) {
+        const state = wsRef.current.readyState;
+        if (state === WebSocket.CONNECTING || state === WebSocket.OPEN) {
           if (import.meta.env.DEV) {
             console.debug(
-              '[WS] Error during intentional close (suppressed), state:',
+              '[WS] Socket already exists in state:',
               ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][state]
             );
           }
           return;
         }
+      }
+
+      // Prevent multiple simultaneous connection attempts
+      if (isConnectingRef.current) {
+        if (import.meta.env.DEV) {
+          console.debug('[WS] Connection already in progress, skipping');
+        }
+        return;
+      }
+
+      isConnectingRef.current = true;
+      const currentMountId = mountIdRef.current;
+      const instanceId = Math.random().toString(36).substring(7);
+
+      // Only show "reconnecting" if this is a retry (not the very first connect)
+      if (reconnectAttempts.current > 0) {
+        setConnectionState(ConnectionState.RECONNECTING);
+      }
+
+      try {
+        let socketUrl = currentUrl;
+        try {
+          const parsed = new URL(currentUrl);
+          if (sessionIdRef.current) {
+            parsed.searchParams.set('resume', 'true');
+            parsed.searchParams.set('session_id', sessionIdRef.current);
+            parsed.searchParams.set('last_seq', String(lastSeqRef.current));
+          }
+          socketUrl = parsed.toString();
+        } catch {
+          // Keep original URL for non-standard runtimes.
+        }
+
+        const protocols = currentAccessToken ? ['access_token', currentAccessToken] : [];
+        const socket = new WebSocket(socketUrl, protocols);
+        wsRef.current = socket;
+        socket._mountId = currentMountId;
+        socket._instanceId = instanceId;
+        socket._sourceUrl = currentUrl;
+        isIntentionalCloseRef.current = false;
 
         if (import.meta.env.DEV) {
-          console.debug(
-            '[WS] Error event, state:',
-            ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][state]
-          );
+          console.debug('[WS] Creating new WebSocket, state: CONNECTING');
         }
+
+        socket.onopen = () => {
+          if (socket._instanceId !== instanceId) {
+            socket.close();
+            return;
+          }
+          if (socket._mountId !== mountIdRef.current) {
+            socket.close();
+            return;
+          }
+
+          isConnectingRef.current = false;
+          connectedAtRef.current = Date.now();
+
+          if (import.meta.env.DEV) {
+            console.debug('[WS] State transition: → INITIALIZING');
+          }
+
+          // Enter brief "initializing" phase so the UI can show a handshake state
+          setConnectionState(ConnectionState.INITIALIZING);
+
+          // Transition to ONLINE after a short delay (lets the server send 'ready')
+          // If we receive a 'ready' message earlier, we promote immediately.
+          initTimerRef.current = setTimeout(() => {
+            initTimerRef.current = null;
+            setConnectionState((prev) =>
+              prev === ConnectionState.INITIALIZING ? ConnectionState.ONLINE : prev
+            );
+          }, 800);
+
+          reconnectAttempts.current = 0;
+          authRefreshAttemptsRef.current = 0;
+
+          if (import.meta.env.DEV) {
+            console.log('[WS] ✅ Connected to backend');
+          }
+
+          // Flush message queue
+          while (messageQueue.current.length > 0) {
+            const msg = messageQueue.current.shift();
+            try {
+              socket.send(JSON.stringify(msg));
+            } catch (err) {
+              logger.error('[WS] Failed to send queued message:', err);
+            }
+          }
+        };
+
+        socket.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data);
+
+            if (Number.isFinite(message.seq_id)) {
+              const nextSeq = Number(message.seq_id);
+              if (nextSeq > lastSeqRef.current) {
+                lastSeqRef.current = nextSeq;
+              }
+              scheduleAck();
+            }
+
+            if (!message.type) {
+              if (import.meta.env.DEV) {
+                console.warn('[WS] Invalid message: missing type field', message);
+              }
+              return;
+            }
+
+            const messageData = message.data || {};
+            if (
+              typeof messageData.session_id === 'string' &&
+              messageData.session_id.length > 0 &&
+              !sessionIdRef.current
+            ) {
+              sessionIdRef.current = messageData.session_id;
+            }
+
+            // 'ready' / 'pong' are control messages — use 'ready' to promote to ONLINE early
+            if (message.type === 'ready') {
+              const readyData = message.data || {};
+              if (typeof readyData.session_id === 'string' && readyData.session_id.length > 0) {
+                sessionIdRef.current = readyData.session_id;
+              }
+              if (Number.isFinite(readyData.last_seq)) {
+                lastSeqRef.current = Math.max(lastSeqRef.current, Number(readyData.last_seq));
+              }
+
+              if (initTimerRef.current) {
+                clearTimeout(initTimerRef.current);
+                initTimerRef.current = null;
+              }
+              setConnectionState(ConnectionState.ONLINE);
+              scheduleAck();
+              clearReconnectState();
+              if (import.meta.env.DEV) {
+                console.debug('[WS] Received ready — promoted to ONLINE');
+              }
+              return;
+            }
+
+            if (message.type === 'pong') {
+              if (import.meta.env.DEV) {
+                console.debug('[WS] Received pong');
+              }
+              return;
+            }
+
+            // Dispatch to registered handlers
+            const typeHandlers = handlers.current[message.type];
+            if (typeHandlers && typeHandlers.size > 0) {
+              const data = message.data || message;
+              typeHandlers.forEach((handler) => handler(data));
+            } else if (import.meta.env.DEV) {
+              console.warn('[WS] Unknown message type:', message.type);
+            }
+          } catch (err) {
+            logger.error('[WS] Failed to parse message:', err);
+          }
+        };
+
+        socket.onerror = () => {
+          const state = socket.readyState;
+
+          if (isIntentionalCloseRef.current) {
+            if (import.meta.env.DEV) {
+              console.debug(
+                '[WS] Error during intentional close (suppressed), state:',
+                ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][state]
+              );
+            }
+            return;
+          }
+
+          if (import.meta.env.DEV) {
+            console.debug(
+              '[WS] Error event, state:',
+              ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][state]
+            );
+          }
+
+          const now = Date.now();
+          if (now - lastErrorTimeRef.current > 10000) {
+            if (import.meta.env.DEV) {
+              console.warn('[WS] ⚠️ Backend offline — will retry with exponential backoff');
+              console.info(
+                '[WS] 💡 Start backend: cd backend && python -m uvicorn app.main:app --reload'
+              );
+            }
+            lastErrorTimeRef.current = now;
+          }
+        };
+
+        socket.onclose = (event) => {
+          if (socket._instanceId !== instanceId) {
+            return;
+          }
+          if (socket._mountId !== mountIdRef.current) {
+            return;
+          }
+
+          const wasIntentional = isIntentionalCloseRef.current;
+
+          if (import.meta.env.DEV) {
+            console.debug(
+              `[WS] → CLOSED (code: ${event.code}, reason: "${event.reason || 'none'}", intentional: ${wasIntentional})`
+            );
+          }
+
+          isConnectingRef.current = false;
+          wsRef.current = null;
+
+          // Clear initializing timer if still running
+          if (initTimerRef.current) {
+            clearTimeout(initTimerRef.current);
+            initTimerRef.current = null;
+          }
+
+          if (wasIntentional) {
+            setConnectionState(ConnectionState.OFFLINE);
+            return;
+          }
+
+          const latestUrl = urlRef.current;
+          if (!latestUrl || latestUrl !== socket._sourceUrl) {
+            clearReconnectTimer();
+            setConnectionState(ConnectionState.OFFLINE);
+            return;
+          }
+
+          // 4401 = invalid/expired access token. Try one HTTP refresh, then reconnect.
+          if (event.code === 4401) {
+            clearReconnectTimer();
+            if (authRefreshAttemptsRef.current >= 1) {
+              clearBrowserAuthState();
+              useAuthStore.getState().logout();
+              setConnectionState(ConnectionState.OFFLINE);
+              setReconnectError('Session expired. Please log in again.');
+              return;
+            }
+
+            authRefreshAttemptsRef.current += 1;
+            setConnectionState(ConnectionState.RECONNECTING);
+            refreshAccessTokenSingleFlight()
+              .then((data) => {
+                useAuthStore.setState({ accessToken: data.access_token });
+                isIntentionalCloseRef.current = false;
+                connectRef.current(socket._sourceUrl);
+              })
+              .catch(() => {
+                clearBrowserAuthState();
+                useAuthStore.getState().logout();
+                setConnectionState(ConnectionState.OFFLINE);
+                setReconnectError('Session expired. Please log in again.');
+              });
+            return;
+          }
+
+          // 4403 = authorization failure — don't reconnect automatically
+          if (event.code === 4403) {
+            clearReconnectTimer();
+            setConnectionState(ConnectionState.OFFLINE);
+            setReconnectError('Session authorization failed. Please log in again.');
+            return;
+          }
+
+          // 4404 = session not found (backend already gracefully falls back, but
+          // handle it defensively here too). Clear resume state so the retry
+          // connects fresh without injecting stale resume params.
+          if (event.code === 4404) {
+            if (import.meta.env.DEV) {
+              console.warn('[WS] Session not found (4404) — clearing resume state before retry');
+            }
+            sessionIdRef.current = null;
+            lastSeqRef.current = 0;
+            lastAckedSeqRef.current = 0;
+          }
+
+          // Fast-fail detection: if the connection opened and then closed within 2s
+          // while we had a stale session_id, the session has expired. Clear it so
+          // the reconnect attempt goes in as a fresh connection (no resume=true).
+          const openDuration = Date.now() - connectedAtRef.current;
+          if (openDuration < 2000 && sessionIdRef.current && connectedAtRef.current > 0) {
+            if (import.meta.env.DEV) {
+              console.warn(
+                `[WS] Fast-fail detected (closed after ${openDuration}ms with active session_id) — clearing resume state`
+              );
+            }
+            sessionIdRef.current = null;
+            lastSeqRef.current = 0;
+            lastAckedSeqRef.current = 0;
+          }
+
+          // Normal close — don't reconnect
+          if (event.code === 1000 || event.code === 1001) {
+            clearReconnectTimer();
+            clearReconnectState();
+            setConnectionState(ConnectionState.OFFLINE);
+            return;
+          }
+
+          // Abnormal close — schedule reconnect with exponential backoff
+          scheduleReconnect(`Socket closed with code ${event.code}`, socket._sourceUrl);
+        };
+      } catch (err) {
+        isConnectingRef.current = false;
 
         const now = Date.now();
         if (now - lastErrorTimeRef.current > 10000) {
@@ -430,114 +561,12 @@ function useWSClient(url) {
           }
           lastErrorTimeRef.current = now;
         }
-      };
 
-      socket.onclose = (event) => {
-        if (socket._instanceId !== instanceId) {
-          return;
-        }
-        if (socket._mountId !== mountIdRef.current) {
-          return;
-        }
-
-        const wasIntentional = isIntentionalCloseRef.current;
-
-        if (import.meta.env.DEV) {
-          console.debug(
-            `[WS] → CLOSED (code: ${event.code}, reason: "${event.reason || 'none'}", intentional: ${wasIntentional})`
-          );
-        }
-
-        isConnectingRef.current = false;
-        wsRef.current = null;
-
-        // Clear initializing timer if still running
-        if (initTimerRef.current) {
-          clearTimeout(initTimerRef.current);
-          initTimerRef.current = null;
-        }
-
-        if (wasIntentional) {
-          setConnectionState(ConnectionState.OFFLINE);
-          return;
-        }
-
-        const latestUrl = urlRef.current;
-        if (!latestUrl || latestUrl !== socket._sourceUrl) {
-          clearReconnectTimer();
-          setConnectionState(ConnectionState.OFFLINE);
-          return;
-        }
-
-        // 4403 = auth failure — don't reconnect automatically
-        if (event.code === 4403) {
-          clearReconnectTimer();
-          setConnectionState(ConnectionState.OFFLINE);
-          setReconnectError('Session authorization failed. Please log in again.');
-          return;
-        }
-
-        // 4404 = session not found (backend already gracefully falls back, but
-        // handle it defensively here too). Clear resume state so the retry
-        // connects fresh without injecting stale resume params.
-        if (event.code === 4404) {
-          if (import.meta.env.DEV) {
-            console.warn('[WS] Session not found (4404) — clearing resume state before retry');
-          }
-          sessionIdRef.current = null;
-          lastSeqRef.current = 0;
-          lastAckedSeqRef.current = 0;
-        }
-
-        // Fast-fail detection: if the connection opened and then closed within 2s
-        // while we had a stale session_id, the session has expired. Clear it so
-        // the reconnect attempt goes in as a fresh connection (no resume=true).
-        const openDuration = Date.now() - connectedAtRef.current;
-        if (openDuration < 2000 && sessionIdRef.current && connectedAtRef.current > 0) {
-          if (import.meta.env.DEV) {
-            console.warn(
-              `[WS] Fast-fail detected (closed after ${openDuration}ms with active session_id) — clearing resume state`
-            );
-          }
-          sessionIdRef.current = null;
-          lastSeqRef.current = 0;
-          lastAckedSeqRef.current = 0;
-        }
-
-        // Normal close — don't reconnect
-        if (event.code === 1000 || event.code === 1001) {
-          clearReconnectTimer();
-          clearReconnectState();
-          setConnectionState(ConnectionState.OFFLINE);
-          return;
-        }
-
-        // Abnormal close — schedule reconnect with exponential backoff
-        scheduleReconnect(`Socket closed with code ${event.code}`, socket._sourceUrl);
-      };
-    } catch (err) {
-      isConnectingRef.current = false;
-
-      const now = Date.now();
-      if (now - lastErrorTimeRef.current > 10000) {
-        if (import.meta.env.DEV) {
-          console.warn('[WS] ⚠️ Backend offline — will retry with exponential backoff');
-          console.info(
-            '[WS] 💡 Start backend: cd backend && python -m uvicorn app.main:app --reload'
-          );
-        }
-        lastErrorTimeRef.current = now;
+        scheduleReconnect(err?.message || 'Failed to create WebSocket connection', currentUrl);
       }
-
-      scheduleReconnect(err?.message || 'Failed to create WebSocket connection', currentUrl);
-    }
-  }, [
-    scheduleAck,
-    clearReconnectState,
-    clearReconnectTimer,
-    scheduleReconnect,
-    pauseReconnect,
-  ]);
+    },
+    [scheduleAck, clearReconnectState, clearReconnectTimer, scheduleReconnect, pauseReconnect]
+  );
 
   useEffect(() => {
     connectRef.current = connect;
@@ -571,6 +600,7 @@ function useWSClient(url) {
       lastSeqRef.current = 0;
       lastAckedSeqRef.current = 0;
       connectedAtRef.current = 0;
+      authRefreshAttemptsRef.current = 0;
 
       clearReconnectTimer();
       if (ackTimerRef.current) {
@@ -671,12 +701,14 @@ function useWSClient(url) {
     lastSeqRef.current = 0;
     lastAckedSeqRef.current = 0;
     reconnectAttempts.current = 0;
+    authRefreshAttemptsRef.current = 0;
     setReconnectError(null);
   }, [clearReconnectTimer]);
 
   const reconnect = useCallback(() => {
     reconnectPausedRef.current = false;
     reconnectAttempts.current = 0;
+    authRefreshAttemptsRef.current = 0;
     clearReconnectTimer();
     setReconnectError(null);
     setConnectionState(ConnectionState.RECONNECTING);

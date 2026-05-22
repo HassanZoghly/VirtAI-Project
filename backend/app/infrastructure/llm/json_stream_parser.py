@@ -4,7 +4,6 @@ It processes raw token chunks and yields characters for specific string fields.
 """
 
 
-
 class JsonStreamParser:
     def __init__(self):
         self.reset()
@@ -32,7 +31,7 @@ class JsonStreamParser:
                 else:
                     self.current_key += char
             elif self.state == "WAIT_COLON":
-                if char == ':':
+                if char == ":":
                     self.state = "WAIT_VALUE_START"
             elif self.state == "WAIT_VALUE_START":
                 if char == '"':
@@ -46,38 +45,40 @@ class JsonStreamParser:
                         self.unicode_buffer += char
                         if len(self.unicode_buffer) == 4:
                             try:
-                                emissions.append((self.current_key, chr(int(self.unicode_buffer, 16))))
+                                emissions.append(
+                                    (self.current_key, chr(int(self.unicode_buffer, 16)))
+                                )
                             except ValueError:
                                 emissions.append((self.current_key, f"\\u{self.unicode_buffer}"))
                             self.in_escape = False
                             self.unicode_buffer = ""
-                    elif char == 'n':
+                    elif char == "n":
                         emissions.append((self.current_key, "\n"))
                         self.in_escape = False
-                    elif char == 't':
+                    elif char == "t":
                         emissions.append((self.current_key, "\t"))
                         self.in_escape = False
-                    elif char == 'r':
+                    elif char == "r":
                         emissions.append((self.current_key, "\r"))
                         self.in_escape = False
-                    elif char == 'u':
+                    elif char == "u":
                         self.unicode_buffer = "u"
-                    elif char == '\\' or char == '"':
+                    elif char == "\\" or char == '"':
                         emissions.append((self.current_key, char))
                         self.in_escape = False
                     else:
                         # For other escaped characters, just pass them
                         emissions.append((self.current_key, char))
                         self.in_escape = False
-                elif char == '\\':
+                elif char == "\\":
                     self.in_escape = True
                 elif char == '"':
                     self.state = "WAIT_COMMA_OR_END"
                 else:
                     emissions.append((self.current_key, char))
             elif self.state == "WAIT_COMMA_OR_END":
-                if char == ',':
+                if char == ",":
                     self.state = "WAIT_KEY_START"
-                elif char == '}':
+                elif char == "}":
                     self.state = "DONE"
         return emissions

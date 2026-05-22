@@ -15,6 +15,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.shared.ids import parse_uuid
+
 
 def _normalize_optional_identifier(value: str | None) -> str | None:
     if value is None:
@@ -22,14 +24,20 @@ def _normalize_optional_identifier(value: str | None) -> str | None:
     normalized = value.strip()
     if not normalized:
         raise ValueError("Identifier cannot be empty")
-    return normalized
+    parsed = parse_uuid(normalized)
+    if parsed is None:
+        raise ValueError("Identifier must be a UUID")
+    return str(parsed)
 
 
 def _normalize_required_identifier(value: str) -> str:
     normalized = value.strip()
     if not normalized:
         raise ValueError("Identifier cannot be empty")
-    return normalized
+    parsed = parse_uuid(normalized)
+    if parsed is None:
+        raise ValueError("Identifier must be a UUID")
+    return str(parsed)
 
 
 # ── Message Envelope ──────────────────────────────────────────────────────────

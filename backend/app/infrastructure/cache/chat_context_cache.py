@@ -2,14 +2,15 @@
 Redis-backed chat context cache.
 
 Stores the last N messages per session as a Redis List of JSON strings.
-This reduces MongoDB reads for active conversations.
-MongoDB remains the source of truth — Redis is a fast read-through cache.
+PostgreSQL remains the source of truth — Redis is a fast read-through cache.
 
 Flow:
-  get_context()     → Redis HIT → return messages
-                    → Redis MISS → rebuild from MongoDB → return messages
-  push_message()    → append to Redis list + trim to MAX_MESSAGES
-  invalidate()      → delete context key (e.g. session ended)
+    get_context()   → Redis HIT  → return messages
+                    → Redis MISS → return [] (no rebuild)
+    get_or_rebuild_context()    → Redis HIT  → return messages
+                                → Redis MISS → rebuild from PostgreSQL → return messages
+    push_message()  → append to Redis list + trim to MAX_MESSAGES
+    invalidate()    → delete context key (e.g. session ended)
 
 Key: virtai:chat:ctx:{session_id}   (Redis List, JSON strings)
 TTL: REDIS_CHAT_CONTEXT_TTL seconds (refreshed on each push)
@@ -31,11 +32,10 @@ MAX_MESSAGES = 50
 
 async def get_context(session_id: str) -> list[dict]:
     """
-    Return the last MAX_MESSAGES messages for a session.
+    Return the last MAX_MESSAGES messages for a session from Redis.
 
-    Returns an empty list if Redis is unavailable (graceful degradation).
-    Does NOT trigger a MongoDB rebuild — call rebuild_context() explicitly
-    when you need guaranteed context on a cache miss.
+    Returns an empty list if Redis is unavailable or key is missing.
+    Does NOT trigger a PostgreSQL rebuild — call rebuild_context() explicitly.
     """
     try:
         redis = get_redis()
@@ -49,7 +49,7 @@ async def get_context(session_id: str) -> list[dict]:
 
 async def get_or_rebuild_context(session_id: str) -> list[dict]:
     """
-    Get context from Redis, rebuilding from MongoDB if the key is missing or expired.
+    Get context from Redis, rebuilding from PostgreSQL if the key is missing or expired.
 
     This is the preferred method for the pipeline — it guarantees fresh context
     on a cache miss without failing the request.
@@ -88,7 +88,7 @@ async def push_message(
 
         pipe = redis.pipeline()
         pipe.rpush(key, json.dumps(message))
-        pipe.ltrim(key, -MAX_MESSAGES, -1)           # keep last N
+        pipe.ltrim(key, -MAX_MESSAGES, -1)  # keep last N
         pipe.expire(key, settings.REDIS_CHAT_CONTEXT_TTL)  # refresh TTL
         await pipe.execute()
     except Exception as e:
@@ -97,17 +97,20 @@ async def push_message(
 
 async def rebuild_context(session_id: str) -> list[dict]:
     """
-    Fetch the last MAX_MESSAGES messages from MongoDB and repopulate Redis.
+    Fetch the last MAX_MESSAGES messages from PostgreSQL and repopulate Redis.
 
     Called on a cache miss. Returns the messages fetched.
-    Fails gracefully if MongoDB is also unreachable.
+    Fails gracefully if PostgreSQL is also unreachable.
     """
     try:
-        from app.infrastructure.db.chat_repository import get_session_messages
+        from app.infrastructure.db.database import AsyncSessionLocal
+        from app.infrastructure.db.repositories.chat_repository import ChatRepository
 
-        messages = await get_session_messages(session_id, limit=MAX_MESSAGES)
-        if not messages:
-            return []
+        async with AsyncSessionLocal() as db:
+            repo = ChatRepository(db)
+            messages = await repo.get_session_messages(session_id, limit=MAX_MESSAGES)
+            if not messages:
+                return []
 
         settings = get_settings()
         redis = get_redis()
@@ -122,7 +125,7 @@ async def rebuild_context(session_id: str) -> list[dict]:
         await pipe.execute()
 
         logger.info(
-            f"[ChatContextCache] Rebuilt from MongoDB | session={session_id} | count={len(messages)}"
+            f"[ChatContextCache] Rebuilt from PostgreSQL | session={session_id} | count={len(messages)}"
         )
         return [{"role": m["role"], "content": m["content"]} for m in messages]
 

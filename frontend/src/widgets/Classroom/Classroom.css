@@ -503,6 +503,9 @@
 .chat-input-wrapper {
   display: flex;
   flex-direction: column;
+  direction: ltr;
+  position: relative;
+  z-index: 5;
 }
 
 .chat-input-bar {
@@ -510,6 +513,7 @@
   display: flex;
   align-items: center;
   gap: 0.9rem;
+  overflow: visible;
 }
 
 .char-count {
@@ -528,6 +532,7 @@
 }
 
 .input-icon-btn {
+  flex: 0 0 44px;
   width: 44px;
   height: 44px;
   border-radius: 50%;
@@ -544,6 +549,12 @@
     color var(--transition-normal, 0.3s) var(--ease-smooth, ease),
     border-color var(--transition-normal, 0.3s) var(--ease-smooth, ease),
     transform var(--transition-fast, 0.2s) var(--ease-smooth, ease);
+}
+
+.input-icon-btn:focus-visible,
+.send-btn:focus-visible {
+  outline: 2px solid rgba(180, 171, 139, 0.8);
+  outline-offset: 3px;
 }
 
 .input-icon-btn:hover:not(:disabled) {
@@ -563,6 +574,8 @@
 .chat-input {
   flex: 1;
   min-width: 0;
+  direction: ltr;
+  text-align: left;
   padding: 0.85rem 1.15rem;
   padding-right: 1.5rem;
   background: var(--card-bg, #1e1e1e);
@@ -620,6 +633,7 @@
 }
 
 .send-btn {
+  flex: 0 0 44px;
   width: 44px;
   height: 44px;
   border-radius: 50%;

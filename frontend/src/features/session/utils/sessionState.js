@@ -30,11 +30,7 @@ export function extractCollection(data, keys = []) {
 
 export function getSessionTimeMs(session) {
   return new Date(
-    session?.updated_at ||
-      session?.updatedAt ||
-      session?.created_at ||
-      session?.createdAt ||
-      0
+    session?.updated_at || session?.updatedAt || session?.created_at || session?.createdAt || 0
   ).getTime();
 }
 
@@ -58,7 +54,9 @@ export function normalizeAndSortSessions(data) {
     ? data
     : extractCollection(data, ['sessions', 'messages', 'data', 'items']);
 
-  return sortSessionsByRecency(sessions.map(normalizeSession).filter((session) => Boolean(session.id)));
+  return sortSessionsByRecency(
+    sessions.map(normalizeSession).filter((session) => Boolean(session.id))
+  );
 }
 
 export function selectSessionId(sessions, urlSessionId) {
@@ -81,7 +79,9 @@ export function resolveInitialSessionId(sessions, urlSessionId) {
     return null;
   }
 
-  const normalizedSessions = sessions.map(normalizeSession).filter((session) => Boolean(session.id));
+  const normalizedSessions = sessions
+    .map(normalizeSession)
+    .filter((session) => Boolean(session.id));
   if (normalizedSessions.length === 0) {
     return null;
   }
@@ -106,4 +106,3 @@ export function resolveInitialSessionId(sessions, urlSessionId) {
 
   return normalizedSessions[0].id;
 }
-

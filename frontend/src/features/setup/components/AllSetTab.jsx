@@ -12,7 +12,13 @@ import SuccessAnimation from './SuccessAnimation';
 
 const toast = new Toast();
 
-export default function AllSetTab({ avatar, voice, movementEnabled }) {
+export default function AllSetTab({
+  avatar,
+  voice,
+  movementEnabled,
+  documentsSkipped,
+  documentsUploaded,
+}) {
   const navigate = useNavigate();
   const setUser = useAuthStore((s) => s.setUser);
   const isInitializing = useAuthStore((s) => s.isInitializing);
@@ -34,6 +40,8 @@ export default function AllSetTab({ avatar, voice, movementEnabled }) {
         avatarId: avatar.id,
         voiceId: voice.id,
         movementEnabled: !!movementEnabled,
+        documentsSkipped: !!documentsSkipped,
+        documentsUploaded: !!documentsUploaded,
       });
 
       markStartNewConversation();

@@ -66,6 +66,75 @@ class ValidationException(AvatarBaseException):
         )
 
 
+class RAGException(AvatarBaseException):
+    """Raised when RAG ingestion or retrieval fails."""
+
+    def __init__(self, message: str, details: dict | None = None):
+        super().__init__(
+            message=f"RAG Error: {message}",
+            code="RAG_ERROR",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            details=details,
+        )
+
+
+class EmptyDocumentError(RAGException):
+    def __init__(self, message: str = "Document is empty", details: dict | None = None):
+        super().__init__(message=message, details=details)
+
+
+class UnsupportedFileType(RAGException):
+    def __init__(self, message: str = "Unsupported file type", details: dict | None = None):
+        self.status_code = status.HTTP_400_BAD_REQUEST
+        super().__init__(message=message, details=details)
+
+
+class IngestionCancelledException(RAGException):
+    def __init__(self, message: str = "Ingestion cancelled", details: dict | None = None):
+        super().__init__(message=message, details=details)
+
+
+class DuplicateDocumentError(RAGException):
+    def __init__(self, existing_doc_id: str):
+        self.existing_doc_id = existing_doc_id
+        self.status_code = status.HTTP_409_CONFLICT
+        super().__init__(
+            message="Duplicate document detected", details={"existing_doc_id": existing_doc_id}
+        )
+
+
+class ChunkLimitExceeded(RAGException):
+    def __init__(
+        self, message: str = "Document exceeds maximum chunk limit", details: dict | None = None
+    ):
+        self.status_code = status.HTTP_400_BAD_REQUEST
+        super().__init__(message=message, details=details)
+
+
+class VectorDimensionMismatch(RAGException):
+    def __init__(self, expected: int, actual: int):
+        self.expected = expected
+        self.actual = actual
+        super().__init__(
+            message=f"Vector dimension mismatch. Expected {expected}, got {actual}",
+            details={"expected": expected, "actual": actual},
+        )
+
+
+class IngestionQueueFull(RAGException):
+    def __init__(self, message: str = "Ingestion queue is full", details: dict | None = None):
+        self.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        super().__init__(message=message, details=details)
+
+
+class ActiveJobLimitExceeded(RAGException):
+    def __init__(
+        self, message: str = "Too many active ingestion jobs", details: dict | None = None
+    ):
+        self.status_code = status.HTTP_429_TOO_MANY_REQUESTS
+        super().__init__(message=message, details=details)
+
+
 class ServiceUnavailableException(AvatarBaseException):
     def __init__(self, service: str):
         super().__init__(
@@ -90,6 +159,54 @@ class AuthenticationException(AvatarBaseException):
             status_code=status.HTTP_401_UNAUTHORIZED,
             details=details,
         )
+
+
+class InvalidTokenError(AuthenticationException):
+    """JWT is malformed, has the wrong type, or is missing required claims."""
+
+    def __init__(self, message: str = "Invalid token", details: dict | None = None) -> None:
+        super().__init__(message=message, details=details)
+        self.code = "INVALID_TOKEN"
+
+
+class ExpiredTokenError(AuthenticationException):
+    """JWT signature is valid but the token is expired."""
+
+    def __init__(self, message: str = "Token has expired", details: dict | None = None) -> None:
+        super().__init__(message=message, details=details)
+        self.code = "EXPIRED_TOKEN"
+
+
+class InvalidUserIdError(AuthenticationException):
+    """Token or request carried a non-UUID user identifier."""
+
+    def __init__(
+        self, message: str = "Invalid user identifier", details: dict | None = None
+    ) -> None:
+        super().__init__(message=message, details=details)
+        self.code = "INVALID_USER_ID"
+
+
+class RevokedTokenError(AuthenticationException):
+    """JWT was explicitly revoked or superseded by refresh rotation."""
+
+    def __init__(
+        self, message: str = "Token has been revoked", details: dict | None = None
+    ) -> None:
+        super().__init__(message=message, details=details)
+        self.code = "REVOKED_TOKEN"
+
+
+class InvalidAuthStateError(AuthenticationException):
+    """Authentication state is internally inconsistent or superseded."""
+
+    def __init__(
+        self,
+        message: str = "Invalid authentication state",
+        details: dict | None = None,
+    ) -> None:
+        super().__init__(message=message, details=details)
+        self.code = "INVALID_AUTH_STATE"
 
 
 class AuthorizationException(AvatarBaseException):

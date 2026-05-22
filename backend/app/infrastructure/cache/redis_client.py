@@ -10,6 +10,8 @@ get_redis() returns the active client for use in cache modules.
 
 from __future__ import annotations
 
+import asyncio
+
 import redis.asyncio as aioredis
 from loguru import logger
 
@@ -29,17 +31,36 @@ async def init_redis() -> None:
     url_safe = settings.REDIS_URL.split("@")[-1] if "@" in settings.REDIS_URL else "redacted"
     logger.info(f"Connecting to Redis | url={url_safe}")
 
-    _redis = aioredis.from_url(
-        settings.REDIS_URL,
-        encoding="utf-8",
-        decode_responses=False,  # keep bytes; callers encode/decode as needed
-        socket_connect_timeout=5,
-        socket_timeout=5,
-    )
+    last_error: Exception | None = None
+    for attempt in range(1, settings.REDIS_CONNECT_RETRIES + 1):
+        _redis = aioredis.from_url(
+            settings.REDIS_URL,
+            encoding="utf-8",
+            decode_responses=False,  # keep bytes; callers encode/decode as needed
+            socket_connect_timeout=5,
+            socket_timeout=5,
+        )
 
-    # Verify connectivity
-    await _redis.ping()
-    logger.info("Redis connection established")
+        try:
+            await _redis.ping()
+            logger.info("Redis connection established")
+            return
+        except Exception as exc:
+            last_error = exc
+            await _redis.aclose()
+            _redis = None
+            logger.warning(
+                {
+                    "event": "redis_connect_failed",
+                    "attempt": attempt,
+                    "max_attempts": settings.REDIS_CONNECT_RETRIES,
+                    "error_type": type(exc).__name__,
+                }
+            )
+            if attempt < settings.REDIS_CONNECT_RETRIES:
+                await asyncio.sleep(settings.REDIS_CONNECT_RETRY_DELAY_SEC)
+
+    raise RuntimeError("Redis connection failed") from last_error
 
 
 async def close_redis() -> None:
@@ -58,7 +79,6 @@ def get_redis() -> aioredis.Redis:
     """
     if _redis is None:
         raise RuntimeError(
-            "Redis not initialised. "
-            "Ensure init_redis() is called in the app lifespan."
+            "Redis not initialised. Ensure init_redis() is called in the app lifespan."
         )
     return _redis

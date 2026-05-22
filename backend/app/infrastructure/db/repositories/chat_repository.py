@@ -1,0 +1,176 @@
+"""
+Chat repository using SQLAlchemy async.
+
+Implements ChatRepositoryPort interface.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.domain.chat.ports import ChatRepositoryPort
+from app.infrastructure.db.models import ChatSession, Message
+from app.shared.ids import require_uuid
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _derive_session_title(content: str, max_len: int = 30) -> str:
+    return content.strip()[:max_len]
+
+
+class ChatRepository(ChatRepositoryPort):
+    """SQLAlchemy implementation of chat repository."""
+
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def create_chat_session(
+        self, user_id: str, title: str = "New Chat", session_id: str | None = None
+    ) -> dict:
+        """Create a new chat session."""
+        session_uuid = require_uuid(session_id, field_name="session_id") if session_id else None
+        user_uuid = require_uuid(user_id, field_name="user_id")
+        session = ChatSession(
+            id=session_uuid,
+            user_id=user_uuid,
+            title=title,
+        )
+        self.db.add(session)
+        await self.db.flush()
+        await self.db.refresh(session)
+        return self._serialize_session(session)
+
+    async def get_chat_session(self, session_id: str) -> dict | None:
+        """Get a chat session by ID."""
+        sid = require_uuid(session_id, field_name="session_id")
+        stmt = select(ChatSession).where(ChatSession.id == sid)
+        result = await self.db.execute(stmt)
+        session = result.scalar_one_or_none()
+        return self._serialize_session(session) if session else None
+
+    async def list_user_sessions(
+        self, user_id: str, archived: bool = False, limit: int = 50
+    ) -> list[dict]:
+        """List sessions for a user, ordered by updated_at desc."""
+        stmt = (
+            select(ChatSession)
+            .where(
+                ChatSession.user_id == require_uuid(user_id, field_name="user_id"),
+                ChatSession.is_archived == archived,
+            )
+            .order_by(ChatSession.updated_at.desc())
+            .limit(limit)
+        )
+        result = await self.db.execute(stmt)
+        sessions = result.scalars().all()
+        return [self._serialize_session(s) for s in sessions]
+
+    async def delete_chat_session(self, session_id: str) -> bool:
+        """Delete a session and all its messages."""
+        sid = require_uuid(session_id, field_name="session_id")
+        # Delete messages first
+        await self.db.execute(delete(Message).where(Message.session_id == sid))
+        # Delete session
+        result = await self.db.execute(delete(ChatSession).where(ChatSession.id == sid))
+        await self.db.flush()
+        return result.rowcount > 0
+
+    async def save_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        input_type: str = "text",
+        tts_cache_key: str | None = None,
+        sources: list[dict] | None = None,
+    ) -> dict:
+        """Save a message and update session counters."""
+        sid = require_uuid(session_id, field_name="session_id")
+        message = Message(
+            session_id=sid,
+            role=role,
+            content=content,
+            input_type=input_type,
+            tts_cache_key=tts_cache_key,
+            sources=sources or [],
+        )
+        self.db.add(message)
+
+        # Update session message_count and updated_at
+        await self.db.execute(
+            update(ChatSession)
+            .where(ChatSession.id == sid)
+            .values(
+                message_count=ChatSession.message_count + 1,
+                updated_at=_now(),
+            )
+        )
+
+        # If this is first user message and title is still "New Chat", update title
+        if role == "user":
+            # Check if this is the first message in the session
+            count_stmt = select(func.count(Message.id)).where(Message.session_id == sid)
+            count_result = await self.db.execute(count_stmt)
+            msg_count = count_result.scalar()
+            if msg_count == 1:  # this is the first message
+                new_title = _derive_session_title(content)
+                if new_title:
+                    await self.db.execute(
+                        update(ChatSession)
+                        .where(ChatSession.id == sid, ChatSession.title == "New Chat")
+                        .values(title=new_title)
+                    )
+
+        await self.db.flush()
+        await self.db.refresh(message)
+        return self._serialize_message(message)
+
+    async def get_session_messages(self, session_id: str, limit: int = 50) -> list[dict]:
+        """Get last N messages for a session, ordered by timestamp asc."""
+        stmt = (
+            select(Message)
+            .where(Message.session_id == require_uuid(session_id, field_name="session_id"))
+            .order_by(Message.timestamp.asc())
+            .limit(limit)
+        )
+        result = await self.db.execute(stmt)
+        messages = result.scalars().all()
+        return [self._serialize_message(m) for m in messages]
+
+    async def get_message_count(self, session_id: str) -> int:
+        """Get total message count for a session."""
+        stmt = select(func.count(Message.id)).where(
+            Message.session_id == require_uuid(session_id, field_name="session_id")
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar() or 0
+
+    # ── Serialization helpers ─────────────────────────────────────────────
+    def _serialize_session(self, session: ChatSession) -> dict:
+        return {
+            "id": str(session.id),
+            "user_id": str(session.user_id),
+            "title": session.title,
+            "created_at": session.created_at.isoformat() if session.created_at else None,
+            "updated_at": session.updated_at.isoformat() if session.updated_at else None,
+            "is_archived": session.is_archived,
+            "message_count": session.message_count,
+        }
+
+    def _serialize_message(self, message: Message) -> dict:
+        return {
+            "id": str(message.id),
+            "session_id": str(message.session_id),
+            "role": message.role,
+            "content": message.content,
+            "input_type": message.input_type,
+            "tts_cache_key": message.tts_cache_key,
+            "sources": message.sources,
+            "timestamp": message.timestamp.isoformat() if message.timestamp else None,
+        }

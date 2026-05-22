@@ -3,6 +3,7 @@ import { Helmet, HelmetProvider } from 'react-helmet-async';
 import { BrowserRouter as Router } from 'react-router-dom';
 import './App.css';
 
+import { hasBrowserAuthSessionHint } from '@/features/auth/services/authStateCleanup';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import PageLoader from '@/shared/components/PageLoader';
 import useVisualViewport from '@/shared/hooks/useVisualViewport';
@@ -63,7 +64,15 @@ function App() {
       return;
     }
 
-    void useAuthStore.getState().initAuth();
+    const protectedPath = pathname.startsWith('/setup') || pathname.startsWith('/classroom');
+    const shouldAttemptRefresh = protectedPath || hasBrowserAuthSessionHint();
+
+    if (!shouldAttemptRefresh) {
+      useAuthStore.setState({ isInitialized: true, isInitializing: false, isLoading: false });
+      return;
+    }
+
+    void useAuthStore.getState().initAuth({ forceRefresh: protectedPath });
   }, []);
 
   // Block ALL route rendering until the auth check completes.

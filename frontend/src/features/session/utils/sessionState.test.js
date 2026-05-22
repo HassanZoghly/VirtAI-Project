@@ -51,4 +51,3 @@ describe('sessionState helpers', () => {
     expect(resolveInitialSessionId(sessions)).toBe('first');
   });
 });
-

@@ -1,9 +1,11 @@
 """Voice domain ports — abstract interfaces for ASR, TTS, and viseme generation."""
 
 from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 from typing import Any
+
 import numpy as np
 
 from app.domain.voice.entities import (

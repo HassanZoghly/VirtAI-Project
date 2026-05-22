@@ -68,6 +68,36 @@ def token_validation_key(jti: str) -> str:
     return f"virtai:auth:token:{jti}"
 
 
-def auth_refresh_key(user_id: str) -> str:
-    """Redis string key for the active refresh token of a user."""
-    return f"auth:refresh:{user_id}"
+def auth_refresh_key(user_id: str, family_id: str) -> str:
+    """Redis string key for the active refresh token in a session family."""
+    return f"virtai:auth:refresh:{user_id}:{family_id}"
+
+
+def auth_refresh_active_jti_key(user_id: str, family_id: str) -> str:
+    """Redis string key for the active refresh JTI in a session family."""
+    return f"virtai:auth:refresh:active-jti:{user_id}:{family_id}"
+
+
+def auth_refresh_consumed_jti_key(jti: str) -> str:
+    """Redis string key marking a rotated refresh JTI as consumed."""
+    return f"virtai:auth:refresh:consumed:{jti}"
+
+
+def auth_refresh_family_revoked_key(user_id: str, family_id: str) -> str:
+    """Redis string key showing a refresh session family is revoked."""
+    return f"virtai:auth:refresh:family-revoked:{user_id}:{family_id}"
+
+
+def auth_refresh_user_families_key(user_id: str) -> str:
+    """Redis set key containing all refresh family IDs known for a user."""
+    return f"virtai:auth:refresh:families:{user_id}"
+
+
+def auth_refresh_reuse_incident_key(user_id: str, jti: str) -> str:
+    """Redis hash key recording refresh token reuse detection metadata."""
+    return f"virtai:auth:refresh:reuse:{user_id}:{jti}"
+
+
+def auth_refresh_rotation_lock_key(user_id: str, family_id: str) -> str:
+    """Redis lock key serializing refresh rotation per session family."""
+    return f"virtai:auth:refresh:lock:{user_id}:{family_id}"

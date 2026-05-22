@@ -25,6 +25,7 @@ export default function ChatInput({
   backendStatus,
   wsClient,
   pipelineState,
+  onToggleDocuments,
 }) {
   const handleChange = useCallback(
     (e) => {
@@ -53,10 +54,10 @@ export default function ChatInput({
       <div className="chat-input-bar">
         <button
           className="input-icon-btn"
-          title="Attach file"
+          title="Manage Knowledge Base"
           type="button"
-          disabled
-          aria-label="Attach file"
+          onClick={onToggleDocuments}
+          aria-label="Manage Knowledge Base"
         >
           <PiPaperclipFill />
         </button>

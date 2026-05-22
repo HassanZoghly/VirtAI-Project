@@ -4,19 +4,33 @@ API v1 Router - registers all endpoints.
 Canonical location: app.presentation.http.v1.router
 """
 
+from contextlib import suppress
+
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.auth.auth_use_cases import get_user_by_id
+from app.infrastructure.cache.jwt_blacklist import is_blacklisted
 from app.infrastructure.cache.rate_limiter import check_rate_limit
+from app.infrastructure.db.database import get_db
 from app.presentation.http.v1.dependencies import get_session_manager, get_ws_connection_manager
 from app.presentation.http.v1.endpoints.audio import router as audio_router
 from app.presentation.http.v1.endpoints.auth import router as auth_router
 from app.presentation.http.v1.endpoints.chat import router as chat_router
+from app.presentation.http.v1.endpoints.documents import router as documents_router
 from app.presentation.http.v1.endpoints.health import router as health_router
 from app.presentation.ws.connection_manager import WSConnectionManager
 from app.presentation.ws.gateway import WebSocketHandler
 from app.shared.config import get_settings
-from app.shared.security import verify_token
+from app.shared.errors import (
+    ExpiredTokenError,
+    InvalidAuthStateError,
+    InvalidTokenError,
+    InvalidUserIdError,
+)
+from app.shared.ids import parse_uuid
+from app.shared.security import decode_auth_token
 
 settings = get_settings()
 
@@ -27,6 +41,7 @@ router.include_router(health_router)
 router.include_router(audio_router)
 router.include_router(chat_router, prefix="/chat", tags=["chat"])
 router.include_router(auth_router, prefix="/auth", tags=["auth"])
+router.include_router(documents_router, prefix="/documents", tags=["documents"])
 
 
 @router.websocket("/ws/{avatar_id}")
@@ -39,6 +54,7 @@ async def websocket_endpoint(
     last_seq: int = Query(default=0, ge=0),
     session_manager=Depends(get_session_manager),
     connection_manager: WSConnectionManager = Depends(get_ws_connection_manager),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     WebSocket endpoint for real-time communication.
@@ -60,6 +76,9 @@ async def websocket_endpoint(
     )
     if not allowed:
         await websocket.close(code=4408, reason="Too many connection attempts")
+        return
+    if connection_manager.active_count >= settings.WS_MAX_ACTIVE_CONNECTIONS:
+        await websocket.close(code=4408, reason="WebSocket capacity reached")
         return
 
     # Validate avatar_id
@@ -85,11 +104,42 @@ async def websocket_endpoint(
         await websocket.close(code=4401, reason="Missing token")
         return
 
-    verified = verify_token(token, expected_type="access")
-    if not verified:
+    try:
+        token_payload = decode_auth_token(token, expected_type="access")
+    except (ExpiredTokenError, InvalidAuthStateError, InvalidTokenError, InvalidUserIdError):
         logger.warning("[WS] Invalid token")
         await websocket.close(code=4401, reason="Invalid token")
         return
+
+    if await is_blacklisted(token_payload.jti):
+        logger.warning("[WS] Revoked token")
+        await websocket.close(code=4401, reason="Invalid token")
+        return
+
+    parsed_user_id = parse_uuid(token_payload.user_id)
+    if parsed_user_id is None:
+        logger.warning("[WS] Token subject is not a UUID")
+        await websocket.close(code=4401, reason="Invalid token")
+        return
+
+    user = await get_user_by_id(db, parsed_user_id)
+    if user is None or not user.is_active:
+        logger.warning("[WS] User not found or inactive")
+        await websocket.close(code=4401, reason="Invalid token")
+        return
+    if token_payload.token_version != user.refresh_token_version:
+        logger.warning("[WS] Stale access token")
+        await websocket.close(code=4401, reason="Invalid token")
+        return
+
+    parsed_session_id = None
+    if session_id:
+        parsed_session_id = parse_uuid(session_id)
+        if parsed_session_id is None:
+            logger.warning("[WS] Invalid session_id")
+            await websocket.close(code=4400, reason="Invalid session ID")
+            return
+        session_id = str(parsed_session_id)
 
     # Accept connection
     try:
@@ -99,7 +149,7 @@ async def websocket_endpoint(
         logger.error(f"[WS] Failed to accept connection: {e}")
         return
 
-    user_id, _ = verified
+    user_id = str(parsed_user_id)
 
     # Create or resume session
     resumed = False
@@ -119,9 +169,10 @@ async def websocket_endpoint(
                 resumed = False
             else:
                 # Session Fixation (S1-06)
-                if session.user_id != user_id:
+                session_user_id = parse_uuid(getattr(session, "user_id", None))
+                if session_user_id != parsed_user_id:
                     logger.warning(
-                        f"[WS] Unauthorized session resume attempt by user {user_id} for session {session_id}"
+                        f"[WS] Unauthorized session resume attempt for session {session_id}"
                     )
                     await websocket.close(code=4403, reason="Unauthorized session resume")
                     return
@@ -133,10 +184,8 @@ async def websocket_endpoint(
             )
     except Exception as e:
         logger.error(f"[WS] Failed to create session: {e}")
-        try:
+        with suppress(Exception):
             await websocket.close(code=1011, reason="Failed to create session")
-        except:
-            pass
         return
 
     # Create handler and run
@@ -166,7 +215,7 @@ async def websocket_endpoint(
             exc_info=True,
         )
     finally:
-        if handler and getattr(handler, 'session', None) and handler.session.session_id:
+        if handler and getattr(handler, "session", None) and handler.session.session_id:
             await connection_manager.unregister(handler.session.session_id, websocket)
             await session_manager.disconnect_session(handler.session.session_id)
             logger.info(

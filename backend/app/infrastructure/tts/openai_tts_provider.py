@@ -29,10 +29,8 @@ class OpenAITTSProvider(BaseTTSProvider):
         "christopher": "echo",
         "ryan": "fable",
     }
-    
-    SUPPORTED_VOICES: ClassVar[set[str]] = {
-        "alloy", "echo", "fable", "onyx", "nova", "shimmer"
-    }
+
+    SUPPORTED_VOICES: ClassVar[set[str]] = {"alloy", "echo", "fable", "onyx", "nova", "shimmer"}
 
     def __init__(self, voice: str = "aria", speed: float = 0.8, model: str = "tts-1", **kwargs):
         self.voice = voice
@@ -60,20 +58,20 @@ class OpenAITTSProvider(BaseTTSProvider):
             return text
 
         # Expand common abbreviations (case-insensitive)
-        text = re.sub(r'(?i)\bdr\.', 'Doctor ', text)
-        text = re.sub(r'(?i)\bmr\.', 'Mister ', text)
-        text = re.sub(r'(?i)\bmrs\.', 'Missus ', text)
-        text = re.sub(r'(?i)\bprof\.', 'Professor ', text)
+        text = re.sub(r"(?i)\bdr\.", "Doctor ", text)
+        text = re.sub(r"(?i)\bmr\.", "Mister ", text)
+        text = re.sub(r"(?i)\bmrs\.", "Missus ", text)
+        text = re.sub(r"(?i)\bprof\.", "Professor ", text)
 
         # Remove Markdown symbols: *, #, _, ~, `
-        text = re.sub(r'[*#_~`]', '', text)
+        text = re.sub(r"[*#_~`]", "", text)
 
         # Remove emojis and other non-standard characters
         # Keeps word characters (letters, digits), spaces, and standard punctuation/symbols
-        text = re.sub(r'[^\w\s.,!?\'"\-;:()$%@&+=/\\<>|]', '', text)
+        text = re.sub(r'[^\w\s.,!?\'"\-;:()$%@&+=/\\<>|]', "", text)
 
         # Collapse multiple spaces
-        text = re.sub(r'\s+', ' ', text).strip()
+        text = re.sub(r"\s+", " ", text).strip()
         return text
 
     def _is_safe_path_component(self, component: str) -> bool:
@@ -99,7 +97,9 @@ class OpenAITTSProvider(BaseTTSProvider):
         if not self._is_safe_path_component(message_id):
             raise TTSException(f"Invalid message_id: {message_id}")
 
-        logger.info(f"TTS generate | session={session_id} | message={message_id} | api_voice={self.api_voice}")
+        logger.info(
+            f"TTS generate | session={session_id} | message={message_id} | api_voice={self.api_voice}"
+        )
 
         cached_audio = await get_cached_audio(text=text, voice=self.api_voice)
         if cached_audio is not None:
@@ -172,7 +172,7 @@ class OpenAITTSProvider(BaseTTSProvider):
         text = self._sanitize_for_tts(text)
         if not text.strip():
             raise TTSException("Empty text provided")
-            
+
         settings = get_settings()
         for attempt in range(max_retries):
             try:
@@ -190,7 +190,9 @@ class OpenAITTSProvider(BaseTTSProvider):
                     ) as response:
                         if response.status_code != 200:
                             error_details = await response.aread()
-                            logger.error(f"TTS API Error details: {error_details.decode('utf-8', errors='replace') if error_details else ''}")
+                            logger.error(
+                                f"TTS API Error details: {error_details.decode('utf-8', errors='replace') if error_details else ''}"
+                            )
                         response.raise_for_status()
                         async for chunk in response.aiter_bytes():
                             if chunk:

@@ -2,6 +2,7 @@ import { AvatarPanel } from '@/features/avatar';
 import { getAvatarById, getAvatarModelPath } from '@/features/avatar/data/avatars';
 import { ChatInput, MessageList } from '@/features/chat';
 import { SettingsDrawer, useSessionManager } from '@/features/session';
+import { DocumentsDrawer } from '@/features/documents/components/DocumentsDrawer';
 import { loadSetup } from '@/features/setup';
 import useConversationReducer from '@/shared/hooks/useConversationReducer';
 import useWSClient, { ConnectionState } from '@/shared/hooks/useWSClient';
@@ -13,6 +14,17 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { SCROLL_STICK_THRESHOLD_PX } from './constants';
 
 const toast = new Toast('tr');
+
+function buildWsUrl(avatarId, voiceId, sessionId) {
+  const configuredBase = import.meta.env.VITE_WS_BASE_URL;
+  const base =
+    configuredBase ||
+    `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`;
+  const url = new URL(`/api/v1/ws/${avatarId}`, base);
+  url.searchParams.set('voice', voiceId);
+  url.searchParams.set('session_id', sessionId);
+  return url.toString();
+}
 
 export default function ClassroomShell() {
   const { sessionId: urlSessionId } = useParams();
@@ -39,7 +51,7 @@ export default function ClassroomShell() {
 
   const WS_URL =
     status === 'success' && currentSessionId
-      ? `ws://localhost:8000/api/v1/ws/${wsAvatarId}?voice=${encodeURIComponent(activeVoiceId)}&session_id=${currentSessionId}`
+      ? buildWsUrl(wsAvatarId, activeVoiceId, currentSessionId)
       : null;
 
   const { connectionState, isConnected, send, onMessage, reconnect, reconnectError } =
@@ -49,6 +61,7 @@ export default function ClassroomShell() {
   const [mouthCues, setMouthCues] = useState([]);
   const [animationTimeline, setAnimationTimeline] = useState([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isDocumentsOpen, setIsDocumentsOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [avatarLoaded, setAvatarLoaded] = useState(false);
 
@@ -196,6 +209,7 @@ export default function ClassroomShell() {
   const handleAvatarLoaded = useCallback(() => setAvatarLoaded(true), []);
   const openSettings = useCallback(() => setIsSettingsOpen(true), []);
   const closeSettings = useCallback(() => setIsSettingsOpen(false), []);
+  const toggleDocuments = useCallback(() => setIsDocumentsOpen((prev) => !prev), []);
 
   const handleChatScroll = useCallback(() => {
     const el = chatScrollRef.current;
@@ -311,6 +325,7 @@ export default function ClassroomShell() {
           onDeleteSession={deleteSession}
           onRenameSession={renameSession}
         />
+        <DocumentsDrawer isOpen={isDocumentsOpen} onClose={() => setIsDocumentsOpen(false)} />
 
         <div className="classroom-top-controls">
           <button
@@ -421,6 +436,7 @@ export default function ClassroomShell() {
                   backendStatus={connectionState}
                   wsClient={{ connectionState, isConnected, send: safeSend, onMessage }}
                   pipelineState={conversationState.pipelineState}
+                  onToggleDocuments={toggleDocuments}
                 />
               </>
             )}

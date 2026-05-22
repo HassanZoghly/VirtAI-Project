@@ -1,6 +1,7 @@
 """Voice domain entities — pure data classes with no external dependencies."""
 
 from __future__ import annotations
+
 import re
 from dataclasses import dataclass, field
 

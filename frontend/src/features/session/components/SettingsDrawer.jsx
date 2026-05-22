@@ -122,7 +122,13 @@ export default function SettingsDrawer({
             )}
             <div
               className="drawer-body"
-              style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '1rem 0', minHeight: 0 }}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%',
+                padding: '1rem 0',
+                minHeight: 0,
+              }}
             >
               <SessionList
                 sessions={sessions}

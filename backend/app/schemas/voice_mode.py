@@ -17,6 +17,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.shared.ids import parse_uuid
+
 
 def _normalize_optional_identifier(value: str | None) -> str | None:
     if value is None:
@@ -24,14 +26,20 @@ def _normalize_optional_identifier(value: str | None) -> str | None:
     normalized = value.strip()
     if not normalized:
         raise ValueError("Identifier cannot be empty")
-    return normalized
+    parsed = parse_uuid(normalized)
+    if parsed is None:
+        raise ValueError("Identifier must be a UUID")
+    return str(parsed)
 
 
 def _normalize_required_identifier(value: str) -> str:
     normalized = value.strip()
     if not normalized:
         raise ValueError("Identifier cannot be empty")
-    return normalized
+    parsed = parse_uuid(normalized)
+    if parsed is None:
+        raise ValueError("Identifier must be a UUID")
+    return str(parsed)
 
 
 # ── Client Messages (Frontend -> Backend) ─────────────────────────────────────
@@ -73,7 +81,7 @@ class AudioChunkMessage(BaseModel):
             if len(decoded) == 0:
                 raise ValueError("Decoded audio data is empty")
         except Exception as e:
-            raise ValueError(f"Invalid base64 audio data: {e!s}")
+            raise ValueError(f"Invalid base64 audio data: {e!s}") from e
 
         return v
 

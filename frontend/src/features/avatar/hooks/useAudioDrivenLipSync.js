@@ -152,7 +152,7 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
       morphTargetsRef.current = {};
       smoothedMorphsRef.current = {};
       bodyMotionRef.current = { headBob: 0, chestBob: 0 };
-      
+
       // Cleanup: disconnect source if we stopped playing
       if (sourceRef.current) {
         try {
@@ -327,18 +327,18 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
       // Apply muscle smoothing (lerp)
       // We calculate lerp alpha based on deltaTime to be frame-rate independent
       const lerpAlpha = Math.min(VISEME_SMOOTHING * (deltaTime / 16.67), 1.0);
-      
+
       const newSmoothedMorphs = { ...smoothedMorphsRef.current };
-      
+
       // Update existing smoothed morphs towards targets
-      Object.keys(targetMorphs).forEach(key => {
+      Object.keys(targetMorphs).forEach((key) => {
         const current = newSmoothedMorphs[key] || 0;
         const target = targetMorphs[key];
         newSmoothedMorphs[key] = THREE.MathUtils.lerp(current, target, lerpAlpha);
       });
 
       // Lerp morphs back to 0 if they are not in the current targetMorphs
-      Object.keys(newSmoothedMorphs).forEach(key => {
+      Object.keys(newSmoothedMorphs).forEach((key) => {
         if (!(key in targetMorphs)) {
           newSmoothedMorphs[key] = THREE.MathUtils.lerp(newSmoothedMorphs[key], 0, lerpAlpha);
           // Cleanup very small values to keep state clean

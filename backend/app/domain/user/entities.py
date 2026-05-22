@@ -5,9 +5,11 @@ This is the domain entity; the ORM model lives in infrastructure/db/models.py.
 """
 
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from uuid import UUID
 
 
 class AuthProvider(str, Enum):
@@ -19,7 +21,7 @@ class AuthProvider(str, Enum):
 class UserEntity:
     """Pure domain representation of a user (no ORM dependency)."""
 
-    id: str
+    id: UUID
     email: str
     full_name: str
     username: str | None = None

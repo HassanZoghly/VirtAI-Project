@@ -1,8 +1,4 @@
-"""
-Audio file serving endpoint.
-
-Canonical location: app.presentation.http.v1.endpoints.audio
-"""
+"""Audio file serving endpoint."""
 
 import re
 from pathlib import Path
@@ -12,11 +8,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi import Path as PathParam
 from fastapi.responses import FileResponse
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.user.entities import UserEntity
-from app.infrastructure.db.chat_repository import get_chat_session
+from app.infrastructure.db.database import get_db
+from app.infrastructure.db.repositories.chat_repository import ChatRepository
 from app.presentation.http.v1.endpoints.auth import _current_user
 from app.shared.config import get_settings
+from app.shared.ids import parse_uuid
 
 router = APIRouter()
 
@@ -46,16 +45,18 @@ async def get_audio_file(
     session_id: Annotated[str, PathParam(description="Session identifier")],
     message_id: Annotated[str, PathParam(description="Message identifier")],
     user: UserEntity = Depends(_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> FileResponse:
-    if not is_safe_path_component(session_id):
+    if not is_safe_path_component(session_id) or parse_uuid(session_id) is None:
         logger.warning(f"Invalid session_id attempted: {session_id}")
         raise HTTPException(status_code=400, detail=f"Invalid session_id format: {session_id}")
 
-    if not is_safe_path_component(message_id):
+    if not is_safe_path_component(message_id) or parse_uuid(message_id) is None:
         logger.warning(f"Invalid message_id attempted: {message_id}")
         raise HTTPException(status_code=400, detail=f"Invalid message_id format: {message_id}")
 
-    db_session = await get_chat_session(session_id)
+    repo = ChatRepository(db)
+    db_session = await repo.get_chat_session(session_id)
     if db_session is None or db_session.get("user_id") != str(user.id):
         logger.warning(f"Session not found or unauthorized for session {session_id}")
         raise HTTPException(status_code=404, detail="Audio file not found")

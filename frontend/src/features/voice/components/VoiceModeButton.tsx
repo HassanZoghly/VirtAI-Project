@@ -44,15 +44,8 @@ export default function VoiceModeButton({
   className = '',
 }: VoiceModeButtonProps) {
   // Use realtime ASR hook for voice + transcript state (Requirement 1.1, 1.4)
-  const {
-    isListening,
-    isPaused,
-    isProcessing,
-    interimText,
-    error,
-    startListening,
-    stopListening,
-  } = useRealtimeASR(wsClient, pipelineState);
+  const { isListening, isPaused, isProcessing, interimText, error, startListening, stopListening } =
+    useRealtimeASR(wsClient, pipelineState);
 
   // Determine button state and styling
   const buttonState = useMemo(() => {
@@ -146,7 +139,6 @@ export default function VoiceModeButton({
           <span className="status-text">Paused (assistant speaking)</span>
         </div>
       )}
-
     </div>
   );
 }

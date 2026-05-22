@@ -1,10 +1,16 @@
 import { refreshAccessTokenSingleFlight } from '@/features/auth/services/refreshService';
 import { useAuthStore } from '@/features/auth/store/authStore';
+import {
+  clearBrowserAuthState,
+  hasBrowserAuthSessionHint,
+  markBrowserAuthSession,
+} from '@/features/auth/services/authStateCleanup';
 import axios from 'axios';
 
 const CSRF_COOKIE_NAME = 'csrf_token';
 const CSRF_HEADER_NAME = 'X-CSRF-Token';
 const STATE_CHANGING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const API_PREFIX = '/api/v1';
 
 let csrfTokenRequest = null;
 
@@ -37,6 +43,22 @@ function setRequestHeader(headers, name, value) {
 
   headers[name] = value;
   return headers;
+}
+
+function normalizeApiUrl(url) {
+  if (typeof url !== 'string') {
+    return url;
+  }
+
+  if (url === API_PREFIX) {
+    return '/';
+  }
+
+  if (url.startsWith(`${API_PREFIX}/`)) {
+    return url.slice(API_PREFIX.length);
+  }
+
+  return url;
 }
 
 async function ensureCsrfToken() {
@@ -78,6 +100,7 @@ if (typeof window !== 'undefined') {
 }
 
 apiClient.interceptors.request.use(async (config) => {
+  config.url = normalizeApiUrl(config.url);
   const method = config.method?.toUpperCase() ?? 'GET';
 
   if (STATE_CHANGING_METHODS.has(method)) {
@@ -100,17 +123,24 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const original = error.config;
-    if (error.response?.status === 401 && !original._retry) {
+    const hasRefreshCandidate = useAuthStore.getState().accessToken || hasBrowserAuthSessionHint();
+    if (error.response?.status === 401 && !original._retry && hasRefreshCandidate) {
       original._retry = true;
       try {
         const resData = await refreshAccessTokenSingleFlight();
+        markBrowserAuthSession();
         // Only update the token — never touch the user object mid-flight.
         // setAuth(store.user, token) would wipe user to null if initAuth
         // hasn't finished populating it yet (e.g. on hard page refresh).
         useAuthStore.setState({ accessToken: resData.access_token });
-        original.headers.Authorization = `Bearer ${resData.access_token}`;
+        original.headers = setRequestHeader(
+          original.headers || {},
+          'Authorization',
+          `Bearer ${resData.access_token}`
+        );
         return apiClient(original);
       } catch {
+        clearBrowserAuthState();
         useAuthStore.getState().logout();
         return Promise.reject(error);
       }

@@ -1,0 +1,5 @@
+# Clean Architecture
+Clean Architecture separates concerns into domain, application, infrastructure, and presentation layers.
+
+# Vector Databases
+Vector databases use embeddings to perform semantic search via cosine similarity or dot product. They index high dimensional vectors.

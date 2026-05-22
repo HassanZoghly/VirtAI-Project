@@ -174,7 +174,9 @@ class AnimationIntelligenceService:
             duration_s,
         )
         speech_rate = float(audio_features.get("speech_rate_wps") or 2.3)
-        pause_segments = self._normalize_time_segments(audio_features.get("pause_segments"), duration_s)
+        pause_segments = self._normalize_time_segments(
+            audio_features.get("pause_segments"), duration_s
+        )
 
         timeline: list[dict[str, Any]] = []
         recent_window = list((recent_assets or [])[-6:])
@@ -209,7 +211,10 @@ class AnimationIntelligenceService:
                 1.0,
             )
             speed = self._clamp(
-                0.92 + (speech_rate - 2.3) * 0.13 + (local_energy - 0.5) * 0.22 + emphasis_hits * 0.03,
+                0.92
+                + (speech_rate - 2.3) * 0.13
+                + (local_energy - 0.5) * 0.22
+                + emphasis_hits * 0.03,
                 0.75,
                 1.35,
             )
@@ -419,7 +424,9 @@ class AnimationIntelligenceService:
         if not timeline:
             return []
 
-        ordered = sorted(timeline, key=lambda item: (item.get("start_time", 0.0), item.get("end_time", 0.0)))
+        ordered = sorted(
+            timeline, key=lambda item: (item.get("start_time", 0.0), item.get("end_time", 0.0))
+        )
         normalized: list[dict[str, Any]] = []
 
         for item in ordered:

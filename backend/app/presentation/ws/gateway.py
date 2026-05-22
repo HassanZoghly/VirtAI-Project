@@ -1,5 +1,5 @@
 from __future__ import annotations
-from collections import defaultdict
+
 """
 WebSocket Gateway — Main real-time communication handler.
 
@@ -250,7 +250,8 @@ class WebSocketHandler:
                 try:
                     # Wait for message (text or binary) with timeout to keep ping task alive
                     message = await asyncio.wait_for(
-                        self.ws.receive(), timeout=1.0  # short timeout so ping loop can run
+                        self.ws.receive(),
+                        timeout=1.0,  # short timeout so ping loop can run
                     )
 
                     # ── Explicit disconnect detection ──────────────────────────
@@ -430,7 +431,9 @@ class WebSocketHandler:
             text: Transcribed text from ASR to send through the pipeline.
         """
         if not text or not text.strip():
-            logger.warning(f"[WS] _run_text_turn called with empty text | session={self.session.session_id}")
+            logger.warning(
+                f"[WS] _run_text_turn called with empty text | session={self.session.session_id}"
+            )
             return
 
         await self._ensure_session()

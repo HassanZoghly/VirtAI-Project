@@ -3,19 +3,22 @@ Dependencies for API v1 endpoints.
 
 Canonical location: app.presentation.http.v1.dependencies
 
-Changes from original:
-- Removed get_db (SQLAlchemy session) — MongoDB repositories are
-  instantiated directly inside service functions (no session-per-request)
-- Added get_redis_client dependency for endpoints that need raw cache access
-- SessionManager dependency unchanged
+Provides FastAPI dependency injection for:
+- SessionManager (app-scoped, initialized in lifespan)
+- WSConnectionManager (app-scoped, initialized in lifespan)
+- Redis client
+- Settings
 """
 
 from typing import Annotated
 
 import redis.asyncio as aioredis
-from fastapi import Depends
+from fastapi import Depends, Request
 
 from app.application.chat.session_manager import SessionManager
+
+# RAG specific imports
+from app.domain.storage.ports import StorageProvider
 from app.infrastructure.cache.redis_client import get_redis
 from app.presentation.ws.connection_manager import WSConnectionManager
 from app.shared.config import Settings, get_settings
@@ -55,8 +58,7 @@ def get_session_manager() -> SessionManager:
     """
     if _session_manager is None:
         raise RuntimeError(
-            "SessionManager not initialised. "
-            "Ensure init_session_manager() is called in lifespan."
+            "SessionManager not initialised. Ensure init_session_manager() is called in lifespan."
         )
     return _session_manager
 
@@ -81,3 +83,32 @@ SessionManagerDep = Annotated[SessionManager, Depends(get_session_manager)]
 WSConnectionManagerDep = Annotated[WSConnectionManager, Depends(get_ws_connection_manager)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 RedisDep = Annotated[aioredis.Redis, Depends(get_redis_client)]
+
+
+def get_storage(request: Request) -> StorageProvider:
+    return request.app.state.storage
+
+
+StorageDep = Annotated[StorageProvider, Depends(get_storage)]
+
+from app.application.chat.chat_use_case import ChatUseCase
+
+
+async def get_chat_use_case(request: Request) -> ChatUseCase:
+    """Dependency injection for ChatUseCase."""
+    from app.application.rag.retrieval_use_case import RetrievalUseCase
+    from app.infrastructure.llm.groq_provider import GroqLLMProvider
+    from app.shared.config import get_settings
+
+    settings = get_settings()
+    llm = GroqLLMProvider(
+        model=settings.LLM_MODEL,
+        max_tokens=settings.LLM_MAX_TOKENS,
+        temperature=settings.LLM_TEMPERATURE,
+        api_key=settings.GROQ_API_KEY or "dummy-key-for-dev",
+    )
+    retrieval = RetrievalUseCase(embedder=request.app.state.embedder)
+    return ChatUseCase(llm_provider=llm, retrieval_use_case=retrieval)
+
+
+ChatUseCaseDep = Annotated[ChatUseCase, Depends(get_chat_use_case)]

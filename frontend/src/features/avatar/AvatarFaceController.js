@@ -460,11 +460,12 @@ export class AvatarFaceController {
    * @param {string} name      One of VALID_EMOTIONS
    * @param {number} intensity 0-1
    */
-  setEmotion(name, intensity = 1.0) {
+  setEmotion(name, intensity = 1.0, durationMs = 600) {
     if (!VALID_EMOTIONS.has(name)) {
       name = 'neutral';
     }
     intensity = Math.max(0, Math.min(1, intensity));
+    const durationSeconds = Math.max(0.001, durationMs / 1000);
 
     const preset = AvatarFaceController.EMOTION_MAP[name] || {};
 
@@ -477,7 +478,9 @@ export class AvatarFaceController {
       this._transTo[k] = v * intensity;
     }
 
-    // Ensure we start pulling towards new targets
+    this._transFrom = { ...this._emotionValues };
+    this._transElapsed = 0;
+    this._transDuration = durationSeconds;
     this._transitioning = true;
   }
 
@@ -527,10 +530,7 @@ export class AvatarFaceController {
         // Rough conversion: at ~25 chars/sec reading speed
         const delayMs = (tr.at_char_index / 25) * 1000;
         const timerId = setTimeout(() => {
-          this.setEmotion(
-            tr.emotion,
-            typeof tr.intensity === 'number' ? tr.intensity : 0.5
-          );
+          this.setEmotion(tr.emotion, typeof tr.intensity === 'number' ? tr.intensity : 0.5);
         }, delayMs);
         this._scheduledTimers.push(timerId);
       }
@@ -542,26 +542,21 @@ export class AvatarFaceController {
       return;
     }
 
-    // Continuous pull towards target values (asymptotic lerp)
-    // Roughly 0.1 at 60fps -> factor of 6
-    const lerpAlpha = Math.min(dt * 6, 1.0);
-    
-    const allKeys = new Set([...Object.keys(this._emotionValues), ...Object.keys(this._transTo)]);
-    let anySignificantDiff = false;
+    this._transElapsed += dt;
+    const t = Math.min(this._transElapsed / this._transDuration, 1.0);
+    const eased = easeOutQuad(t);
+
+    const allKeys = new Set([...Object.keys(this._transFrom), ...Object.keys(this._transTo)]);
 
     for (const k of allKeys) {
-      const current = this._emotionValues[k] || 0;
+      const current = this._transFrom[k] || 0;
       const target = this._transTo[k] || 0;
-      
-      const nextValue = current + (target - current) * lerpAlpha;
-      this._emotionValues[k] = nextValue;
 
-      if (Math.abs(target - nextValue) > 0.001) {
-        anySignificantDiff = true;
-      }
+      const nextValue = current + (target - current) * eased;
+      this._emotionValues[k] = nextValue;
     }
 
-    if (!anySignificantDiff) {
+    if (t >= 1) {
       this._transitioning = false;
       // Cleanup near-zero values
       for (const k of Object.keys(this._emotionValues)) {

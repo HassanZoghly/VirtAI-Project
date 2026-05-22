@@ -1,22 +1,25 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+
+const MIN_VISIBLE_MS = 2800;
 
 export default function SplashScreen({ onComplete }) {
-  const [done, setDone] = useState(false);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setVisible(false), MIN_VISIBLE_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   return (
-    <AnimatePresence>
-      {!done && (
+    <AnimatePresence onExitComplete={() => onComplete?.()}>
+      {visible && (
         <motion.div
           className="fixed inset-0 z-50 flex items-center justify-center bg-dark"
+          initial={{ opacity: 1 }}
+          animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.6 }}
-          onAnimationComplete={(def) => {
-            /* only fire after the exit animation */
-            if (def?.opacity === 0) {
-              onComplete?.();
-            }
-          }}
+          transition={{ duration: 0.65, ease: 'easeInOut' }}
         >
           {/* glow ring */}
           <motion.div
@@ -48,14 +51,6 @@ export default function SplashScreen({ onComplete }) {
           >
             Welcome to the Future of Teaching
           </motion.h1>
-
-          {/* auto-dismiss */}
-          <motion.div
-            initial={{ opacity: 1 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 2.8 }}
-            onAnimationComplete={() => setDone(true)}
-          />
         </motion.div>
       )}
     </AnimatePresence>

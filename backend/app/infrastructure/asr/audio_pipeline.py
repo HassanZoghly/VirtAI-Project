@@ -21,38 +21,41 @@ import numpy as np
 
 class BufferOverflowError(Exception):
     """Raised when audio buffer exceeds maximum allowed size."""
+
     pass
 
 
 class BufferTimeoutError(Exception):
     """Raised when audio buffer accumulation exceeds timeout duration."""
+
     pass
 
 
 class ChunkSizeError(Exception):
     """Raised when a single audio chunk exceeds maximum allowed size."""
+
     pass
 
 
 class AudioPipeline:
     """Manages PCM audio buffer accumulation and ASR input preparation.
-    
+
     This class accumulates raw PCM audio bytes received from WebSocket binary frames
     until a final chunk (is_final=True) is received, indicating VAD detected silence,
     or until the buffer duration reaches the proactive flush threshold. It converts
     the accumulated PCM buffer to float32 numpy array for ASR input.
-    
+
     The buffer uses two trigger mechanisms for ASR processing:
     1. Primary: VAD-based silence detection (is_final=True) - immediate processing
     2. Fallback: Proactive duration-based flush (max_buffer_duration) - prevents
        timeout during continuous speech without silence pauses
-    
+
     PCM Format:
     - Sample rate: 16kHz
     - Channels: mono (1 channel)
     - Bit depth: 16-bit signed integer (Int16)
     - Byte order: little-endian
-    
+
     Attributes:
         max_buffer_size: Maximum total buffer size in bytes (default 10MB)
         max_chunk_size: Maximum size for a single chunk in bytes (default 1MB)
@@ -99,14 +102,14 @@ class AudioPipeline:
 
     def add_pcm_chunk(self, pcm_bytes: bytes, is_final: bool = False) -> None:
         """Append raw PCM bytes to buffer.
-        
+
         Accumulates raw PCM audio bytes from WebSocket binary frames. Validates
         chunk size and buffer limits. Updates VAD final flag for silence detection.
-        
+
         Args:
             pcm_bytes: Raw PCM audio bytes (16-bit signed integer, little-endian)
             is_final: True when VAD detects silence, indicating end of speech segment
-            
+
         Raises:
             BufferOverflowError: If adding chunk would exceed max_buffer_size
             ChunkSizeError: If chunk size exceeds max_chunk_size
@@ -164,14 +167,14 @@ class AudioPipeline:
 
     def should_process(self) -> bool:
         """Check VAD flag or timeout threshold.
-        
+
         Returns True when VAD detects silence (is_final=True) or when buffer
         duration reaches the proactive flush threshold. This ensures audio is
         processed even during continuous speech without silence pauses.
-        
+
         The is_final flag (VAD-based silence detection) is checked first as the
         primary trigger. Buffer duration check serves as a fallback mechanism.
-        
+
         Returns:
             True if buffer is ready for processing, False otherwise
         """
@@ -189,14 +192,14 @@ class AudioPipeline:
 
     def get_audio_for_asr(self) -> np.ndarray:
         """Convert PCM buffer to float32 numpy array.
-        
+
         Converts the accumulated PCM buffer (Int16 bytes) to a float32 numpy array
         in the range [-1.0, 1.0] for ASR model input. This conversion is done
         directly without ffmpeg or pydub.
-        
+
         Returns:
             numpy.ndarray: Float32 audio samples in range [-1.0, 1.0]
-            
+
         Raises:
             ValueError: If buffer is empty or has invalid size (not multiple of 2)
         """
@@ -214,7 +217,7 @@ class AudioPipeline:
 
     def clear_buffer(self) -> None:
         """Reset buffer after transcription.
-        
+
         Clears the PCM buffer and resets all state variables. This should be
         called after transcription is complete to free memory and prepare for
         the next speech segment.
@@ -226,7 +229,7 @@ class AudioPipeline:
 
     def get_buffer_size(self) -> int:
         """Get total size of accumulated PCM buffer.
-        
+
         Returns:
             Total size in bytes of accumulated PCM data
         """
@@ -235,22 +238,22 @@ class AudioPipeline:
 
 def pcm_bytes_to_float32(pcm_bytes: bytes) -> np.ndarray:
     """Int16 PCM → float32 conversion.
-    
+
     Converts raw PCM bytes (16-bit signed integer, little-endian) to float32
     numpy array in the range [-1.0, 1.0]. This is the standard conversion for
     ASR model input.
-    
+
     Conversion formula:
     - Int16 range: [-32768, 32767]
     - Float32 range: [-1.0, 1.0]
     - Conversion: float32 = int16 / 32768.0
-    
+
     Args:
         pcm_bytes: Raw PCM bytes (Int16, little-endian)
-        
+
     Returns:
         numpy.ndarray: Float32 audio samples in range [-1.0, 1.0]
-        
+
     Raises:
         ValueError: If pcm_bytes is empty or has invalid size
     """

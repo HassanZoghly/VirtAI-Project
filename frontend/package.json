@@ -13,7 +13,8 @@
     "lint": "eslint src --ext .js,.jsx,.ts,.tsx",
     "lint:fix": "eslint src --ext .js,.jsx,.ts,.tsx --fix",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,json,css}\"",
-    "format:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx,json,css}\""
+    "format:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx,json,css}\"",
+    "prepare": "husky"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -55,6 +56,8 @@
     "eslint-plugin-react-hooks": "^4.6.0",
     "fast-check": "^4.5.3",
     "happy-dom": "^20.7.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.11",
     "lighthouse": "^13.1.0",
     "prettier": "^3.2.5",
     "tailwindcss": "^4.2.1",
@@ -64,5 +67,14 @@
   },
   "engines": {
     "node": ">=18.18"
+  },
+  "lint-staged": {
+    "src/**/*.{js,jsx,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "src/**/*.{json,css}": [
+      "prettier --write"
+    ]
   }
 }

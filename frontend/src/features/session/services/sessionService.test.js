@@ -39,4 +39,3 @@ describe('sessionService response extraction', () => {
     expect(messages).toEqual([{ id: 'm1' }]);
   });
 });
-

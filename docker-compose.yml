@@ -1,38 +1,20 @@
 services:
-  mongodb:
-    image: mongo:7
-    container_name: virtai-mongodb
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: virtai-postgres
     restart: unless-stopped
-
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_ROOT_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_ROOT_PASSWORD}
-      MONGO_INITDB_DATABASE: ${MONGODB_DB_NAME:-virtai}
-
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-virtai}
     ports:
-      - '127.0.0.1:27017:27017'
-
+      - "127.0.0.1:5432:5432"
     volumes:
-      - mongodb-data:/data/db
-
+      - postgres-data:/var/lib/postgresql/data
     networks:
       - virtai-network
-
     healthcheck:
-      test:
-        [
-          'CMD',
-          'mongosh',
-          '--username',
-          '${MONGODB_ROOT_USERNAME}',
-          '--password',
-          '${MONGODB_ROOT_PASSWORD}',
-          '--authenticationDatabase',
-          'admin',
-          '--eval',
-          "db.adminCommand('ping')",
-          '--quiet',
-        ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-virtai}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -41,24 +23,19 @@ services:
     image: redis:7-alpine
     container_name: virtai-redis
     restart: unless-stopped
-
     command: >
       redis-server
       --requirepass ${REDIS_PASSWORD}
       --save 60 1
       --loglevel warning
-
     ports:
-      - '127.0.0.1:6379:6379'
-
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
-
     networks:
       - virtai-network
-
     healthcheck:
-      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -67,32 +44,30 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-
     container_name: virtai-backend
-
     restart: unless-stopped
-
     ports:
-      - '8000:8000'
-
+      - "8000:8000"
     env_file:
       - ./backend/.env
-
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_URL: redis://:virtai_redis_password@redis:6379/0
+      XDG_CACHE_HOME: /app/.cache
+      HF_HOME: /app/.cache/huggingface
+      FASTEMBED_CACHE_DIR: /app/.cache/fastembed
     volumes:
       - backend-data:/app/.data
-
+      - backend-cache:/app/.cache
     networks:
       - virtai-network
-
     depends_on:
-      mongodb:
+      postgres:
         condition: service_healthy
-
       redis:
         condition: service_healthy
-
     healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:8000/api/v1/health']
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 15s
       timeout: 5s
       start_period: 15s
@@ -102,47 +77,37 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
-
     container_name: virtai-frontend
-
     restart: unless-stopped
-
     ports:
-      - '3000:3000'
-
+      - "3000:3000"
     environment:
       VITE_API_TARGET: http://backend:8000
-
     depends_on:
       backend:
         condition: service_healthy
-
     networks:
       - virtai-network
 
   tts:
     image: ghcr.io/matatonic/openedai-speech
     container_name: virtai-tts
-
     restart: unless-stopped
-
     ports:
-      - '8080:8000'
-
+      - "8080:8000"
     environment:
       TTS_HOME: /app/voices
-
     volumes:
       - tts_voices:/app/voices
       - tts_config:/app/config
-
     networks:
       - virtai-network
 
 volumes:
-  mongodb-data:
+  postgres-data:
   redis-data:
   backend-data:
+  backend-cache:
   tts_voices:
   tts_config:
 

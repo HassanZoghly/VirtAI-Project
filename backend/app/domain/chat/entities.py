@@ -1,9 +1,10 @@
 """Chat domain entities — pure data classes with no external dependencies."""
 
 from __future__ import annotations
+
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Callable
 
 
 # ── Message Roles ─────────────────────────────────────────────────────────────

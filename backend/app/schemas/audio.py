@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 class AudioChunk(BaseModel):
     """
     A single audio chunk received from the frontend via WebSocket binary frame.
-    
+
     The audio data is raw PCM bytes (16kHz, mono, Int16) transmitted via
     WebSocket binary frames. No format field is needed since PCM is implicit
     in the binary frame protocol.
@@ -30,7 +30,7 @@ class AudioChunk(BaseModel):
 class AudioBuffer(BaseModel):
     """
     Accumulated audio chunks ready for ASR processing.
-    
+
     The buffer stores raw PCM bytes that can be safely concatenated
     without container parsing. PCM format is implicit: 16kHz, mono, Int16.
     """

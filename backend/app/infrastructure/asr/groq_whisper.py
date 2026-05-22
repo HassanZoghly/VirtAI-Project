@@ -68,9 +68,7 @@ class GroqWhisperASR(BaseASRProvider, StreamingASRService):
         self.model = model or settings.ASR_MODEL
         self.language = language or settings.ASR_LANGUAGE
         self._client = AsyncGroq(api_key=api_key or settings.GROQ_API_KEY)
-        logger.info(
-            f"GroqWhisperASR initialized | " f"model={self.model} | " f"language={self.language}"
-        )
+        logger.info(f"GroqWhisperASR initialized | model={self.model} | language={self.language}")
 
     # ── Private Helpers ───────────────────────────────────────────────────────
     def _parse_word_timestamps(self, raw_words: list[dict]) -> list[WordTimestamp]:
@@ -267,7 +265,7 @@ class GroqWhisperASR(BaseASRProvider, StreamingASRService):
             raise ASRException("No audio chunks provided")
 
         combined = b"".join(audio_chunks)
-        logger.debug(f"Joining {len(audio_chunks)} chunks → " f"{len(combined):,} bytes total")
+        logger.debug(f"Joining {len(audio_chunks)} chunks → {len(combined):,} bytes total")
         return await self.transcribe(combined, audio_format, language)
 
     async def transcribe_stream(

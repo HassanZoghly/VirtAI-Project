@@ -19,7 +19,7 @@ export function loadSetup() {
 
 /**
  * Save setup configuration to localStorage.
- * @param {{ avatarId: string, voiceId: string, movementEnabled?: boolean }} config
+ * @param {{ avatarId: string, voiceId: string, movementEnabled?: boolean, documentsSkipped?: boolean, documentsUploaded?: boolean }} config
  */
 export function saveSetup(config) {
   try {

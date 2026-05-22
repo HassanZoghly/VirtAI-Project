@@ -1,4 +1,9 @@
 import axios from 'axios';
+import {
+  clearBrowserAuthState,
+  isInvalidRefreshResponse,
+  markBrowserAuthSession,
+} from './authStateCleanup';
 
 let refreshPromise = null;
 
@@ -49,12 +54,20 @@ export function refreshAccessTokenSingleFlight() {
       throw new Error('Unable to obtain CSRF token for refresh request.');
     }
 
-    const response = await axios.post('/api/v1/auth/refresh', null, {
-      withCredentials: true,
-      headers: { [CSRF_HEADER_NAME]: csrfToken },
-    });
+    try {
+      const response = await axios.post('/api/v1/auth/refresh', null, {
+        withCredentials: true,
+        headers: { [CSRF_HEADER_NAME]: csrfToken },
+      });
 
-    return response.data;
+      markBrowserAuthSession();
+      return response.data;
+    } catch (error) {
+      if (isInvalidRefreshResponse(error)) {
+        clearBrowserAuthState();
+      }
+      throw error;
+    }
   })().finally(() => {
     refreshPromise = null;
   });

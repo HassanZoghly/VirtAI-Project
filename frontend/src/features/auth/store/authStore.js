@@ -1,5 +1,10 @@
 import { create } from 'zustand';
 import { getMe } from '../services/authApi';
+import {
+  clearBrowserAuthState,
+  hasBrowserAuthSessionHint,
+  markBrowserAuthSession,
+} from '../services/authStateCleanup';
 import { refreshAccessTokenSingleFlight } from '../services/refreshService';
 
 let initAuthPromise = null;
@@ -18,8 +23,10 @@ export const useAuthStore = create((set, _get) => ({
   // No routing decisions should be made while this is false.
   isInitialized: false,
 
-  setAuth: (user, accessToken) =>
-    set({ user, accessToken, isLoading: false, isInitializing: false, isInitialized: true }),
+  setAuth: (user, accessToken) => {
+    markBrowserAuthSession();
+    set({ user, accessToken, isLoading: false, isInitializing: false, isInitialized: true });
+  },
 
   setUser: (user) =>
     set((state) => ({
@@ -27,14 +34,16 @@ export const useAuthStore = create((set, _get) => ({
       user,
     })),
 
-  logout: () =>
+  logout: () => {
+    clearBrowserAuthState();
     set({
       user: null,
       accessToken: null,
       isLoading: false,
       isInitializing: false,
       isInitialized: true,
-    }),
+    });
+  },
 
   setLoading: (isLoading) => set({ isLoading }),
 
@@ -43,7 +52,7 @@ export const useAuthStore = create((set, _get) => ({
    * Deduplicates concurrent calls via initAuthPromise.
    * Always sets isInitialized = true when done, regardless of outcome.
    */
-  initAuth: async () => {
+  initAuth: async ({ forceRefresh = false } = {}) => {
     if (initAuthPromise) {
       return initAuthPromise;
     }
@@ -51,7 +60,18 @@ export const useAuthStore = create((set, _get) => ({
     initAuthPromise = (async () => {
       set({ isLoading: true, isInitializing: true });
       try {
+        if (!forceRefresh && !hasBrowserAuthSessionHint()) {
+          set({
+            user: null,
+            accessToken: null,
+            isLoading: false,
+            isInitializing: false,
+            isInitialized: true,
+          });
+          return;
+        }
         const { access_token } = await refreshAccessTokenSingleFlight();
+        markBrowserAuthSession();
         // Store token immediately so the getMe() call (via apiClient) picks it up
         set((state) => ({ ...state, accessToken: access_token }));
         const user = await getMe();
@@ -63,6 +83,7 @@ export const useAuthStore = create((set, _get) => ({
           isInitialized: true,
         });
       } catch {
+        clearBrowserAuthState();
         set({
           user: null,
           accessToken: null,

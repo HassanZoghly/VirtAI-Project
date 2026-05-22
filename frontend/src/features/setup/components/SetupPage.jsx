@@ -1,11 +1,12 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { FiCheck, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+import { FiCheck, FiChevronLeft, FiChevronRight, FiFileText } from 'react-icons/fi';
 import { HiOutlineSparkles, HiOutlineSpeakerWave, HiOutlineUser } from 'react-icons/hi2';
 import { useNavigate } from 'react-router-dom';
 
 import { avatarImages } from '@/features/avatar/data/avatars';
+import { useDocumentList } from '@/features/documents/useDocumentList';
 import '@/pages/Setup/Setup.css';
 import { cn } from '@/shared/utils/cn';
 import CircuitBoardBackground from '@/widgets/Overview/CircuitBoardBackground';
@@ -15,10 +16,12 @@ import AllSetTab from './AllSetTab';
 import AvatarPreview from './AvatarPreview';
 import AvatarTab from './AvatarTab';
 import VoiceTab from './VoiceTab';
+import { UploadTab } from './UploadTab';
 
 const TABS = [
   { key: 'avatar', label: 'Avatar', icon: HiOutlineUser },
   { key: 'voice', label: 'Voice', icon: HiOutlineSpeakerWave },
+  { key: 'documents', label: 'Documents', icon: FiFileText },
   { key: 'allset', label: 'All Set', icon: HiOutlineSparkles },
 ];
 
@@ -28,6 +31,9 @@ export default function SetupPage() {
   const [selectedAvatar, setSelectedAvatar] = useState(null);
   const [selectedVoice, setSelectedVoice] = useState(null);
   const [isMovementEnabled, setIsMovementEnabled] = useState(false);
+  const [documentsSkipped, setDocumentsSkipped] = useState(false);
+  const [documentsUploaded, setDocumentsUploaded] = useState(false);
+  const { documents } = useDocumentList();
 
   useEffect(() => {
     const saved = loadSetup();
@@ -49,8 +55,16 @@ export default function SetupPage() {
       } else {
         setIsMovementEnabled(false);
       }
+      setDocumentsSkipped(saved.documentsSkipped === true);
+      setDocumentsUploaded(saved.documentsUploaded === true);
     }
   }, []);
+
+  useEffect(() => {
+    if (documents.some((doc) => doc.current_stage === 'COMPLETE' || doc.status === 'COMPLETE')) {
+      setDocumentsUploaded(true);
+    }
+  }, [documents]);
 
   // Clear voice selection when avatar gender changes
   const handleAvatarSelect = useCallback(
@@ -80,9 +94,12 @@ export default function SetupPage() {
       if (idx === 1) {
         return !!selectedVoice;
       }
+      if (idx === 2) {
+        return documentsUploaded || documentsSkipped;
+      }
       return false;
     },
-    [selectedAvatar, selectedVoice]
+    [documentsSkipped, documentsUploaded, selectedAvatar, selectedVoice]
   );
 
   const canAdvance = isTabComplete(activeTab);
@@ -107,6 +124,17 @@ export default function SetupPage() {
     if (activeTab < TABS.length - 1 && canAdvance) {
       goTo(activeTab + 1);
     }
+  };
+
+  const handleDocumentsUploaded = () => {
+    setDocumentsUploaded(true);
+    setDocumentsSkipped(false);
+    goTo(3);
+  };
+
+  const handleDocumentsSkipped = () => {
+    setDocumentsSkipped(true);
+    goTo(3);
   };
 
   const stopAudio = useCallback(() => {
@@ -248,10 +276,18 @@ export default function SetupPage() {
                     />
                   )}
                   {activeTab === 2 && (
+                    <UploadTab
+                      onUploaded={handleDocumentsUploaded}
+                      onSkip={handleDocumentsSkipped}
+                    />
+                  )}
+                  {activeTab === 3 && (
                     <AllSetTab
                       avatar={selectedAvatar}
                       voice={selectedVoice}
                       movementEnabled={isMovementEnabled}
+                      documentsSkipped={documentsSkipped}
+                      documentsUploaded={documentsUploaded}
                     />
                   )}
                 </motion.div>

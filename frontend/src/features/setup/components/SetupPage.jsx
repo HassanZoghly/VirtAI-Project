@@ -7,7 +7,6 @@ import { useNavigate } from 'react-router-dom';
 
 import { avatarImages } from '@/features/avatar/data/avatars';
 import { useDocumentList } from '@/features/documents/useDocumentList';
-import '@/pages/Setup/Setup.css';
 import { cn } from '@/shared/utils/cn';
 import CircuitBoardBackground from '@/widgets/Overview/CircuitBoardBackground';
 import { voices as VOICES } from '../data/voices';
@@ -15,8 +14,8 @@ import { loadSetup } from '../services/setupStorage';
 import AllSetTab from './AllSetTab';
 import AvatarPreview from './AvatarPreview';
 import AvatarTab from './AvatarTab';
-import VoiceTab from './VoiceTab';
 import { UploadTab } from './UploadTab';
+import VoiceTab from './VoiceTab';
 
 const TABS = [
   { key: 'avatar', label: 'Avatar', icon: HiOutlineUser },

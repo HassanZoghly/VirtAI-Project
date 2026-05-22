@@ -112,3 +112,53 @@ async def get_chat_use_case(request: Request) -> ChatUseCase:
 
 
 ChatUseCaseDep = Annotated[ChatUseCase, Depends(get_chat_use_case)]
+
+
+# ── RAG Dependencies ─────────────────────────────────────────────────────────
+
+from app.domain.rag.ports import LLMGenerationProvider, VectorCollectionStore, EmbeddingProvider
+from app.infrastructure.llm.provider_factory import LLMProviderFactory
+from app.infrastructure.vector.provider_factory import VectorDBProviderFactory
+from app.infrastructure.db.database import AsyncSessionLocal, get_db
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.infrastructure.memory.memory_manager import MemoryManager
+from app.infrastructure.db.repositories.conversation_repository import ConversationRepository
+from app.application.rag.nlp_operations import NLPOperations
+from app.infrastructure.rag.template_parser import TemplateParser
+
+
+def get_llm_generation_provider(settings: Settings = Depends(get_settings)) -> LLMGenerationProvider:
+    factory = LLMProviderFactory(settings=settings)
+    return factory.create(provider=settings.LLM_PROVIDER if hasattr(settings, "LLM_PROVIDER") else "OPENAI")
+
+
+def get_vector_collection_store(settings: Settings = Depends(get_settings)) -> VectorCollectionStore:
+    # Use AsyncSessionLocal as the session factory since PGVectorCollectionProvider uses `async with self.db_client():`
+    factory = VectorDBProviderFactory(settings=settings, db_client=AsyncSessionLocal)
+    return factory.create()
+
+
+def get_memory_manager(db: AsyncSession = Depends(get_db)) -> MemoryManager:
+    repo = ConversationRepository(db=db)
+    return MemoryManager(conversation_repo=repo)
+
+
+def get_nlp_operations(
+    request: Request,
+    vector_store: VectorCollectionStore = Depends(get_vector_collection_store),
+    llm_provider: LLMGenerationProvider = Depends(get_llm_generation_provider),
+    memory_manager: MemoryManager = Depends(get_memory_manager),
+) -> NLPOperations:
+    # Get embedding provider from app state just like get_chat_use_case
+    embedding_provider: EmbeddingProvider = request.app.state.embedder
+    template_parser = TemplateParser()
+    
+    return NLPOperations(
+        vector_store=vector_store,
+        llm_provider=llm_provider,
+        embedding_provider=embedding_provider,
+        template_parser=template_parser,
+        memory_manager=memory_manager,
+    )
+
+NLPOperationsDep = Annotated[NLPOperations, Depends(get_nlp_operations)]

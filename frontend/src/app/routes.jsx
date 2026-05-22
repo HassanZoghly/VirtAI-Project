@@ -1,15 +1,14 @@
 import { lazy, Suspense } from 'react';
 import { Route, Routes } from 'react-router-dom';
 
-import Overview from '../pages/OverviewPage';
 import PageLoader from '@/shared/components/PageLoader';
+import Overview from '../pages/Overview';
 
-const Classroom = lazy(() => import('../pages/ClassroomPage'));
-const Setup = lazy(() => import('../pages/SetupPage'));
-const NotFound = lazy(() => import('../pages/NotFoundPage'));
-const AuthPage = lazy(() => import('../pages/AuthPage'));
-const AuthCallbackHandler = lazy(() => import('../pages/AuthCallbackPage'));
-const ProtectedRoute = lazy(() => import('@/shared/components/ProtectedRoute'));
+const Classroom = lazy(() => import('../pages/Classroom'));
+const Setup = lazy(() => import('../pages/Setup'));
+const NotFound = lazy(() => import('../pages/NotFound'));
+const AuthPage = lazy(() => import('../pages/Auth'));
+const AuthCallbackHandler = lazy(() => import('../pages/AuthCallback'));
 
 export default function AppRoutes() {
   return (
@@ -21,9 +20,7 @@ export default function AppRoutes() {
         path="/setup"
         element={
           <Suspense fallback={<PageLoader />}>
-            <ProtectedRoute>
-              <Setup />
-            </ProtectedRoute>
+            <Setup />
           </Suspense>
         }
       />
@@ -31,9 +28,7 @@ export default function AppRoutes() {
         path="/classroom/:sessionId?"
         element={
           <Suspense fallback={<PageLoader />}>
-            <ProtectedRoute>
-              <Classroom />
-            </ProtectedRoute>
+            <Classroom />
           </Suspense>
         }
       />

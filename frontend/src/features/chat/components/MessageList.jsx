@@ -1,9 +1,9 @@
 import {
   PiLightbulbFilament,
-  PiRobotFill,
-  PiUserCircleFill,
-  PiWarningCircleFill,
 } from 'react-icons/pi';
+import { Bot, User } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import MessageBubble from './MessageBubble';
 
 /**
@@ -59,8 +59,8 @@ export default function MessageList({
               aria-label="AI is typing"
             >
               <div className="chat-message ai-message">
-                <div className="message-avatar">
-                  <PiRobotFill aria-hidden="true" />
+                <div className="message-avatar ai-avatar">
+                  <Bot size={22} aria-hidden="true" />
                 </div>
                 <div className="message-bubble typing-indicator">
                   <span className="typing-dot" />
@@ -79,8 +79,8 @@ export default function MessageList({
             >
               <div className="chat-message user-message interim-transcript">
                 <div className="message-bubble">{interimTranscript}</div>
-                <div className="message-avatar">
-                  <PiUserCircleFill aria-hidden="true" />
+                <div className="message-avatar user-avatar">
+                  <User size={22} aria-hidden="true" />
                 </div>
               </div>
             </div>
@@ -88,13 +88,17 @@ export default function MessageList({
           {/* Show streaming message if present */}
           {currentMessage && (
             <div className="chat-message-wrapper ai-message-wrapper">
-              <div className="chat-message ai-message">
-                <div className="message-avatar">
-                  <PiRobotFill aria-hidden="true" />
+              <div className="chat-message ai-message items-start">
+                <div className="message-avatar ai-avatar mt-1">
+                  <Bot size={22} aria-hidden="true" />
                 </div>
-                <div className="message-bubble">
-                  {currentMessage}
-                  <span className="streaming-cursor">▊</span>
+                <div className="message-bubble flex flex-col gap-2 max-w-none w-full">
+                  <div className="markdown-body prose prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:mb-2 prose-headings:mt-4 prose-hr:my-4">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {currentMessage}
+                    </ReactMarkdown>
+                    <span className="streaming-cursor">▊</span>
+                  </div>
                 </div>
               </div>
             </div>

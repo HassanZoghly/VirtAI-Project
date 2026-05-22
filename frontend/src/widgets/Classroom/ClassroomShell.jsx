@@ -12,7 +12,7 @@ import { Helmet } from 'react-helmet-async';
 import { PiGearFill, PiWifiSlashFill } from 'react-icons/pi';
 import { useNavigate, useParams } from 'react-router-dom';
 import { SCROLL_STICK_THRESHOLD_PX } from './constants';
-import ClassroomSkeleton from './ClassroomSkeleton';
+
 
 const toast = new Toast('tr');
 
@@ -383,38 +383,28 @@ export default function ClassroomShell() {
           />
 
           <div className="chat-panel" key={currentSessionId || 'empty'}>
-            {!currentSessionId ? (
-              <ClassroomSkeleton />
-            ) : (
-              <>
-                {currentSession && currentSession.messages_loaded !== true ? (
-                  <ClassroomSkeleton />
-                ) : (
-                  <MessageList
-                    messages={currentSession.messages}
-                    currentMessage={conversationState.currentMessage}
-                    interimTranscript={interimTranscript}
-                    error={conversationState.error}
-                    avatarName={avatarName}
-                    chatScrollRef={chatScrollRef}
-                    messagesEndRef={messagesEndRef}
-                    onScroll={handleChatScroll}
-                    pipelineState={conversationState.pipelineState}
-                  />
-                )}
-                <ChatInput
-                  inputValue={inputValue}
-                  onInputChange={setInputValue}
-                  onSend={handleSendMessage}
-                  onKeyDown={onKeyDown}
-                  textareaRef={textareaRef}
-                  backendStatus={connectionState}
-                  wsClient={{ connectionState, isConnected, send: safeSend, onMessage }}
-                  pipelineState={conversationState.pipelineState}
-                  onToggleDocuments={toggleDocuments}
-                />
-              </>
-            )}
+            <MessageList
+              messages={currentSession?.messages || []}
+              currentMessage={conversationState.currentMessage}
+              interimTranscript={interimTranscript}
+              error={conversationState.error}
+              avatarName={avatarName}
+              chatScrollRef={chatScrollRef}
+              messagesEndRef={messagesEndRef}
+              onScroll={handleChatScroll}
+              pipelineState={conversationState.pipelineState}
+            />
+            <ChatInput
+              inputValue={inputValue}
+              onInputChange={setInputValue}
+              onSend={handleSendMessage}
+              onKeyDown={onKeyDown}
+              textareaRef={textareaRef}
+              backendStatus={connectionState}
+              wsClient={{ connectionState, isConnected, send: safeSend, onMessage }}
+              pipelineState={conversationState.pipelineState}
+              onToggleDocuments={toggleDocuments}
+            />
           </div>
         </div>
       </div>

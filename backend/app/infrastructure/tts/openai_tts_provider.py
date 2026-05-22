@@ -63,8 +63,20 @@ class OpenAITTSProvider(BaseTTSProvider):
         text = re.sub(r"(?i)\bmrs\.", "Missus ", text)
         text = re.sub(r"(?i)\bprof\.", "Professor ", text)
 
-        # Remove Markdown symbols: *, #, _, ~, `
-        text = re.sub(r"[*#_~`]", "", text)
+        # Remove Markdown URLs/Links: [text](url) -> text
+        text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
+        
+        # Remove Markdown Images: ![alt](url) -> ""
+        text = re.sub(r"!\[[^\]]*\]\([^\)]+\)", "", text)
+        
+        # Remove markdown bold/italic/strikethrough markers, but keep the text
+        text = re.sub(r"(?<!\\)(\*\*|\*|__|_|~~|`)", "", text)
+        
+        # Remove markdown headers (# Header -> Header)
+        text = re.sub(r"(?m)^#+\s+", "", text)
+        
+        # Remove HTML tags
+        text = re.sub(r"<[^>]+>", "", text)
 
         # Remove emojis and other non-standard characters
         # Keeps word characters (letters, digits), spaces, and standard punctuation/symbols

@@ -326,6 +326,20 @@ excited, concerned, reassuring, proud, disappointed, sarcastic, grateful, curiou
 
 
 # ─────────────────────────────────────────────────────────────
+# Formatting Rules
+# ─────────────────────────────────────────────────────────────
+
+FORMATTING_RULES = """
+When providing summaries, explaining concepts, or answering questions, you MUST strictly follow these formatting rules:
+1. Use clear, bold hierarchical headings.
+2. Use concise, tightly grouped bullet points for lists.
+3. Visually separate distinct topics, concepts, or sections using a markdown horizontal rule (`---`).
+4. Keep paragraphs short and easily digestible. Avoid giant walls of text.
+5. Prioritize a highly organized, textbook-style layout designed for quick student comprehension.
+"""
+
+
+# ─────────────────────────────────────────────────────────────
 # Avatar Personalities
 # ─────────────────────────────────────────────────────────────
 
@@ -362,7 +376,6 @@ EMOTIONAL DEFAULTS:
 Never default to [emotion:neutral].
 
 HARD RULES:
-Prose only — no bullets, no lists, no numbered items, no headers in output.
 Do not imitate the structure of these instructions in your responses.
 Never use filler phrases: "Great question!", "Absolutely!", "Of course!", "Certainly!".
 Conversational register — never lecture-like.
@@ -406,7 +419,6 @@ EMOTIONAL DEFAULTS:
 [emotion:empathetic] — when correcting an error.
 
 HARD RULES:
-Prose only — no bullets, no lists, no numbered items, no headers in output.
 No rhetorical flourishes, no exclamation marks, no filler phrases.
 Do not imitate the structure of these instructions in your responses.
 Academic register — precise but never cold or dismissive.
@@ -449,7 +461,6 @@ EMOTIONAL DEFAULTS:
 [emotion:proud] or [emotion:happy] — when the student reaches a real insight.
 
 HARD RULES:
-Prose only — no bullets, no lists, no numbered items, no headers in output.
 Every response must open with a hook — this is non-negotiable.
 Never start with: "That is a good question", "Great!", "Absolutely!", or any filler.
 Keep rhythm lively but controlled — energy, not chaos.
@@ -477,8 +488,9 @@ def get_system_prompt(avatar_id: str | None = None) -> str:
 
     Composition order (matters for LLM attention):
         1. SAFETY_GUARDRAILS  — parsed first, highest priority
-        2. Avatar personality — core behavioral identity
-        3. EMOTION_INSTRUCTIONS — output format layer, applied last
+        2. FORMATTING_RULES — strictly enforced output formatting
+        3. Avatar personality — core behavioral identity
+        4. EMOTION_INSTRUCTIONS — output format layer, applied last
 
     Args:
         avatar_id: "avatar1" / "avatar2" / "avatar3" or None → default
@@ -487,6 +499,7 @@ def get_system_prompt(avatar_id: str | None = None) -> str:
     return "\n\n".join(
         [
             SAFETY_GUARDRAILS.strip(),
+            FORMATTING_RULES.strip(),
             base.strip(),
             EMOTION_INSTRUCTIONS.strip(),
         ]

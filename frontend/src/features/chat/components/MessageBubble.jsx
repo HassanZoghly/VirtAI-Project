@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { PiRobotFill, PiUserCircleFill } from 'react-icons/pi';
+import { Bot, User } from 'lucide-react';
 import CopyButton from '../../../shared/components/CopyButton';
 
 /**
@@ -15,25 +15,31 @@ const MessageBubble = memo(function MessageBubble({ msg }) {
     <div
       className={`chat-message-wrapper ${isUser ? 'user-message-wrapper' : 'ai-message-wrapper'} message-enter`}
     >
-      <div className={`chat-message ${isUser ? 'user-message' : 'ai-message'}`}>
+      <div className={`chat-message ${isUser ? 'user-message' : 'ai-message'} items-start`}>
         {!isUser && (
-          <div className="message-avatar">
-            <PiRobotFill aria-hidden="true" />
+          <div className="message-avatar ai-avatar mt-1">
+            <Bot size={22} aria-hidden="true" />
           </div>
         )}
-        <div className="message-bubble markdown-body">
+        <div className={`message-bubble ${isUser ? '' : 'flex flex-col gap-2 max-w-none w-full'}`}>
           {isUser ? (
             msg.content
           ) : (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {msg.content}
-            </ReactMarkdown>
+            <>
+              <div className="markdown-body prose prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:mb-2 prose-headings:mt-4 prose-hr:my-4">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {msg.content}
+                </ReactMarkdown>
+              </div>
+              <div className="flex justify-start mt-2">
+                <CopyButton content={msg.content} />
+              </div>
+            </>
           )}
-          {!isUser && <CopyButton content={msg.content} />}
         </div>
         {isUser && (
-          <div className="message-avatar">
-            <PiUserCircleFill aria-hidden="true" />
+          <div className="message-avatar user-avatar">
+            <User size={22} aria-hidden="true" />
           </div>
         )}
       </div>

@@ -64,6 +64,7 @@ class ConversationHistory:
 
     system_prompt: str
     max_messages: int = 20  # max user+assistant pairs to keep
+    max_tokens: int = 4096  # safe token limit threshold
     _messages: list[ChatMessage] = field(default_factory=list)
     sanitizer: Callable[[str], str] | None = None
 
@@ -99,12 +100,22 @@ class ConversationHistory:
 
     def _trim(self) -> None:
         """
-        Keeps only the last N message pairs.
+        Keeps only the last N message pairs, and enforces a maximum token limit.
         Always removes in pairs (user + assistant) to keep history consistent.
+        Uses 1 token ≈ 4 characters heuristic.
         """
         max_raw = self.max_messages * 2  # pairs → individual messages
         if len(self._messages) > max_raw:
             self._messages = self._messages[-max_raw:]
+
+        while len(self._messages) >= 2:
+            total_chars = len(self.system_prompt) + sum(len(m.content) for m in self._messages)
+            estimated_tokens = total_chars // 4
+
+            if estimated_tokens <= self.max_tokens:
+                break
+
+            self._messages = self._messages[2:]
 
     @property
     def message_count(self) -> int:
@@ -152,8 +163,14 @@ class PipelineEvent:
     type: PipelineEventType
     data: dict = field(default_factory=dict)
     session_id: str | None = None  # for tracking
+    trace_id: str | None = None  # for distributed tracing
 
 
-def ev(event_type: PipelineEventType, session_id: str | None = None, **kwargs) -> PipelineEvent:
+def ev(
+    event_type: PipelineEventType,
+    session_id: str | None = None,
+    trace_id: str | None = None,
+    **kwargs
+) -> PipelineEvent:
     """Shorthand to create a PipelineEvent."""
-    return PipelineEvent(type=event_type, data=kwargs, session_id=session_id)
+    return PipelineEvent(type=event_type, data=kwargs, session_id=session_id, trace_id=trace_id)

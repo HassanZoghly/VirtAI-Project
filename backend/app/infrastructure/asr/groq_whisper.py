@@ -14,8 +14,9 @@ import time
 import wave
 
 import numpy as np
-from groq import AsyncGroq
+from groq import AsyncGroq, APIStatusError, APITimeoutError, APIConnectionError
 from loguru import logger
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from app.domain.voice.entities import (
     ASRResult,
@@ -177,6 +178,23 @@ class GroqWhisperASR(BaseASRProvider, StreamingASRService):
         )
 
     # ── Public Methods ────────────────────────────────────────────────────────
+    @retry(
+        retry=retry_if_exception_type((APIStatusError, APITimeoutError, APIConnectionError)),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        stop=stop_after_attempt(3),
+        reraise=True,
+    )
+    async def _call_groq_api(self, audio_file: io.BytesIO, lang: str):
+        """Helper to call Groq API with automatic retries for transient errors."""
+        audio_file.seek(0)
+        return await self._client.audio.transcriptions.create(
+            model=self.model,
+            file=audio_file,
+            language=lang,
+            response_format="verbose_json",
+            timestamp_granularities=["word", "segment"],
+        )
+
     async def transcribe(
         self,
         audio_bytes: bytes,
@@ -214,13 +232,7 @@ class GroqWhisperASR(BaseASRProvider, StreamingASRService):
             audio_file = io.BytesIO(audio_bytes)
             audio_file.name = f"audio.{audio_format}"
 
-            response = await self._client.audio.transcriptions.create(
-                model=self.model,
-                file=audio_file,
-                language=lang,
-                response_format="verbose_json",  # gives segments + words
-                timestamp_granularities=["word", "segment"],
-            )
+            response = await self._call_groq_api(audio_file, lang)
         except Exception as e:
             logger.error(f"Groq ASR API call failed: {e}")
             raise ASRException(f"ASR transcription failed: {e!s}")

@@ -46,6 +46,11 @@ RUN mkdir -p /app/.cache/fastembed /app/.cache/huggingface && \
 # ── Copy application source (invalidates less often) ───────
 COPY app ./app
 
+# ── Copy Alembic migration scripts & config ────────────────
+# Required so `alembic upgrade head` works inside the container.
+COPY alembic.ini ./alembic.ini
+COPY alembic ./alembic
+
 # ── Runtime directories ────────────────────────────────────
 RUN mkdir -p /app/.data/sessions /app/.data/uploads
 

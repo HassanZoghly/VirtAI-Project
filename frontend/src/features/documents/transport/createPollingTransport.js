@@ -7,6 +7,7 @@
  * @param {Function} onError - Callback when the task fails
  * @param {number} initialDelay - Initial delay before polling starts (ms)
  * @param {number} maxDelay - Maximum delay between polls (ms)
+ * @param {number} maxRetries - Maximum consecutive fetch failures before giving up
  * @returns {Function} Function to cancel the polling
  */
 export function createPollingTransport({
@@ -16,10 +17,12 @@ export function createPollingTransport({
   onError,
   initialDelay = 1000,
   maxDelay = 5000,
+  maxRetries = 3,
 }) {
   let timeoutId = null;
   let isCancelled = false;
   let currentDelay = initialDelay;
+  let consecutiveFailures = 0;
 
   const poll = async () => {
     if (isCancelled) {
@@ -28,6 +31,9 @@ export function createPollingTransport({
 
     try {
       const status = await fetchStatusFn();
+
+      // Reset failure counter on successful fetch
+      consecutiveFailures = 0;
 
       // Terminal states
       if (status.current_stage === 'COMPLETE') {
@@ -54,8 +60,27 @@ export function createPollingTransport({
         timeoutId = setTimeout(poll, currentDelay);
       }
     } catch (error) {
+      if (isCancelled) {
+        return;
+      }
+
+      consecutiveFailures++;
+
+      if (consecutiveFailures >= maxRetries) {
+        // Too many consecutive failures — give up
+        onError(
+          new Error(
+            error?.message || `Upload status check failed after ${maxRetries} retries`
+          )
+        );
+        return;
+      }
+
+      // Transient failure — retry with exponential backoff
+      const retryDelay = Math.min(currentDelay * Math.pow(2, consecutiveFailures), maxDelay * 2);
+
       if (!isCancelled) {
-        onError(error);
+        timeoutId = setTimeout(poll, retryDelay);
       }
     }
   };

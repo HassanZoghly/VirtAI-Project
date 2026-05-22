@@ -12,6 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.application.auth.auth_use_cases import (
     authenticate_user,
     build_google_auth_url,
+    change_user_password,
     exchange_google_code,
     get_or_create_google_user,
     get_user_by_email,
@@ -43,6 +44,7 @@ from app.infrastructure.cache.refresh_token_family import (
 )
 from app.infrastructure.db.database import get_db
 from app.schemas.auth import (
+    ChangePasswordRequest,
     GoogleCallbackRequest,
     LoginRequest,
     SetupStatusRequest,
@@ -65,6 +67,11 @@ from app.shared.security import (
     extract_jti,
     extract_user_id,
     verify_token,
+)
+from app.shared.metrics import (
+    auth_login_attempts,
+    auth_login_failures,
+    auth_refresh_rotations,
 )
 
 if TYPE_CHECKING:
@@ -144,17 +151,84 @@ def _deserialize_cached_user(data: dict) -> UserEntity:
     )
 
 
-async def _assert_rate_limit(request: Request, scope: str) -> None:
+async def _assert_rate_limit_login(request: Request) -> None:
     settings = get_settings()
     client_ip = _extract_client_ip(request)
-    identifier = f"auth:{scope}:{client_ip}"
     allowed = await check_rate_limit(
-        identifier=identifier,
-        limit=settings.RATE_LIMIT_REQUESTS,
-        window=settings.RATE_LIMIT_WINDOW,
+        identifier=f"auth:login:{client_ip}",
+        limit=settings.RATE_LIMIT_LOGIN_REQUESTS,
+        window=settings.RATE_LIMIT_LOGIN_WINDOW,
     )
     if not allowed:
-        raise HTTPException(status_code=429, detail="Too many requests")
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts",
+            headers={"Retry-After": str(settings.RATE_LIMIT_LOGIN_WINDOW)},
+        )
+
+async def _assert_rate_limit_signup(request: Request) -> None:
+    settings = get_settings()
+    client_ip = _extract_client_ip(request)
+    allowed = await check_rate_limit(
+        identifier=f"auth:signup:{client_ip}",
+        limit=settings.RATE_LIMIT_SIGNUP_REQUESTS,
+        window=settings.RATE_LIMIT_SIGNUP_WINDOW,
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many signup attempts",
+            headers={"Retry-After": str(settings.RATE_LIMIT_SIGNUP_WINDOW)},
+        )
+
+async def _assert_rate_limit_refresh(request: Request) -> None:
+    settings = get_settings()
+    client_ip = _extract_client_ip(request)
+    allowed = await check_rate_limit(
+        identifier=f"auth:refresh:{client_ip}",
+        limit=settings.RATE_LIMIT_REFRESH_REQUESTS,
+        window=settings.RATE_LIMIT_REFRESH_WINDOW,
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many refresh attempts",
+            headers={"Retry-After": str(settings.RATE_LIMIT_REFRESH_WINDOW)},
+        )
+
+async def _assert_rate_limit_google_callback(request: Request) -> None:
+    settings = get_settings()
+    client_ip = _extract_client_ip(request)
+    allowed = await check_rate_limit(
+        identifier=f"auth:google_callback:{client_ip}",
+        limit=settings.RATE_LIMIT_LOGIN_REQUESTS,
+        window=settings.RATE_LIMIT_LOGIN_WINDOW,
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts",
+            headers={"Retry-After": str(settings.RATE_LIMIT_LOGIN_WINDOW)},
+        )
+
+async def _check_account_lockout(email: str) -> None:
+    """Exponential backoff after repeated failures for the same email."""
+    redis = get_redis()
+    key = f"virtai:auth:lockout:{email}"
+    failures = await redis.get(key)
+    if failures and int(failures) >= 10:
+        raise HTTPException(
+            status_code=423,
+            detail="Account temporarily locked due to repeated failed attempts",
+        )
+
+async def _record_login_failure(email: str) -> None:
+    redis = get_redis()
+    key = f"virtai:auth:lockout:{email}"
+    pipe = redis.pipeline()
+    pipe.incr(key)
+    pipe.expire(key, 900)  # 15 minute window
+    await pipe.execute()
 
 
 async def _current_user(
@@ -204,6 +278,7 @@ def _refresh_cookie_policy() -> tuple[bool, str]:
 
 
 def _set_refresh_cookie(response: Response, token: str) -> None:
+    settings = get_settings()
     secure, same_site = _refresh_cookie_policy()
     response.set_cookie(
         key=COOKIE_KEY,
@@ -213,10 +288,12 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
         samesite=same_site,
         path=COOKIE_PATH,
         max_age=_refresh_cookie_max_age(),
+        domain=settings.COOKIE_DOMAIN,
     )
 
 
 def _delete_refresh_cookie(response: Response) -> None:
+    settings = get_settings()
     secure, same_site = _refresh_cookie_policy()
     response.delete_cookie(
         key=COOKIE_KEY,
@@ -224,6 +301,7 @@ def _delete_refresh_cookie(response: Response) -> None:
         secure=secure,
         samesite=same_site,
         path=COOKIE_PATH,
+        domain=settings.COOKIE_DOMAIN,
     )
 
 
@@ -246,22 +324,31 @@ def _user_response(user: UserEntity) -> UserResponse:
 
 
 def _issue_tokens(user: UserEntity, family_id: str | None = None) -> tuple[str, str, str]:
-    access = create_access_token(user.id, user.refresh_token_version)
     refresh = create_refresh_token(user.id, user.refresh_token_version, family_id=family_id)
     refresh_payload = decode_auth_token(refresh, expected_type="refresh")
     if refresh_payload.family_id is None:
         raise InvalidAuthStateError("Refresh token missing family")
-    return access, refresh, str(refresh_payload.family_id)
+        
+    resolved_family_id = str(refresh_payload.family_id)
+    access = create_access_token(user.id, user.refresh_token_version, family_id=resolved_family_id)
+    
+    return access, refresh, resolved_family_id
 
 
-async def _store_initial_refresh(user: UserEntity, refresh: str, family_id: str) -> None:
+async def _store_initial_refresh(
+    user: UserEntity, refresh: str, family_id: str, request: Request
+) -> None:
     refresh_payload = decode_auth_token(refresh, expected_type="refresh")
+    client_ip = _extract_client_ip(request)
+    user_agent = request.headers.get("user-agent", "unknown")
     await store_initial_refresh_token(
         str(user.id),
         family_id,
         refresh,
         refresh_payload.jti,
         _refresh_cookie_max_age(),
+        client_ip=client_ip,
+        user_agent=user_agent,
     )
 
 
@@ -272,16 +359,22 @@ async def login(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    await _assert_rate_limit(request, "login")
+    auth_login_attempts.labels(status="attempt", provider="local").inc()
+    await _assert_rate_limit_login(request)
+    await _check_account_lockout(body.email)
     user = await authenticate_user(db, body.email, body.password)
     if user is None:
+        await _record_login_failure(body.email)
+        auth_login_failures.labels(reason="invalid_credentials").inc()
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not user.is_active:
+        auth_login_failures.labels(reason="inactive_account").inc()
         raise HTTPException(status_code=403, detail="User account is inactive")
     access, refresh, family_id = _issue_tokens(user)
-    await _store_initial_refresh(user, refresh, family_id)
+    await _store_initial_refresh(user, refresh, family_id, request)
     await cache_auth_session(str(user.id), _serialize_user_for_cache(user))
     _set_refresh_cookie(response, refresh)
+    auth_login_attempts.labels(status="success", provider="local").inc()
     return {
         "access_token": access,
         "token_type": "bearer",
@@ -296,13 +389,13 @@ async def signup(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    await _assert_rate_limit(request, "signup")
+    await _assert_rate_limit_signup(request)
     existing = await get_user_by_email(db, body.email)
     if existing is not None:
         raise HTTPException(status_code=409, detail="Email already registered")
     user = await register_user(db, body.full_name, body.email, body.password)
     access, refresh, family_id = _issue_tokens(user)
-    await _store_initial_refresh(user, refresh, family_id)
+    await _store_initial_refresh(user, refresh, family_id, request)
     await cache_auth_session(str(user.id), _serialize_user_for_cache(user))
     _set_refresh_cookie(response, refresh)
     return {
@@ -331,6 +424,28 @@ async def update_setup_status(
     return _user_response(updated).model_dump(by_alias=True)
 
 
+@router.post("/change-password")
+async def change_password(
+    body: ChangePasswordRequest,
+    user: UserEntity = Depends(_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    if user.provider != AuthProvider.LOCAL:
+        raise HTTPException(
+            status_code=400, detail="Password change is only supported for local accounts"
+        )
+    
+    updated_user = await change_user_password(db, user.id, body.current_password, body.new_password)
+    if updated_user is None:
+        raise HTTPException(status_code=400, detail="Invalid current password")
+
+    # Revoke all refresh families and invalidate cache so user must log in again
+    await revoke_all_refresh_families(str(user.id), reason="password_changed")
+    await invalidate_auth_session(str(user.id))
+    
+    return {"detail": "Password changed successfully. Please log in again."}
+
+
 @router.get("/csrf")
 async def get_csrf_token(request: Request, response: Response) -> dict:
     return {"detail": "CSRF cookie set"}
@@ -350,21 +465,25 @@ async def google_callback(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    await _assert_rate_limit(request, "google_callback")
+    auth_login_attempts.labels(status="attempt", provider="google").inc()
+    await _assert_rate_limit_google_callback(request)
     redis = get_redis()
     state_key = f"oauth:state:{body.state}"
     is_valid_state = await redis.get(state_key)
     if not is_valid_state:
+        auth_login_failures.labels(reason="invalid_oauth_state").inc()
         raise HTTPException(status_code=400, detail="Invalid or expired state parameter")
     await redis.delete(state_key)
     google_info = await exchange_google_code(body.code)
     user = await get_or_create_google_user(db, google_info)
     if not user.is_active:
+        auth_login_failures.labels(reason="inactive_account").inc()
         raise HTTPException(status_code=403, detail="User account is inactive")
     access, refresh, family_id = _issue_tokens(user)
-    await _store_initial_refresh(user, refresh, family_id)
+    await _store_initial_refresh(user, refresh, family_id, request)
     await cache_auth_session(str(user.id), _serialize_user_for_cache(user))
     _set_refresh_cookie(response, refresh)
+    auth_login_attempts.labels(status="success", provider="google").inc()
     return {
         "access_token": access,
         "token_type": "bearer",
@@ -379,7 +498,7 @@ async def refresh(
     refresh_token: str | None = Cookie(None, alias=COOKIE_KEY),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    await _assert_rate_limit(request, "refresh")
+    await _assert_rate_limit_refresh(request)
     if refresh_token is None:
         raise HTTPException(status_code=401, detail="Missing refresh token")
     try:
@@ -429,17 +548,36 @@ async def refresh(
 
             new_access, new_refresh, _ = _issue_tokens(rotated_user, family_id=family_id)
             new_refresh_payload = decode_auth_token(new_refresh, expected_type="refresh")
-            await mark_refresh_rotated(
-                str(user_id),
-                family_id,
-                jti,
-                new_refresh_payload.jti,
-                new_refresh,
-                _refresh_cookie_max_age(),
-            )
-            await blacklist_token(jti)
+
+            try:
+                await mark_refresh_rotated(
+                    str(user_id),
+                    family_id,
+                    jti,
+                    new_refresh_payload.jti,
+                    new_refresh,
+                    _refresh_cookie_max_age(),
+                )
+                await blacklist_token(jti)
+            except Exception as redis_err:
+                # COMPENSATE: Roll back the DB version bump
+                logger.error(
+                    f"Redis failed after DB version bump — compensating | "
+                    f"user={user_id} | error={redis_err}"
+                )
+                # The safest compensating action is to revoke all families
+                # so the user must re-login cleanly instead of being left in a corrupted state
+                await revoke_all_refresh_families(
+                    str(user_id), reason="redis_compensation_failure"
+                )
+                raise HTTPException(
+                    status_code=503,
+                    detail="Session refresh failed — please log in again",
+                )
+
             await invalidate_auth_session(str(user_id))
             _set_refresh_cookie(response, new_refresh)
+            auth_refresh_rotations.labels(status="success").inc()
             return {"access_token": new_access, "token_type": "bearer"}
         finally:
             await release_refresh_rotation_lock(str(user_id), family_id, lock_token)
@@ -450,6 +588,7 @@ async def refresh(
         InvalidUserIdError,
         RevokedTokenError,
     ):
+        auth_refresh_rotations.labels(status="failure").inc()
         _delete_refresh_cookie(response)
         raise
 
@@ -477,6 +616,17 @@ async def logout(
         if access_jti:
             settings = get_settings()
             await blacklist_token(access_jti, ttl_seconds=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+            
+            # If no refresh token is provided, we still want to kill the WS connection
+            # by broadcasting the family_id embedded in the access token.
+            if refresh_token is None:
+                try:
+                    payload = decode_auth_token(creds.credentials, expected_type="access")
+                    if payload.family_id:
+                        from app.infrastructure.cache.pubsub import publish_session_invalidation
+                        await publish_session_invalidation(str(user_id), str(payload.family_id))
+                except Exception:
+                    pass
     # Blacklist refresh token
     if refresh_token is not None:
         refresh_payload = None
@@ -499,3 +649,43 @@ async def logout(
             )
     _delete_refresh_cookie(response)
     return {"detail": "Logged out"}
+
+
+@router.get("/sessions")
+async def list_sessions(user: UserEntity = Depends(_current_user)) -> dict:
+    """List all active refresh families with device metadata."""
+    redis = get_redis()
+    from app.infrastructure.cache.cache_keys import (
+        auth_refresh_family_meta_key,
+        auth_refresh_user_families_key,
+    )
+    raw_families = await redis.smembers(auth_refresh_user_families_key(str(user.id)))
+    sessions = []
+    for fam_raw in raw_families:
+        fam = fam_raw.decode() if isinstance(fam_raw, bytes) else str(fam_raw)
+        # Check if family is revoked
+        if await is_refresh_family_revoked(str(user.id), fam):
+            continue
+        meta = await redis.hgetall(auth_refresh_family_meta_key(str(user.id), fam))
+        if meta:
+            def _decode(v: bytes | str) -> str:
+                return v.decode() if isinstance(v, bytes) else str(v)
+            sessions.append({
+                "family_id": fam,
+                "ip": _decode(meta.get(b"ip", b"unknown")),
+                "user_agent": _decode(meta.get(b"ua", b"unknown")),
+                "device_name": _decode(meta.get(b"device_name", b"unknown")),
+                "created_at": _decode(meta.get(b"created_at", b"")),
+                "last_seen": _decode(meta.get(b"last_seen", b"")),
+            })
+    return {"sessions": sessions}
+
+
+@router.delete("/sessions/{family_id}")
+async def revoke_session(
+    family_id: str,
+    user: UserEntity = Depends(_current_user),
+) -> dict:
+    """Revoke a specific session family (remote logout)."""
+    await revoke_refresh_family(str(user.id), family_id, reason="user_revoked")
+    return {"detail": "Session revoked"}

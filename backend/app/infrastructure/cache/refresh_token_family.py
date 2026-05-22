@@ -10,6 +10,7 @@ from loguru import logger
 from app.infrastructure.cache.cache_keys import (
     auth_refresh_active_jti_key,
     auth_refresh_consumed_jti_key,
+    auth_refresh_family_meta_key,
     auth_refresh_family_revoked_key,
     auth_refresh_key,
     auth_refresh_reuse_incident_key,
@@ -22,6 +23,24 @@ from app.shared.config import get_settings
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _parse_device_name(user_agent: str) -> str:
+    """Extract a simple device name from User-Agent string."""
+    ua = user_agent.lower()
+    if "iphone" in ua:
+        return "iPhone"
+    if "ipad" in ua:
+        return "iPad"
+    if "android" in ua:
+        return "Android Device"
+    if "macintosh" in ua or "mac os" in ua:
+        return "Mac"
+    if "windows" in ua:
+        return "Windows PC"
+    if "linux" in ua:
+        return "Linux PC"
+    return "Unknown Device"
 
 
 async def acquire_refresh_rotation_lock(user_id: str, family_id: str) -> str | None:
@@ -55,6 +74,10 @@ async def store_initial_refresh_token(
     refresh_token: str,
     refresh_jti: str,
     ttl_seconds: int,
+    *,
+    client_ip: str = "unknown",
+    user_agent: str = "unknown",
+    device_name: str | None = None,
 ) -> None:
     redis = get_redis()
     pipe = redis.pipeline()
@@ -63,6 +86,19 @@ async def store_initial_refresh_token(
     pipe.sadd(auth_refresh_user_families_key(user_id), family_id)
     pipe.expire(auth_refresh_user_families_key(user_id), ttl_seconds)
     pipe.delete(auth_refresh_family_revoked_key(user_id, family_id))
+    # Session metadata
+    pipe.hset(
+        auth_refresh_family_meta_key(user_id, family_id),
+        mapping={
+            "ip": client_ip,
+            "ua": user_agent,
+            "device_name": device_name or _parse_device_name(user_agent),
+            "created_at": _now_iso(),
+            "last_seen": _now_iso(),
+            "revoked_reason": "",
+        },
+    )
+    pipe.expire(auth_refresh_family_meta_key(user_id, family_id), ttl_seconds)
     await pipe.execute()
 
 
@@ -88,15 +124,28 @@ async def mark_refresh_rotated(
     pipe.setex(auth_refresh_active_jti_key(user_id, family_id), ttl_seconds, new_jti)
     pipe.sadd(auth_refresh_user_families_key(user_id), family_id)
     pipe.expire(auth_refresh_user_families_key(user_id), ttl_seconds)
+    pipe.hset(
+        auth_refresh_family_meta_key(user_id, family_id),
+        "last_seen", _now_iso(),
+    )
+    pipe.expire(auth_refresh_family_meta_key(user_id, family_id), ttl_seconds)
     await pipe.execute()
 
 
 async def is_refresh_jti_consumed(jti: str) -> bool:
-    return bool(await get_redis().exists(auth_refresh_consumed_jti_key(jti)))
+    try:
+        return bool(await get_redis().exists(auth_refresh_consumed_jti_key(jti)))
+    except Exception as e:
+        logger.error(f"[RefreshFamily] consumed check failed (FAILING CLOSED): {e}")
+        return True
 
 
 async def is_refresh_family_revoked(user_id: str, family_id: str) -> bool:
-    return bool(await get_redis().exists(auth_refresh_family_revoked_key(user_id, family_id)))
+    try:
+        return bool(await get_redis().exists(auth_refresh_family_revoked_key(user_id, family_id)))
+    except Exception as e:
+        logger.error(f"[RefreshFamily] revoked check failed (FAILING CLOSED): {e}")
+        return True
 
 
 async def revoke_refresh_family(
@@ -124,7 +173,19 @@ async def revoke_refresh_family(
             },
         )
         pipe.expire(auth_refresh_reuse_incident_key(user_id, replay_jti), ttl_seconds)
+    # Update the session metadata hash so the revocation reason is visible
+    # even if the session is later included in a dashboard query.
+    meta_key = auth_refresh_family_meta_key(user_id, family_id)
+    pipe.hset(meta_key, mapping={"revoked_reason": reason, "last_seen": _now_iso()})
+    pipe.expire(meta_key, ttl_seconds)
     await pipe.execute()
+    
+    from app.shared.metrics import auth_token_revocations
+    auth_token_revocations.labels(reason=reason).inc()
+    
+    from app.infrastructure.cache.pubsub import publish_session_invalidation
+    await publish_session_invalidation(user_id, family_id)
+    
     logger.warning(
         {
             "event": "refresh_family_revoked",

@@ -168,6 +168,10 @@ async def lifespan(app: FastAPI):
     # ── WebSocket connection manager ────────────────────────────────────────
     ws_connection_manager = WSConnectionManager(history_size=250)
     init_ws_connection_manager(ws_connection_manager)
+    await ws_connection_manager.start_pubsub_listener()
+    if getattr(ws_connection_manager, "_pubsub_task", None):
+        background_tasks.add(ws_connection_manager._pubsub_task)
+        ws_connection_manager._pubsub_task.add_done_callback(background_tasks.discard)
 
     # ── Background task: cleanup idle sessions ──────────────────────────────
     async def cleanup_task():
@@ -281,8 +285,19 @@ def create_app() -> FastAPI:
     app.add_exception_handler(AvatarBaseException, avatar_exception_handler)
     app.add_exception_handler(Exception, generic_exception_handler)
 
+    # ── JWKS Endpoint ─────────────────────────────────────────────────────────
+    @app.get("/.well-known/jwks.json", tags=["auth"])
+    async def jwks_endpoint():
+        from app.shared.key_manager import get_jwks
+        return get_jwks()
+
     # ── Routers ───────────────────────────────────────────────────────────────
     app.include_router(api_v1_router)
+    
+    # ── Prometheus Metrics ────────────────────────────────────────────────────
+    from prometheus_fastapi_instrumentator import Instrumentator
+    Instrumentator().instrument(app).expose(app, endpoint="/metrics")
+
     return app
 
 

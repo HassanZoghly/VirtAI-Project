@@ -18,6 +18,11 @@ from app.infrastructure.db.repositories.user_repository import UserRepository
 from app.shared.config import get_settings
 from app.shared.security import hash_password, verify_password
 
+# Pre-computed bcrypt hash used to burn constant CPU time when the looked-up
+# user does not exist.  This prevents timing-oracle attacks that enumerate
+# valid email addresses by measuring response latency.
+_DUMMY_HASH: str = hash_password("constant-time-padding-do-not-remove")
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -75,14 +80,46 @@ async def register_user(
 
 
 async def authenticate_user(db: AsyncSession, email: str, password: str) -> UserEntity | None:
-    """Verify credentials. Returns UserEntity on success, None on failure."""
+    """Verify credentials. Returns UserEntity on success, None on failure.
+
+    Always runs a bcrypt verify even for non-existent users so that an
+    attacker cannot distinguish "wrong email" from "wrong password" via
+    response timing.
+    """
     repo = UserRepository(db)
     user = await repo.get_by_email(email)
     if user is None or user.password_hash is None:
+        # Burn the same CPU time as a real verification
+        verify_password(password, _DUMMY_HASH)
         return None
     if not verify_password(password, user.password_hash):
         return None
     return user
+
+
+async def change_user_password(
+    db: AsyncSession, user_id: UUID, current_password: str, new_password: str
+) -> UserEntity | None:
+    """
+    Change user password if the current password is valid.
+    This also increments the token version to revoke all existing sessions.
+    """
+    repo = UserRepository(db)
+    user = await repo.get_by_id(user_id)
+    if user is None or user.password_hash is None or user.provider != AuthProvider.LOCAL:
+        # Burn CPU time if user not found or wrong provider
+        verify_password(current_password, _DUMMY_HASH)
+        return None
+
+    if not verify_password(current_password, user.password_hash):
+        return None
+
+    user.password_hash = hash_password(new_password)
+    user.updated_at = _now()
+    # Update user (this won't bump token version, we do that atomically next)
+    await repo.update(user)
+    # Now force-bump the token version to revoke all existing tokens
+    return await repo.force_increment_refresh_token_version(user_id)
 
 
 # ---------------------------------------------------------------------------

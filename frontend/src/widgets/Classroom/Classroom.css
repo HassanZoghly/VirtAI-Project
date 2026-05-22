@@ -1515,3 +1515,96 @@
   border-color: rgba(220, 38, 38, 0.4);
   color: #ef4444;
 }
+
+/* Classroom Skeleton Loader */
+.classroom-skeleton {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 1rem 1.5rem;
+  justify-content: space-between;
+}
+
+.skeleton-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  flex: 1;
+}
+
+.skeleton-msg {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+.skeleton-user {
+  justify-content: flex-end;
+}
+
+.skeleton-ai {
+  justify-content: flex-start;
+}
+
+.skeleton-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--border-color, #333);
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-bubble {
+  height: 48px;
+  border-radius: 16px;
+  background: var(--border-color, #333);
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-bubble-lg { width: 70%; height: 80px; }
+.skeleton-bubble-md { width: 50%; border-bottom-right-radius: 4px; }
+.skeleton-bubble-sm { width: 30%; border-bottom-left-radius: 4px; }
+
+.skeleton-ai .skeleton-bubble { border-bottom-left-radius: 4px; }
+
+.skeleton-input {
+  padding-top: 1rem;
+}
+
+.skeleton-input-bar {
+  height: 56px;
+  width: 100%;
+  border-radius: 28px;
+  background: var(--border-color, #333);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Shimmer animation */
+.skeleton-avatar::after,
+.skeleton-bubble::after,
+.skeleton-input-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.03) 20%,
+    rgba(255, 255, 255, 0.08) 60%,
+    rgba(255, 255, 255, 0)
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}

@@ -109,7 +109,7 @@ class DocumentRepository(DocumentRepositoryPort):
             Document.document_sha256 == sha256,
         )
         result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     async def mark_failed(self, document_id: str, error_msg: str, is_retryable: bool) -> None:
         doc = await self.get(document_id)

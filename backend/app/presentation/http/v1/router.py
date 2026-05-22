@@ -73,8 +73,8 @@ async def websocket_endpoint(
     # Per-IP connection throttling (best effort, fail-open handled by helper)
     allowed = await check_rate_limit(
         identifier=f"ws:connect:{client_ip}",
-        limit=settings.RATE_LIMIT_CONNECTIONS_PER_IP,
-        window=60,
+        limit=settings.RATE_LIMIT_WS_CONNECT_REQUESTS,
+        window=settings.RATE_LIMIT_WS_CONNECT_WINDOW,
     )
     if not allowed:
         await websocket.close(code=4408, reason="Too many connection attempts")
@@ -97,7 +97,7 @@ async def websocket_endpoint(
         try:
             idx = subprotocols.index("access_token")
             if idx + 1 < len(subprotocols):
-                token = subprotocols[idx + 1]
+                token = subprotocols[idx + 1].strip()
         except ValueError:
             pass
 
@@ -108,8 +108,8 @@ async def websocket_endpoint(
 
     try:
         token_payload = decode_auth_token(token, expected_type="access")
-    except (ExpiredTokenError, InvalidAuthStateError, InvalidTokenError, InvalidUserIdError):
-        logger.warning("[WS] Invalid token")
+    except (ExpiredTokenError, InvalidAuthStateError, InvalidTokenError, InvalidUserIdError) as e:
+        logger.warning(f"[WS] Invalid token: {e}")
         await websocket.close(code=4401, reason="Invalid token")
         return
 
@@ -203,6 +203,7 @@ async def websocket_endpoint(
         replay_after_seq=last_seq if resumed else 0,
         requested_session_id=session_id if not resumed else None,
     )
+    handler._family_id = str(token_payload.family_id) if token_payload.family_id else None
 
     try:
         logger.info(

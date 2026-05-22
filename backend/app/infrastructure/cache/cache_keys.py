@@ -101,3 +101,8 @@ def auth_refresh_reuse_incident_key(user_id: str, jti: str) -> str:
 def auth_refresh_rotation_lock_key(user_id: str, family_id: str) -> str:
     """Redis lock key serializing refresh rotation per session family."""
     return f"virtai:auth:refresh:lock:{user_id}:{family_id}"
+
+
+def auth_refresh_family_meta_key(user_id: str, family_id: str) -> str:
+    """Redis hash key for session family metadata."""
+    return f"virtai:auth:refresh:meta:{user_id}:{family_id}"

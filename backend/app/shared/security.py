@@ -16,6 +16,7 @@ from app.shared.errors import (
     InvalidUserIdError,
 )
 from app.shared.ids import parse_uuid
+from app.shared.key_manager import get_signing_key, get_verification_keys
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -72,10 +73,14 @@ def _create_token(
             "jti": jti,
         }
     )
+    
+    key, algorithm, headers = get_signing_key()
+    
     return jwt.encode(
         payload,
-        settings.JWT_SECRET_KEY,
-        algorithm=settings.JWT_ALGORITHM,
+        key,
+        algorithm=algorithm,
+        headers=headers if headers else None,
     )
 
 
@@ -86,11 +91,21 @@ def _normalize_token_user_id(user_id: str | UUID) -> UUID:
     return parsed
 
 
-def create_access_token(user_id: str | UUID, token_version: int = 0) -> str:
+def create_access_token(
+    user_id: str | UUID, 
+    token_version: int = 0,
+    family_id: str | UUID | None = None,
+) -> str:
     settings = get_settings()
     uid = _normalize_token_user_id(user_id)
+    data = {"sub": str(uid), "token_version": token_version}
+    if family_id:
+        parsed_family = parse_uuid(family_id)
+        if parsed_family:
+            data["family_id"] = str(parsed_family)
+            
     return _create_token(
-        data={"sub": str(uid), "token_version": token_version},
+        data=data,
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
         token_type="access",
     )
@@ -149,19 +164,31 @@ def decode_auth_token(token: str, expected_type: str = "access") -> AuthTokenPay
     - token_version: non-negative integer
     """
     settings = get_settings()
-    try:
-        payload = jwt.decode(
-            token,
-            settings.JWT_SECRET_KEY,
-            algorithms=[settings.JWT_ALGORITHM],
-            audience=settings.JWT_AUDIENCE,
-            issuer=settings.JWT_ISSUER,
-            options={"leeway": settings.JWT_LEEWAY_SECONDS},
-        )
-    except ExpiredSignatureError as exc:
-        raise ExpiredTokenError() from exc
-    except JWTError as exc:
-        raise InvalidTokenError() from exc
+    valid_keys = get_verification_keys()
+    
+    payload = None
+    last_expired_error = None
+    
+    for key, algorithm in valid_keys:
+        try:
+            payload = jwt.decode(
+                token,
+                key,
+                algorithms=[algorithm],
+                audience=settings.JWT_AUDIENCE,
+                issuer=settings.JWT_ISSUER,
+                options={"leeway": settings.JWT_LEEWAY_SECONDS},
+            )
+            break # Successfully decoded
+        except ExpiredSignatureError as exc:
+            last_expired_error = exc
+        except JWTError:
+            continue
+            
+    if payload is None:
+        if last_expired_error:
+            raise ExpiredTokenError() from last_expired_error
+        raise InvalidTokenError()
 
     token_type = payload.get("type")
     if token_type != expected_type:
@@ -189,10 +216,12 @@ def decode_auth_token(token: str, expected_type: str = "access") -> AuthTokenPay
         raise InvalidAuthStateError("Token version is invalid")
 
     family_id = None
-    if expected_type == "refresh":
-        family_id = parse_uuid(payload.get("family_id"))
-        if family_id is None:
-            raise InvalidAuthStateError("Refresh token missing valid family id")
+    raw_family_id = payload.get("family_id")
+    if raw_family_id:
+        family_id = parse_uuid(raw_family_id)
+        
+    if expected_type == "refresh" and family_id is None:
+        raise InvalidAuthStateError("Refresh token missing valid family id")
 
     iat, nbf, exp = _validate_temporal_claims(payload)
     return AuthTokenPayload(
@@ -231,33 +260,39 @@ def verify_token(
 def extract_jti(token: str) -> str | None:
     """Extract JTI from a token without full verification (for blacklisting on logout)."""
     settings = get_settings()
-    try:
-        payload = jwt.decode(
-            token,
-            settings.JWT_SECRET_KEY,
-            algorithms=[settings.JWT_ALGORITHM],
-            audience=settings.JWT_AUDIENCE,
-            issuer=settings.JWT_ISSUER,
-            options={"verify_exp": False},  # allow expired tokens to be blacklisted
-        )
-        return payload.get("jti")
-    except JWTError:
-        return None
+    valid_keys = get_verification_keys()
+    for key, algorithm in valid_keys:
+        try:
+            payload = jwt.decode(
+                token,
+                key,
+                algorithms=[algorithm],
+                audience=settings.JWT_AUDIENCE,
+                issuer=settings.JWT_ISSUER,
+                options={"verify_exp": False},  # allow expired tokens to be blacklisted
+            )
+            return payload.get("jti")
+        except JWTError:
+            continue
+    return None
 
 
 def extract_user_id(token: str) -> str | None:
     """Extract user_id (sub) from a token without full verification."""
     settings = get_settings()
-    try:
-        payload = jwt.decode(
-            token,
-            settings.JWT_SECRET_KEY,
-            algorithms=[settings.JWT_ALGORITHM],
-            audience=settings.JWT_AUDIENCE,
-            issuer=settings.JWT_ISSUER,
-            options={"verify_exp": False},
-        )
-        parsed = parse_uuid(payload.get("sub"))
-        return str(parsed) if parsed else None
-    except JWTError:
-        return None
+    valid_keys = get_verification_keys()
+    for key, algorithm in valid_keys:
+        try:
+            payload = jwt.decode(
+                token,
+                key,
+                algorithms=[algorithm],
+                audience=settings.JWT_AUDIENCE,
+                issuer=settings.JWT_ISSUER,
+                options={"verify_exp": False},
+            )
+            parsed = parse_uuid(payload.get("sub"))
+            return str(parsed) if parsed else None
+        except JWTError:
+            continue
+    return None

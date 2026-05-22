@@ -82,3 +82,19 @@ def get_redis() -> aioredis.Redis:
             "Redis not initialised. Ensure init_redis() is called in the app lifespan."
         )
     return _redis
+
+
+async def is_redis_healthy() -> bool:
+    """Non-throwing health check."""
+    if _redis is None:
+        return False
+    try:
+        await _redis.ping()
+        return True
+    except Exception:
+        return False
+
+
+def get_redis_or_none() -> aioredis.Redis | None:
+    """Return Redis client or None if unavailable (for fail-closed paths)."""
+    return _redis

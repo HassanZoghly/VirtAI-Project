@@ -99,23 +99,6 @@ export default function MessageList({
               </div>
             </div>
           )}
-          {/* Show error message if present */}
-          {error && (
-            <div
-              className="chat-message-wrapper ai-message-wrapper"
-              role="alert"
-              aria-live="assertive"
-            >
-              <div className="chat-message ai-message error-message">
-                <div className="message-avatar">
-                  <PiWarningCircleFill aria-hidden="true" />
-                </div>
-                <div className="message-bubble">
-                  <strong>Error:</strong> {error}
-                </div>
-              </div>
-            </div>
-          )}
           <div ref={messagesEndRef} />
         </div>
       )}

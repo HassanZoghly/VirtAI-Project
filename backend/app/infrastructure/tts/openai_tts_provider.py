@@ -88,6 +88,7 @@ class OpenAITTSProvider(BaseTTSProvider):
         text: str,
         session_id: str,
         message_id: str,
+        trace_id: str | None = None,
     ) -> TTSResult:
         if not text.strip():
             raise TTSException("Empty text provided")
@@ -98,7 +99,7 @@ class OpenAITTSProvider(BaseTTSProvider):
             raise TTSException(f"Invalid message_id: {message_id}")
 
         logger.info(
-            f"TTS generate | session={session_id} | message={message_id} | api_voice={self.api_voice}"
+            f"TTS generate | session={session_id} | message={message_id} | api_voice={self.api_voice} | trace_id={trace_id}"
         )
 
         cached_audio = await get_cached_audio(text=text, voice=self.api_voice)
@@ -111,7 +112,10 @@ class OpenAITTSProvider(BaseTTSProvider):
                 audio_duration_ms=calculate_audio_duration(cached_audio, format="mp3"),
             )
         else:
-            result = await self.synthesize(text)
+            try:
+                result = await asyncio.wait_for(self.synthesize(text, trace_id=trace_id), timeout=70.0)
+            except asyncio.TimeoutError:
+                raise TTSException("TTS synthesis timed out (wait_for trigger)")
             await cache_audio(text=text, voice=self.api_voice, audio_bytes=result.audio_bytes)
 
         storage_base = Path(get_settings().AUDIO_STORAGE_PATH)
@@ -129,7 +133,7 @@ class OpenAITTSProvider(BaseTTSProvider):
         result.audio_ref = str(audio_file_path)
         return result
 
-    async def synthesize(self, text: str) -> TTSResult:
+    async def synthesize(self, text: str, trace_id: str | None = None) -> TTSResult:
         text = self._sanitize_for_tts(text)
         if not text.strip():
             raise TTSException("Empty text provided")
@@ -151,7 +155,7 @@ class OpenAITTSProvider(BaseTTSProvider):
                 response.raise_for_status()
                 audio_bytes = response.content
         except Exception as e:
-            logger.error(f"TTS synthesis failed: {e}")
+            logger.error(f"TTS synthesis failed: {e} | trace_id={trace_id}")
             raise TTSException(f"TTS failed: {e!s}")
 
         if not audio_bytes:

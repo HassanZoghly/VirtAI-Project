@@ -10,6 +10,7 @@ Why Groq for LLM?
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import AsyncGenerator, Callable
 
@@ -111,6 +112,7 @@ class GroqLLMProvider(BaseLLMProvider):
         self,
         history: ConversationHistory,
         on_sentence: Callable[[str], None] | None = None,
+        trace_id: str | None = None,
     ) -> AsyncGenerator[LLMChunk, None]:
         """
         Streams tokens from Groq LLM.
@@ -133,20 +135,21 @@ class GroqLLMProvider(BaseLLMProvider):
             f"LLM stream start | "
             f"model={self.model} | "
             f"messages={len(messages)} | "
-            f"history_pairs={history.message_count // 2}"
+            f"history_pairs={history.message_count // 2} | "
+            f"trace_id={trace_id}"
         )
 
         # ── Open Groq stream ──────────────────────────────────────────────────
         try:
             groq_stream = await self._client.chat.completions.create(
                 model=self.model,
-                messages=messages,  # type: ignore[arg-type]
+                messages=messages,
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
                 stream=True,
             )
         except Exception as e:
-            logger.error(f"Groq LLM stream init failed: {e}")
+            logger.error(f"Groq LLM stream init failed: {e} | trace_id={trace_id}")
             raise LLMException(f"LLM stream failed: {e!s}")
 
         # ── Process stream ────────────────────────────────────────────────────
@@ -180,8 +183,13 @@ class GroqLLMProvider(BaseLLMProvider):
 
                         yield LLMChunk(token="", sentence=sentence)
 
+        except asyncio.CancelledError:
+            logger.warning(f"LLM stream cancelled mid-generation. Closing Groq stream to save API tokens. | trace_id={trace_id}")
+            if hasattr(groq_stream, "close"):
+                await groq_stream.close()
+            raise
         except Exception as e:
-            logger.error(f"LLM stream error during iteration: {e}")
+            logger.error(f"LLM stream error during iteration: {e} | trace_id={trace_id}")
             raise LLMException(f"LLM stream error: {e!s}")
 
         # ── Flush remaining buffer ────────────────────────────────────────────
@@ -200,7 +208,8 @@ class GroqLLMProvider(BaseLLMProvider):
             f"LLM stream done | "
             f"tokens={token_count} | "
             f"elapsed={elapsed_ms:.0f}ms | "
-            f"sentences={sentence_count}"
+            f"sentences={sentence_count} | "
+            f"trace_id={trace_id}"
         )
         yield LLMChunk(token="", is_done=True)
 

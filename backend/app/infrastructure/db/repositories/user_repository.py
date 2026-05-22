@@ -47,6 +47,11 @@ class UserRepository(UserRepositoryPort):
         return self._to_entity(model)
 
     async def update(self, entity: UserEntity) -> UserEntity:
+        """
+        Update user fields.
+        WARNING: Not safe for concurrent version bumps —
+        use increment_refresh_token_version() for token version changes.
+        """
         user_uuid = require_uuid(entity.id, field_name="user_id")
         model = await self.db.get(User, user_uuid)
         if not model:

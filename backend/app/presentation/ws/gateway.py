@@ -131,6 +131,7 @@ class WebSocketHandler:
         self.ws = websocket
         self._session_manager = session_manager
         self._user_id = user_id
+        self._family_id = None
         self._avatar_id = avatar_id
         self._voice_id = self._normalize_voice(voice_id)
         self._session_pending = session is None
@@ -155,6 +156,9 @@ class WebSocketHandler:
 
         # Voice mode handler (lazy initialization)
         self._voice_mode_handler: VoiceModeHandler | None = None
+        
+        from app.shared.metrics import ws_connections_active
+        ws_connections_active.inc()
 
         logger.info(
             f"WebSocketHandler created | "
@@ -181,7 +185,9 @@ class WebSocketHandler:
         self.session = session
         self.pipeline = session.pipeline
         self._session_pending = False
-        await self.connection_manager.register(session.session_id, self.ws)
+        await self.connection_manager.register(
+            session.session_id, self.ws, user_id=self._user_id, family_id=self._family_id
+        )
         logger.info(f"[WS] Lazy session created | session={session.session_id}")
 
     async def run(self) -> None:
@@ -194,7 +200,9 @@ class WebSocketHandler:
         settings = get_settings()
         replay_batch: list[str] = []
         if self.resumed and self.session.session_id:
-            await self.connection_manager.register(self.session.session_id, self.ws)
+            await self.connection_manager.register(
+                self.session.session_id, self.ws, user_id=self._user_id, family_id=self._family_id
+            )
             replay_batch = await self.connection_manager.get_replay_batch(
                 self.session.session_id, after_seq=self.replay_after_seq
             )
@@ -323,24 +331,31 @@ class WebSocketHandler:
                             )
                         self._voice_mode_handler.audio_pipeline.clear_buffer()
 
+                    from app.shared.metrics import ws_connection_drops
+                    ws_connection_drops.labels(reason="client_disconnect").inc()
                     self._connected = False
                     break
                 except RuntimeError as e:
                     # Starlette raises RuntimeError("Cannot call ...") after disconnect;
                     # treat it the same as a normal disconnect.
+                    from app.shared.metrics import ws_connection_drops
                     if "disconnect" in str(e).lower() or "receive" in str(e).lower():
                         logger.warning(
                             f"[WS] RuntimeError after disconnect (suppressed) | "
                             f"session={self.session.session_id} | {e}"
                         )
+                        ws_connection_drops.labels(reason="runtime_error_disconnect").inc()
                         self._connected = False
                         break
                     logger.error(f"[WS] Unexpected RuntimeError: {e}")
+                    ws_connection_drops.labels(reason="runtime_error").inc()
                     await self._safe_send(
                         make_error_msg(code="INTERNAL_ERROR", message="Error processing message")
                     )
                 except Exception as e:
                     logger.error(f"[WS] Error receiving message: {e}")
+                    from app.shared.metrics import ws_connection_drops
+                    ws_connection_drops.labels(reason="unexpected_error").inc()
                     await self._safe_send(
                         make_error_msg(code="INTERNAL_ERROR", message="Error processing message")
                     )
@@ -447,12 +462,14 @@ class WebSocketHandler:
             f"message_id={message_id} | text='{text[:60]}'"
         )
 
+        trace_id = str(uuid.uuid4())
         self._pipeline_task = asyncio.create_task(
             self.pipeline.process_message(
                 message_id=message_id,
                 text=text,
                 session_id=session_id,
                 send_callback=self._send_protocol_message,
+                trace_id=trace_id,
             ),
             name=f"pipeline_voice_{session_id}",
         )
@@ -828,6 +845,7 @@ class WebSocketHandler:
         # Use session_id from message or fall back to session's session_id
         session_id = msg.session_id or self.session.session_id
 
+        trace_id = str(uuid.uuid4())
         # Start new protocol pipeline with process_message
         self._pipeline_task = asyncio.create_task(
             self.pipeline.process_message(
@@ -835,6 +853,7 @@ class WebSocketHandler:
                 text=msg.text,
                 session_id=session_id,
                 send_callback=self._send_protocol_message,
+                trace_id=trace_id,
             ),
             name=f"pipeline_message_{session_id}",
         )
@@ -1136,6 +1155,9 @@ class WebSocketHandler:
             f"session={self.session.session_id} | "
             f"avatar={self.session.avatar_id}"
         )
+        
+        from app.shared.metrics import ws_connections_active
+        ws_connections_active.dec()
 
         # Cancel pipeline if running
         await self._cancel_pipeline()

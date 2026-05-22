@@ -66,6 +66,11 @@ function useWSClient(url) {
   const authRefreshAttemptsRef = useRef(0);
 
   useEffect(() => {
+    if (accessToken !== accessTokenRef.current) {
+      if (wsRef.current) {
+        wsRef.current.close(1000, 'Token refreshed');
+      }
+    }
     accessTokenRef.current = accessToken;
   }, [accessToken]);
 

@@ -12,6 +12,7 @@ import { Helmet } from 'react-helmet-async';
 import { PiGearFill, PiWifiSlashFill } from 'react-icons/pi';
 import { useNavigate, useParams } from 'react-router-dom';
 import { SCROLL_STICK_THRESHOLD_PX } from './constants';
+import ClassroomSkeleton from './ClassroomSkeleton';
 
 const toast = new Toast('tr');
 
@@ -383,37 +384,11 @@ export default function ClassroomShell() {
 
           <div className="chat-panel" key={currentSessionId || 'empty'}>
             {!currentSessionId ? (
-              <div
-                className="messages-loading"
-                style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  height: '100%',
-                  color: '#fff',
-                  fontSize: '1.1rem',
-                  flexDirection: 'column',
-                  gap: '1rem',
-                }}
-              >
-                Initializing session...
-              </div>
+              <ClassroomSkeleton />
             ) : (
               <>
                 {currentSession && currentSession.messages_loaded !== true ? (
-                  <div
-                    className="messages-loading"
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'center',
-                      alignItems: 'center',
-                      height: '100%',
-                      color: '#fff',
-                      fontSize: '1.1rem',
-                    }}
-                  >
-                    Loading messages...
-                  </div>
+                  <ClassroomSkeleton />
                 ) : (
                   <MessageList
                     messages={currentSession.messages}

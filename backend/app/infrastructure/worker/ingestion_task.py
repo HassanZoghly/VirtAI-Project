@@ -54,6 +54,10 @@ async def run_ingestion_task(
             repo = DocumentRepository(db)
             await repo.mark_cancelled(doc_id)
     except Exception as e:
+        import httpx
+        from arq import Retry
+        from app.application.rag.ingest_document import IngestDocumentUseCase
+        
         is_retryable, reason = classify(e)
         logger.error(
             {
@@ -64,10 +68,27 @@ async def run_ingestion_task(
                 "error": str(e),
             }
         )
+        
+        # If not retryable or we are aborting, clean up first
+        if not is_retryable:
+            logger.warning({**log_ctx, "event": "cleaning_up_failed_job"})
+            try:
+                # Instantiate use case just to call cleanup_failed_job
+                use_case = IngestDocumentUseCase(storage=ctx["storage"], parser=None, chunker=None, embedder=None)
+                await use_case.cleanup_failed_job(doc_id, storage_key)
+            except Exception as cleanup_err:
+                logger.error({**log_ctx, "event": "cleanup_failed", "error": str(cleanup_err)})
+                
         async with await get_short_session() as db:
             repo = DocumentRepository(db)
             await repo.mark_failed(doc_id, str(e), is_retryable)
+            
         if is_retryable:
+            # Handle rate limiting / backoff explicitly
+            if isinstance(e, httpx.HTTPStatusError) and e.response.status_code in (429, 503):
+                retry_after = e.response.headers.get("retry-after")
+                defer = int(retry_after) if retry_after and retry_after.isdigit() else 30
+                raise Retry(defer=defer)
             raise  # ARQ will retry
     finally:
         # Only release if we own the lock
@@ -114,6 +135,8 @@ async def _run_ingestion(
 
     # Progress Callback
     async def progress_callback(stage: str, pct: int, processed: int, total: int) -> None:
+        redis_client = ctx["redis"]
+        await redis_client.set(f"doc_progress:{doc_id}", pct, ex=3600)
         async with await get_short_session() as db:
             repo = DocumentRepository(db)
             await repo.update_progress(doc_id, stage, pct, processed, total)

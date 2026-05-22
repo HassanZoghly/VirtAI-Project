@@ -1,9 +1,10 @@
 import { useDocumentList } from '../useDocumentList';
 import { FiFileText, FiTrash2, FiClock, FiCheckCircle, FiXCircle, FiLoader } from 'react-icons/fi';
+import { UploadTab } from '../../setup/components/UploadTab';
 import './DocumentsPanel.css';
 
 export function DocumentsPanel() {
-  const { documents, isLoading, error, deleteDocument } = useDocumentList();
+  const { documents, isLoading, error, deleteDocument, refresh } = useDocumentList();
 
   const getStatusIcon = (status, stage) => {
     if (stage === 'COMPLETE') {
@@ -42,11 +43,16 @@ export function DocumentsPanel() {
   }
 
   return (
-    <div className="documents-panel">
-      <div className="documents-panel-header">
-        <h3>Knowledge Base</h3>
-        <span className="badge">{documents.length} Files</span>
+    <div className="documents-panel-container">
+      <div className="documents-panel">
+        <UploadTab onUploaded={refresh} />
       </div>
+
+      <div className="documents-panel list-panel">
+        <div className="documents-panel-header">
+          <h3>Knowledge Base</h3>
+          <span className="badge">{documents.length} Files</span>
+        </div>
 
       {error && <div className="error-banner">{error}</div>}
 
@@ -94,6 +100,7 @@ export function DocumentsPanel() {
           ))}
         </ul>
       )}
+      </div>
     </div>
   );
 }

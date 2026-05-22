@@ -53,6 +53,7 @@ class BaseLLMProvider(ABC):
         self,
         history: ConversationHistory,
         on_sentence: Callable[[str], None] | None = None,
+        trace_id: str | None = None,
     ) -> AsyncGenerator[LLMChunk, None]:
         """
         Streams tokens from the LLM.

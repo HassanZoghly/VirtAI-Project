@@ -97,10 +97,15 @@ class Settings(BaseSettings):
     SESSION_CLEANUP_INTERVAL: int = 60
 
     # Rate limiting
-    RATE_LIMIT_REQUESTS: int = 60
-    RATE_LIMIT_WINDOW: int = 60
+    RATE_LIMIT_LOGIN_REQUESTS: int = 5
+    RATE_LIMIT_LOGIN_WINDOW: int = 60
+    RATE_LIMIT_SIGNUP_REQUESTS: int = 3
+    RATE_LIMIT_SIGNUP_WINDOW: int = 300
+    RATE_LIMIT_REFRESH_REQUESTS: int = 10
+    RATE_LIMIT_REFRESH_WINDOW: int = 60
+    RATE_LIMIT_WS_CONNECT_REQUESTS: int = 3
+    RATE_LIMIT_WS_CONNECT_WINDOW: int = 10
     RATE_LIMIT_MESSAGES_PER_MINUTE: int = 60
-    RATE_LIMIT_CONNECTIONS_PER_IP: int = 5
     TRUST_PROXY_HEADERS: bool = False
 
     # Storage
@@ -134,9 +139,15 @@ class Settings(BaseSettings):
     REDIS_CONNECT_RETRIES: int = 3
     REDIS_CONNECT_RETRY_DELAY_SEC: float = 1.0
 
+    # Cookies
+    COOKIE_DOMAIN: str | None = None
+
     # JWT
     JWT_SECRET_KEY: str = _DEFAULT_JWT_SECRET
     JWT_ALGORITHM: str = "HS256"
+    JWT_PRIVATE_KEY: str = ""
+    JWT_PUBLIC_KEY: str = ""
+    JWT_KID: str = ""
     JWT_ISSUER: str = "virtai-api"
     JWT_AUDIENCE: str = "virtai-client"
     JWT_LEEWAY_SECONDS: int = 30
@@ -188,10 +199,15 @@ class Settings(BaseSettings):
     NAPKIN_API_KEY: str = ""
 
     @field_validator(
-        "RATE_LIMIT_REQUESTS",
-        "RATE_LIMIT_WINDOW",
+        "RATE_LIMIT_LOGIN_REQUESTS",
+        "RATE_LIMIT_LOGIN_WINDOW",
+        "RATE_LIMIT_SIGNUP_REQUESTS",
+        "RATE_LIMIT_SIGNUP_WINDOW",
+        "RATE_LIMIT_REFRESH_REQUESTS",
+        "RATE_LIMIT_REFRESH_WINDOW",
+        "RATE_LIMIT_WS_CONNECT_REQUESTS",
+        "RATE_LIMIT_WS_CONNECT_WINDOW",
         "RATE_LIMIT_MESSAGES_PER_MINUTE",
-        "RATE_LIMIT_CONNECTIONS_PER_IP",
         "ACCESS_TOKEN_EXPIRE_MINUTES",
         "REFRESH_TOKEN_EXPIRE_DAYS",
         "REFRESH_REUSE_INCIDENT_TTL_DAYS",

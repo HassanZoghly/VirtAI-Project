@@ -1,5 +1,7 @@
 import hashlib
+import re
 from typing import Any
+import filetype
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from loguru import logger
@@ -17,11 +19,15 @@ from app.shared.ids import parse_uuid
 router = APIRouter()
 settings = get_settings()
 
-MAGIC_BYTES = {
-    "pdf": b"%PDF",
-    "txt": None,
-    "md": None,
-}
+def sanitize_filename(filename: str) -> str:
+    """Strip path traversal sequences and special characters."""
+    if not filename:
+        return "unnamed_document"
+    # Replace anything that isn't alphanumeric, dot, dash, or underscore
+    safe = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', filename)
+    # Strip any leading dots to prevent hidden files/traversal
+    safe = safe.lstrip('.')
+    return safe or "unnamed_document"
 
 ALLOWED_MIME_TYPES = {
     "pdf": {"application/pdf", "application/x-pdf", "application/octet-stream"},
@@ -43,12 +49,19 @@ def validate_declared_mime(content_type: str | None, declared_ext: str) -> None:
 
 
 async def validate_file_magic(data: bytes, declared_ext: str) -> None:
-    magic = MAGIC_BYTES.get(declared_ext)
-    if magic and not data[: len(magic)] == magic:
-        raise HTTPException(
-            status_code=400, detail=f"File content does not match declared type '{declared_ext}'"
-        )
-    if declared_ext in ("txt", "md"):
+    kind = filetype.guess(data)
+    if declared_ext == "pdf":
+        if kind is None or kind.extension != "pdf":
+            raise HTTPException(
+                status_code=400, detail="File content does not match declared type 'pdf'"
+            )
+    elif declared_ext in ("txt", "md"):
+        # For plain text/markdown, filetype might not match a known binary format,
+        # but if it matches a KNOWN binary format, it's definitely not pure text.
+        if kind is not None:
+            raise HTTPException(
+                status_code=400, detail=f"File appears to be {kind.mime}, not text/markdown"
+            )
         try:
             data.decode("utf-8")
         except UnicodeDecodeError:
@@ -66,7 +79,8 @@ async def upload_document(
 ) -> dict[str, Any]:
     """Upload a document and trigger the RAG ingestion pipeline asynchronously."""
     # 1. Validate file type & size early
-    ext = file.filename.split(".")[-1].lower() if file.filename else ""
+    safe_filename = sanitize_filename(file.filename)
+    ext = safe_filename.split(".")[-1].lower() if "." in safe_filename else ""
     if ext not in ["pdf", "txt", "md"]:
         raise HTTPException(
             status_code=400, detail="Unsupported file type. Must be pdf, txt, or md."
@@ -89,14 +103,22 @@ async def upload_document(
             detail="Too many active ingestion jobs. Please wait for them to finish.",
         )
 
-    # 3. Read file bytes
-    file_bytes = await file.read()
+    # 3. Read file bytes with chunked size limits to prevent memory exhaustion
+    file_bytes_array = bytearray()
+    while True:
+        chunk = await file.read(65536)  # 64KB chunks
+        if not chunk:
+            break
+        file_bytes_array.extend(chunk)
+        if len(file_bytes_array) > max_upload_bytes:
+            raise HTTPException(
+                status_code=413, detail=f"File exceeds maximum size of {settings.MAX_UPLOAD_SIZE_MB}MB"
+            )
+            
+    file_bytes = bytes(file_bytes_array)
     if not file_bytes:
         raise HTTPException(status_code=400, detail="File is empty")
-    if len(file_bytes) > max_upload_bytes:
-        raise HTTPException(
-            status_code=413, detail=f"File exceeds maximum size of {settings.MAX_UPLOAD_SIZE_MB}MB"
-        )
+        
     await validate_file_magic(file_bytes, ext)
 
     # 4. Compute sha256
@@ -131,6 +153,7 @@ async def upload_document(
                 arq_pool = request.app.state.arq_pool
                 await arq_pool.enqueue_job(
                     "run_ingestion_task",
+                    _queue_name="ingestion",
                     doc_id=str(existing.id),
                     user_id=str(user.id),
                     filename=existing.filename,
@@ -147,7 +170,7 @@ async def upload_document(
             # Max retries exhausted, allow fresh upload below
 
     # 6. Create DB record (QUEUED) FIRST
-    doc = await repo.create(user_id=str(user.id), filename=file.filename, file_type=ext)
+    doc = await repo.create(user_id=str(user.id), filename=safe_filename, file_type=ext)
 
     # Update with SHA256 and size
     from sqlalchemy import update
@@ -180,9 +203,10 @@ async def upload_document(
     try:
         job = await arq_pool.enqueue_job(
             "run_ingestion_task",
+            _queue_name="ingestion",
             doc_id=str(doc.id),
             user_id=str(user.id),
-            filename=file.filename,
+            filename=safe_filename,
             file_type=ext,
             upload_source="SETUP",
             storage_key=storage_key,
@@ -206,25 +230,39 @@ async def list_statuses(
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     """List statuses for all documents."""
+    from app.infrastructure.cache.redis_client import get_redis_or_none
+    
     repo = DocumentRepository(db)
     if active_only:
         docs = await repo.list_active(str(user.id))
     else:
         docs = await repo.list_by_user(str(user.id))
 
-    return [
-        {
+    redis_client = get_redis_or_none()
+    
+    results = []
+    for d in docs:
+        progress_pct = d.progress_pct
+        if redis_client and d.current_stage not in {"COMPLETE", "FAILED", "CANCELLED"}:
+            cached_pct = await redis_client.get(f"doc_progress:{d.id}")
+            if cached_pct is not None:
+                try:
+                    progress_pct = int(cached_pct.decode())
+                except ValueError:
+                    pass
+                    
+        results.append({
             "id": str(d.id),
             "filename": d.filename,
             "status": d.status,
             "current_stage": d.current_stage,
-            "progress_pct": d.progress_pct,
+            "progress_pct": progress_pct,
             "processed_chunks": d.processed_chunks,
             "total_chunks": d.total_chunks,
             "error_message": d.error_message,
-        }
-        for d in docs
-    ]
+        })
+        
+    return results
 
 
 @router.get("/{document_id}/status", response_model=dict[str, Any])
@@ -234,12 +272,24 @@ async def get_document_status(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Get status of a specific document."""
+    from app.infrastructure.cache.redis_client import get_redis_or_none
+    
     if parse_uuid(document_id) is None:
         raise HTTPException(status_code=400, detail="Invalid document_id")
     repo = DocumentRepository(db)
     status = await repo.get_status(document_id, str(user.id))
     if not status:
         raise HTTPException(status_code=404, detail="Document not found")
+        
+    redis_client = get_redis_or_none()
+    if redis_client and status["current_stage"] not in {"COMPLETE", "FAILED", "CANCELLED"}:
+        cached_pct = await redis_client.get(f"doc_progress:{document_id}")
+        if cached_pct is not None:
+            try:
+                status["progress_pct"] = int(cached_pct.decode())
+            except ValueError:
+                pass
+                
     return status
 
 

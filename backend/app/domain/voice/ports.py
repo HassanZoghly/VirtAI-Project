@@ -84,6 +84,7 @@ class BaseTTSProvider(ABC):
         text: str,
         session_id: str,
         message_id: str,
+        trace_id: str | None = None,
     ) -> TTSResult:
         """Generate audio, store to disk, and return result with file path."""
         ...

@@ -206,6 +206,7 @@ class ConversationPipeline:
         text: str,
         session_id: str,
         send_callback: Callable,
+        trace_id: str | None = None,
     ) -> None:
         """
         Process user message through LLM → TTS → Visemes pipeline.
@@ -268,7 +269,7 @@ class ConversationPipeline:
                     )
                     await db.commit()
             except Exception as e:
-                logger.warning(f"[Pipeline] Failed to persist user message: {e}")
+                logger.warning(f"[Pipeline] Failed to persist user message: {e} | trace_id={trace_id}")
 
             await send_callback(
                 make_user_message_echo(
@@ -306,7 +307,7 @@ class ConversationPipeline:
                     if context:
                         self._history.system_prompt = f"{original_sys_prompt}\n\nUse the following retrieved context to answer the query:\n{context}"
                 except Exception as e:
-                    logger.error(f"RAG retrieval failed: {e}")
+                    logger.error(f"RAG retrieval failed: {e} | trace_id={trace_id}")
 
             # ── 4. Stream LLM tokens ──────────────────────────────────────────
             full_response_parts: list[str] = []
@@ -314,7 +315,7 @@ class ConversationPipeline:
                 self._history.system_prompt = original_sys_prompt
                 raise LLMException("LLM service not configured")
             try:
-                async for chunk in self._llm.stream(self._history):
+                async for chunk in self._llm.stream(self._history, trace_id=trace_id):
                     if self._aborted:
                         break
                     if chunk.token:
@@ -329,7 +330,7 @@ class ConversationPipeline:
                     if chunk.is_done:
                         break
             except LLMException as e:
-                logger.error(f"LLM error: {e}")
+                logger.error(f"LLM error: {e} | trace_id={trace_id}")
                 await send_callback(
                     make_error(
                         code="LLM_ERROR",
@@ -396,7 +397,7 @@ class ConversationPipeline:
                     )
                     await db.commit()
             except Exception as e:
-                logger.warning(f"[Pipeline] Failed to persist assistant message: {e}")
+                logger.warning(f"[Pipeline] Failed to persist assistant message: {e} | trace_id={trace_id}")
 
             await push_ctx(
                 session_id,
@@ -418,9 +419,12 @@ class ConversationPipeline:
                     text=full_response,
                     session_id=session_id,
                     message_id=message_id,
+                    trace_id=trace_id,
                 )
             except TTSException as e:
-                logger.error(f"TTS error: {e}")
+                logger.error(f"TTS error: {e} | trace_id={trace_id}")
+                # Graceful degradation: log the error but don't return early
+                # We will send text and a dummy timeline to prevent pipeline crash
                 await send_callback(
                     make_error(
                         code="TTS_ERROR",
@@ -429,8 +433,7 @@ class ConversationPipeline:
                         message_id=message_id,
                     )
                 )
-                await send_callback(make_pipeline_state(session_id, "idle"))
-                return
+                tts_result = None
 
             if self._aborted:
                 await send_callback(make_pipeline_state(session_id, "idle"))
@@ -438,20 +441,32 @@ class ConversationPipeline:
 
             # ── 7. Visemes ────────────────────────────────────────────────────
             viseme_generator = VisemeGenerator()
-            mouth_cues = await viseme_generator.generate_from_audio(
-                audio_path=tts_result.audio_ref or "",
-                text=full_response,
-                session_id=session_id,
-                message_id=message_id,
-            )
+            if tts_result and getattr(tts_result, "audio_ref", None):
+                mouth_cues = await viseme_generator.generate_from_audio(
+                    audio_path=tts_result.audio_ref,
+                    text=full_response,
+                    session_id=session_id,
+                    message_id=message_id,
+                )
+            else:
+                mouth_cues = []
 
             if self._aborted:
                 await send_callback(make_pipeline_state(session_id, "idle"))
                 return
 
             # ── 8. Audio-driven animation timeline v2 ────────────────────────
+            from app.domain.voice.entities import TTSResult
+            
+            safe_tts_result = tts_result or TTSResult(
+                audio_bytes=b"",
+                visemes=[],
+                word_boundaries=[],
+                audio_duration_ms=len(full_response) * 60.0  # Estimate 60ms per char
+            )
+
             audio_features = analyze_tts_for_animation(
-                tts_result=tts_result,
+                tts_result=safe_tts_result,
                 mouth_cues=mouth_cues,
                 text=full_response,
             )
@@ -465,15 +480,18 @@ class ConversationPipeline:
                 intent_history=self._intent_history,
             )
 
-            audio_url = f"/api/v1/audio/{session_id}/{message_id}.mp3"
-            await send_callback(
-                make_tts_ready(
-                    session_id=session_id,
-                    message_id=message_id,
-                    audio_url=audio_url,
-                    duration_ms=int(tts_result.audio_duration_ms),
+            audio_url = f"/api/v1/audio/{session_id}/{message_id}.mp3" if tts_result else ""
+            duration = int(tts_result.audio_duration_ms) if tts_result else 0
+            
+            if audio_url:
+                await send_callback(
+                    make_tts_ready(
+                        session_id=session_id,
+                        message_id=message_id,
+                        audio_url=audio_url,
+                        duration_ms=duration,
+                    )
                 )
-            )
             await send_callback(
                 make_visemes_ready(
                     session_id=session_id,
@@ -499,7 +517,7 @@ class ConversationPipeline:
                 self._recent_animation_assets = self._recent_animation_assets[-12:]
 
         except Exception as e:
-            logger.error(f"Pipeline error: {e}")
+            logger.error(f"Pipeline error: {e} | trace_id={trace_id}")
             await send_callback(
                 make_error(
                     code="PIPELINE_ERROR",
@@ -511,7 +529,7 @@ class ConversationPipeline:
         finally:
             await send_callback(make_pipeline_state(session_id, "idle"))
             self._current_message_id = None
-            logger.info(f"Pipeline complete | session={session_id} | message={message_id}")
+            logger.info(f"Pipeline complete | session={session_id} | message={message_id} | trace_id={trace_id}")
 
     def abort(self) -> None:
         """Signal the pipeline to stop and cancel running tasks."""

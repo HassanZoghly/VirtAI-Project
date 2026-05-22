@@ -137,7 +137,7 @@ class IngestDocumentUseCase:
 
         for i in range(0, total_chunks, batch_size):
             if await cancellation_check():
-                await self._cleanup_cancelled(doc_id, storage_key)
+                await self.cleanup_failed_job(doc_id, storage_key)
                 raise IngestionCancelledException()
 
             batch_texts = chunks_text[i : i + batch_size]
@@ -186,7 +186,7 @@ class IngestDocumentUseCase:
         await progress_callback("INDEXING", 90, processed, total_chunks)
 
         if await cancellation_check():
-            await self._cleanup_cancelled(doc_id, storage_key)
+            await self.cleanup_failed_job(doc_id, storage_key)
             raise IngestionCancelledException()
 
         async with await get_short_session() as db:
@@ -194,7 +194,7 @@ class IngestDocumentUseCase:
             rows = await repo.activate_chunk_version(doc_id, next_version, total_chunks)
             if rows == 0:
                 # Activation aborted (e.g. document was CANCELLED mid-activation)
-                await self._cleanup_cancelled(doc_id, storage_key)
+                await self.cleanup_failed_job(doc_id, storage_key)
                 raise IngestionCancelledException()
             await db.commit()
 
@@ -223,8 +223,8 @@ class IngestDocumentUseCase:
             )
             await db.commit()
 
-    async def _cleanup_cancelled(self, doc_id: str, storage_key: str) -> None:
-        """Cleans up completely on cancellation (zero retrieval pollution)."""
+    async def cleanup_failed_job(self, doc_id: str, storage_key: str) -> None:
+        """Cleans up completely on cancellation or permanent failure (zero retrieval pollution)."""
         async with await get_short_session() as db:
             from sqlalchemy import delete
 

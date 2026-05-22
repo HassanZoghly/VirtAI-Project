@@ -192,7 +192,7 @@ export default function SetupPage() {
               <div
                 key={idx}
                 className={cn(
-                  'step-dot',
+                  'step-dot aspect-square rounded-full flex-shrink-0',
                   isTabComplete(idx) && 'completed',
                   activeTab === idx && 'active'
                 )}

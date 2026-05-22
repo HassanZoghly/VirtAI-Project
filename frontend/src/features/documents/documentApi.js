@@ -21,7 +21,7 @@ export const documentApi = {
    * Get the status of all documents
    */
   list: async () => {
-    const response = await api.get('/documents/');
+    const response = await api.get(`/documents/?t=${Date.now()}`);
     return response.data;
   },
 

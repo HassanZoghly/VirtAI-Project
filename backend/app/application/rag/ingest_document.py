@@ -12,7 +12,7 @@ from app.domain.rag.ports import (
     EmbeddingProvider,
 )
 from app.domain.storage.ports import StorageProvider
-from app.infrastructure.db.database import get_db
+from app.infrastructure.db.database import AsyncSessionLocal
 from app.infrastructure.db.repositories.document_repository import DocumentRepository
 from app.infrastructure.vector.pgvector_store import PGVectorStore
 from app.shared.config import get_settings
@@ -21,8 +21,7 @@ from app.shared.ids import require_uuid
 
 
 async def get_short_session() -> AsyncSession:
-    db_gen = get_db()
-    return await anext(db_gen)
+    return AsyncSessionLocal()
 
 
 class IngestDocumentUseCase:
@@ -61,6 +60,7 @@ class IngestDocumentUseCase:
             doc = await repo.get(doc_id)
             retrieval_scope = doc.retrieval_scope
             scope_id = doc.scope_id
+            await db.commit()
 
         # 1. UPLOADING
         await progress_callback("UPLOADING", 5, 0, 0)

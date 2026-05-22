@@ -41,6 +41,7 @@ dependencies = [
     "email-validator>=2.0.0",
     # RAG dependencies
     "langchain>=0.1.0",
+    "langchain-text-splitters>=0.0.1",
     "pymupdf>=1.24.0",
     "pytesseract>=0.3.13",
     "pdf2image>=1.17.0",

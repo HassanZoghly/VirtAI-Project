@@ -95,13 +95,126 @@
   border: none;
   background: transparent;
   padding: 0;
+  gap: 14px;
 }
 .documents-panel-container .upload-area {
-  min-height: 160px;
-  padding: 16px;
+  min-height: 140px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.documents-panel-container .upload-prompt p {
+  font-size: 13px;
+  margin: 8px 0 4px;
+}
+.documents-panel-container .upload-formats {
+  font-size: 11px;
 }
 .documents-panel-container .setup-section-subtitle {
   display: none;
+}
+.documents-panel-container .setup-section-title {
+  font-size: 18px;
+}
+
+/* ── Button & action bar styles (needed when UploadTab renders outside Setup page) ── */
+.documents-panel-container .tab-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.documents-panel-container .btn {
+  min-width: 0;
+  flex: 1 1 0;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-body, 'Google Sans', sans-serif);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.22s ease,
+    border-color 0.22s ease,
+    color 0.22s ease,
+    box-shadow 0.22s ease,
+    transform 0.22s ease;
+}
+
+.documents-panel-container .btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.documents-panel-container .btn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.documents-panel-container .btn.primary {
+  color: #121212;
+  background: var(--color-gold, #b4ab8b);
+  border-color: rgba(180, 171, 139, 0.7);
+}
+
+.documents-panel-container .btn.primary:hover:not(:disabled) {
+  background: #c9bf9c;
+  box-shadow: 0 10px 20px rgba(180, 171, 139, 0.14);
+}
+
+.documents-panel-container .btn.secondary {
+  color: var(--text-secondary, #b0b0b0);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.documents-panel-container .btn.secondary:hover:not(:disabled) {
+  color: var(--text-primary, #ffffff);
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.075);
+}
+
+.documents-panel-container .btn.warning {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+/* ── Compact progress bar for drawer context ── */
+.documents-panel-container .upload-progress-container {
+  padding: 10px 12px;
+  gap: 8px;
+}
+
+.documents-panel-container .progress-floating-marker {
+  font-size: 10px !important;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Compact file list in drawer ── */
+.documents-panel-container .file-list-item {
+  padding: 8px 12px;
+  gap: 10px;
+}
+
+.documents-panel-container .file-list-name {
+  font-size: 13px;
+}
+
+.documents-panel-container .file-list-size {
+  font-size: 11px;
 }
 
 .documents-panel-header {

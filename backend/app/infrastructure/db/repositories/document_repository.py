@@ -88,7 +88,8 @@ class DocumentRepository(DocumentRepositoryPort):
         if not doc:
             return
 
-        assert_transition(IngestionStage(doc.current_stage), IngestionStage(stage))
+        if doc.current_stage != stage:
+            assert_transition(IngestionStage(doc.current_stage), IngestionStage(stage))
 
         stmt = (
             update(Document)
@@ -232,16 +233,21 @@ class DocumentRepository(DocumentRepositoryPort):
         # 1. Integrity check
         await self._validate_chunk_integrity(doc_uuid, new_version, expected_total)
 
-        # 2. Atomic activation
+        # 2. Atomic activation with row lock
         # Ensures that activation is aborted if the document has been CANCELLED
+        lock_stmt = select(Document.id).where(
+            Document.id == doc_uuid,
+            Document.current_stage != 'CANCELLED'
+        ).with_for_update()
+        
+        lock_result = await self.db.execute(lock_stmt)
+        if not lock_result.scalar_one_or_none():
+            return 0  # Document is CANCELLED or missing
+
         stmt = text("""
             UPDATE document_chunks
             SET is_active = (chunk_version = :new_version)
             WHERE document_id = :doc_id
-              AND EXISTS (
-                  SELECT 1 FROM documents
-                  WHERE id = :doc_id AND current_stage != 'CANCELLED'
-              )
         """)
         result = await self.db.execute(stmt, {"doc_id": doc_uuid, "new_version": new_version})
         return result.rowcount

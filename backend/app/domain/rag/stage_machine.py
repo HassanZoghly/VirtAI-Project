@@ -18,6 +18,7 @@ TERMINAL_STAGES = {IngestionStage.COMPLETE, IngestionStage.FAILED, IngestionStag
 ALLOWED_TRANSITIONS: dict[IngestionStage, set[IngestionStage]] = {
     IngestionStage.QUEUED: {
         IngestionStage.UPLOADING,
+        IngestionStage.PARSING,
         IngestionStage.FAILED,
         IngestionStage.CANCELLED,
     },
@@ -47,7 +48,13 @@ ALLOWED_TRANSITIONS: dict[IngestionStage, set[IngestionStage]] = {
         IngestionStage.CANCELLED,
     },
     IngestionStage.COMPLETE: set(),
-    IngestionStage.FAILED: {IngestionStage.UPLOADING},
+    IngestionStage.FAILED: {
+        IngestionStage.UPLOADING,
+        IngestionStage.PARSING,
+        IngestionStage.CHUNKING,
+        IngestionStage.EMBEDDING,
+        IngestionStage.INDEXING,
+    },
     IngestionStage.CANCELLED: set(),
 }
 

@@ -5,6 +5,7 @@ import filetype
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from loguru import logger
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.rag.stage_machine import IngestionStage
@@ -127,66 +128,75 @@ async def upload_document(
     # 5. Check dedup
     existing = await repo.find_by_sha256(str(user.id), file_sha256)
     if existing:
-        if existing.current_stage == IngestionStage.COMPLETE:
+        from datetime import datetime, timezone, timedelta
+        is_stale = False
+        if existing.upload_date:
+            # Ensure upload_date is timezone aware for comparison
+            upload_dt = existing.upload_date
+            if upload_dt.tzinfo is None:
+                upload_dt = upload_dt.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) - upload_dt > timedelta(minutes=5) and existing.current_stage != IngestionStage.COMPLETE:
+                is_stale = True
+
+        if existing.current_stage == IngestionStage.FAILED or is_stale:
+            # Force delete the dead/failed record and proceed to create a new one
+            logger.info(f"Deleting dead/failed document {existing.id} for fresh re-upload")
+            old_storage_key = await repo.delete_with_cascade(str(existing.id), str(user.id))
+            await db.commit()
+            if old_storage_key and await storage.exists(old_storage_key):
+                await storage.delete(old_storage_key)
+            existing = None  # Proceed to create new record below
+        elif existing.current_stage == IngestionStage.COMPLETE:
             response.status_code = 200
             return {
                 "id": str(existing.id),
                 "status": "COMPLETE",
                 "message": "Document already ingested",
             }
-        if existing.current_stage in {
-            IngestionStage.QUEUED,
-            IngestionStage.UPLOADING,
-            IngestionStage.PARSING,
-            IngestionStage.CHUNKING,
-            IngestionStage.EMBEDDING,
-            IngestionStage.INDEXING,
-        }:
+        elif existing:
+            # Still active and not stale
             response.status_code = 202
             return {
                 "id": str(existing.id),
                 "status": existing.current_stage,
                 "message": "Document currently processing",
             }
-        if existing.current_stage == IngestionStage.FAILED:
-            if existing.retry_count < settings.ARQ_MAX_TRIES:
-                arq_pool = request.app.state.arq_pool
-                await arq_pool.enqueue_job(
-                    "run_ingestion_task",
-                    _queue_name="ingestion",
-                    doc_id=str(existing.id),
-                    user_id=str(user.id),
-                    filename=existing.filename,
-                    file_type=existing.file_type,
-                    upload_source=existing.upload_source,
-                    storage_key=existing.storage_key,
-                )
-                response.status_code = 202
-                return {
-                    "id": str(existing.id),
-                    "status": "QUEUED",
-                    "message": "Retrying failed document",
-                }
-            # Max retries exhausted, allow fresh upload below
 
     # 6. Create DB record (QUEUED) FIRST
     doc = await repo.create(user_id=str(user.id), filename=safe_filename, file_type=ext)
 
-    # Update with SHA256 and size
+    # Update with SHA256 and size — guarded against concurrent duplicate uploads
     from sqlalchemy import update
 
     from app.infrastructure.db.models import Document
 
-    await db.execute(
-        update(Document)
-        .where(Document.id == doc.id)
-        .values(
-            document_sha256=file_sha256,
-            file_size=len(file_bytes),
-            storage_key=f"{user.id}/{doc.id}.{ext}",
+    try:
+        await db.execute(
+            update(Document)
+            .where(Document.id == doc.id)
+            .values(
+                document_sha256=file_sha256,
+                file_size=len(file_bytes),
+                storage_key=f"{user.id}/{doc.id}.{ext}",
+            )
         )
-    )
-    await db.commit()
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        # A concurrent upload of the same file won the race
+        logger.info(f"Concurrent duplicate detected for SHA256 {file_sha256[:12]}…")
+        winner = await repo.find_by_sha256(str(user.id), file_sha256)
+        # Clean up the orphaned row we just created
+        await repo.delete_with_cascade(str(doc.id), str(user.id))
+        await db.commit()
+        if winner:
+            response.status_code = 200
+            return {
+                "id": str(winner.id),
+                "status": winner.current_stage,
+                "message": "Document already exists (concurrent upload resolved)",
+            }
+        raise HTTPException(status_code=500, detail="Unexpected constraint conflict") from None
 
     # 7. Write to storage
     storage_key = f"{user.id}/{doc.id}.{ext}"
@@ -336,6 +346,7 @@ async def list_documents(
             "file_type": d.file_type,
         }
         for d in docs
+        if d.current_stage not in {IngestionStage.FAILED, IngestionStage.CANCELLED}
     ]
 
 

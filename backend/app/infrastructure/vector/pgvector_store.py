@@ -17,26 +17,6 @@ class PGVectorStore(VectorStore):
     def __init__(self, db_session: AsyncSession):
         self.db = db_session
 
-    async def store_chunk(self, chunk: DocumentChunk, embedding: list[float]) -> None:
-        expected = settings.EMBEDDING_DIMENSION
-        if len(embedding) != expected:
-            raise VectorDimensionMismatch(expected=expected, actual=len(embedding))
-
-        model = ChunkModel(
-            id=chunk.id,
-            document_id=chunk.document_id,
-            chunk_text=chunk.chunk_text,
-            chunk_order=chunk.chunk_order,
-            embedding=embedding,
-            chunk_metadata=chunk.metadata,
-            chunk_version=chunk.chunk_version,
-            is_active=chunk.is_active,
-            retrieval_scope=chunk.retrieval_scope,
-            scope_id=chunk.scope_id,
-        )
-        self.db.add(model)
-        await self.db.flush()
-
     async def store_chunks_batch(
         self, chunks: list[DocumentChunk], embeddings: list[list[float]]
     ) -> None:
@@ -80,7 +60,7 @@ class PGVectorStore(VectorStore):
                 (1 - ChunkModel.embedding.cosine_distance(query_vector)).label("similarity"),
             )
             .where(ChunkModel.is_active == True)
-            .order_by(text("similarity DESC"))
+            .order_by(ChunkModel.embedding.cosine_distance(query_vector))
             .limit(limit)
         )
 
@@ -118,7 +98,7 @@ class PGVectorStore(VectorStore):
         # Retrieval instrumentation
         if output:
             avg_sim = sum(sim for _, sim in output) / len(output)
-            logger.info(
+            logger.debug(
                 {
                     "event": "retrieval_executed",
                     "retrieved_chunks_count": len(output),
@@ -130,7 +110,7 @@ class PGVectorStore(VectorStore):
                 }
             )
         else:
-            logger.info(
+            logger.debug(
                 {
                     "event": "retrieval_executed",
                     "retrieved_chunks_count": 0,

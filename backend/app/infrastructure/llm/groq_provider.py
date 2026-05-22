@@ -141,13 +141,21 @@ class GroqLLMProvider(BaseLLMProvider):
 
         # ── Open Groq stream ──────────────────────────────────────────────────
         try:
-            groq_stream = await self._client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                stream=True,
-            )
+            from tenacity import AsyncRetrying, wait_exponential, stop_after_attempt
+            
+            async for attempt in AsyncRetrying(
+                wait=wait_exponential(multiplier=1, min=2, max=10),
+                stop=stop_after_attempt(3),
+                reraise=True
+            ):
+                with attempt:
+                    groq_stream = await self._client.chat.completions.create(
+                        model=self.model,
+                        messages=messages,
+                        max_tokens=self.max_tokens,
+                        temperature=self.temperature,
+                        stream=True,
+                    )
         except Exception as e:
             logger.error(f"Groq LLM stream init failed: {e} | trace_id={trace_id}")
             raise LLMException(f"LLM stream failed: {e!s}")
@@ -226,13 +234,21 @@ class GroqLLMProvider(BaseLLMProvider):
         start_time = time.perf_counter()
         logger.info(f"LLM complete | model={self.model} | messages={len(messages)}")
         try:
-            response = await self._client.chat.completions.create(
-                model=self.model,
-                messages=messages,  # type: ignore[arg-type]
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                stream=False,
-            )
+            from tenacity import AsyncRetrying, wait_exponential, stop_after_attempt
+            
+            async for attempt in AsyncRetrying(
+                wait=wait_exponential(multiplier=1, min=2, max=10),
+                stop=stop_after_attempt(3),
+                reraise=True
+            ):
+                with attempt:
+                    response = await self._client.chat.completions.create(
+                        model=self.model,
+                        messages=messages,  # type: ignore[arg-type]
+                        max_tokens=self.max_tokens,
+                        temperature=self.temperature,
+                        stream=False,
+                    )
         except Exception as e:
             logger.error(f"Groq LLM complete failed: {e}")
             raise LLMException(f"LLM complete failed: {e!s}")

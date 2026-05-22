@@ -1,4 +1,6 @@
 import { memo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { PiRobotFill, PiUserCircleFill } from 'react-icons/pi';
 import CopyButton from '../../../shared/components/CopyButton';
 
@@ -19,8 +21,14 @@ const MessageBubble = memo(function MessageBubble({ msg }) {
             <PiRobotFill aria-hidden="true" />
           </div>
         )}
-        <div className="message-bubble">
-          {msg.content}
+        <div className="message-bubble markdown-body">
+          {isUser ? (
+            msg.content
+          ) : (
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {msg.content}
+            </ReactMarkdown>
+          )}
           {!isUser && <CopyButton content={msg.content} />}
         </div>
         {isUser && (

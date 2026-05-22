@@ -26,6 +26,7 @@ export function useDocumentUpload(options = {}) {
   });
 
   const cancelPollingRef = useRef(null);
+  const pollingStartTimeRef = useRef(null);
 
   const reset = useCallback(() => {
     if (cancelPollingRef.current) {
@@ -89,10 +90,27 @@ export function useDocumentUpload(options = {}) {
         }
 
         // 2. Start polling
+        pollingStartTimeRef.current = Date.now();
         return new Promise((resolve, reject) => {
           cancelPollingRef.current = createPollingTransport({
             fetchStatusFn: () => documentApi.getStatus(docId),
             onProgress: (status) => {
+              if (Date.now() - pollingStartTimeRef.current > 180000) {
+                // 3 minutes timeout reached
+                cancelPollingRef.current?.();
+                setUploadState((prev) => ({
+                  ...prev,
+                  isPolling: false,
+                  error: 'Processing Timeout: The backend took too long.',
+                  stage: 'FAILED',
+                }));
+                if (onError) {
+                  onError(new Error('Processing Timeout'));
+                }
+                reject(new Error('Processing Timeout'));
+                return;
+              }
+              
               setUploadState((prev) => ({
                 ...prev,
                 progress: status.progress_pct || 0,

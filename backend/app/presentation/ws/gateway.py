@@ -167,6 +167,15 @@ class WebSocketHandler:
             f"resumed={resumed} | replay_after_seq={replay_after_seq}"
         )
 
+    async def _cleanup(self) -> None:
+        self._connected = False
+        if self._heartbeat_task and not self._heartbeat_task.done():
+            self._heartbeat_task.cancel()
+        if self._pipeline_task and not self._pipeline_task.done():
+            self._pipeline_task.cancel()
+        if self._voice_mode_handler:
+            self._voice_mode_handler.audio_pipeline.clear_buffer()
+
     def _normalize_voice(self, voice_id: str) -> str:
         if not voice_id:
             return "aria"

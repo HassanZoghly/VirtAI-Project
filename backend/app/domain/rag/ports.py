@@ -130,9 +130,6 @@ class EmbeddingProvider(ABC):
 
 
 class VectorStore(ABC):
-    @abstractmethod
-    async def store_chunk(self, chunk: DocumentChunk, embedding: list[float]) -> None:
-        pass
 
     @abstractmethod
     async def store_chunks_batch(

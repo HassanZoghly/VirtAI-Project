@@ -1,4 +1,4 @@
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_text_splitters import MarkdownTextSplitter
 
 from app.domain.rag.ports import ChunkingStrategy
 
@@ -7,11 +7,9 @@ class MarkdownChunker(ChunkingStrategy):
     """Chunking strategy that respects Markdown boundaries and paragraph limits."""
 
     def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200):
-        self.splitter = RecursiveCharacterTextSplitter(
+        self.splitter = MarkdownTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
-            separators=["\n\n", "\n", ".", "?", "!", " ", ""],
-            keep_separator=True,
         )
 
     def chunk(self, text: str) -> list[str]:

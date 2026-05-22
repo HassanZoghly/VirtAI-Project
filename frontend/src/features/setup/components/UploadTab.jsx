@@ -27,18 +27,24 @@ function RealisticProgressBar({ progress, stage, error, filename }) {
       setDisplayProgress(100);
       return;
     }
-    
-    // Smooth out progress
-    if (progress > displayProgress) {
-      const step = (progress - displayProgress) * 0.1;
+
+    if (progress > 0) {
+      // Real backend progress available — use it as the authoritative target
+      if (displayProgress > progress) {
+        // Artificial progress overshot the real value; snap down immediately
+        setDisplayProgress(progress);
+      } else if (progress > displayProgress) {
+        // Smoothly ease toward the real value
+        const step = (progress - displayProgress) * 0.15;
+        const timer = requestAnimationFrame(() => {
+          setDisplayProgress(prev => Math.min(prev + Math.max(step, 0.5), progress));
+        });
+        return () => cancelAnimationFrame(timer);
+      }
+    } else if (stage && displayProgress < 15) {
+      // No real progress yet — subtle artificial hint capped low at 15%
       const timer = requestAnimationFrame(() => {
-        setDisplayProgress(prev => Math.min(prev + Math.max(step, 0.5), progress));
-      });
-      return () => cancelAnimationFrame(timer);
-    } else if (progress === 0 && displayProgress < 90 && stage) {
-      // Artificial progress while polling but backend is stuck at 0%
-      const timer = requestAnimationFrame(() => {
-        setDisplayProgress(prev => Math.min(prev + 0.2, 85));
+        setDisplayProgress(prev => Math.min(prev + 0.15, 15));
       });
       return () => cancelAnimationFrame(timer);
     }
@@ -47,8 +53,10 @@ function RealisticProgressBar({ progress, stage, error, filename }) {
   const getStageText = () => {
     if (error) return 'Upload failed';
     if (stage === 'COMPLETE') return 'Ready';
+    if (stage === 'PARSING') return 'Parsing document...';
     if (stage === 'CHUNKING' || stage === 'PROCESSING') return 'Chunking & Processing...';
     if (stage === 'EMBEDDING') return 'Generating embeddings...';
+    if (stage === 'INDEXING') return 'Indexing...';
     if (stage === 'QUEUED') return 'In queue...';
     return 'Uploading...';
   };

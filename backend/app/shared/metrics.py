@@ -2,7 +2,7 @@
 Prometheus metrics registry for tracking business and infrastructure health.
 """
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Gauge, Histogram
 
 # Auth & Session Metrics
 auth_login_attempts = Counter(
@@ -37,9 +37,9 @@ rate_limit_hits = Counter(
 )
 
 # WebSocket connection health
-ws_connections_active = Counter(
-    "virtai_ws_connections_active_total",
-    "Active websocket connections (approx)",
+ws_connections_active = Gauge(
+    "virtai_ws_connections_active",
+    "Currently active websocket connections",
 )
 
 ws_connection_drops = Counter(

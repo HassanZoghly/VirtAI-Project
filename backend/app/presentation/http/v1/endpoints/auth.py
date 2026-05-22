@@ -427,6 +427,7 @@ async def update_setup_status(
 @router.post("/change-password")
 async def change_password(
     body: ChangePasswordRequest,
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     user: UserEntity = Depends(_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -442,6 +443,12 @@ async def change_password(
     # Revoke all refresh families and invalidate cache so user must log in again
     await revoke_all_refresh_families(str(user.id), reason="password_changed")
     await invalidate_auth_session(str(user.id))
+    
+    if creds is not None:
+        access_jti = extract_jti(creds.credentials)
+        if access_jti:
+            settings = get_settings()
+            await blacklist_token(access_jti, ttl_seconds=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60)
     
     return {"detail": "Password changed successfully. Please log in again."}
 

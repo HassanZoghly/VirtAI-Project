@@ -3,10 +3,12 @@ from datetime import datetime, timezone
 
 import redis.asyncio as redis
 from loguru import logger
+import httpx
+from arq import Retry
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.rag.stage_machine import IngestionStage
-from app.infrastructure.db.database import get_db
+from app.infrastructure.db.database import AsyncSessionLocal
 from app.infrastructure.db.repositories.document_repository import DocumentRepository
 from app.infrastructure.worker.retry_classifier import classify
 from app.shared.errors import IngestionCancelledException
@@ -16,8 +18,7 @@ LOCK_TTL = 620  # job_timeout (600) + 20s buffer
 
 async def get_short_session() -> AsyncSession:
     """Helper to get a short-lived database session without FastAPI dependency injection."""
-    db_gen = get_db()
-    return await anext(db_gen)
+    return AsyncSessionLocal()
 
 
 async def run_ingestion_task(
@@ -53,9 +54,8 @@ async def run_ingestion_task(
         async with await get_short_session() as db:
             repo = DocumentRepository(db)
             await repo.mark_cancelled(doc_id)
+            await db.commit()
     except Exception as e:
-        import httpx
-        from arq import Retry
         from app.application.rag.ingest_document import IngestDocumentUseCase
         
         is_retryable, reason = classify(e)
@@ -82,6 +82,7 @@ async def run_ingestion_task(
         async with await get_short_session() as db:
             repo = DocumentRepository(db)
             await repo.mark_failed(doc_id, str(e), is_retryable)
+            await db.commit()
             
         if is_retryable:
             # Handle rate limiting / backoff explicitly
@@ -140,6 +141,7 @@ async def _run_ingestion(
         async with await get_short_session() as db:
             repo = DocumentRepository(db)
             await repo.update_progress(doc_id, stage, pct, processed, total)
+            await db.commit()
 
     # Cancellation Check
     async def cancellation_check() -> bool:

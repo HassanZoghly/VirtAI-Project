@@ -73,6 +73,33 @@ services:
       start_period: 120s
       retries: 5
 
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: virtai-worker
+    restart: unless-stopped
+    command: ["python", "-m", "arq", "app.infrastructure.worker.arq_settings.WorkerSettings"]
+    env_file:
+      - ./backend/.env
+    environment:
+      PYTHONPATH: /app
+      POSTGRES_HOST: postgres
+      REDIS_URL: redis://:virtai_redis_password@redis:6379/0
+      XDG_CACHE_HOME: /app/.cache
+      HF_HOME: /app/.cache/huggingface
+      FASTEMBED_CACHE_DIR: /app/.cache/fastembed
+    volumes:
+      - backend-data:/app/.data
+      - backend-cache:/app/.cache
+    networks:
+      - virtai-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   frontend:
     build:
       context: ./frontend

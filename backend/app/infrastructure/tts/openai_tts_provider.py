@@ -10,7 +10,7 @@ from loguru import logger
 from app.domain.voice.entities import TTSChunk, TTSResult
 from app.domain.voice.ports import BaseTTSProvider
 from app.infrastructure.cache.tts_cache import cache_audio, get_cached_audio
-from app.infrastructure.tts.tts_utils import calculate_audio_duration
+from app.infrastructure.tts.tts_utils import calculate_audio_duration, clean_text_for_tts
 from app.shared.config import get_settings
 from app.shared.errors import TTSException
 
@@ -57,40 +57,6 @@ class OpenAITTSProvider(BaseTTSProvider):
     def get_voice_settings(self) -> dict:
         return {"voice": self.voice, "speed": getattr(self, "speed", 1.0)}
 
-    def _sanitize_for_tts(self, text: str) -> str:
-        """Sanitize text for TTS by expanding abbreviations and removing markdown/emojis."""
-        if not text:
-            return text
-
-        # Expand common abbreviations (case-insensitive)
-        text = re.sub(r"(?i)\bdr\.", "Doctor ", text)
-        text = re.sub(r"(?i)\bmr\.", "Mister ", text)
-        text = re.sub(r"(?i)\bmrs\.", "Missus ", text)
-        text = re.sub(r"(?i)\bprof\.", "Professor ", text)
-
-        # Remove Markdown URLs/Links: [text](url) -> text
-        text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
-        
-        # Remove Markdown Images: ![alt](url) -> ""
-        text = re.sub(r"!\[[^\]]*\]\([^\)]+\)", "", text)
-        
-        # Remove markdown bold/italic/strikethrough markers, but keep the text
-        text = re.sub(r"(?<!\\)(\*\*|\*|__|_|~~|`)", "", text)
-        
-        # Remove markdown headers (# Header -> Header)
-        text = re.sub(r"(?m)^#+\s+", "", text)
-        
-        # Remove HTML tags
-        text = re.sub(r"<[^>]+>", "", text)
-
-        # Remove emojis and other non-standard characters
-        # Keeps word characters (letters, digits), spaces, and standard punctuation/symbols
-        text = re.sub(r'[^\w\s.,!?\'"\-;:()$%@&+=/\\<>|]', "", text)
-
-        # Collapse multiple spaces
-        text = re.sub(r"\s+", " ", text).strip()
-        return text
-
     def _is_safe_path_component(self, component: str) -> bool:
         if not component:
             return False
@@ -113,7 +79,7 @@ class OpenAITTSProvider(BaseTTSProvider):
             raise TTSException(f"Invalid message_id: {message_id}")
 
         # Sanitize text BEFORE cache lookup so formatting differences don't cause misses
-        sanitized_text = self._sanitize_for_tts(text)
+        sanitized_text = clean_text_for_tts(text)
         if not sanitized_text.strip():
             raise TTSException("Empty text after sanitization")
 
@@ -153,7 +119,7 @@ class OpenAITTSProvider(BaseTTSProvider):
         return result
 
     async def synthesize(self, text: str, trace_id: str | None = None) -> TTSResult:
-        text = self._sanitize_for_tts(text)
+        text = clean_text_for_tts(text)
         if not text.strip():
             raise TTSException("Empty text provided")
 
@@ -191,7 +157,7 @@ class OpenAITTSProvider(BaseTTSProvider):
     async def synthesize_streaming(
         self, text: str, max_retries: int = 3
     ) -> AsyncGenerator[TTSChunk, None]:
-        text = self._sanitize_for_tts(text)
+        text = clean_text_for_tts(text)
         if not text.strip():
             raise TTSException("Empty text provided")
 

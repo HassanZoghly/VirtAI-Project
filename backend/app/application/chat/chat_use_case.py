@@ -1,6 +1,7 @@
 from app.application.rag.retrieval_use_case import RetrievalUseCase
 from app.domain.chat.policies import build_conversation
 from app.domain.chat.ports import BaseLLMProvider
+from app.application.chat.prompt_builder import PromptBuilder
 
 
 class ChatUseCase:
@@ -15,10 +16,7 @@ class ChatUseCase:
         context = await self.retrieval.execute(query)
 
         # Build prompt
-        if context:
-            prompt = f"Use the following retrieved context to answer the user's query.\n\nContext:\n{context}\n\nQuery: {query}"
-        else:
-            prompt = query
+        prompt = PromptBuilder.build_user_prompt_with_context(query, context)
 
         history = build_conversation("avatar1")
         history.add_user_message(prompt)

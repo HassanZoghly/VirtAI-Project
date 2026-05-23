@@ -185,6 +185,7 @@ class Settings(BaseSettings):
 
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
+    USE_SMART_CHUNKER: bool = False
     EMBEDDING_BATCH_SIZE: int = 32
     MAX_CHUNKS_PER_DOCUMENT: int = 2000
     MAX_UPLOAD_SIZE_MB: int = 25

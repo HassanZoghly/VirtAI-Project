@@ -125,27 +125,44 @@ async def lifespan(app: FastAPI):
     from app.infrastructure.llm.groq_provider import GroqLLMProvider
     from app.infrastructure.tts.openai_tts_provider import OpenAITTSProvider
 
+    from app.application.services.model_policy import ModelPolicyService
+    from app.domain.chat.ports import BaseLLMProvider
+    from app.domain.voice.ports import BaseTTSProvider
+
+    app.state.model_policy = ModelPolicyService()
+    
+    groq_llm = GroqLLMProvider(
+        model=settings.LLM_MODEL,
+        max_tokens=settings.LLM_MAX_TOKENS,
+        temperature=settings.LLM_TEMPERATURE,
+        api_key=settings.GROQ_API_KEY or "dummy-key-for-dev",
+    )
+    openai_tts = OpenAITTSProvider(voice="aria", speed=0.8)
+    
+    app.state.model_policy.registry.register_llm("groq_llm", groq_llm)
+    app.state.model_policy.registry.register_tts("openai_tts", openai_tts)
+
     def create_asr_service() -> GroqWhisperASR:
         return GroqWhisperASR()
 
-    def create_llm_service() -> GroqLLMProvider:
+    def create_llm_service() -> BaseLLMProvider:
         if not settings.GROQ_API_KEY:
             logger.warning("LLM service created without API key - will fail on use")
-        return GroqLLMProvider(
-            model=settings.LLM_MODEL,
-            max_tokens=settings.LLM_MAX_TOKENS,
-            temperature=settings.LLM_TEMPERATURE,
-            api_key=settings.GROQ_API_KEY or "dummy-key-for-dev",
-        )
+        return app.state.model_policy.router.get_llm_chain()
 
-    def create_tts_service() -> OpenAITTSProvider:
-        return OpenAITTSProvider(
-            voice="aria",
-            speed=0.8,
-        )
+    def create_tts_service() -> BaseTTSProvider:
+        return app.state.model_policy.router.get_tts_chain()
 
     async def create_retrieval_service() -> RetrievalUseCase:
-        return RetrievalUseCase(embedder=app.state.embedder)
+        from app.infrastructure.vector.pgvector_store import SessionManagedPGVectorStore
+        from app.infrastructure.rag.reranker import DummyCrossEncoderReranker
+        from app.application.rag.token_budget import TokenBudgetManager
+        return RetrievalUseCase(
+            embedder=app.state.embedder,
+            vector_store=SessionManagedPGVectorStore(),
+            reranker=DummyCrossEncoderReranker(),
+            budget_manager=TokenBudgetManager()
+        )
 
     # ── Chat database session factory (provides a fresh AsyncSession per call) ─────
     async def get_chat_db_session():
@@ -260,10 +277,14 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def correlation_id_middleware(request: Request, call_next) -> Response:
+        from app.shared.request_context import set_trace_id
         request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
         request.state.request_id = request_id
-        with logger.contextualize(request_id=request_id):
-            response = await call_next(request)
+        
+        # Set unified trace context
+        set_trace_id(request_id)
+        
+        response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
         return response
 

@@ -107,7 +107,16 @@ async def get_chat_use_case(request: Request) -> ChatUseCase:
         temperature=settings.LLM_TEMPERATURE,
         api_key=settings.GROQ_API_KEY or "dummy-key-for-dev",
     )
-    retrieval = RetrievalUseCase(embedder=request.app.state.embedder)
+    from app.infrastructure.vector.pgvector_store import SessionManagedPGVectorStore
+    from app.infrastructure.rag.reranker import DummyCrossEncoderReranker
+    from app.application.rag.token_budget import TokenBudgetManager
+    
+    retrieval = RetrievalUseCase(
+        embedder=request.app.state.embedder,
+        vector_store=SessionManagedPGVectorStore(),
+        reranker=DummyCrossEncoderReranker(),
+        budget_manager=TokenBudgetManager()
+    )
     return ChatUseCase(llm_provider=llm, retrieval_use_case=retrieval)
 
 

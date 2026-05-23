@@ -109,7 +109,9 @@ async def _run_ingestion(
 ) -> None:
     from app.application.rag.ingest_document import IngestDocumentUseCase
     from app.infrastructure.rag.markdown_chunker import MarkdownChunker
+    from app.infrastructure.rag.smart_chunker import SmartChunker
     from app.infrastructure.rag.pdf_parser import PyMuPDFParser
+    from app.shared.config import get_settings
 
     embedder = ctx["embedder"]
     storage = ctx["storage"]
@@ -150,11 +152,18 @@ async def _run_ingestion(
             stage = await repo.get_stage(doc_id)
             return stage == IngestionStage.CANCELLED
 
+    settings = get_settings()
+    chunker = (
+        SmartChunker(chunk_size=settings.CHUNK_SIZE, overlap_size=settings.CHUNK_OVERLAP)
+        if settings.USE_SMART_CHUNKER
+        else MarkdownChunker(chunk_size=settings.CHUNK_SIZE, chunk_overlap=settings.CHUNK_OVERLAP)
+    )
+
     # Instantiate use case
     use_case = IngestDocumentUseCase(
         storage=storage,
         parser=PyMuPDFParser(),
-        chunker=MarkdownChunker(),
+        chunker=chunker,
         embedder=embedder,
     )
 

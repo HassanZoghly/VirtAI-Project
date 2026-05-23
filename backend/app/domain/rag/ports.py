@@ -148,6 +148,27 @@ class VectorStore(ABC):
     ) -> list[tuple[DocumentChunk, float]]:
         pass
 
+    @abstractmethod
+    async def hybrid_search(
+        self,
+        query_text: str,
+        query_vector: list[float],
+        limit: int = 10,
+        document_id: UUID | None = None,
+        scope: str | None = None,
+        scope_id: UUID | None = None,
+    ) -> list[tuple[DocumentChunk, float]]:
+        pass
+
+
+class RerankerPort(ABC):
+    """Abstract interface for a document reranker (e.g., Cross-Encoder)."""
+    @abstractmethod
+    async def rerank(
+        self, query: str, chunks: list[DocumentChunk], top_k: int = 5
+    ) -> list[tuple[DocumentChunk, float]]:
+        pass
+
 
 class DocumentParser(ABC):
     @abstractmethod

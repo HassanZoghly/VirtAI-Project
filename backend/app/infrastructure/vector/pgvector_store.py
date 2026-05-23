@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from loguru import logger
-from sqlalchemy import select, text
+from sqlalchemy import select, text, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.rag.entities import DocumentChunk
@@ -98,28 +98,54 @@ class PGVectorStore(VectorStore):
         # Retrieval instrumentation
         if output:
             avg_sim = sum(sim for _, sim in output) / len(output)
-            logger.debug(
-                {
-                    "event": "retrieval_executed",
-                    "retrieved_chunks_count": len(output),
-                    "avg_similarity": round(avg_sim, 4),
-                    "empty_retrieval_rate": 0.0,
-                    "document_id": str(document_id) if document_id else None,
-                    "scope": scope,
-                    "scope_id": str(scope_id) if scope_id else None,
-                }
-            )
+            logger.debug(f"[VectorStore] Dense search found {len(output)} chunks | avg_sim={avg_sim:.3f}")
         else:
-            logger.debug(
-                {
-                    "event": "retrieval_executed",
-                    "retrieved_chunks_count": 0,
-                    "avg_similarity": 0.0,
-                    "empty_retrieval_rate": 1.0,
-                    "document_id": str(document_id) if document_id else None,
-                    "scope": scope,
-                    "scope_id": str(scope_id) if scope_id else None,
-                }
-            )
+            logger.debug("[VectorStore] Dense search found 0 chunks")
 
         return output
+
+
+class SessionManagedPGVectorStore(VectorStore):
+    """
+    A VectorStore adapter that manages its own database session.
+    Ideal for injection into long-lived application services.
+    """
+
+    async def store_chunks_batch(
+        self, chunks: list[DocumentChunk], embeddings: list[list[float]]
+    ) -> None:
+        from app.infrastructure.db.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
+            store = PGVectorStore(db)
+            await store.store_chunks_batch(chunks, embeddings)
+            await db.commit()
+
+    async def search(
+        self,
+        query_vector: list[float],
+        limit: int = 5,
+        document_id: UUID | None = None,
+        scope: str | None = None,
+        scope_id: UUID | None = None,
+    ) -> list[tuple[DocumentChunk, float]]:
+        from app.infrastructure.db.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
+            store = PGVectorStore(db)
+            return await store.search(query_vector, limit, document_id, scope, scope_id)
+
+    async def hybrid_search(
+        self,
+        query_text: str,
+        query_vector: list[float],
+        limit: int = 10,
+        document_id: UUID | None = None,
+        scope: str | None = None,
+        scope_id: UUID | None = None,
+    ) -> list[tuple[DocumentChunk, float]]:
+        from app.infrastructure.db.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
+            store = PGVectorStore(db)
+            return await store.hybrid_search(
+                query_text, query_vector, limit, document_id, scope, scope_id
+            )
+

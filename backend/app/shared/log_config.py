@@ -25,6 +25,12 @@ def _redact_secrets(record: Record) -> None:
     record["message"] = _JWT_PATTERN.sub("[JWT_REDACTED]", record["message"])
 
 
+def _inject_trace_id(record: Record) -> None:
+    """Inject trace_id from contextvar into log record extra."""
+    from app.shared.request_context import get_trace_id
+    record["extra"]["request_id"] = get_trace_id()
+
+
 def setup_logging() -> None:
     settings = get_settings()
     logger.remove()
@@ -94,7 +100,11 @@ def setup_logging() -> None:
             enqueue=True,
         )
 
-    logger.configure(patcher=_redact_secrets, extra={"request_id": "-"})
+    def _patcher(record):
+        _inject_trace_id(record)
+        _redact_secrets(record)
+
+    logger.configure(patcher=_patcher, extra={"request_id": "-"})
 
     logger.info(
         f"[*] Logging initialized | env={settings.ENVIRONMENT} | level={effective_level} | json={settings.LOG_JSON}"

@@ -7,6 +7,7 @@ Canonical location: app.presentation.http.v1.router
 from contextlib import suppress
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+import uuid
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -63,6 +64,11 @@ async def websocket_endpoint(
     URL: ws://localhost:8000/api/v1/ws/{avatar_id}?voice=aria
     Supported avatar_id: avatar1, avatar2, avatar3
     """
+    from app.shared.request_context import set_trace_id
+    
+    trace_id = websocket.headers.get("x-request-id") or str(uuid.uuid4())
+    set_trace_id(trace_id)
+
     voice_id = voice or settings.TTS_VOICE
     client_ip = websocket.client.host if websocket.client else "unknown"
     logger.info(

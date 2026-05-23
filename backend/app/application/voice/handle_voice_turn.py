@@ -160,6 +160,7 @@ class ConversationPipeline:
         self.avatar_id = avatar_id
         self._history: ConversationHistory = build_conversation(avatar_id)
         self._aborted: bool = False
+        self._abort_event: asyncio.Event = asyncio.Event()
         self._current_llm_task: asyncio.Task | None = None
         self._current_tts_task: asyncio.Task | None = None
         self._current_message_id: str | None = None
@@ -179,6 +180,7 @@ class ConversationPipeline:
     ) -> AsyncGenerator[PipelineEvent, None]:
         """Full pipeline: Audio → ASR → LLM → TTS."""
         self._aborted = False
+        self._abort_event.clear()
         async for event in self._run_pipeline(
             audio_buffer=audio_buffer,
             text_input=None,
@@ -193,6 +195,7 @@ class ConversationPipeline:
     ) -> AsyncGenerator[PipelineEvent, None]:
         """Shortcut pipeline: Text → LLM → TTS (skips ASR)."""
         self._aborted = False
+        self._abort_event.clear()
         async for event in self._run_pipeline(
             audio_buffer=None,
             text_input=text,
@@ -243,6 +246,7 @@ class ConversationPipeline:
         from app.shared.config import get_settings as _settings
 
         self._aborted = False
+        self._abort_event.clear()
         self._current_message_id = message_id
 
         try:
@@ -303,7 +307,7 @@ class ConversationPipeline:
             original_sys_prompt = self._history.system_prompt
             if self._retrieval:
                 try:
-                    context = await self._retrieval.execute(text)
+                    context = await self._retrieval.execute(text, session_id=session_id)
                     if context:
                         self._history.system_prompt = f"{original_sys_prompt}\n\nUse the following retrieved context to answer the query:\n{context}"
                 except Exception as e:
@@ -411,6 +415,10 @@ class ConversationPipeline:
                 return
 
             # ── 6. TTS ────────────────────────────────────────────────────────
+            if self._aborted:
+                await send_callback(make_pipeline_state(session_id, "idle"))
+                return
+
             await send_callback(make_pipeline_state(session_id, "speaking"))
             if not self._tts:
                 raise TTSException("TTS service not configured")
@@ -516,6 +524,9 @@ class ConversationPipeline:
                 )
                 self._recent_animation_assets = self._recent_animation_assets[-12:]
 
+        except asyncio.CancelledError:
+            logger.info(f"Pipeline cancelled | session={session_id} | message={message_id} | trace_id={trace_id}")
+            return
         except Exception as e:
             logger.error(f"Pipeline error: {e} | trace_id={trace_id}")
             await send_callback(
@@ -534,6 +545,7 @@ class ConversationPipeline:
     def abort(self) -> None:
         """Signal the pipeline to stop and cancel running tasks."""
         self._aborted = True
+        self._abort_event.set()
         if self._current_llm_task and not self._current_llm_task.done():
             self._current_llm_task.cancel()
         if self._current_tts_task and not self._current_tts_task.done():
@@ -640,7 +652,7 @@ class ConversationPipeline:
         original_sys_prompt = self._history.system_prompt
         if self._retrieval:
             try:
-                context = await self._retrieval.execute(user_text)
+                context = await self._retrieval.execute(user_text, session_id=session_id)
                 if context:
                     self._history.system_prompt = f"{original_sys_prompt}\n\nUse the following retrieved context to answer the query:\n{context}"
             except Exception as e:

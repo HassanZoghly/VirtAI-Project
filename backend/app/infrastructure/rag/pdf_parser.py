@@ -1,6 +1,11 @@
 import io
 
 import fitz  # PyMuPDF
+
+# Suppress non-fatal MuPDF structure warnings (e.g. "No common ancestor in structure tree")
+# Fatal errors still raise exceptions; this only silences stderr diagnostic output.
+fitz.TOOLS.mupdf_display_errors(False)
+
 import pytesseract
 from loguru import logger
 from PIL import Image

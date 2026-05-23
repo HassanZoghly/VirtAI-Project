@@ -12,7 +12,7 @@ class RetrievalUseCase:
     def __init__(self, embedder: EmbeddingProvider):
         self.embedder = embedder
 
-    async def retrieve(self, query: str, top_k: int = 5) -> list[DocumentChunk]:
+    async def retrieve(self, query: str, top_k: int = 5, session_id: str | None = None) -> list[DocumentChunk]:
         """Retrieves relevant chunks as DocumentChunk objects."""
         if not query.strip():
             return []
@@ -23,7 +23,7 @@ class RetrievalUseCase:
 
             async with AsyncSessionLocal() as db:
                 vector_store = PGVectorStore(db)
-                results = await vector_store.search(query_vector, limit=top_k)
+                results = await vector_store.search(query_vector, limit=top_k, scope_id=session_id)
 
             # Return just the chunks (strip similarity scores)
             return [chunk for chunk, score in results]
@@ -32,9 +32,9 @@ class RetrievalUseCase:
             logger.error(f"Retrieval failed: {e}")
             return []
 
-    async def inject_context(self, query: str, system_prompt: str, top_k: int = 5) -> str:
+    async def inject_context(self, query: str, system_prompt: str, top_k: int = 5, session_id: str | None = None) -> str:
         """Retrieves relevant chunks and injects them into the system prompt."""
-        chunks = await self.retrieve(query, top_k=top_k)
+        chunks = await self.retrieve(query, top_k=top_k, session_id=session_id)
 
         if not chunks:
             return system_prompt
@@ -56,7 +56,7 @@ class RetrievalUseCase:
         )
         return injected
 
-    async def execute(self, query: str, limit: int = 5) -> str:
+    async def execute(self, query: str, limit: int = 5, session_id: str | None = None) -> str:
         """Retrieves relevant chunks and formats them as a context string."""
         if not query.strip():
             return ""
@@ -67,7 +67,7 @@ class RetrievalUseCase:
 
             async with AsyncSessionLocal() as db:
                 vector_store = PGVectorStore(db)
-                results = await vector_store.search(query_vector, limit=limit)
+                results = await vector_store.search(query_vector, limit=limit, scope_id=session_id)
 
             if not results:
                 return ""

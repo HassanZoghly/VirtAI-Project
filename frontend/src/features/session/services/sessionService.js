@@ -32,3 +32,11 @@ export async function deleteSession(sessionId) {
   const response = await apiClient.delete(`/chat/${sessionId}`);
   return response.data;
 }
+
+/**
+ * Delete all chat sessions for the user.
+ */
+export async function deleteAllSessions() {
+  const response = await apiClient.delete('/chat/all');
+  return response.data;
+}

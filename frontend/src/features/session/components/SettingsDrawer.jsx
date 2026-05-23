@@ -23,6 +23,7 @@ export default function SettingsDrawer({
   onNewSession,
   onDeleteSession,
   onRenameSession,
+  onClearAllSessions,
 }) {
   const drawerRef = useRef(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -137,6 +138,7 @@ export default function SettingsDrawer({
                 onNewSession={onNewSession}
                 onDeleteSession={onDeleteSession}
                 onRenameSession={onRenameSession}
+                onClearAllSessions={onClearAllSessions}
                 onCloseDrawer={onClose}
               />
             </div>

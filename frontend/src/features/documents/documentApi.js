@@ -5,9 +5,12 @@ export const documentApi = {
    * Upload a document for ingestion
    * Returns 202 Accepted with a document ID
    */
-  upload: async (file) => {
+  upload: async (file, sessionId = null) => {
     const formData = new FormData();
     formData.append('file', file);
+    if (sessionId) {
+      formData.append('session_id', sessionId);
+    }
 
     const response = await api.post('/documents/upload', formData, {
       headers: {
@@ -20,8 +23,12 @@ export const documentApi = {
   /**
    * Get the status of all documents
    */
-  list: async () => {
-    const response = await api.get(`/documents/?t=${Date.now()}`);
+  list: async (sessionId = null) => {
+    let url = `/documents/?t=${Date.now()}`;
+    if (sessionId) {
+      url += `&session_id=${sessionId}`;
+    }
+    const response = await api.get(url);
     return response.data;
   },
 

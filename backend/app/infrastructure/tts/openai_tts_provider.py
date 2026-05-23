@@ -37,6 +37,11 @@ class OpenAITTSProvider(BaseTTSProvider):
         self.speed = speed
         self.model = model if model in ("tts-1", "tts-1-hd") else "tts-1"
         self.api_url = "http://tts:8000/v1/audio/speech"
+        # Reuse HTTP client for connection pooling (avoids TCP+TLS overhead per request)
+        self._client = httpx.AsyncClient(
+            timeout=60.0,
+            limits=httpx.Limits(max_connections=4, max_keepalive_connections=2),
+        )
         logger.info(f"OpenAITTSProvider initialized | voice={self.voice} | model={self.model}")
 
     @property
@@ -102,19 +107,21 @@ class OpenAITTSProvider(BaseTTSProvider):
         message_id: str,
         trace_id: str | None = None,
     ) -> TTSResult:
-        if not text.strip():
-            raise TTSException("Empty text provided")
-
         if not self._is_safe_path_component(session_id):
             raise TTSException(f"Invalid session_id: {session_id}")
         if not self._is_safe_path_component(message_id):
             raise TTSException(f"Invalid message_id: {message_id}")
 
+        # Sanitize text BEFORE cache lookup so formatting differences don't cause misses
+        sanitized_text = self._sanitize_for_tts(text)
+        if not sanitized_text.strip():
+            raise TTSException("Empty text after sanitization")
+
         logger.info(
             f"TTS generate | session={session_id} | message={message_id} | api_voice={self.api_voice} | trace_id={trace_id}"
         )
 
-        cached_audio = await get_cached_audio(text=text, voice=self.api_voice)
+        cached_audio = await get_cached_audio(text=sanitized_text, voice=self.api_voice)
         if cached_audio is not None:
             logger.info("TTS cache hit")
             result = TTSResult(
@@ -125,10 +132,10 @@ class OpenAITTSProvider(BaseTTSProvider):
             )
         else:
             try:
-                result = await asyncio.wait_for(self.synthesize(text, trace_id=trace_id), timeout=70.0)
+                result = await asyncio.wait_for(self.synthesize(sanitized_text, trace_id=trace_id), timeout=70.0)
             except asyncio.TimeoutError:
                 raise TTSException("TTS synthesis timed out (wait_for trigger)")
-            await cache_audio(text=text, voice=self.api_voice, audio_bytes=result.audio_bytes)
+            await cache_audio(text=sanitized_text, voice=self.api_voice, audio_bytes=result.audio_bytes)
 
         storage_base = Path(get_settings().AUDIO_STORAGE_PATH)
         session_dir = storage_base / session_id
@@ -151,21 +158,20 @@ class OpenAITTSProvider(BaseTTSProvider):
             raise TTSException("Empty text provided")
 
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    self.api_url,
-                    json={
-                        "model": self.model,
-                        "input": text,
-                        "voice": self.api_voice,
-                        "response_format": "mp3",
-                        "speed": self.speed,
-                    },
-                )
-                if response.status_code != 200:
-                    logger.error(f"TTS API Error details: {response.text}")
-                response.raise_for_status()
-                audio_bytes = response.content
+            response = await self._client.post(
+                self.api_url,
+                json={
+                    "model": self.model,
+                    "input": text,
+                    "voice": self.api_voice,
+                    "response_format": "mp3",
+                    "speed": self.speed,
+                },
+            )
+            if response.status_code != 200:
+                logger.error(f"TTS API Error details: {response.text}")
+            response.raise_for_status()
+            audio_bytes = response.content
         except Exception as e:
             logger.error(f"TTS synthesis failed: {e} | trace_id={trace_id}")
             raise TTSException(f"TTS failed: {e!s}")
@@ -192,27 +198,26 @@ class OpenAITTSProvider(BaseTTSProvider):
         settings = get_settings()
         for attempt in range(max_retries):
             try:
-                async with httpx.AsyncClient(timeout=settings.TTS_TIMEOUT_SEC) as client:
-                    async with client.stream(
-                        "POST",
-                        self.api_url,
-                        json={
-                            "model": self.model,
-                            "input": text,
-                            "voice": self.api_voice,
-                            "response_format": "mp3",
-                            "speed": self.speed,
-                        },
-                    ) as response:
-                        if response.status_code != 200:
-                            error_details = await response.aread()
-                            logger.error(
-                                f"TTS API Error details: {error_details.decode('utf-8', errors='replace') if error_details else ''}"
-                            )
-                        response.raise_for_status()
-                        async for chunk in response.aiter_bytes():
-                            if chunk:
-                                yield TTSChunk(audio_data=chunk)
+                async with self._client.stream(
+                    "POST",
+                    self.api_url,
+                    json={
+                        "model": self.model,
+                        "input": text,
+                        "voice": self.api_voice,
+                        "response_format": "mp3",
+                        "speed": self.speed,
+                    },
+                ) as response:
+                    if response.status_code != 200:
+                        error_details = await response.aread()
+                        logger.error(
+                            f"TTS API Error details: {error_details.decode('utf-8', errors='replace') if error_details else ''}"
+                        )
+                    response.raise_for_status()
+                    async for chunk in response.aiter_bytes():
+                        if chunk:
+                            yield TTSChunk(audio_data=chunk)
                 yield TTSChunk(is_done=True)
                 return
             except Exception as e:

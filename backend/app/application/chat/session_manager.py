@@ -228,9 +228,10 @@ class SessionManager:
             except Exception as e:
                 logger.warning(f"Failed to set TTS voice: {e}")
 
+        connected_count = sum(1 for s in self._sessions.values() if s.connected)
         logger.info(
             f"Session created | id={sid} | user={user_id} | avatar={avatar_id} | "
-            f"voice={voice_id or 'default'} | total_active={len(self._sessions)}"
+            f"voice={voice_id or 'default'} | active_ws={connected_count} | resumable={len(self._sessions)}"
         )
         return session
 
@@ -264,7 +265,11 @@ class SessionManager:
             return
         session.pipeline.abort()
         session.mark_disconnected()
-        logger.info(f"Session disconnected | id={session_id} | total_active={len(self._sessions)}")
+        connected_count = sum(1 for s in self._sessions.values() if s.connected)
+        logger.info(
+            f"Session disconnected | id={session_id} | "
+            f"active_ws={connected_count} | resumable={len(self._sessions)}"
+        )
 
     async def remove_session(self, session_id: str) -> None:
         parsed_session_id = parse_uuid(session_id)
@@ -323,6 +328,12 @@ class SessionManager:
 
     @property
     def active_count(self) -> int:
+        """Count only sessions with an active WebSocket connection."""
+        return sum(1 for s in self._sessions.values() if s.connected)
+
+    @property
+    def total_count(self) -> int:
+        """Count all sessions (connected + resumable)."""
         return len(self._sessions)
 
     async def get_stats(self) -> dict:

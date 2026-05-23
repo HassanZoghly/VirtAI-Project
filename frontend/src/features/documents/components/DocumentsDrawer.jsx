@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DocumentsPanel } from './DocumentsPanel';
 
-export function DocumentsDrawer({ isOpen, onClose }) {
+export function DocumentsDrawer({ isOpen, onClose, sessionId }) {
   const drawerRef = useRef(null);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -77,15 +77,7 @@ export function DocumentsDrawer({ isOpen, onClose }) {
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
           >
             {isMobile && <div className="drawer-drag-handle" />}
-            <button
-              type="button"
-              aria-label="Close documents drawer"
-              className="documents-drawer-close"
-              onClick={onClose}
-            >
-              &times;
-            </button>
-            <DocumentsPanel />
+            <DocumentsPanel sessionId={sessionId} onClose={onClose} />
           </motion.div>
         </div>
       )}

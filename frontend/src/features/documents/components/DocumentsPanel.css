@@ -7,7 +7,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 1rem;
+  padding: 0.75rem 1rem 1rem;
   direction: ltr;
   overflow: hidden;
   background: var(--card-bg, #1e1e1e);
@@ -18,18 +18,18 @@
 
 .documents-drawer-close {
   position: absolute;
-  top: 0.9rem;
-  right: 0.9rem;
+  top: 0.6rem;
+  right: 0.6rem;
   z-index: 2;
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--text-secondary, #b0b0b0);
-  font-size: 1.35rem;
+  font-size: 1.15rem;
   line-height: 1;
   cursor: pointer;
   transition:
@@ -40,10 +40,10 @@
 }
 
 .documents-drawer-close:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.22);
   color: var(--text-primary, #fff);
-  transform: scale(1.04);
+  transform: scale(1.06);
 }
 
 .drawer-drag-handle {
@@ -223,7 +223,6 @@
   align-items: center;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   padding-bottom: 0.75rem;
-  padding-right: 2.6rem;
 }
 
 .documents-panel-header h3 {
@@ -416,4 +415,70 @@
   100% {
     transform: rotate(360deg);
   }
+}
+
+/* ── Per-file inline progress bar ── */
+.file-inline-progress {
+  margin-top: 6px;
+  width: 100%;
+}
+
+.file-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 3px;
+}
+
+.file-progress-stage {
+  font-size: 11px;
+  color: var(--color-gold, #b4ab8b);
+  font-weight: 600;
+}
+
+.file-progress-pct {
+  font-size: 10px;
+  color: var(--text-secondary, #b0b0b0);
+  font-variant-numeric: tabular-nums;
+}
+
+.file-progress-bar-bg {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.file-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-gold, #b4ab8b), #d4c9a0);
+  border-radius: 99px;
+  transition: width 0.15s linear;
+}
+
+.file-progress-bar-fill.success {
+  background: #22c55e;
+}
+
+.file-progress-error {
+  font-size: 11px;
+  color: #fca5a5;
+  margin-top: 2px;
+}
+
+.file-status-icon.spinning {
+  color: var(--color-gold, #b4ab8b);
+  animation: spin 1s linear infinite;
+  flex-shrink: 0;
+}
+
+.file-status-icon.success {
+  color: #22c55e;
+  flex-shrink: 0;
+}
+
+.file-status-icon.error {
+  color: #ef4444;
+  flex-shrink: 0;
 }

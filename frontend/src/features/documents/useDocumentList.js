@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { documentApi } from './documentApi';
 
-export function useDocumentList() {
+export function useDocumentList(sessionId = null) {
   const [documents, setDocuments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -9,7 +9,7 @@ export function useDocumentList() {
   const fetchDocuments = useCallback(async () => {
     try {
       setIsLoading(true);
-      const data = await documentApi.list();
+      const data = await documentApi.list(sessionId);
       setDocuments(data);
       setError(null);
     } catch (err) {
@@ -17,7 +17,7 @@ export function useDocumentList() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [sessionId]);
 
   const deleteDocument = useCallback(async (id) => {
     try {

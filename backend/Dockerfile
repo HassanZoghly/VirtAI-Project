@@ -23,8 +23,14 @@ ENV EMBEDDING_MODEL=${EMBEDDING_MODEL}
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ffmpeg \
-    curl && \
+    curl \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    poppler-utils && \
     rm -rf /var/lib/apt/lists/*
+
+# Verify Tesseract is available for OCR fallback in PDF parsing
+RUN tesseract --version
 
 # ── Install Python dependencies first (cache optimization) ─
 # Copy only the dependency manifest so pip install is cached

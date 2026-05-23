@@ -280,7 +280,7 @@ class PromptSanitizer:
 # Conversation Policies
 # ─────────────────────────────────────────────────────────────
 
-MAX_MESSAGES_DEFAULT = 20  # user+assistant pairs to retain in context
+MAX_MESSAGES_DEFAULT = 10  # user+assistant pairs to retain in context
 
 
 # ─────────────────────────────────────────────────────────────

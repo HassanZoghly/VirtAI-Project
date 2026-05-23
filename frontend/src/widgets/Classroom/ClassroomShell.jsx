@@ -48,6 +48,7 @@ export default function ClassroomShell() {
   const createNewSession = session.createNewSession;
   const switchSession = session.switchSession;
   const deleteSession = session.deleteSession;
+  const clearAllSessions = session.clearAllSessions;
   const renameSession = session.renameSession;
 
   const WS_URL =
@@ -129,6 +130,11 @@ export default function ClassroomShell() {
     const prevId = prevSessionIdRef.current;
     const nextId = currentSessionId;
     if (prevId !== nextId) {
+      // EXPLICIT MEDIA HALT: clear media state to force AvatarController to pause and unmount audio
+      setAudioUrl(null);
+      setMouthCues([]);
+      setAnimationTimeline([]);
+
       if (chatScrollRef.current) {
         scrollPositionsRef.current.set(prevId, chatScrollRef.current.scrollTop);
       }
@@ -325,8 +331,9 @@ export default function ClassroomShell() {
           onNewSession={createNewSession}
           onDeleteSession={deleteSession}
           onRenameSession={renameSession}
+          onClearAllSessions={clearAllSessions}
         />
-        <DocumentsDrawer isOpen={isDocumentsOpen} onClose={() => setIsDocumentsOpen(false)} />
+        <DocumentsDrawer isOpen={isDocumentsOpen} onClose={() => setIsDocumentsOpen(false)} sessionId={currentSessionId} />
 
         <div className="classroom-top-controls">
           <button

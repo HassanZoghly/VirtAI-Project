@@ -69,17 +69,82 @@ class ChatRepository(ChatRepositoryPort):
         )
         result = await self.db.execute(stmt)
         sessions = result.scalars().all()
-        return [self._serialize_session(s) for s in sessions]
+        
+        session_dicts = [self._serialize_session(s) for s in sessions]
+        
+        if not session_dicts:
+            return session_dicts
+            
+        # Fetch documents tied to these sessions
+        from app.infrastructure.db.models import Document
+        session_ids = [s.id for s in sessions]
+        doc_stmt = select(Document).where(
+            Document.retrieval_scope == "SESSION",
+            Document.scope_id.in_(session_ids)
+        )
+        doc_result = await self.db.execute(doc_stmt)
+        documents = doc_result.scalars().all()
+        
+        # Group documents by scope_id
+        from collections import defaultdict
+        docs_by_session = defaultdict(list)
+        for doc in documents:
+            docs_by_session[str(doc.scope_id)].append({
+                "id": str(doc.id),
+                "filename": doc.filename,
+                "file_type": doc.file_type,
+                "status": doc.status
+            })
+            
+        for s_dict in session_dicts:
+            s_dict["documents"] = docs_by_session.get(s_dict["id"], [])
+            
+        return session_dicts
 
     async def delete_chat_session(self, session_id: str) -> bool:
-        """Delete a session and all its messages."""
+        """Delete a session, its messages, and any scoped documents."""
         sid = require_uuid(session_id, field_name="session_id")
+        
+        # Delete scoped documents associated with this session
+        from app.infrastructure.db.models import Document
+        await self.db.execute(
+            delete(Document).where(
+                Document.retrieval_scope == "SESSION", 
+                Document.scope_id == sid
+            )
+        )
+        
         # Delete messages first
         await self.db.execute(delete(Message).where(Message.session_id == sid))
+        
         # Delete session
         result = await self.db.execute(delete(ChatSession).where(ChatSession.id == sid))
         await self.db.flush()
         return result.rowcount > 0
+
+    async def delete_all_user_sessions(self, user_id: str) -> None:
+        """Delete all chat sessions for a given user."""
+        uid = require_uuid(user_id, field_name="user_id")
+        
+        # Because we're using SQLAlchemy, we first need to find all sessions for the user
+        stmt = select(ChatSession.id).where(ChatSession.user_id == uid)
+        result = await self.db.execute(stmt)
+        session_ids = result.scalars().all()
+        
+        if not session_ids:
+            return
+            
+        # Delete messages for all those sessions
+        await self.db.execute(delete(Message).where(Message.session_id.in_(session_ids)))
+        
+        # Delete the sessions themselves
+        await self.db.execute(delete(ChatSession).where(ChatSession.id.in_(session_ids)))
+        
+        # We also need to delete scoped documents because they are linked to the session
+        from app.infrastructure.db.models import Document
+        await self.db.execute(delete(Document).where(Document.retrieval_scope == "SESSION", Document.scope_id.in_(session_ids)))
+        
+        await self.db.flush()
 
     async def save_message(
         self,

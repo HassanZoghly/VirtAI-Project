@@ -1,10 +1,10 @@
 import { useDocumentList } from '../useDocumentList';
-import { FiFileText, FiTrash2, FiClock, FiCheckCircle, FiXCircle, FiLoader } from 'react-icons/fi';
-import { UploadTab } from '../../setup/components/UploadTab';
+import { FiFileText, FiTrash2, FiClock, FiCheckCircle, FiXCircle, FiLoader, FiX } from 'react-icons/fi';
+import { UploadTab } from './UploadTab';
 import './DocumentsPanel.css';
 
-export function DocumentsPanel() {
-  const { documents, isLoading, error, deleteDocument, refresh } = useDocumentList();
+export function DocumentsPanel({ sessionId = null, onClose }) {
+  const { documents, isLoading, error, deleteDocument, refresh } = useDocumentList(sessionId);
 
   const getStatusIcon = (status, stage) => {
     if (stage === 'COMPLETE') {
@@ -44,8 +44,18 @@ export function DocumentsPanel() {
 
   return (
     <div className="documents-panel-container">
-      <div className="documents-panel">
-        <UploadTab onUploaded={refresh} />
+      <div className="documents-panel" style={{ position: 'relative' }}>
+        {onClose && (
+          <button
+            type="button"
+            aria-label="Close documents drawer"
+            className="documents-drawer-close"
+            onClick={onClose}
+          >
+            &times;
+          </button>
+        )}
+        <UploadTab onUploaded={refresh} sessionId={sessionId} />
       </div>
 
       <div className="documents-panel list-panel">

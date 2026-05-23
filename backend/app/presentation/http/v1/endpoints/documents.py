@@ -3,7 +3,7 @@ import re
 from typing import Any
 import filetype
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from loguru import logger
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -75,6 +75,7 @@ async def upload_document(
     storage: StorageDep,
     response: Response,
     file: UploadFile = File(...),
+    session_id: str | None = Form(None),
     user: UserEntity = Depends(_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -126,7 +127,7 @@ async def upload_document(
     file_sha256 = hashlib.sha256(file_bytes).hexdigest()
 
     # 5. Check dedup
-    existing = await repo.find_by_sha256(str(user.id), file_sha256)
+    existing = await repo.find_by_sha256(str(user.id), file_sha256, session_id)
     if existing:
         from datetime import datetime, timezone, timedelta
         is_stale = False
@@ -147,6 +148,24 @@ async def upload_document(
                 await storage.delete(old_storage_key)
             existing = None  # Proceed to create new record below
         elif existing.current_stage == IngestionStage.COMPLETE:
+            if session_id and str(existing.scope_id) != session_id:
+                from sqlalchemy import update
+                from app.infrastructure.db.models import Document, DocumentChunk
+                
+                parsed_session_id = parse_uuid(session_id)
+                if parsed_session_id:
+                    await db.execute(
+                        update(Document)
+                        .where(Document.id == existing.id)
+                        .values(scope_id=parsed_session_id, retrieval_scope="SESSION")
+                    )
+                    await db.execute(
+                        update(DocumentChunk)
+                        .where(DocumentChunk.document_id == existing.id)
+                        .values(scope_id=parsed_session_id, retrieval_scope="SESSION")
+                    )
+                    await db.commit()
+
             response.status_code = 200
             return {
                 "id": str(existing.id),
@@ -163,7 +182,7 @@ async def upload_document(
             }
 
     # 6. Create DB record (QUEUED) FIRST
-    doc = await repo.create(user_id=str(user.id), filename=safe_filename, file_type=ext)
+    doc = await repo.create(user_id=str(user.id), filename=safe_filename, file_type=ext, session_id=session_id)
 
     # Update with SHA256 and size — guarded against concurrent duplicate uploads
     from sqlalchemy import update
@@ -185,7 +204,7 @@ async def upload_document(
         await db.rollback()
         # A concurrent upload of the same file won the race
         logger.info(f"Concurrent duplicate detected for SHA256 {file_sha256[:12]}…")
-        winner = await repo.find_by_sha256(str(user.id), file_sha256)
+        winner = await repo.find_by_sha256(str(user.id), file_sha256, session_id)
         # Clean up the orphaned row we just created
         await repo.delete_with_cascade(str(doc.id), str(user.id))
         await db.commit()
@@ -196,7 +215,12 @@ async def upload_document(
                 "status": winner.current_stage,
                 "message": "Document already exists (concurrent upload resolved)",
             }
-        raise HTTPException(status_code=500, detail="Unexpected constraint conflict") from None
+        
+        # If no winner is found (e.g., due to different constraint triggering), gracefully reject
+        raise HTTPException(
+            status_code=409, 
+            detail="Conflict: A document with this SHA256 already exists in the requested scope."
+        )
 
     # 7. Write to storage
     storage_key = f"{user.id}/{doc.id}.{ext}"
@@ -329,12 +353,13 @@ async def cancel_document(
 
 @router.get("/", response_model=list[dict[str, Any]])
 async def list_documents(
+    session_id: str | None = None,
     user: UserEntity = Depends(_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     """List all documents for the current user."""
     repo = DocumentRepository(db)
-    docs = await repo.list_by_user(str(user.id))
+    docs = await repo.list_by_user(str(user.id), session_id=session_id)
     return [
         {
             "id": str(d.id),

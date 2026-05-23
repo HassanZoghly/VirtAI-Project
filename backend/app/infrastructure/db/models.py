@@ -136,6 +136,7 @@ class Document(Base):
         Index("ix_documents_sha256", "document_sha256"),
         Index("ix_documents_scope", "retrieval_scope", "scope_id"),
         Index("ix_documents_active_stage", "current_stage"),
+        UniqueConstraint("user_id", "scope_id", "document_sha256", name="uq_user_scope_document_sha256"),
     )
 
 

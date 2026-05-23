@@ -11,6 +11,7 @@ import {
   PiUserGearFill,
 } from 'react-icons/pi';
 import { useNavigate } from 'react-router-dom';
+import SessionHoverPreview from './SessionHoverPreview';
 
 /** Format a timestamp to a short relative / absolute label. */
 function formatTime(ts) {
@@ -57,15 +58,19 @@ const SessionList = memo(function SessionList({
   onNewSession,
   onDeleteSession,
   onRenameSession,
+  onClearAllSessions,
   onCloseDrawer,
 }) {
   const navigate = useNavigate();
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState('');
+  const [hoveredSession, setHoveredSession] = useState(null);
+  const [hoverElement, setHoverElement] = useState(null);
   const { logout } = useLogout();
 
   // Context menu state: { sessionId, x, y } or null
   const [contextMenu, setContextMenu] = useState(null);
+  const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false);
   const contextMenuRef = useRef(null);
 
   // Close context menu on any click outside of it
@@ -199,9 +204,22 @@ const SessionList = memo(function SessionList({
           <h2 className="sidebar-section-title">
             <PiChatsFill /> Chats
           </h2>
-          <button className="sidebar-new-chat-btn" onClick={onNewSession} aria-label="New chat">
-            <PiPlusFill size={14} /> New Chat
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <button className="sidebar-new-chat-btn" onClick={onNewSession} aria-label="New chat">
+              <PiPlusFill size={14} /> New Chat
+            </button>
+            {sessions.length > 0 && (
+              <button
+                id="clear-all-chats-btn"
+                className="sidebar-clear-all-btn"
+                onClick={() => setIsConfirmClearOpen(true)}
+                aria-label="Delete all chats"
+                title="Delete all chats"
+              >
+                <PiTrashSimpleFill size={14} />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="sidebar-sessions-scroll">
@@ -220,6 +238,14 @@ const SessionList = memo(function SessionList({
                   key={session.id}
                   className="sidebar-session-item-wrapper"
                   onContextMenu={(e) => handleContextMenu(e, session.id)}
+                  onMouseEnter={(e) => {
+                    setHoveredSession(session);
+                    setHoverElement(e.currentTarget);
+                  }}
+                  onMouseLeave={() => {
+                    setHoveredSession(null);
+                    setHoverElement(null);
+                  }}
                 >
                   <button
                     className={`sidebar-session-item ${session.id === currentSessionId ? 'active' : ''}`}
@@ -304,6 +330,39 @@ const SessionList = memo(function SessionList({
           </div>,
           document.body
         )}
+        
+      {isConfirmClearOpen &&
+        createPortal(
+          <div className="clear-confirm-overlay">
+            <div className="clear-confirm-modal">
+              <h3 className="clear-confirm-title">Clear all chats?</h3>
+              <p className="clear-confirm-desc">This action cannot be undone.</p>
+              <div className="clear-confirm-actions">
+                <button className="clear-confirm-cancel" onClick={() => setIsConfirmClearOpen(false)}>
+                  Cancel
+                </button>
+                <button 
+                  className="clear-confirm-danger" 
+                  onClick={() => {
+                    setIsConfirmClearOpen(false);
+                    onClearAllSessions?.();
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+        
+      {hoveredSession && hoverElement && (
+        <SessionHoverPreview 
+          session={hoveredSession} 
+          triggerElement={hoverElement} 
+          isHovered={!!hoveredSession} 
+        />
+      )}
     </div>
   );
 });

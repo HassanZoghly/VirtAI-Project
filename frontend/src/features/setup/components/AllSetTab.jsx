@@ -16,8 +16,6 @@ export default function AllSetTab({
   avatar,
   voice,
   movementEnabled,
-  documentsSkipped,
-  documentsUploaded,
 }) {
   const navigate = useNavigate();
   const setUser = useAuthStore((s) => s.setUser);
@@ -40,8 +38,6 @@ export default function AllSetTab({
         avatarId: avatar.id,
         voiceId: voice.id,
         movementEnabled: !!movementEnabled,
-        documentsSkipped: !!documentsSkipped,
-        documentsUploaded: !!documentsUploaded,
       });
 
       markStartNewConversation();

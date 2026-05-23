@@ -52,7 +52,7 @@ export default function useSessionManager(urlSessionId, navigate) {
         const fetchedSessions = await sessionService.fetchSessions();
         const initialSessions = normalizeAndSortSessions(fetchedSessions);
 
-        if (shouldForceNew || initialSessions.length === 0) {
+        if (shouldForceNew || !urlSessionId || initialSessions.length === 0) {
           try {
             const newSession = await sessionService.createSession();
             const createdSession = normalizeSession({
@@ -281,6 +281,36 @@ export default function useSessionManager(urlSessionId, navigate) {
     [setActiveSessionId, navigate]
   );
 
+  const clearAllSessions = useCallback(async () => {
+    try {
+      await sessionService.deleteAllSessions();
+      // Wipe local state immediately for instant UI feedback
+      setSessions([]);
+      setActiveSessionId(null);
+      if (navigate) {
+        navigate('/classroom', { replace: true });
+      }
+      // Auto-create a fresh blank session
+      try {
+        const newSession = await sessionService.createSession();
+        const sessionWithDefaults = normalizeSession({
+          ...newSession,
+          messages: [],
+          messages_loaded: true,
+        });
+        setSessions([sessionWithDefaults]);
+        setActiveSessionId(sessionWithDefaults.id);
+        if (navigate) {
+          navigate(`/classroom/${sessionWithDefaults.id}`, { replace: true });
+        }
+      } catch (createError) {
+        console.error('Failed to auto-create session after clear:', createError);
+      }
+    } catch (error) {
+      console.error('Failed to clear all sessions:', error);
+    }
+  }, [setActiveSessionId, navigate]);
+
   const renameSession = useCallback((sessionId, newTitle) => {
     setSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, title: newTitle } : s)));
   }, []);
@@ -344,6 +374,7 @@ export default function useSessionManager(urlSessionId, navigate) {
     createNewSession,
     switchSession,
     deleteSession,
+    clearAllSessions,
     renameSession,
     addUserMessage,
     addAssistantMessage,

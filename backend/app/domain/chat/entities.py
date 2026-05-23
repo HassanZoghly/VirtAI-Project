@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
+
+_logger = logging.getLogger(__name__)
 
 
 # ── Message Roles ─────────────────────────────────────────────────────────────
@@ -63,7 +66,7 @@ class ConversationHistory:
     """
 
     system_prompt: str
-    max_messages: int = 20  # max user+assistant pairs to keep
+    max_messages: int = 10  # max user+assistant pairs to keep (sliding window)
     max_tokens: int = 4096  # safe token limit threshold
     _messages: list[ChatMessage] = field(default_factory=list)
     sanitizer: Callable[[str], str] | None = None
@@ -88,6 +91,7 @@ class ConversationHistory:
 
     def add_assistant_message(self, content: str) -> None:
         self._messages.append(ChatMessage(role=MessageRole.ASSISTANT, content=content))
+        self._trim()
 
     def get_messages(self) -> list[dict[str, str]]:
         """Returns messages formatted for the API"""
@@ -106,7 +110,12 @@ class ConversationHistory:
         """
         max_raw = self.max_messages * 2  # pairs → individual messages
         if len(self._messages) > max_raw:
+            trimmed = len(self._messages) - max_raw
             self._messages = self._messages[-max_raw:]
+            _logger.warning(
+                "History trimmed by pair count | removed=%d messages | remaining=%d | max_pairs=%d",
+                trimmed, len(self._messages), self.max_messages,
+            )
 
         while len(self._messages) >= 2:
             total_chars = len(self.system_prompt) + sum(len(m.content) for m in self._messages)
@@ -116,6 +125,10 @@ class ConversationHistory:
                 break
 
             self._messages = self._messages[2:]
+            _logger.warning(
+                "History trimmed by token budget | est_tokens=%d | max=%d | remaining=%d",
+                estimated_tokens, self.max_tokens, len(self._messages),
+            )
 
     @property
     def message_count(self) -> int:

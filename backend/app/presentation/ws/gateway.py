@@ -175,6 +175,14 @@ class WebSocketHandler:
             self._pipeline_task.cancel()
         if self._voice_mode_handler:
             self._voice_mode_handler.audio_pipeline.clear_buffer()
+        
+        # Explicitly attempt to send a stop/abort frame to halt frontend audio
+        try:
+            from starlette.websockets import WebSocketState
+            if self.ws.client_state == WebSocketState.CONNECTED:
+                await self.ws.send_text('{"type":"chat.abort","data":{}}')
+        except Exception as e:
+            logger.debug(f"[WS] Could not send abort frame during cleanup: {e}")
 
     def _normalize_voice(self, voice_id: str) -> str:
         if not voice_id:
@@ -1138,14 +1146,18 @@ class WebSocketHandler:
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     async def _cancel_pipeline(self) -> None:
-        """Cancel any running pipeline task."""
+        """Cancel any running pipeline task and wait for it to stop."""
         if self._pipeline_task and not self._pipeline_task.done():
             if self.pipeline is not None:
                 self.pipeline.abort()
             self._pipeline_task.cancel()
             try:
-                await self._pipeline_task
-            except asyncio.CancelledError:
+                await asyncio.wait_for(
+                    asyncio.shield(self._pipeline_task), timeout=2.0
+                )
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
+            except Exception:
                 pass
             logger.debug("Pipeline task cancelled")
         self._pipeline_task = None

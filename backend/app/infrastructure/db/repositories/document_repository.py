@@ -22,9 +22,13 @@ class DocumentRepository(DocumentRepositoryPort):
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create(self, user_id: str, filename: str, file_type: str) -> Document:
+    async def create(self, user_id: str, filename: str, file_type: str, session_id: str | None = None) -> Document:
         # Note: the full implementation with SHA-256 and size will require a specific payload,
         # but to satisfy the port we create a QUEUED document.
+        
+        scope = "SESSION" if session_id else "GLOBAL"
+        s_id = require_uuid(session_id, field_name="session_id") if session_id else None
+
         doc = Document(
             user_id=require_uuid(user_id, field_name="user_id"),
             filename=filename,
@@ -32,6 +36,8 @@ class DocumentRepository(DocumentRepositoryPort):
             status="QUEUED",
             current_stage="QUEUED",
             upload_date=_now(),
+            retrieval_scope=scope,
+            scope_id=s_id,
         )
         self.db.add(doc)
         await self.db.flush()
@@ -46,18 +52,21 @@ class DocumentRepository(DocumentRepositoryPort):
         return result.scalar_one_or_none()
 
     async def list_by_user(
-        self, user_id: str, status: str | None = None, limit: int = 100
+        self, user_id: str, status: str | None = None, limit: int = 100, session_id: str | None = None
     ) -> list[Document]:
-        stmt = (
-            select(Document)
-            .where(Document.user_id == require_uuid(user_id, field_name="user_id"))
-            .order_by(Document.upload_date.desc())
-            .limit(limit)
-        )
+        uid = require_uuid(user_id, field_name="user_id")
+        stmt = select(Document).where(Document.user_id == uid)
         if status:
             stmt = stmt.where(Document.status == status)
+        if session_id:
+            s_id = require_uuid(session_id, field_name="session_id")
+            stmt = stmt.where(Document.retrieval_scope == "SESSION", Document.scope_id == s_id)
+        else:
+            stmt = stmt.where(Document.retrieval_scope == "GLOBAL")
+            
+        stmt = stmt.order_by(Document.upload_date.desc()).limit(limit)
         result = await self.db.execute(stmt)
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     async def update_status(
         self, document_id: str, status: str, chunk_count: int = 0
@@ -104,11 +113,17 @@ class DocumentRepository(DocumentRepositoryPort):
         )
         await self.db.execute(stmt)
 
-    async def find_by_sha256(self, user_id: str, sha256: str) -> Document | None:
+    async def find_by_sha256(self, user_id: str, sha256: str, session_id: str | None = None) -> Document | None:
         stmt = select(Document).where(
             Document.user_id == require_uuid(user_id, field_name="user_id"),
             Document.document_sha256 == sha256,
         )
+        if session_id:
+            s_id = require_uuid(session_id, field_name="session_id")
+            stmt = stmt.where(Document.retrieval_scope == "SESSION", Document.scope_id == s_id)
+        else:
+            stmt = stmt.where(Document.retrieval_scope == "GLOBAL")
+            
         result = await self.db.execute(stmt)
         return result.scalars().first()
 

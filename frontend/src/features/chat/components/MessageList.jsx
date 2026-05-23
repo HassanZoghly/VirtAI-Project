@@ -58,7 +58,7 @@ export default function MessageList({
               role="status"
               aria-label="AI is typing"
             >
-              <div className="chat-message ai-message">
+              <div className="chat-message ai-message typing-state">
                 <div className="message-avatar ai-avatar">
                   <Bot size={22} aria-hidden="true" />
                 </div>

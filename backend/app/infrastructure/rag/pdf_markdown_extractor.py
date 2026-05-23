@@ -23,6 +23,9 @@ from loguru import logger
 
 try:
     import fitz  # PyMuPDF
+
+    # Suppress non-fatal MuPDF structure warnings (e.g. "No common ancestor in structure tree")
+    fitz.TOOLS.mupdf_display_errors(False)
 except ImportError:
     fitz = None
     logger.warning("PyMuPDF (fitz) not installed — PDF markdown extraction unavailable")

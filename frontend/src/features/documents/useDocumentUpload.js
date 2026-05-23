@@ -60,7 +60,7 @@ export function useDocumentUpload(options = {}) {
   }, [uploadState.documentId, reset]);
 
   const upload = useCallback(
-    async (file) => {
+    async (file, sessionId = null) => {
       reset();
       setUploadState((prev) => ({
         ...prev,
@@ -71,7 +71,7 @@ export function useDocumentUpload(options = {}) {
 
       try {
         // 1. Initial upload (returns 202)
-        const response = await documentApi.upload(file);
+        const response = await documentApi.upload(file, sessionId);
         const docId = response.id;
 
         setUploadState((prev) => ({

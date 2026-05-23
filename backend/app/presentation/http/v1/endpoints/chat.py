@@ -70,6 +70,22 @@ async def get_messages(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@router.delete("/all", status_code=204)
+async def delete_all_sessions(
+    user: UserEntity = Depends(_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Physically delete all sessions and messages for the user."""
+    try:
+        repo = ChatRepository(db)
+        await repo.delete_all_user_sessions(str(user.id))
+        await db.commit()
+    except Exception as e:
+        logger.error(f"Failed to delete all sessions for {user.id}: {e}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @router.delete("/{session_id}", status_code=204)
 async def delete_session(
     session_id: str,

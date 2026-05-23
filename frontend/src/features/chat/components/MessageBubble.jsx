@@ -26,7 +26,7 @@ const MessageBubble = memo(function MessageBubble({ msg }) {
             msg.content
           ) : (
             <>
-              <div className="markdown-body prose prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:mb-2 prose-headings:mt-4 prose-hr:my-4">
+              <div className="markdown-body">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {msg.content}
                 </ReactMarkdown>

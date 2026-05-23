@@ -84,10 +84,10 @@
   }
 }
 
-/* ── Typography Hierarchy ── */
-h1,
-h2,
-h3,
+/* ── Typography Hierarchy (Class-Based) ── */
+.display-h1,
+.display-h2,
+.display-h3,
 .heading-display {
   font-family: var(--font-display);
   font-weight: 800;
@@ -95,21 +95,21 @@ h3,
   letter-spacing: -0.02em;
 }
 
-h1 {
+.display-h1 {
   font-size: var(--h1);
   font-weight: 900;
   line-height: 1.02;
   letter-spacing: -0.03em;
 }
 
-h2 {
+.display-h2 {
   font-size: var(--h2);
   font-weight: 800;
   line-height: 1.08;
   letter-spacing: -0.02em;
 }
 
-h3 {
+.display-h3 {
   font-size: var(--h3);
   font-weight: 800;
   line-height: 1.12;
@@ -648,3 +648,136 @@ input[type="password"]::-webkit-contacts-auto-fill-button {
   }
 }
 
+
+
+/* ── Markdown Chat Styling (Isolated) ── */
+.markdown-body {
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+/* Normalize headings to Body font and sane weights */
+.markdown-body h1 {
+  color: red !important;
+  font-size: 60px !important;
+  font-family: monospace !important;
+  font-weight: 100 !important;
+  border: 10px solid red !important;
+}
+.markdown-body h2 {
+  color: blue !important;
+  font-size: 50px !important;
+  font-family: monospace !important;
+  font-weight: 100 !important;
+  border: 10px solid blue !important;
+}
+.markdown-body h3 {
+  color: green !important;
+  font-size: 40px !important;
+  font-family: monospace !important;
+  font-weight: 100 !important;
+  border: 10px solid green !important;
+}
+.markdown-body h4 {
+  color: orange !important;
+  font-size: 30px !important;
+  font-family: monospace !important;
+  font-weight: 100 !important;
+  border: 10px solid orange !important;
+}
+
+/* Compact Spacing */
+.markdown-body p {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding-left: 1.5rem;
+}
+
+.markdown-body ul { list-style-type: disc; }
+.markdown-body ol { list-style-type: decimal; }
+
+.markdown-body li {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.markdown-body ul ul,
+.markdown-body ol ol,
+.markdown-body ul ol,
+.markdown-body ol ul {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.markdown-body li > p {
+  margin: 0;
+  display: inline;
+}
+
+/* Inline formatting */
+.markdown-body strong { font-weight: 600; color: var(--text-primary); }
+.markdown-body em { font-style: italic; }
+
+/* Code Blocks */
+.markdown-body pre {
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
+  overflow-x: auto;
+}
+
+.markdown-body code {
+  font-family: monospace;
+  background-color: var(--card-bg);
+  padding: 0.15rem 0.3rem;
+  border-radius: 4px;
+  font-size: 0.85em;
+  color: var(--color-gold, #b4ab8b);
+  border: 1px solid var(--border-color);
+}
+
+.markdown-body pre code {
+  background-color: transparent;
+  padding: 0;
+  color: var(--text-primary);
+  border: none;
+}
+
+/* Links & subtle HR */
+.markdown-body a {
+  color: var(--color-gold, #b4ab8b);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-body a:hover { color: var(--text-primary); }
+
+.markdown-body hr { 
+  border: none; 
+  border-top: 1px solid var(--border-color); 
+  margin: 1.5rem 0; 
+}
+
+.markdown-body blockquote {
+  border-left: 3px solid var(--color-gold, #b4ab8b);
+  padding-left: 1rem;
+  margin: 1rem 0;
+  color: var(--text-muted);
+  font-style: italic;
+  background-color: var(--card-bg);
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}

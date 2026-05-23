@@ -31,7 +31,7 @@ class ErrorBoundary extends Component {
     if (this.state.hasError) {
       return (
         <div className="error-fallback" role="alert" aria-live="assertive">
-          <h2>Something went wrong</h2>
+          <h2 className="display-h2">Something went wrong</h2>
           <p>Please refresh the page or try again later.</p>
           <button onClick={() => window.location.reload()}>Refresh</button>
         </div>

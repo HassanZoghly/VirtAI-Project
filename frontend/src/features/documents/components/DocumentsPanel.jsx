@@ -60,7 +60,7 @@ export function DocumentsPanel({ sessionId = null, onClose }) {
 
       <div className="documents-panel list-panel">
         <div className="documents-panel-header">
-          <h3>Knowledge Base</h3>
+          <h3 className="display-h3">Knowledge Base</h3>
           <span className="badge">{documents.length} Files</span>
         </div>
 

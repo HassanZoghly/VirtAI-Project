@@ -1636,3 +1636,44 @@
   border-color: rgba(220, 38, 38, 0.4);
   color: #ef4444;
 }
+
+/* =============== Markdown Typography Overrides =============== */
+/* Fix excessive margins between list items and paragraphs inside li */
+.markdown-body li {
+  margin-top: 0.35rem !important;
+  margin-bottom: 0.35rem !important;
+}
+
+.markdown-body li > p {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+/* Ensure proper indentation for lists and nested lists */
+.markdown-body ul, 
+.markdown-body ol {
+  padding-left: 1.5rem !important;
+}
+
+.markdown-body ul {
+  list-style-type: disc !important;
+}
+
+.markdown-body ol {
+  list-style-type: decimal !important;
+}
+
+.markdown-body ul ul,
+.markdown-body ul ol,
+.markdown-body ol ul,
+.markdown-body ol ol {
+  margin-top: 0.25rem !important;
+  margin-bottom: 0 !important;
+  padding-left: 1.5rem !important;
+}
+
+/* Consistent typography and line-height */
+.markdown-body p,
+.markdown-body li {
+  line-height: 1.6 !important;
+}

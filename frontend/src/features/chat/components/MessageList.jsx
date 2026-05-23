@@ -93,7 +93,7 @@ export default function MessageList({
                   <Bot size={22} aria-hidden="true" />
                 </div>
                 <div className="message-bubble flex flex-col gap-2 max-w-none w-full">
-                  <div className="markdown-body prose prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0 prose-headings:mb-2 prose-headings:mt-4 prose-hr:my-4">
+                  <div className="markdown-body">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {currentMessage}
                     </ReactMarkdown>

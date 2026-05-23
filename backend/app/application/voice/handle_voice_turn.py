@@ -61,7 +61,11 @@ class ConversationPipeline:
         self.llm_stage = LLMStage(llm=self._llm, retrieval=self._retrieval)
         self.sentence_stage = SentenceSegmentationStage()
         self.tts_stage = TTSStage(tts=self._tts)
-        self.animation_stage = AnimationStage(animation_service=AnimationIntelligenceService())
+        from app.infrastructure.tts.viseme_generator import VisemeGenerator
+        self.animation_stage = AnimationStage(
+            animation_service=AnimationIntelligenceService(),
+            viseme_generator=VisemeGenerator()
+        )
 
         # State tracking
         self._current_context: TurnContext | None = None

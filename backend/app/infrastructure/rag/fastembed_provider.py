@@ -10,11 +10,19 @@ from app.shared.config import get_settings
 
 
 class FastEmbedProvider(EmbeddingProvider):
+    _model_instance = None
+    _model_name_cache = None
+
     def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5", cache_dir: str | None = None):
         self.model_name = model_name
         settings = get_settings()
         self.cache_dir = cache_dir or settings.FASTEMBED_CACHE_DIR
         Path(self.cache_dir).mkdir(parents=True, exist_ok=True)
+
+        if FastEmbedProvider._model_instance is not None and FastEmbedProvider._model_name_cache == self.model_name:
+            self.model = FastEmbedProvider._model_instance
+            logger.debug("FastEmbed model loaded from class singleton cache.")
+            return
 
         # FastEmbed downloads and loads the model into memory synchronously on init.
         # Docker prewarms this cache; runtime startup should reuse it.
@@ -33,6 +41,8 @@ class FastEmbedProvider(EmbeddingProvider):
             kwargs["lazy_load"] = settings.FASTEMBED_LAZY_LOAD
 
         self.model = TextEmbedding(**kwargs)
+        FastEmbedProvider._model_instance = self.model
+        FastEmbedProvider._model_name_cache = self.model_name
         logger.info("FastEmbed model loaded successfully.")
 
     def _embed_sync(self, texts: list[str]) -> list[list[float]]:

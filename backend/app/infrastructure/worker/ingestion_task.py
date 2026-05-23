@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.rag.stage_machine import IngestionStage
 from app.infrastructure.db.database import AsyncSessionLocal
 from app.infrastructure.db.repositories.document_repository import DocumentRepository
+from app.infrastructure.vector.pgvector_store import PGVectorStore
 from app.infrastructure.worker.retry_classifier import classify
 from app.shared.errors import IngestionCancelledException
 
@@ -74,7 +75,15 @@ async def run_ingestion_task(
             logger.warning({**log_ctx, "event": "cleaning_up_failed_job"})
             try:
                 # Instantiate use case just to call cleanup_failed_job
-                use_case = IngestDocumentUseCase(storage=ctx["storage"], parser=None, chunker=None, embedder=None)
+                use_case = IngestDocumentUseCase(
+                    storage=ctx["storage"], 
+                    parser=None, 
+                    chunker=None, 
+                    embedder=None,
+                    db_session_factory=get_short_session,
+                    document_repo_factory=DocumentRepository,
+                    vector_store_factory=PGVectorStore,
+                )
                 await use_case.cleanup_failed_job(doc_id, storage_key)
             except Exception as cleanup_err:
                 logger.error({**log_ctx, "event": "cleanup_failed", "error": str(cleanup_err)})
@@ -165,6 +174,9 @@ async def _run_ingestion(
         parser=PyMuPDFParser(),
         chunker=chunker,
         embedder=embedder,
+        db_session_factory=get_short_session,
+        document_repo_factory=DocumentRepository,
+        vector_store_factory=PGVectorStore,
     )
 
     # Execute

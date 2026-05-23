@@ -105,16 +105,17 @@ async def get_chat_use_case(request: Request) -> ChatUseCase:
         model=settings.LLM_MODEL,
         max_tokens=settings.LLM_MAX_TOKENS,
         temperature=settings.LLM_TEMPERATURE,
-        api_key=settings.GROQ_API_KEY or "dummy-key-for-dev",
+        api_key=settings.GROQ_API_KEY,
     )
     from app.infrastructure.vector.pgvector_store import SessionManagedPGVectorStore
-    from app.infrastructure.rag.reranker import DummyCrossEncoderReranker
+    from app.infrastructure.rag.reranker import DummyCrossEncoderReranker, CrossEncoderReranker
+    from app.shared.config import get_settings
     from app.application.rag.token_budget import TokenBudgetManager
     
     retrieval = RetrievalUseCase(
         embedder=request.app.state.embedder,
         vector_store=SessionManagedPGVectorStore(),
-        reranker=DummyCrossEncoderReranker(),
+        reranker=DummyCrossEncoderReranker() if get_settings().USE_DUMMY_RERANKER else CrossEncoderReranker(),
         budget_manager=TokenBudgetManager()
     )
     return ChatUseCase(llm_provider=llm, retrieval_use_case=retrieval)

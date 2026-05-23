@@ -1,5 +1,6 @@
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, AsyncContextManager
+from typing import Any
 
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,16 +13,9 @@ from app.domain.rag.ports import (
     EmbeddingProvider,
 )
 from app.domain.storage.ports import StorageProvider
-from app.infrastructure.db.database import AsyncSessionLocal
-from app.infrastructure.db.repositories.document_repository import DocumentRepository
-from app.infrastructure.vector.pgvector_store import PGVectorStore
 from app.shared.config import get_settings
 from app.shared.errors import ChunkLimitExceeded, EmptyDocumentError, IngestionCancelledException
 from app.shared.ids import require_uuid
-
-
-async def get_short_session() -> AsyncSession:
-    return AsyncSessionLocal()
 
 
 class IngestDocumentUseCase:
@@ -31,11 +25,17 @@ class IngestDocumentUseCase:
         parser: DocumentParser,
         chunker: ChunkingStrategy,
         embedder: EmbeddingProvider,
+        db_session_factory: Callable[[], AsyncContextManager[AsyncSession]],
+        document_repo_factory: Callable[[AsyncSession], Any],
+        vector_store_factory: Callable[[AsyncSession], Any],
     ):
         self.storage = storage
         self.parser = parser
         self.chunker = chunker
         self.embedder = embedder
+        self.db_session_factory = db_session_factory
+        self.document_repo_factory = document_repo_factory
+        self.vector_store_factory = vector_store_factory
         self.settings = get_settings()
 
     async def execute(
@@ -54,8 +54,8 @@ class IngestDocumentUseCase:
         doc_id = str(doc_uuid)
 
         # 0. Initial Cleanup (in case of retries)
-        async with await get_short_session() as db:
-            repo = DocumentRepository(db)
+        async with self.db_session_factory() as db:
+            repo = self.document_repo_factory(db)
             await repo.delete_inactive_chunks(doc_id)
             doc = await repo.get(doc_id)
             retrieval_scope = doc.retrieval_scope
@@ -77,8 +77,8 @@ class IngestDocumentUseCase:
 
         content_hash = compute_content_hash(normalized)
 
-        async with await get_short_session() as db:
-            repo = DocumentRepository(db)
+        async with self.db_session_factory() as db:
+            repo = self.document_repo_factory(db)
             # We don't have an explicit method for hash update, so we update it directly
             from sqlalchemy import update
 
@@ -128,8 +128,8 @@ class IngestDocumentUseCase:
         t_embed = time.monotonic()
         await progress_callback("EMBEDDING", 50, 0, total_chunks)
 
-        async with await get_short_session() as db:
-            repo = DocumentRepository(db)
+        async with self.db_session_factory() as db:
+            repo = self.document_repo_factory(db)
             next_version = await repo.get_next_chunk_version(doc_id)
 
         processed = 0
@@ -162,8 +162,8 @@ class IngestDocumentUseCase:
                 )
                 chunks_to_store.append(chunk)
 
-            async with await get_short_session() as db:
-                vector_store = PGVectorStore(db)
+            async with self.db_session_factory() as db:
+                vector_store = self.vector_store_factory(db)
                 await vector_store.store_chunks_batch(chunks_to_store, embeddings)
                 await db.commit()
 
@@ -189,8 +189,8 @@ class IngestDocumentUseCase:
             await self.cleanup_failed_job(doc_id, storage_key)
             raise IngestionCancelledException()
 
-        async with await get_short_session() as db:
-            repo = DocumentRepository(db)
+        async with self.db_session_factory() as db:
+            repo = self.document_repo_factory(db)
             rows = await repo.activate_chunk_version(doc_id, next_version, total_chunks)
             if rows == 0:
                 # Activation aborted (e.g. document was CANCELLED mid-activation)
@@ -208,8 +208,8 @@ class IngestDocumentUseCase:
         )
 
         # 6. COMPLETE
-        async with await get_short_session() as db:
-            repo = DocumentRepository(db)
+        async with self.db_session_factory() as db:
+            repo = self.document_repo_factory(db)
             await repo.delete_inactive_chunks(doc_id, active_version=next_version)
             await repo.update_progress(doc_id, "COMPLETE", 100, total_chunks, total_chunks)
             # Update completed_at
@@ -225,7 +225,7 @@ class IngestDocumentUseCase:
 
     async def cleanup_failed_job(self, doc_id: str, storage_key: str) -> None:
         """Cleans up completely on cancellation or permanent failure (zero retrieval pollution)."""
-        async with await get_short_session() as db:
+        async with self.db_session_factory() as db:
             from sqlalchemy import delete
 
             from app.infrastructure.db.models import DocumentChunk

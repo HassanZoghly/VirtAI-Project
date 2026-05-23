@@ -5,9 +5,6 @@ from loguru import logger
 from app.application.voice.pipeline_context import TurnContext
 from app.domain.chat.ports import BaseLLMProvider
 from app.domain.voice.ports import BaseTTSProvider
-from app.infrastructure.cache.chat_context_cache import push_message as push_ctx
-from app.infrastructure.db.database import AsyncSessionLocal
-from app.infrastructure.db.repositories.chat_repository import ChatRepository
 from app.schemas.ws_messages import (
     make_error, make_chat_delta, make_chat_final, make_tts_ready, make_visemes_ready,
     make_animation_timeline_v2, make_pipeline_state
@@ -175,8 +172,9 @@ class TTSStage(BaseStage):
 
 
 class AnimationStage(BaseStage):
-    def __init__(self, animation_service):
+    def __init__(self, animation_service, viseme_generator):
         self._animation_service = animation_service
+        self._viseme_generator = viseme_generator
         self._recent_animation_assets: list[str] = []
         self._profile_usage: dict[str, int] = {}
         self._intent_history: list[str] = []
@@ -185,11 +183,8 @@ class AnimationStage(BaseStage):
         if context.aborted or not context.llm_full_response:
             return
 
-        from app.infrastructure.tts.viseme_generator import VisemeGenerator
-        viseme_generator = VisemeGenerator()
-
         if context.tts_result and getattr(context.tts_result, "audio_ref", None):
-            mouth_cues = await viseme_generator.generate_from_audio(
+            mouth_cues = await self._viseme_generator.generate_from_audio(
                 audio_path=context.tts_result.audio_ref,
                 text=context.llm_full_response,
                 session_id=context.session_id,

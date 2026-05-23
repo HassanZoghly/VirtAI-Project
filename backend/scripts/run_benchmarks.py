@@ -12,7 +12,8 @@ from app.infrastructure.db.database import init_db
 from app.infrastructure.rag.fastembed_provider import FastEmbedProvider
 from app.infrastructure.rag.openai_embedder import OpenAIEmbedder
 from app.infrastructure.vector.pgvector_store import SessionManagedPGVectorStore
-from app.infrastructure.rag.reranker import DummyCrossEncoderReranker
+from app.infrastructure.rag.reranker import DummyCrossEncoderReranker, CrossEncoderReranker
+from app.shared.config import get_settings
 from app.application.rag.token_budget import TokenBudgetManager
 from app.application.rag.retrieval_use_case import RetrievalUseCase
 from app.infrastructure.llm.groq_provider import GroqLLMProvider
@@ -47,7 +48,7 @@ async def run_benchmark():
     retrieval = RetrievalUseCase(
         embedder=embedder,
         vector_store=SessionManagedPGVectorStore(),
-        reranker=DummyCrossEncoderReranker(),
+        reranker=DummyCrossEncoderReranker() if get_settings().USE_DUMMY_RERANKER else CrossEncoderReranker(),
         budget_manager=TokenBudgetManager()
     )
     

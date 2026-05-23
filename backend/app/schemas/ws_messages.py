@@ -445,9 +445,6 @@ from enum import Enum
 class ClientMessageType(str, Enum):
     """Legacy client message types"""
 
-    AUDIO_CHUNK = "audio_chunk"
-    AUDIO_END = "audio_end"
-    TEXT_INPUT = "text_input"
     PING = "ping"
     ABORT = "abort"
     VOICE_MODE_STOP = "voice_mode_stop"

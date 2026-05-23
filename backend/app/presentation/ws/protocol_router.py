@@ -80,11 +80,7 @@ class ProtocolRouter:
             return
 
         match msg_type:
-            case ClientMessageType.AUDIO_CHUNK | ClientMessageType.AUDIO_END | ClientMessageType.TEXT_INPUT:
-                await self.ctx.outbound_sender.safe_send_error(
-                    code="DEPRECATED", message="This message type is deprecated. Use chat.user_message or binary frames.",
-                    session_id=None, session_pending=self.ctx._session_pending, connected=self.ctx._connected
-                )
+
             case ClientMessageType.PING:
                 await self._handle_ping()
             case ClientMessageType.ABORT:

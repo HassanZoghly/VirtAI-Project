@@ -50,18 +50,11 @@ async def lifespan(app: FastAPI):
 
     # ── Check GROQ_API_KEY ──────────────────────────────────────────────────
     if not settings.GROQ_API_KEY:
-        if settings.ENVIRONMENT in {Environment.development, Environment.testing}:
-            logger.warning(
-                "⚠️  GROQ_API_KEY is not set! "
-                "LLM and ASR features will not work. "
-                "WebSocket connections will still be accepted but will return errors for AI features."
-            )
-        else:
-            logger.error(
-                "❌ GROQ_API_KEY is required in production mode! "
-                "Please set GROQ_API_KEY environment variable."
-            )
-            raise ValueError("GROQ_API_KEY is required in production mode")
+        logger.error(
+            "❌ GROQ_API_KEY is missing! "
+            "Please set GROQ_API_KEY environment variable."
+        )
+        raise ValueError("GROQ_API_KEY is required")
 
     # ── RAG Infrastructure ───────────────────────────────────────────────────
     import time
@@ -135,7 +128,7 @@ async def lifespan(app: FastAPI):
         model=settings.LLM_MODEL,
         max_tokens=settings.LLM_MAX_TOKENS,
         temperature=settings.LLM_TEMPERATURE,
-        api_key=settings.GROQ_API_KEY or "dummy-key-for-dev",
+        api_key=settings.GROQ_API_KEY,
     )
     openai_tts = OpenAITTSProvider(voice="aria", speed=0.8)
     
@@ -146,8 +139,7 @@ async def lifespan(app: FastAPI):
         return GroqWhisperASR()
 
     def create_llm_service() -> BaseLLMProvider:
-        if not settings.GROQ_API_KEY:
-            logger.warning("LLM service created without API key - will fail on use")
+        # Note: Handled by fast-fail at startup
         return app.state.model_policy.router.get_llm_chain()
 
     def create_tts_service() -> BaseTTSProvider:
@@ -155,12 +147,13 @@ async def lifespan(app: FastAPI):
 
     async def create_retrieval_service() -> RetrievalUseCase:
         from app.infrastructure.vector.pgvector_store import SessionManagedPGVectorStore
-        from app.infrastructure.rag.reranker import DummyCrossEncoderReranker
+        from app.infrastructure.rag.reranker import DummyCrossEncoderReranker, CrossEncoderReranker
+        from app.shared.config import get_settings
         from app.application.rag.token_budget import TokenBudgetManager
         return RetrievalUseCase(
             embedder=app.state.embedder,
             vector_store=SessionManagedPGVectorStore(),
-            reranker=DummyCrossEncoderReranker(),
+            reranker=DummyCrossEncoderReranker() if get_settings().USE_DUMMY_RERANKER else CrossEncoderReranker(),
             budget_manager=TokenBudgetManager()
         )
 

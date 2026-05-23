@@ -1,3 +1,4 @@
+import asyncio
 from loguru import logger
 
 from app.domain.rag.entities import DocumentChunk
@@ -38,3 +39,27 @@ class DummyCrossEncoderReranker(RerankerPort):
         ranked = [(chunk, 1.0 - (i * 0.01)) for i, chunk in enumerate(chunks)]
         
         return ranked[:top_k]
+
+class CrossEncoderReranker(RerankerPort):
+    def __init__(self, model_name: str = "BAAI/bge-reranker-base"):
+        from sentence_transformers import CrossEncoder
+        self.model_name = model_name
+        logger.info(f"[Reranker] Loading CrossEncoder model={model_name}")
+        self.model = CrossEncoder(model_name)
+        logger.info(f"[Reranker] Successfully loaded {model_name}")
+
+    def _rerank_sync(self, query: str, chunks: list[DocumentChunk], top_k: int) -> list[tuple[DocumentChunk, float]]:
+        if not chunks:
+            return []
+        
+        pairs = [[query, chunk.chunk_text] for chunk in chunks]
+        scores = self.model.predict(pairs)
+        
+        ranked = sorted(zip(chunks, scores), key=lambda x: x[1], reverse=True)
+        return ranked[:top_k]
+
+    async def rerank(
+        self, query: str, chunks: list[DocumentChunk], top_k: int = 5
+    ) -> list[tuple[DocumentChunk, float]]:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._rerank_sync, query, chunks, top_k)

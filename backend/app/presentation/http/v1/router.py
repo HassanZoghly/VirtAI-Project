@@ -173,7 +173,12 @@ async def websocket_endpoint(
     session = None
     try:
         if resume and session_id:
-            session = await session_manager.connect_existing_session(session_id)
+            session = await session_manager.connect_existing_session(
+                session_id=session_id,
+                user_id=user_id,
+                avatar_id=avatar_id,
+                voice_id=voice_id,
+            )
             if session is None:
                 # Graceful fallback: session expired or not found — don't close the
                 # connection. Instead, drop into lazy-session mode so the client

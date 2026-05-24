@@ -43,14 +43,49 @@ class DummyCrossEncoderReranker(RerankerPort):
         return ranked[:top_k]
 
 
-class CrossEncoderReranker(RerankerPort):
-    def __init__(self, model_name: str = "BAAI/bge-reranker-base"):
-        from sentence_transformers import CrossEncoder
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
+
+class CrossEncoderReranker(RerankerPort):
+    _model_instance = None
+    _model_name_cache = None
+    _init_lock = threading.Lock()
+    _executor: ThreadPoolExecutor | None = None
+
+    @classmethod
+    def get_executor(cls) -> ThreadPoolExecutor:
+        if cls._executor is None:
+            with cls._init_lock:
+                if cls._executor is None:
+                    cls._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="crossencoder")
+        return cls._executor
+
+    @classmethod
+    def shutdown_executor(cls) -> None:
+        with cls._init_lock:
+            if cls._executor is not None:
+                cls._executor.shutdown(wait=True)
+                cls._executor = None
+
+    def __init__(self, model_name: str = "BAAI/bge-reranker-base"):
         self.model_name = model_name
-        logger.info(f"[Reranker] Loading CrossEncoder model={model_name}")
-        self.model = CrossEncoder(model_name)
-        logger.info(f"[Reranker] Successfully loaded {model_name}")
+        with self._init_lock:
+            if (
+                CrossEncoderReranker._model_instance is not None
+                and CrossEncoderReranker._model_name_cache == self.model_name
+            ):
+                self.model = CrossEncoderReranker._model_instance
+                logger.debug("CrossEncoder loaded from singleton cache.")
+                return
+
+            from sentence_transformers import CrossEncoder
+
+            logger.info(f"[Reranker] Loading CrossEncoder model={model_name}")
+            self.model = CrossEncoder(model_name)
+            CrossEncoderReranker._model_instance = self.model
+            CrossEncoderReranker._model_name_cache = self.model_name
+            logger.info(f"[Reranker] Successfully loaded {model_name}")
 
     def _rerank_sync(
         self, query: str, chunks: list[DocumentChunk], top_k: int
@@ -68,4 +103,4 @@ class CrossEncoderReranker(RerankerPort):
         self, query: str, chunks: list[DocumentChunk], top_k: int = 5
     ) -> list[tuple[DocumentChunk, float]]:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self._rerank_sync, query, chunks, top_k)
+        return await loop.run_in_executor(self.get_executor(), self._rerank_sync, query, chunks, top_k)

@@ -4,11 +4,10 @@ from __future__ import annotations
 
 # 1. Standard Library
 import secrets
-from datetime import datetime, timezone
 
 # 2. Third-Party
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import HTTPAuthorizationCredentials
 from loguru import logger
 from redis.asyncio.client import Redis as AsyncRedis
 
@@ -29,7 +28,6 @@ from app.application.auth.auth_use_cases import (
 from app.domain.user.entities import AuthProvider, UserEntity
 from app.infrastructure.cache.auth_session_cache import (
     cache_auth_session,
-    get_cached_auth_session,
     invalidate_auth_session,
 )
 from app.infrastructure.cache.cache_keys import auth_refresh_key
@@ -46,7 +44,12 @@ from app.infrastructure.cache.refresh_token_family import (
     revoke_refresh_family,
     store_initial_refresh_token,
 )
-from app.presentation.http.v1.dependencies import UserRepositoryDep
+from app.presentation.http.v1.dependencies import (
+    UserRepositoryDep,
+    _bearer,
+    _current_user,
+    _serialize_user_for_cache,
+)
 from app.schemas.auth import (
     ChangePasswordRequest,
     GoogleCallbackRequest,
@@ -63,7 +66,6 @@ from app.shared.errors import (
     InvalidUserIdError,
     RevokedTokenError,
 )
-from app.shared.ids import parse_uuid
 from app.shared.metrics import (
     auth_login_attempts,
     auth_login_failures,
@@ -78,7 +80,6 @@ from app.shared.security import (
     verify_token,
 )
 
-_bearer = HTTPBearer(auto_error=False)
 router = APIRouter()
 
 COOKIE_KEY = "refresh_token"
@@ -96,60 +97,7 @@ def _extract_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def _serialize_user_for_cache(user: UserEntity) -> dict:
-    return {
-        "id": str(user.id),
-        "email": user.email,
-        "full_name": user.full_name,
-        "username": user.username,
-        "provider": user.provider.value,
-        "google_id": user.google_id,
-        "setup_complete": user.setup_complete,
-        "is_active": user.is_active,
-        "refresh_token_version": user.refresh_token_version,
-        "created_at": user.created_at.isoformat(),
-        "updated_at": user.updated_at.isoformat(),
-    }
 
-
-def _parse_dt(raw: str | None) -> datetime:
-    if not raw:
-        return datetime.now(timezone.utc)
-    try:
-        return datetime.fromisoformat(raw)
-    except Exception:
-        return datetime.now(timezone.utc)
-
-
-def _coerce_provider(value: str | AuthProvider | None) -> AuthProvider:
-    if isinstance(value, AuthProvider):
-        return value
-    if not value:
-        return AuthProvider.LOCAL
-    try:
-        return AuthProvider(value)
-    except ValueError:
-        return AuthProvider.LOCAL
-
-
-def _deserialize_cached_user(data: dict) -> UserEntity:
-    user_id = parse_uuid(data.get("id"))
-    if user_id is None:
-        raise InvalidAuthStateError("Cached auth session has invalid user id")
-    return UserEntity(
-        id=user_id,
-        email=data["email"],
-        full_name=data.get("full_name", ""),
-        username=data.get("username"),
-        password_hash=None,
-        provider=_coerce_provider(data.get("provider")),
-        google_id=data.get("google_id"),
-        setup_complete=data.get("setup_complete", False),
-        is_active=data.get("is_active", True),
-        refresh_token_version=int(data.get("refresh_token_version", 0)),
-        created_at=_parse_dt(data.get("created_at")),
-        updated_at=_parse_dt(data.get("updated_at")),
-    )
 
 
 async def _assert_rate_limit_login(request: Request) -> None:
@@ -238,40 +186,7 @@ async def _record_login_failure(email: str) -> None:
     await pipe.execute()
 
 
-async def _current_user(
-    request: Request,
-    repo: UserRepositoryDep,
-    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
-) -> UserEntity:
-    """Dependency: resolve Bearer token → UserEntity, checking blacklist."""
-    if creds is None:
-        raise HTTPException(status_code=401, detail="Not authenticated")
 
-    token_payload = decode_auth_token(creds.credentials, expected_type="access")
-    user_id = token_payload.user_id
-    jti = token_payload.jti
-
-    if jti and await is_blacklisted(jti):
-        raise RevokedTokenError()
-
-    cached = await get_cached_auth_session(str(user_id))
-    if cached is not None:
-        user = _deserialize_cached_user(cached)
-        if not user.is_active:
-            raise HTTPException(status_code=403, detail="User account is inactive")
-        if token_payload.token_version != user.refresh_token_version:
-            raise RevokedTokenError("Access token is stale")
-        return user
-
-    user = await get_user_by_id(repo, user_id)
-    if user is None:
-        raise InvalidTokenError("User not found")
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail="User account is inactive")
-    if token_payload.token_version != user.refresh_token_version:
-        raise RevokedTokenError("Access token is stale")
-    await cache_auth_session(str(user_id), _serialize_user_for_cache(user))
-    return user
 
 
 def _refresh_cookie_max_age() -> int:

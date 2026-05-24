@@ -12,8 +12,7 @@ from app.domain.rag.stage_machine import IngestionStage
 from app.domain.user.entities import UserEntity
 from app.infrastructure.db.database import get_db
 from app.infrastructure.db.repositories.document_repository import DocumentRepository
-from app.presentation.http.v1.dependencies import StorageDep
-from app.presentation.http.v1.endpoints.auth import _current_user
+from app.presentation.http.v1.dependencies import StorageDep, _current_user
 from app.shared.config import get_settings
 from app.shared.ids import parse_uuid
 

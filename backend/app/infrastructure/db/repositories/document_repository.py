@@ -126,7 +126,11 @@ class DocumentRepository(DocumentRepositoryPort):
         return _to_domain(doc) if doc else None
 
     async def delete(self, document_id: str) -> bool:
-        doc = await self.get(document_id)
+        stmt = select(Document).where(
+            Document.id == require_uuid(document_id, field_name="document_id")
+        )
+        result = await self.db.execute(stmt)
+        doc = result.scalar_one_or_none()
         if doc:
             await self.db.delete(doc)
             await self.db.flush()
@@ -337,8 +341,13 @@ class DocumentRepository(DocumentRepositoryPort):
 
     async def delete_with_cascade(self, document_id: str, user_id: str) -> str | None:
         """Deletes a document explicitly. Returns the storage_key to be deleted from storage."""
-        doc = await self.get(document_id)
-        if not doc or doc.user_id != require_uuid(user_id, field_name="user_id"):
+        stmt = select(Document).where(
+            Document.id == require_uuid(document_id, field_name="document_id"),
+            Document.user_id == require_uuid(user_id, field_name="user_id")
+        )
+        result = await self.db.execute(stmt)
+        doc = result.scalar_one_or_none()
+        if not doc:
             return None
         storage_key = doc.storage_key
         await self.db.delete(doc)
@@ -350,3 +359,22 @@ class DocumentRepository(DocumentRepositoryPort):
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def update_content_hash(self, document_id: str, content_hash: str) -> None:
+        stmt = update(Document).where(
+            Document.id == require_uuid(document_id, field_name="document_id")
+        ).values(normalized_content_hash=content_hash)
+        await self.db.execute(stmt)
+
+    async def mark_completed(self, document_id: str) -> None:
+        stmt = update(Document).where(
+            Document.id == require_uuid(document_id, field_name="document_id")
+        ).values(completed_at=_now())
+        await self.db.execute(stmt)
+
+    async def delete_all_chunks(self, document_id: str) -> None:
+        stmt = delete(DocumentChunk).where(
+            DocumentChunk.document_id == require_uuid(document_id, field_name="document_id")
+        )
+        await self.db.execute(stmt)
+

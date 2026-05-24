@@ -20,14 +20,27 @@ from __future__ import annotations
 
 import asyncio
 import json
-from weakref import WeakValueDictionary
 
 from loguru import logger
 from redis.asyncio.client import Redis as AsyncRedis
 
+from app.domain.chat.ports import ChatContextCachePort
 from app.infrastructure.cache.cache_keys import chat_context_key
 from app.infrastructure.cache.redis_client import get_redis
 from app.shared.config import get_settings
+
+
+class ChatContextCache(ChatContextCachePort):
+    async def get_or_rebuild_context(self, session_id: str) -> list[dict]:
+        return await get_or_rebuild_context(session_id)
+
+    async def push_message(
+        self, session_id: str, role: str, content: str, extra: dict | None = None
+    ) -> None:
+        return await push_message(session_id, role, content, extra)
+
+    async def invalidate(self, session_id: str) -> None:
+        return await invalidate(session_id)
 
 # Maximum messages stored per session in Redis
 MAX_MESSAGES = 50
@@ -51,7 +64,7 @@ async def get_context(session_id: str) -> list[dict]:
         return []
 
 
-_rebuild_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
+_rebuild_locks: dict[str, asyncio.Lock] = {}
 
 
 async def get_or_rebuild_context(session_id: str) -> list[dict]:
@@ -153,6 +166,7 @@ async def rebuild_context(session_id: str) -> list[dict]:
 
 async def invalidate(session_id: str) -> None:
     """Delete the context key for a session (e.g. on session end)."""
+    _rebuild_locks.pop(session_id, None)
     try:
         redis_client: AsyncRedis = get_redis()
         await redis_client.execute_command("DEL", chat_context_key(session_id))

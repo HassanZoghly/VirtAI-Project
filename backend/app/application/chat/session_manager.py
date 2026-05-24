@@ -24,7 +24,7 @@ from app.shared.ids import parse_uuid
 
 if TYPE_CHECKING:
     from app.application.rag.retrieval_use_case import RetrievalUseCase
-    from app.domain.chat.ports import BaseLLMProvider, ChatRepositoryPort
+    from app.domain.chat.ports import BaseLLMProvider, ChatContextCachePort, ChatRepositoryPort
     from app.domain.voice.ports import BaseTTSProvider, StreamingASRService
 
 
@@ -43,6 +43,7 @@ class ConversationSession:
         tts_service: BaseTTSProvider | None = None,
         retrieval_service: RetrievalUseCase | None = None,
         animation_stage: Any | None = None,
+        context_cache: ChatContextCachePort | None = None,
     ):
         self.session_id: str = session_id
         self.user_id: str = user_id
@@ -53,6 +54,7 @@ class ConversationSession:
             tts=tts_service,
             retrieval=retrieval_service,
             animation_stage=animation_stage,
+            context_cache=context_cache,
             avatar_id=avatar_id,
         )
         self.created_at: datetime = datetime.now(timezone.utc)
@@ -107,6 +109,7 @@ class SessionManager:
         tts_service_factory: Callable[[], BaseTTSProvider] | None = None,
         retrieval_service_factory: Callable[[], Awaitable[RetrievalUseCase]] | None = None,
         animation_stage_factory: Callable[[], Any] | None = None,
+        chat_context_cache_factory: Callable[[], ChatContextCachePort] | None = None,
     ):
         if session_timeout_sec <= 0:
             raise ValueError("session_timeout_sec must be positive")
@@ -123,6 +126,7 @@ class SessionManager:
         self._tts_service_factory = tts_service_factory
         self._retrieval_service_factory = retrieval_service_factory
         self._animation_stage_factory = animation_stage_factory
+        self._chat_context_cache_factory = chat_context_cache_factory
         self._lock = asyncio.Lock()
 
         logger.info(
@@ -211,6 +215,7 @@ class SessionManager:
             await self._retrieval_service_factory() if self._retrieval_service_factory else None
         )
         animation = self._animation_stage_factory() if self._animation_stage_factory else None
+        context_cache = self._chat_context_cache_factory() if self._chat_context_cache_factory else None
 
         session = ConversationSession(
             session_id=sid,
@@ -221,6 +226,7 @@ class SessionManager:
             tts_service=tts,
             retrieval_service=retrieval,
             animation_stage=animation,
+            context_cache=context_cache,
         )
         session.pipeline._persist_turn = self.persist_turn
         session.on_cleanup = on_cleanup
@@ -254,16 +260,43 @@ class SessionManager:
             session.touch()
         return session
 
-    async def connect_existing_session(self, session_id: str) -> ConversationSession | None:
+    async def connect_existing_session(
+        self,
+        session_id: str,
+        user_id: str | None = None,
+        avatar_id: str | None = None,
+        voice_id: str | None = None,
+    ) -> ConversationSession | None:
         parsed_session_id = parse_uuid(session_id)
         if parsed_session_id is None:
             return None
         session_id = str(parsed_session_id)
+
         async with self._lock:
             session = self._sessions.get(session_id)
             if session:
+                if user_id and session.user_id != user_id:
+                    raise PermissionError("Cannot attach to another user's session.")
                 session.mark_connected()
-        return session
+                return session
+
+        if not user_id:
+            return None
+
+        async with self._repo_factory() as repo:
+            persisted = await repo.get_chat_session(session_id)
+            if not persisted:
+                return None
+            if persisted.get("user_id") != user_id:
+                raise PermissionError("Cannot attach to another user's session.")
+
+        logger.info(f"Hydrating session {session_id} from database")
+        return await self.create_session(
+            user_id=user_id,
+            session_id=session_id,
+            avatar_id=avatar_id or "avatar1",
+            voice_id=voice_id,
+        )
 
     async def disconnect_session(self, session_id: str) -> None:
         parsed_session_id = parse_uuid(session_id)
@@ -292,6 +325,8 @@ class SessionManager:
             if session_id in self._sessions:
                 session = self._sessions[session_id]
                 session.cleanup()
+                if session.pipeline._context_cache:
+                    await session.pipeline._context_cache.invalidate(session_id)
                 del self._sessions[session_id]
         logger.info(f"Session removed | id={session_id}")
 
@@ -339,6 +374,7 @@ class SessionManager:
                 for sid, s in self._sessions.items()
             ]
         return {
-            "active_sessions": len(self._sessions),
+            "active_sessions": sum(1 for s in sessions_info if s["connected"]),
+            "total_resumable": len(sessions_info),
             "sessions": sessions_info,
         }

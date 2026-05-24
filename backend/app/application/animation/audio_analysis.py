@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import math
 from collections.abc import Iterable
+
+import numpy as np
 
 from app.domain.voice.entities import TTSResult
 from app.schemas.ws_messages import MouthCue
@@ -99,29 +100,26 @@ def _build_energy_curve(
 ) -> list[dict[str, float]]:
     sample_rate_hz = 12.0
     sample_count = max(12, int(duration_s * sample_rate_hz) + 1)
-    times = [duration_s * idx / max(1, sample_count - 1) for idx in range(sample_count)]
-    values = [0.0 for _ in times]
+    times = np.linspace(0, duration_s, sample_count)
+    values = np.zeros(sample_count)
 
     for start, end in speaking_segments:
-        for i, time_s in enumerate(times):
-            if start <= time_s <= end:
-                values[i] += 0.18
+        mask = (times >= start) & (times <= end)
+        values[mask] += 0.18
 
     for viseme in tts_result.visemes:
         center = float(viseme.offset_ms) / 1000.0
         spread = max(0.04, float(viseme.duration_ms) / 1000.0 * 0.8)
         weight = _viseme_weight(int(viseme.viseme_id))
+        values += weight * np.exp(-0.5 * ((times - center) / spread) ** 2)
 
-        for i, time_s in enumerate(times):
-            distance = (time_s - center) / spread
-            values[i] += weight * math.exp(-0.5 * distance * distance)
-
-    peak = max(values) if values else 0.0
+    peak = float(np.max(values)) if len(values) > 0 else 0.0
     if peak > 0:
-        values = [v / peak for v in values]
+        values = values / peak
 
     return [
-        {"time": round(t, 3), "value": round(_clamp(v, 0.0, 1.0), 4)} for t, v in zip(times, values)
+        {"time": round(float(t), 3), "value": round(_clamp(float(v), 0.0, 1.0), 4)}
+        for t, v in zip(times.tolist(), values.tolist())
     ]
 
 

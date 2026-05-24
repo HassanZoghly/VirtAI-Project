@@ -57,9 +57,14 @@ class LongTermMemory:
         self, session_id: str, project_id: int, query: str, limit: int = 5
     ) -> list[dict[str, Any]]:
         """
-        Search past conversations. Uses recent history
-        since vector indexing of memory has compatibility issues
-        with PGVector's foreign key constraints.
+        Search past conversations.
+
+        [FALLBACK MECHANISM]
+        Currently uses naive keyword matching on recent history instead of Vector Search.
+        This is a temporary fallback due to compatibility issues with PGVector's
+        foreign key constraints for cross-table references.
+        TODO: Migrate back to semantic vector search once the DB schema supports
+        safe cascade deletion of vector embeddings for conversation histories.
         """
         try:
             # get more history and let the caller filter

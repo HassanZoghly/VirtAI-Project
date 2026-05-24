@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from types import SimpleNamespace
+from dataclasses import dataclass
 
 from fastapi import WebSocket, WebSocketDisconnect
 from loguru import logger
@@ -17,6 +17,15 @@ from app.presentation.ws.session_bootstrap import SessionBootstrap
 from app.presentation.ws.voice_mode_handler import VoiceModeHandler
 from app.schemas.ws_messages import ServerMessage, ServerMessageType, make_error_msg
 from app.shared.config import get_settings
+
+
+@dataclass(frozen=True)
+class PendingSession:
+    session_id: str
+    avatar_id: str
+
+    def touch(self) -> None:
+        pass
 
 
 class WebSocketHandler:
@@ -47,10 +56,9 @@ class WebSocketHandler:
         self._voice_id = self._normalize_voice(voice_id)
         self._session_pending = session is None
         self._requested_session_id = requested_session_id
-        self.session = session or SimpleNamespace(
+        self.session = session or PendingSession(
             session_id=requested_session_id or "",
             avatar_id=avatar_id,
-            touch=lambda: None,
         )
         self.pipeline = session.pipeline if session is not None else None
         self.connection_manager = connection_manager

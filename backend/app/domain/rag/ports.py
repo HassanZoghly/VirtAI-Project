@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import AsyncGenerator, Sequence
 from typing import Any
 from uuid import UUID
 
@@ -8,7 +8,7 @@ from app.domain.rag.entities import Document, DocumentChunk
 
 class TemplateParserPort(ABC):
     @abstractmethod
-    def get(self, category: str, key: str, variables: dict | None = None) -> str: ...
+    def get(self, category: str, key: str, variables: dict | None = None) -> str | None: ...
 
 
 class GuardrailPort:
@@ -19,6 +19,28 @@ class GuardrailPort:
     @classmethod
     def validate_output(cls, text: str | None) -> str | None:
         return text
+
+
+class MemoryManagerPort(ABC):
+    @abstractmethod
+    async def save_interaction(
+        self,
+        session_id: str,
+        project_id: int,
+        user_query: str,
+        assistant_answer: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def get_context(
+        self,
+        session_id: str,
+        project_id: int,
+        query: str,
+        last_n: int = 6,
+        semantic_n: int = 4,
+    ) -> list[dict[str, str]]: ...
 
 
 # ── Agentic RAG Ports (from RAG_project integration) ────────────────────────
@@ -40,7 +62,7 @@ class LLMGenerationProvider(ABC):
     def set_embedding_model(self, model_id: str, embedding_size: int) -> None: ...
 
     @abstractmethod
-    def generate_text(
+    async def generate_text(
         self,
         prompt: str,
         chat_history: list | None = None,
@@ -57,10 +79,10 @@ class LLMGenerationProvider(ABC):
         max_output_tokens: int | None = None,
         temperature: float | None = None,
         **kwargs: Any,
-    ) -> Any: ...
+    ) -> AsyncGenerator[str, None]: ...
 
     @abstractmethod
-    def embed_text(self, text: str | list[str], document_type: str | None = None) -> Any: ...
+    async def embed_text(self, text: str | list[str], document_type: str | None = None) -> Any: ...
 
     @abstractmethod
     def construct_prompt(self, prompt: str, role: str) -> dict: ...
@@ -228,3 +250,25 @@ class DocumentRepositoryPort(ABC):
 
     @abstractmethod
     async def delete(self, document_id: str) -> bool: ...
+
+    @abstractmethod
+    async def update_progress(self, document_id: str, stage: str, pct: int, processed: int, total: int) -> None: ...
+
+    @abstractmethod
+    async def get_next_chunk_version(self, document_id: str) -> int: ...
+
+    @abstractmethod
+    async def activate_chunk_version(self, document_id: str, new_version: int, expected_total: int) -> int: ...
+
+    @abstractmethod
+    async def delete_inactive_chunks(self, document_id: str, active_version: int | None = None) -> None: ...
+
+    @abstractmethod
+    async def update_content_hash(self, document_id: str, content_hash: str) -> None: ...
+
+    @abstractmethod
+    async def mark_completed(self, document_id: str) -> None: ...
+
+    @abstractmethod
+    async def delete_all_chunks(self, document_id: str) -> None: ...
+

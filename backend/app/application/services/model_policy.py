@@ -127,6 +127,9 @@ class FallbackTTSChain(BaseTTSProvider):
     async def get_voice_settings(self, voice_name: str) -> dict[str, Any]:
         return await self.primary.get_voice_settings(voice_name)
 
+    def generate_cache_key(self, text: str) -> str:
+        return self.primary.generate_cache_key(text)
+
 
 @dataclass
 class ModelCapabilities:

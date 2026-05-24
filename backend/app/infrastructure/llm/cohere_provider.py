@@ -65,7 +65,7 @@ class CoHereProvider(LLMGenerationProvider):
 
     # ── Generation ───────────────────────────────────────────────────────
 
-    def generate_text(
+    async def generate_text(
         self,
         prompt: str,
         chat_history: list | None = None,
@@ -91,7 +91,7 @@ class CoHereProvider(LLMGenerationProvider):
 
         return response.text if response else None
 
-    def generate_stream(
+    async def generate_stream(
         self,
         prompt: str,
         chat_history: list | None = None,
@@ -149,7 +149,7 @@ class CoHereProvider(LLMGenerationProvider):
 
     # ── Embedding ────────────────────────────────────────────────────────
 
-    def embed_text(
+    async def embed_text(
         self, text: Union[str, list[str]], document_type: str | None = None
     ) -> list[list[float]] | None:
         if not self.client or not self.embedding_model_id:

@@ -66,6 +66,12 @@ class OpenAITTSProvider(BaseTTSProvider):
             return False
         return True
 
+    def generate_cache_key(self, text: str) -> str:
+        from app.infrastructure.cache.cache_keys import tts_cache_key
+        from app.infrastructure.tts.tts_utils import clean_text_for_tts
+        sanitized = clean_text_for_tts(text)
+        return tts_cache_key(sanitized, self.api_voice)
+
     async def generate(
         self,
         text: str,

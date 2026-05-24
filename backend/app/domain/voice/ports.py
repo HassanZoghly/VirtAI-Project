@@ -96,6 +96,11 @@ class BaseTTSProvider(ABC):
         ...
 
     @abstractmethod
+    def generate_cache_key(self, text: str) -> str:
+        """Generates a cache key for the given text."""
+        ...
+
+    @abstractmethod
     async def get_voice_settings(self, voice_name: str) -> dict[str, Any]:
         """Get available settings for a specific voice."""
         ...

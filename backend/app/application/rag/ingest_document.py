@@ -54,10 +54,9 @@ class IngestDocumentUseCase:
         require_uuid(user_id, field_name="user_id")
         doc_id = str(doc_uuid)
 
-        # 0. Initial Cleanup (in case of retries)
+        # 0. Get Scope (in case of retries)
         async with self.db_session_factory() as db:
             repo = self.document_repo_factory(db)
-            await repo.delete_inactive_chunks(doc_id)
             doc = await repo.get(doc_id)
             retrieval_scope = doc.retrieval_scope
             scope_id = doc.scope_id
@@ -82,16 +81,7 @@ class IngestDocumentUseCase:
 
         async with self.db_session_factory() as db:
             repo = self.document_repo_factory(db)
-            # We don't have an explicit method for hash update, so we update it directly
-            from sqlalchemy import update
-
-            from app.infrastructure.db.models import Document
-
-            await db.execute(
-                update(Document)
-                .where(Document.id == doc_uuid)
-                .values(normalized_content_hash=content_hash)
-            )
+            await repo.update_content_hash(doc_id, content_hash)
             await db.commit()
 
         logger.info(
@@ -219,27 +209,14 @@ class IngestDocumentUseCase:
             repo = self.document_repo_factory(db)
             await repo.delete_inactive_chunks(doc_id, active_version=next_version)
             await repo.update_progress(doc_id, "COMPLETE", 100, total_chunks, total_chunks)
-            # Update completed_at
-            from sqlalchemy import update
-
-            from app.infrastructure.db.models import Document
-            from app.infrastructure.db.repositories.document_repository import _now
-
-            await db.execute(
-                update(Document).where(Document.id == doc_uuid).values(completed_at=_now())
-            )
+            await repo.mark_completed(doc_id)
             await db.commit()
 
     async def cleanup_failed_job(self, doc_id: str, storage_key: str) -> None:
         """Cleans up completely on cancellation or permanent failure (zero retrieval pollution)."""
         async with self.db_session_factory() as db:
-            from sqlalchemy import delete
-
-            from app.infrastructure.db.models import DocumentChunk
-
-            # Delete ALL chunks for this document
-            doc_uuid = require_uuid(doc_id, field_name="document_id")
-            await db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc_uuid))
+            repo = self.document_repo_factory(db)
+            await repo.delete_all_chunks(doc_id)
             await db.commit()
 
         if await self.storage.exists(storage_key):

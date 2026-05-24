@@ -45,6 +45,25 @@ class ChatRepositoryPort(ABC):
     async def get_message_count(self, session_id: str) -> int: ...
 
 
+class ChatContextCachePort(ABC):
+    """Port for managing chat session context cache with concurrency safety."""
+
+    @abstractmethod
+    async def get_or_rebuild_context(self, session_id: str) -> list[dict]: ...
+
+    @abstractmethod
+    async def push_message(
+        self, session_id: str, role: str, content: str, extra: dict | None = None
+    ) -> None:
+        """Push a message to the context cache."""
+        pass
+
+    @abstractmethod
+    async def invalidate(self, session_id: str) -> None:
+        """Invalidate the cache for a session."""
+        pass
+
+
 class BaseLLMProvider(ABC):
     """Abstract LLM provider interface."""
 

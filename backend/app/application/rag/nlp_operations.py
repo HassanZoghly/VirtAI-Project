@@ -3,15 +3,14 @@ import logging
 from typing import Any
 
 from app.application.rag.orchestrator import AgentOrchestrator
-from app.domain.rag.entities import AgentAction, AgentInput, AgentTrace
+from app.domain.rag.entities import AgentAction, AgentInput, AgentTrace, IndexableChunk
 from app.domain.rag.ports import (
     EmbeddingProvider,
     LLMGenerationProvider,
+    MemoryManagerPort,
     TemplateParserPort,
     VectorCollectionStore,
 )
-from app.infrastructure.db.models import DataChunk, Project
-from app.infrastructure.memory.memory_manager import MemoryManager
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -29,7 +28,7 @@ class NLPOperations:
         llm_provider: LLMGenerationProvider,
         embedding_provider: EmbeddingProvider,
         template_parser: TemplateParserPort,
-        memory_manager: MemoryManager,
+        memory_manager: MemoryManagerPort,
     ):
         self.vector_store = vector_store
         self.llm_provider = llm_provider
@@ -58,15 +57,15 @@ class NLPOperations:
         return json.loads(json.dumps(info, default=lambda x: x.__dict__))
 
     async def index_into_vector_db(
-        self, project: Project, chunks: list[DataChunk], do_reset: bool = False
+        self, project_id: int, chunks: list[IndexableChunk], do_reset: bool = False
     ) -> bool:
         """
         Embeds chunk texts and stores them into the designated vector collection.
         """
-        collection_name = self._create_collection_name(project.project_id)
+        collection_name = self._create_collection_name(project_id)
         texts = [c.chunk_text.replace("\x00", "").strip() for c in chunks]
         metadata = [c.chunk_metadata or {} for c in chunks]
-        record_ids = [c.chunk_id for c in chunks]
+        record_ids = [str(c.chunk_id) for c in chunks]
 
         # Use embedding provider directly
         vectors = await self.embedding_provider.embed_batch(texts)

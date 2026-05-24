@@ -33,11 +33,14 @@ class AgentOrchestrator:
         embedding_provider: EmbeddingProvider,
         template_parser: TemplateParserPort,
     ):
+        from app.shared.config import get_settings
+        embedding_dimension = get_settings().EMBEDDING_DIMENSION
         shared_dependencies = {
             "llm_provider": llm_provider,
             "vector_store": vector_store,
             "embedding_provider": embedding_provider,
             "template_parser": template_parser,
+            "embedding_dimension": embedding_dimension,
         }
 
         self.router = RouterAgent(**shared_dependencies)

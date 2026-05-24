@@ -20,9 +20,9 @@ def _detect_language(text: str) -> str:
     """Detect if query is Arabic or English."""
     if not text:
         return "en"
-    if re.search(r"[a-zA-Z]", text):
-        return "en"
-    if re.search(r"[\u0600-\u06FF]", text):
+    arabic_count = len(re.findall(r"[\u0600-\u06FF]", text))
+    latin_count = len(re.findall(r"[a-zA-Z]", text))
+    if arabic_count > latin_count:
         return "ar"
     return "en"
 
@@ -52,11 +52,13 @@ class BaseAgent(ABC):
         vector_store: VectorCollectionStore | None = None,
         embedding_provider: EmbeddingProvider | None = None,
         template_parser: TemplateParserPort | None = None,
+        embedding_dimension: int = 1536,
     ):
         self.llm_provider = llm_provider
         self.vector_store = vector_store
         self.embedding_provider = embedding_provider
         self.template_parser = template_parser
+        self._embedding_dimension = embedding_dimension
 
     @abstractmethod
     def can_handle(self, input_data: AgentInput) -> bool:
@@ -219,7 +221,7 @@ class RetrieverAgent(BaseAgent):
             # Flatten the embedding vector as expected by legacy implementations
             raw_vec = await self.embedding_provider.embed(text=search_query)
 
-            collection_name = f"collection_1536_{input_data.project_id}"
+            collection_name = f"collection_{self._embedding_dimension}_{input_data.project_id}"
 
             results = await self.vector_store.search_by_vector(
                 collection_name=collection_name,
@@ -227,7 +229,7 @@ class RetrieverAgent(BaseAgent):
                 limit=fetch_limit,
             )
 
-            # Simple Reranking slice
+            # No reranker configured — truncate to requested limit
             results = results[: input_data.limit]
 
             if not results:
@@ -268,11 +270,11 @@ class AnswerAgent(BaseAgent):
                     input_data, success=False, error="No relevant documents found."
                 )
 
-            base_system_prompt = self.template_parser.get("rag", "system_prompt")
+            base_system_prompt = self.template_parser.get(category="rag", key="system_prompt")
 
             chat_history = [
                 self.llm_provider.construct_prompt(
-                    prompt=base_system_prompt,
+                    prompt=base_system_prompt or "",
                     role="system",
                 )
             ]
@@ -294,13 +296,13 @@ class AnswerAgent(BaseAgent):
             documents_prompts = "\n".join(
                 [
                     self.template_parser.get(
-                        "rag",
-                        "document_prompt",
-                        {
+                        category="rag",
+                        key="document_prompt",
+                        variables={
                             "doc_num": idx + 1,
                             "chunk_text": self.llm_provider.process_text(doc.get("text", "")),
                         },
-                    )
+                    ) or ""
                     for idx, doc in enumerate(docs)
                 ]
             )
@@ -308,16 +310,16 @@ class AnswerAgent(BaseAgent):
             lang = "Arabic" if _detect_language(input_data.query) == "ar" else "English"
             lang_prefix = f"[Respond in {lang} only]\n"
             footer = self.template_parser.get(
-                "rag", "footer_prompt", {"query": lang_prefix + input_data.query}
+                category="rag", key="footer_prompt", variables={"query": lang_prefix + input_data.query}
             )
-            footer += _build_language_prompt(input_data.query)
+            footer = (footer or "") + _build_language_prompt(input_data.query)
 
             full_prompt = "\n\n".join([documents_prompts, footer])
 
             if input_data.stream:
                 llm = self.llm_provider
                 async def answer_stream():
-                    for chunk in llm.generate_stream(
+                    async for chunk in llm.generate_stream(
                         prompt=full_prompt,
                         chat_history=chat_history,
                     ):
@@ -332,11 +334,14 @@ class AnswerAgent(BaseAgent):
                     metadata={"streaming": True, "doc_count": len(docs), "language": lang},
                 )
 
-            # non-streaming
-            answer = self.llm_provider.generate_text(
+            answer = await self.llm_provider.generate_text(
                 prompt=full_prompt,
                 chat_history=chat_history,
             )
+            if answer is None:
+                return self._make_output(
+                    input_data, success=False, error="LLM provider returned None — check configuration"
+                )
             answer = GuardrailPort.validate_output(answer)
 
             return self._make_output(
@@ -368,8 +373,8 @@ class SummarizerAgent(BaseAgent):
                     input_data, success=False, error="No documents to summarize"
                 )
 
-            system_prompt = self.template_parser.get("rag", "summarize_system_prompt")
-            footer_prompt = self.template_parser.get("rag", "summarize_footer_prompt")
+            system_prompt = self.template_parser.get(category="rag", key="summarize_system_prompt")
+            footer_prompt = self.template_parser.get(category="rag", key="summarize_footer_prompt") or ""
 
             user_lang_code = _detect_language(input_data.query or "")
             target_lang = "Arabic" if user_lang_code == "ar" else "English"
@@ -383,20 +388,20 @@ class SummarizerAgent(BaseAgent):
             documents_prompts = "\n".join(
                 [
                     self.template_parser.get(
-                        "rag",
-                        "document_prompt",
-                        {
+                        category="rag",
+                        key="document_prompt",
+                        variables={
                             "doc_num": idx + 1,
                             "chunk_text": doc.get("text", ""),
                         },
-                    )
+                    ) or ""
                     for idx, doc in enumerate(docs)
                 ]
             )
 
             chat_history = [
                 self.llm_provider.construct_prompt(
-                    prompt=system_prompt,
+                    prompt=system_prompt or "",
                     role="system",
                 )
             ]
@@ -406,7 +411,7 @@ class SummarizerAgent(BaseAgent):
             if input_data.stream:
                 llm = self.llm_provider
                 async def summary_stream():
-                    for chunk in llm.generate_stream(
+                    async for chunk in llm.generate_stream(
                         prompt=full_prompt,
                         chat_history=chat_history,
                     ):
@@ -419,11 +424,15 @@ class SummarizerAgent(BaseAgent):
                     metadata={"streaming": True, "doc_count": len(docs)},
                 )
 
-            summary = self.llm_provider.generate_text(
+            summary = await self.llm_provider.generate_text(
                 prompt=full_prompt,
                 chat_history=chat_history,
                 max_output_tokens=4000,
             )
+            if summary is None:
+                return self._make_output(
+                    input_data, success=False, error="LLM provider returned None — check configuration"
+                )
 
             return self._make_output(input_data, result={"summary": summary})
 
@@ -452,11 +461,11 @@ class QuizAgent(BaseAgent):
                 )
 
             system_prompt = self.template_parser.get(
-                "rag", "quiz_system_prompt", {"num_questions": 3}
+                category="rag", key="quiz_system_prompt", variables={"num_questions": 3}
             )
             footer_prompt = self.template_parser.get(
-                "rag", "quiz_footer_prompt", {"num_questions": 3}
-            )
+                category="rag", key="quiz_footer_prompt", variables={"num_questions": 3}
+            ) or ""
 
             user_lang_code = _detect_language(input_data.query or "")
             target_lang = "Arabic" if user_lang_code == "ar" else "English"
@@ -470,20 +479,20 @@ class QuizAgent(BaseAgent):
             documents_prompts = "\n".join(
                 [
                     self.template_parser.get(
-                        "rag",
-                        "document_prompt",
-                        {
+                        category="rag",
+                        key="document_prompt",
+                        variables={
                             "doc_num": idx + 1,
                             "chunk_text": doc.get("text", ""),
                         },
-                    )
+                    ) or ""
                     for idx, doc in enumerate(docs)
                 ]
             )
 
             chat_history = [
                 self.llm_provider.construct_prompt(
-                    prompt=system_prompt,
+                    prompt=system_prompt or "",
                     role="system",
                 )
             ]
@@ -493,7 +502,7 @@ class QuizAgent(BaseAgent):
             if input_data.stream:
                 llm = self.llm_provider
                 async def quiz_stream():
-                    for chunk in llm.generate_stream(
+                    async for chunk in llm.generate_stream(
                         prompt=full_prompt,
                         chat_history=chat_history,
                     ):
@@ -506,11 +515,15 @@ class QuizAgent(BaseAgent):
                     metadata={"streaming": True},
                 )
 
-            quiz = self.llm_provider.generate_text(
+            quiz = await self.llm_provider.generate_text(
                 prompt=full_prompt,
                 chat_history=chat_history,
                 max_output_tokens=2000,
             )
+            if quiz is None:
+                return self._make_output(
+                    input_data, success=False, error="LLM provider returned None — check configuration"
+                )
 
             return self._make_output(input_data, result={"quiz": quiz})
 

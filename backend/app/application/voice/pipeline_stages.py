@@ -87,6 +87,18 @@ class LLMStage(BaseStage):
                                 delta=chunk.token,
                             )
                         )
+                if chunk.sentence:
+                    sentence = chunk.sentence
+                    # Strip emotion tag from the first sentence before TTS
+                    if context.llm_emotion is None:
+                        emotion_match = _EMOTION_RE.match(sentence)
+                        if emotion_match:
+                            detected = emotion_match.group(1).lower()
+                            if detected in _VALID_EMOTIONS:
+                                context.llm_emotion = detected
+                            sentence = _EMOTION_RE.sub("", sentence).strip()
+                    if sentence:
+                        await context.sentence_queue.put(sentence)
                 if chunk.is_done:
                     break
         except LLMException as e:
@@ -104,6 +116,8 @@ class LLMStage(BaseStage):
             return
         finally:
             context.history.system_prompt = original_sys_prompt
+            # Ensure the audio consumer task unblocks when LLM finishes or fails
+            await context.sentence_queue.put(None)
 
         if context.aborted:
             return
@@ -150,13 +164,8 @@ class SentenceSegmentationStage(BaseStage):
     """Splits full response into sentences for sequential processing if needed."""
 
     async def process(self, context: TurnContext) -> None:
-        if context.aborted or not context.llm_full_response:
-            return
-        # Currently, process_message generates TTS for the full response at once.
-        # This stage is a structural hook that can be expanded when migrating
-        # fully to sentence-level TTS streaming in the unified pipeline.
-        await context.sentence_queue.put(context.llm_full_response)
-        await context.sentence_queue.put(None)  # sentinel
+        # Replaced by concurrent LLM sentence generation
+        pass
 
 
 class TTSStage(BaseStage):
@@ -164,7 +173,8 @@ class TTSStage(BaseStage):
         self._tts = tts
 
     async def process(self, context: TurnContext) -> None:
-        if context.aborted or not context.llm_full_response or not context.history:
+        text_to_speak = context.current_sentence
+        if context.aborted or not text_to_speak or not context.history:
             return
 
         if context.send_callback:
@@ -175,7 +185,7 @@ class TTSStage(BaseStage):
 
         try:
             tts_result = await self._tts.generate(
-                text=context.llm_full_response,
+                text=text_to_speak,
                 session_id=context.session_id,
                 message_id=context.message_id,
                 trace_id=context.trace_id,
@@ -209,13 +219,14 @@ class AnimationStage(BaseStage):
         self._intent_history: list[str] = []
 
     async def process(self, context: TurnContext) -> None:
-        if context.aborted or not context.llm_full_response or not context.history:
+        text_to_animate = context.current_sentence
+        if context.aborted or not text_to_animate or not context.history:
             return
 
         if context.tts_result and getattr(context.tts_result, "audio_ref", None):
             mouth_cues = await self._viseme_generator.generate_from_audio(
                 audio_path=context.tts_result.audio_ref,
-                text=context.llm_full_response,
+                text=text_to_animate,
                 session_id=context.session_id,
                 message_id=context.message_id,
             )
@@ -230,17 +241,17 @@ class AnimationStage(BaseStage):
             audio_bytes=b"",
             visemes=[],
             word_boundaries=[],
-            audio_duration_ms=len(context.llm_full_response) * 60.0,
+            audio_duration_ms=len(text_to_animate or "") * 60.0,
         )
 
         audio_features = analyze_tts_for_animation(
             tts_result=safe_tts_result,
             mouth_cues=mouth_cues,
-            text=context.llm_full_response,
+            text=text_to_animate,
         )
 
         timeline_payload = self._animation_service.build_timeline_v2(
-            text=context.llm_full_response,
+            text=text_to_animate,
             audio_features=audio_features,
             recent_assets=self._recent_animation_assets,
             emotion=context.llm_emotion,

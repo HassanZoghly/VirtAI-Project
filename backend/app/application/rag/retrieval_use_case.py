@@ -6,6 +6,10 @@ from app.domain.rag.ports import EmbeddingProvider, RerankerPort, VectorStore
 from app.shared.ids import parse_uuid
 
 
+class RetrievalError(Exception):
+    pass
+
+
 class RetrievalUseCase:
     """Orchestrates embedding the query and retrieving chunks via VectorStore."""
 
@@ -57,7 +61,7 @@ class RetrievalUseCase:
 
         except Exception as e:
             logger.error(f"Retrieval failed: {e}")
-            return []
+            raise RetrievalError(str(e))
 
     async def inject_context(
         self,
@@ -68,7 +72,11 @@ class RetrievalUseCase:
         max_context_tokens: int = 4000,
     ) -> str:
         """Retrieves relevant chunks and injects them into the system prompt."""
-        chunks = await self.retrieve(query, top_k=top_k, session_id=session_id)
+        try:
+            chunks = await self.retrieve(query, top_k=top_k, session_id=session_id)
+        except RetrievalError as e:
+            logger.warning(f"Retrieval error: {e}", extra={"query": query})
+            return system_prompt
 
         if not chunks:
             return system_prompt
@@ -109,23 +117,22 @@ class RetrievalUseCase:
 
             if not chunks:
                 return ""
-
-            if self.budget_manager and chunks:
-                chunks = self.budget_manager.fit_chunks_to_budget(
-                    chunks=chunks,
-                    system_prompt="",
-                    user_query=query,
-                    max_context_tokens=3000,
-                )
-
-            # Format chunks into a single context string
-            context_parts = []
-            for chunk in chunks:
-                source = chunk.metadata.get("filename", "Unknown") if chunk.metadata else "Unknown"
-                context_parts.append(f"--- Document: {source} ---\n{chunk.chunk_text}\n")
-
-            return "\n".join(context_parts)
-
-        except Exception as e:
-            logger.error(f"Retrieval failed: {e}")
+        except RetrievalError as e:
+            logger.warning(f"Retrieval error: {e}", extra={"query": query})
             return ""
+
+        if self.budget_manager and chunks:
+            chunks = self.budget_manager.fit_chunks_to_budget(
+                chunks=chunks,
+                system_prompt="",
+                user_query=query,
+                max_context_tokens=3000,
+            )
+
+        # Format chunks into a single context string
+        context_parts = []
+        for chunk in chunks:
+            source = chunk.metadata.get("filename", "Unknown") if chunk.metadata else "Unknown"
+            context_parts.append(f"--- Document: {source} ---\n{chunk.chunk_text}\n")
+
+        return "\n".join(context_parts)

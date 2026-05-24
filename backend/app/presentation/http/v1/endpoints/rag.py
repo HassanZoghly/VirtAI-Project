@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.rag.entities import AgentAction
+from app.domain.rag.entities import AgentAction, IndexableChunk
 from app.infrastructure.db.database import get_db
 from app.infrastructure.db.repositories.chunk_repository import ChunkRepository
 from app.infrastructure.db.repositories.project_repository import ProjectRepository
@@ -38,7 +38,15 @@ async def index_project_documents(
     if not chunks:
         raise HTTPException(status_code=404, detail="No document chunks found for this project.")
 
-    success = await nlp.index_into_vector_db(project=project, chunks=list(chunks), do_reset=True)
+    indexable_chunks = [
+        IndexableChunk(
+            chunk_id=c.chunk_id,
+            chunk_text=c.chunk_text,
+            chunk_metadata=c.chunk_metadata,
+        )
+        for c in chunks
+    ]
+    success = await nlp.index_into_vector_db(project_id=project.project_id, chunks=indexable_chunks, do_reset=True)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to index documents into vector DB.")
 

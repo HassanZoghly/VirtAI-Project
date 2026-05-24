@@ -1,11 +1,12 @@
 from typing import Any
 
+from app.domain.rag.ports import MemoryManagerPort
 from app.infrastructure.db.repositories.conversation_repository import ConversationRepository
 from app.infrastructure.memory.long_term_memory import LongTermMemory
 from app.infrastructure.memory.short_term_memory import ShortTermMemory
 
 
-class MemoryManager:
+class MemoryManager(MemoryManagerPort):
     """
     Unified memory interface.
 

@@ -21,7 +21,7 @@ from app.application.voice.pipeline_stages import (
     TTSStage,
 )
 from app.domain.chat.policies import build_conversation
-from app.domain.chat.ports import BaseLLMProvider
+from app.domain.chat.ports import BaseLLMProvider, ChatContextCachePort
 from app.domain.voice.ports import BaseTTSProvider, StreamingASRService
 
 if TYPE_CHECKING:
@@ -38,6 +38,7 @@ class ConversationPipeline:
         tts: BaseTTSProvider | None = None,
         retrieval: RetrievalUseCase | None = None,
         animation_stage: AnimationStage | None = None,
+        context_cache: ChatContextCachePort | None = None,
         avatar_id: str = "avatar1",
         persist_turn: Callable[[str, str, str, str, str | None], Awaitable[None]] | None = None,
     ):
@@ -47,6 +48,7 @@ class ConversationPipeline:
         self._retrieval = retrieval
         self.avatar_id = avatar_id
         self._persist_turn = persist_turn
+        self._context_cache = context_cache
         self._history = build_conversation(avatar_id)
 
         # Stages setup
@@ -74,12 +76,6 @@ class ConversationPipeline:
         trace_id: str | None = None,
     ) -> None:
         """Sequential processing using decoupled stages."""
-        from app.infrastructure.cache.chat_context_cache import (
-            get_or_rebuild_context,
-        )
-        from app.infrastructure.cache.chat_context_cache import (
-            push_message as push_ctx,
-        )
         from app.schemas.ws_messages import make_error, make_pipeline_state, make_user_message_echo
 
         self._current_message_id = message_id
@@ -124,10 +120,11 @@ class ConversationPipeline:
                     conversation_id=session_id,
                 )
             )
-            await push_ctx(session_id, "user", text)
+            if self._context_cache:
+                await self._context_cache.push_message(session_id, "user", text)
 
-            if self._history.is_empty:
-                ctx_messages = await get_or_rebuild_context(session_id)
+            if self._history.is_empty and self._context_cache:
+                ctx_messages = await self._context_cache.get_or_rebuild_context(session_id)
                 for msg in ctx_messages[:-1]:
                     if msg["role"] == "user":
                         self._history.add_user_message(msg["content"])
@@ -137,22 +134,34 @@ class ConversationPipeline:
             self._history.add_user_message(text)
             await send_callback(make_pipeline_state(session_id, "thinking"))
 
-            # Execute pipeline stages sequentially
-            stages = [self.llm_stage, self.sentence_stage, self.tts_stage, self.animation_stage]
+            # Execute pipeline stages concurrently for streaming
+            # LLMStage pushes to sentence_queue.
+            # Audio task pulls from sentence_queue and runs TTS+Animation sequentially per chunk.
+            llm_task = asyncio.create_task(self.llm_stage.process(context))
 
-            for stage in stages:
-                if context.aborted:
-                    break
-                await stage.process(context)
+            async def process_audio():
+                while not context.aborted:
+                    sentence = await context.sentence_queue.get()
+                    if sentence is None:
+                        break
+
+                    context.current_sentence = sentence
+                    await self.tts_stage.process(context)
+                    if context.aborted:
+                        break
+                    await self.animation_stage.process(context)
+
+            audio_task = asyncio.create_task(process_audio())
+
+            await asyncio.gather(llm_task, audio_task)
 
             # Output Persistence
             if context.llm_full_response and not context.aborted:
                 tts_key: str | None = None
                 try:
-                    from app.infrastructure.cache.cache_keys import tts_cache_key as _tts_key
-                    from app.shared.config import get_settings as _settings
+                    if self._tts:
+                        tts_key = self._tts.generate_cache_key(context.llm_full_response)
 
-                    tts_key = _tts_key(context.llm_full_response, _settings().TTS_VOICE)
                     if self._persist_turn:
                         await self._persist_turn(
                             session_id, "assistant", context.llm_full_response, "text", tts_key
@@ -162,12 +171,13 @@ class ConversationPipeline:
                         f"[Pipeline] Failed to persist assistant message: {e} | trace_id={trace_id}"
                     )
 
-                await push_ctx(
-                    session_id,
-                    "assistant",
-                    context.llm_full_response,
-                    extra={"tts_cache_key": tts_key} if tts_key else None,
-                )
+                if self._context_cache:
+                    await self._context_cache.push_message(
+                        session_id,
+                        "assistant",
+                        context.llm_full_response,
+                        extra={"tts_cache_key": tts_key} if tts_key else None,
+                    )
 
         except asyncio.CancelledError:
             context.abort()

@@ -30,6 +30,13 @@ class DocumentChunk:
     scope_id: UUID | None = None
 
 
+@dataclass
+class IndexableChunk:
+    chunk_id: str | int
+    chunk_text: str
+    chunk_metadata: dict[str, Any] | None = None
+
+
 class AgentAction(str, Enum):
     RETRIEVE = "retrieve"
     ANSWER = "answer"

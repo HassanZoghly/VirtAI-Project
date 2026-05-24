@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.user.entities import UserEntity
 from app.infrastructure.db.database import get_db
 from app.infrastructure.db.repositories.chat_repository import ChatRepository
-from app.presentation.http.v1.endpoints.auth import _current_user
+from app.presentation.http.v1.dependencies import _current_user
 from app.shared.ids import parse_uuid
 
 router = APIRouter()

@@ -76,7 +76,7 @@ class PromptSanitizer:
     """
 
     MAX_LENGTH: ClassVar[int] = 8_000
-    SUSPICIOUS_LENGTH_THRESHOLD: ClassVar[int] = 4_000  # extra scrutiny above this
+    SUSPICIOUS_LENGTH_THRESHOLD: ClassVar[int] = 8_000  # extra scrutiny above this
 
     # ── Layer 1 — Unicode & Homoglyphs ────────────────────────
 
@@ -144,35 +144,35 @@ class PromptSanitizer:
     # ── Layer 4 — Direct Jailbreak Patterns ───────────────────
     # Context-aware: avoids false positives on legitimate educational text.
 
-    JAILBREAK_PATTERNS: ClassVar[list[str]] = [
+    _COMPILED_JAILBREAK: ClassVar[list[re.Pattern]] = [
         # Instruction override
-        r"(?i)\bignore\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions?|rules?|guidelines?|context|prompt)\b",
-        r"(?i)\bforget\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions?|rules?|guidelines?|context|prompt)\b",
-        r"(?i)\bdisregard\s+(all\s+)?(previous|prior|above|earlier)\b",
-        r"(?i)\boverride\s+(all\s+)?(your\s+)?(instructions?|rules?|behavior|settings?|guidelines?)\b",
+        re.compile(r"(?i)\bignore\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions?|rules?|guidelines?|context|prompt)\b"),
+        re.compile(r"(?i)\bforget\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions?|rules?|guidelines?|context|prompt)\b"),
+        re.compile(r"(?i)\bdisregard\s+(all\s+)?(previous|prior|above|earlier)\b"),
+        re.compile(r"(?i)\boverride\s+(all\s+)?(your\s+)?(instructions?|rules?|behavior|settings?|guidelines?)\b"),
         # System prompt exposure
-        r"(?i)\b(reveal|show|dump|print|output|expose|repeat|display)\b.{0,50}\b(system\s*prompt|developer\s*message|hidden\s*instructions?|internal\s*policy|secret\s*instructions?)\b",
+        re.compile(r"(?i)\b(reveal|show|dump|print|output|expose|repeat|display)\b.{0,50}\b(system\s*prompt|developer\s*message|hidden\s*instructions?|internal\s*policy|secret\s*instructions?)\b"),
         # From-now-on style overrides (requires "must/will/should" after)
-        r"(?i)\bfrom\s+now\s+on\s+(you\s+)?(must|will|should|are\s+required\s+to|have\s+to)\b",
-        r"(?i)\bstarting\s+(right\s+)?now\s+(you\s+)?(must|will|should|are\s+required\s+to)\b",
+        re.compile(r"(?i)\bfrom\s+now\s+on\s+(you\s+)?(must|will|should|are\s+required\s+to|have\s+to)\b"),
+        re.compile(r"(?i)\bstarting\s+(right\s+)?now\s+(you\s+)?(must|will|should|are\s+required\s+to)\b"),
         # Roleplay injection — only triggers with suspicious context words
-        r"(?i)\b(act|pretend|roleplay|play|simulate|behave)\s+(as|like)\s+(an?\s+)?"
-        r"(unrestricted|unfiltered|different\s+ai|evil|hacked|jailbroken|uncensored|unlimited)\b",
-        r"(?i)\b(act|pretend|roleplay)\s+(as|like)\s+"
-        r"(DAN|GPT-?[0-9]+|Claude\s*[0-9]*|an?\s+AI\s+without\s+(restrictions?|guidelines?|rules?|policies?))\b",
+        re.compile(r"(?i)\b(act|pretend|roleplay|play|simulate|behave)\s+(as|like)\s+(an?\s+)?"
+                   r"(unrestricted|unfiltered|different\s+ai|evil|hacked|jailbroken|uncensored|unlimited)\b"),
+        re.compile(r"(?i)\b(act|pretend|roleplay)\s+(as|like)\s+"
+                   r"(DAN|GPT-?[0-9]+|Claude\s*[0-9]*|an?\s+AI\s+without\s+(restrictions?|guidelines?|rules?|policies?))\b"),
         # Developer / admin impersonation
-        r"(?i)\b(i\s+am|i'm|this\s+is)\s+(the\s+)?(developer|admin|anthropic|openai|operator|system\s+owner)\b",
-        r"(?i)\bdeveloper\s+(mode|override|access\s+granted|key|token|unlock)\b",
-        r"(?i)\badmin\s+(mode|override|access\s+granted|unlock)\b",
+        re.compile(r"(?i)\b(i\s+am|i'm|this\s+is)\s+(the\s+)?(developer|admin|anthropic|openai|operator|system\s+owner)\b"),
+        re.compile(r"(?i)\bdeveloper\s+(mode|override|access\s+granted|key|token|unlock)\b"),
+        re.compile(r"(?i)\badmin\s+(mode|override|access\s+granted|unlock)\b"),
         # Safety bypass
-        r"(?i)\b(bypass|circumvent|disable|turn\s+off|deactivate|remove)\s+(all\s+)?"
-        r"(safety|content\s+filter|moderation|policy|restriction|guardrail)\b",
+        re.compile(r"(?i)\b(bypass|circumvent|disable|turn\s+off|deactivate|remove)\s+(all\s+)?"
+                   r"(safety|content\s+filter|moderation|policy|restriction|guardrail)\b"),
         # Special token injection (LLM prompt format attacks)
-        r"(?i)<!--.*?(ignore|forget|override|bypass).*?-->",
-        r"(?s)(?i)<\s*system\s*>.*?<\s*/\s*system\s*>",
-        r"(?i)\[INST\]|\[SYS\]|<\|system\|>|<\|im_start\|>|\{\{system\}\}",
+        re.compile(r"(?i)<!--.*?(ignore|forget|override|bypass).*?-->"),
+        re.compile(r"(?s)(?i)<\s*system\s*>.*?<\s*/\s*system\s*>"),
+        re.compile(r"(?i)\[INST\]|\[SYS\]|<\|system\|>|<\|im_start\|>|\{\{system\}\}"),
         # Repetition / context flooding DoS
-        r"(?s)(.{15,})\1{4,}",
+        re.compile(r"(?s)(.{15,})\1{4,}"),
     ]
 
     # ── Layer 5 — Soft Heuristic Markers ──────────────────────
@@ -271,8 +271,8 @@ class PromptSanitizer:
         sanitized = cls.normalize_text(text)
         sanitized = cls.TOKEN_SMUGGLING.sub("[REDACTED]", sanitized)
 
-        for pattern in cls.JAILBREAK_PATTERNS:
-            sanitized = re.sub(pattern, "[REDACTED]", sanitized)
+        for pattern in cls._COMPILED_JAILBREAK:
+            sanitized = pattern.sub("[REDACTED]", sanitized)
 
         sanitized = cls.normalize_text(sanitized)
 

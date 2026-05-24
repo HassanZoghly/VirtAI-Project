@@ -36,7 +36,8 @@ class TurnContext:
     aborted: bool = False
 
     # A queue to handle streaming items between LLM and TTS if needed
-    sentence_queue: asyncio.Queue[str | None] = field(default_factory=asyncio.Queue)
+    sentence_queue: asyncio.Queue[str | None] = field(default_factory=lambda: asyncio.Queue(maxsize=5))
+    current_sentence: str | None = None
 
     def abort(self) -> None:
         self.aborted = True

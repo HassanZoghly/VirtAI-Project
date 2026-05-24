@@ -65,6 +65,18 @@ class TokenBudgetManager:
                 # We stop adding chunks once we hit the limit
                 break
 
+        if len(fitted_chunks) < len(chunks):
+            logger.warning(
+                "[TokenBudget] Context truncated",
+                extra={
+                    "chunks_requested": len(chunks),
+                    "chunks_fitted": len(fitted_chunks),
+                    "chunks_dropped": len(chunks) - len(fitted_chunks),
+                    "budget_used": current_used,
+                    "budget_available": available_budget,
+                }
+            )
+
         logger.debug(
             f"[TokenBudgetManager] Budget check: max={max_context_tokens}, "
             f"base={base_tokens}, used_by_chunks={current_used}, "

@@ -180,6 +180,11 @@ async def lifespan(app: FastAPI):
             animation_service=AnimationIntelligenceService(), viseme_generator=VisemeGenerator()
         )
 
+    def create_chat_context_cache():
+        from app.infrastructure.cache.chat_context_cache import ChatContextCache
+
+        return ChatContextCache()
+
     # ── Session manager (needs to be updated to accept a repo factory) ───────
     session_manager = SessionManager(
         chat_repository_factory=get_chat_repo,
@@ -190,6 +195,7 @@ async def lifespan(app: FastAPI):
         tts_service_factory=create_tts_service,
         retrieval_service_factory=create_retrieval_service,
         animation_stage_factory=create_animation_stage,
+        chat_context_cache_factory=create_chat_context_cache,
     )
     init_session_manager(session_manager)
 
@@ -275,6 +281,10 @@ async def lifespan(app: FastAPI):
         await arq_pool.close()
     await close_redis()
     await close_db()
+    from app.infrastructure.rag.fastembed_provider import FastEmbedProvider
+    FastEmbedProvider.shutdown_executor()
+    from app.infrastructure.rag.reranker import CrossEncoderReranker
+    CrossEncoderReranker.shutdown_executor()
     logger.info("Server shutdown complete")
 
 

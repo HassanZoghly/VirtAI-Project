@@ -7,10 +7,11 @@ Uses the OpenAI SDK for both generation and embedding.
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from typing import Any, Union
 
 from loguru import logger
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 from app.domain.rag.ports import LLMGenerationProvider
 from app.infrastructure.llm.enums import OpenAIRole
@@ -42,7 +43,7 @@ class OpenAIGenerationProvider(LLMGenerationProvider):
         self.embedding_model_id: str | None = None
         self.embedding_size: int | None = None
 
-        self.client = OpenAI(
+        self.client = AsyncOpenAI(
             api_key=self.api_key,
             base_url=self.api_url if self.api_url else None,
         )
@@ -64,7 +65,7 @@ class OpenAIGenerationProvider(LLMGenerationProvider):
 
     # ── Generation ───────────────────────────────────────────────────────
 
-    def generate_text(
+    async def generate_text(
         self,
         prompt: str,
         chat_history: list | None = None,
@@ -83,7 +84,7 @@ class OpenAIGenerationProvider(LLMGenerationProvider):
 
         chat_history.append(self.construct_prompt(prompt=prompt, role=OpenAIRole.USER.value))
 
-        response = self.client.chat.completions.create(
+        response = await self.client.chat.completions.create(
             model=self.generation_model_id,
             messages=chat_history,
             max_tokens=max_output_tokens,
@@ -101,14 +102,14 @@ class OpenAIGenerationProvider(LLMGenerationProvider):
 
         return response.choices[0].message.content
 
-    def generate_stream(
+    async def generate_stream(
         self,
         prompt: str,
         chat_history: list | None = None,
         max_output_tokens: int | None = None,
         temperature: float | None = None,
         **kwargs: Any,
-    ) -> Any:
+    ) -> AsyncGenerator[str, None]:
         """Yields text chunks from a streaming completion."""
         if not self.client or not self.generation_model_id:
             yield "Error: OpenAI client or model not configured."
@@ -121,14 +122,14 @@ class OpenAIGenerationProvider(LLMGenerationProvider):
         chat_history.append(self.construct_prompt(prompt=prompt, role=OpenAIRole.USER.value))
 
         try:
-            response = self.client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model=self.generation_model_id,
                 messages=chat_history,
                 max_tokens=max_output_tokens,
                 temperature=temperature,
                 stream=True,
             )
-            for chunk in response:
+            async for chunk in response:
                 delta = chunk.choices[0].delta if chunk.choices else None
                 content = getattr(delta, "content", None) if delta else None
                 if content:
@@ -139,7 +140,7 @@ class OpenAIGenerationProvider(LLMGenerationProvider):
 
     # ── Embedding ────────────────────────────────────────────────────────
 
-    def embed_text(
+    async def embed_text(
         self, text: Union[str, list[str]], document_type: str | None = None
     ) -> list[list[float]] | None:
         if not self.client or not self.embedding_model_id:
@@ -149,7 +150,7 @@ class OpenAIGenerationProvider(LLMGenerationProvider):
         if isinstance(text, str):
             text = [text]
 
-        response = self.client.embeddings.create(
+        response = await self.client.embeddings.create(
             model=self.embedding_model_id,
             input=text,
         )

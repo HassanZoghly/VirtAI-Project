@@ -30,18 +30,20 @@ class TemplateParser:
 
     def get(
         self,
+        category: str,
         key: str,
-        vars: dict | None = None,
+        variables: dict | None = None,
     ) -> str | None:
         """
         Retrieve and render a prompt template by name.
 
         Args:
+            category: Namespace (ignored, for compatibility with port).
             key: Template attribute name (e.g. "system_prompt", "footer_prompt").
-            vars: Substitution variables for ``string.Template.substitute()``.
+            variables: Substitution variables for ``string.Template.substitute()``.
 
         Returns:
-            Rendered template string, or ``None`` if not found.
+            Rendered template string.
         """
         if not key:
             return None
@@ -52,7 +54,7 @@ class TemplateParser:
             return None
 
         try:
-            return template.substitute(vars or {})
+            return template.substitute(variables or {})
         except (KeyError, ValueError) as exc:
             logger.error(f"Template substitution failed for '{key}': {exc}")
             return None

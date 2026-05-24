@@ -124,7 +124,7 @@ async def _run_ingestion(
 ) -> None:
     from app.application.rag.ingest_document import IngestDocumentUseCase
     from app.infrastructure.rag.markdown_chunker import MarkdownChunker
-    from app.infrastructure.rag.pdf_parser import PyMuPDFParser
+    from app.infrastructure.rag.pdf_markdown_extractor import PDFMarkdownExtractor
     from app.infrastructure.rag.smart_chunker import SmartChunker
     from app.shared.config import get_settings
 
@@ -177,7 +177,7 @@ async def _run_ingestion(
     # Instantiate use case
     use_case = IngestDocumentUseCase(
         storage=storage,
-        parser=PyMuPDFParser(),
+        parser=PDFMarkdownExtractor(),
         chunker=cast("Any", chunker),
         embedder=embedder,
         db_session_factory=cast("Any", get_short_session),

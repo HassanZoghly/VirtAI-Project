@@ -72,9 +72,7 @@ class GuardrailService:
         if not query or not query.strip():
             return False, "Query cannot be empty."
 
-        # Delegate to production PromptSanitizer for injection detection.
-        # sanitize() returns (cleaned_text, is_suspicious).
-        _, is_suspicious = PromptSanitizer.sanitize(query)
+        is_suspicious = PromptSanitizer.is_suspicious(query)
         if is_suspicious:
             logger.warning(f"[Guardrails] PromptSanitizer flagged input: {query[:80]}")
             return False, (

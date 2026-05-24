@@ -21,6 +21,8 @@ from pathlib import Path
 
 from loguru import logger
 
+from app.domain.rag.ports import DocumentParser
+
 try:
     import fitz  # PyMuPDF
 
@@ -52,7 +54,7 @@ class ExtractedPage:
     metadata: dict = field(default_factory=dict)
 
 
-class PDFMarkdownExtractor:
+class PDFMarkdownExtractor(DocumentParser):
     """
     Extracts structured Markdown from PDF files using PyMuPDF.
 
@@ -108,6 +110,24 @@ class PDFMarkdownExtractor:
             doc.close()
 
         return pages
+
+    async def parse(self, file_path: str, file_type: str) -> str:
+        """Implements DocumentParser.parse"""
+        pages = self.extract(file_path)
+        return "\n\n".join(page.page_content for page in pages)
+
+    async def parse_bytes(self, data: bytes, file_type: str) -> str:
+        """Implements DocumentParser.parse_bytes"""
+        import os
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(data)
+            tmp_path = tmp.name
+        try:
+            return await self.parse(tmp_path, file_type)
+        finally:
+            os.remove(tmp_path)
 
     # ── Page-level extraction ────────────────────────────────────────────
 

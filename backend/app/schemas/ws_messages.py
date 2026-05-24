@@ -448,6 +448,7 @@ class ClientMessageType(str, Enum):
     PING = "ping"
     ABORT = "abort"
     VOICE_MODE_STOP = "voice_mode_stop"
+    AUDIO_CHUNK = "audio_chunk"
 
 
 class ServerMessageType(str, Enum):

@@ -198,10 +198,6 @@ export default function ClassroomShell() {
       onMessage('transcript', (d) => {
         if (d.is_final) {
           setInterimTranscript('');
-          if (d.text?.trim()) {
-            const text = d.text.trim();
-            commitAndSend(text);
-          }
         } else {
           setInterimTranscript(d.text || '');
         }

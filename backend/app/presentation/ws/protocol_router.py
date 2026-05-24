@@ -95,6 +95,8 @@ class ProtocolRouter:
                 await self._handle_abort(data)
             case ClientMessageType.VOICE_MODE_STOP:
                 await self._handle_voice_mode_stop(data)
+            case ClientMessageType.AUDIO_CHUNK:
+                pass  # Handled via binary frames, ignore JSON control message
             case _:
                 await self.ctx.outbound_sender.safe_send_error(
                     code="UNKNOWN_TYPE",

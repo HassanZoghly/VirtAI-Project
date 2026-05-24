@@ -31,6 +31,8 @@ class DomainDocument:
     processed_chunks: int
     total_chunks: int
     error_message: str | None
+    retrieval_scope: str
+    scope_id: UUID | None
 
 def _to_domain(doc: Document) -> DomainDocument:
     return DomainDocument(
@@ -47,6 +49,8 @@ def _to_domain(doc: Document) -> DomainDocument:
         processed_chunks=getattr(doc, "processed_chunks", 0),
         total_chunks=getattr(doc, "total_chunks", 0),
         error_message=getattr(doc, "error_message", None),
+        retrieval_scope=getattr(doc, "retrieval_scope", "GLOBAL"),
+        scope_id=getattr(doc, "scope_id", None),
     )
 
 

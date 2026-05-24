@@ -150,6 +150,7 @@ class ConversationPipeline:
                     if context.aborted:
                         break
                     await self.animation_stage.process(context)
+                    context.sentence_index += 1
 
             audio_task = asyncio.create_task(process_audio())
 

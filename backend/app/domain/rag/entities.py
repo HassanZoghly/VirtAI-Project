@@ -13,6 +13,8 @@ class Document(Protocol):
     upload_date: datetime
     chunk_count: int
     status: str  # processing, ready, failed
+    retrieval_scope: str
+    scope_id: UUID | None
 
 
 @dataclass

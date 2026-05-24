@@ -9,15 +9,14 @@ settings = get_settings()
 
 from typing import Any
 
-worker_settings: dict[str, Any] = {
-    "functions": [run_ingestion_task],
-    "redis_settings": RedisSettings.from_dsn(settings.REDIS_URL),
-    "max_tries": 3,
-    "retry_backoff": True,
-    "job_timeout": 600,
-    "health_check_interval": 30,
-    "max_concurrency": 1,
-    "on_startup": worker_startup_validation,
-    "on_shutdown": worker_shutdown,
-    "queue_name": "ingestion",
-}
+class WorkerSettings:
+    functions = [run_ingestion_task]
+    redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
+    max_tries = 3
+    retry_backoff = True
+    job_timeout = 600
+    health_check_interval = 30
+    max_concurrency = 1
+    on_startup = worker_startup_validation
+    on_shutdown = worker_shutdown
+    queue_name = "ingestion"

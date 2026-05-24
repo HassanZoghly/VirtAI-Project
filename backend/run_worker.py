@@ -7,7 +7,7 @@ sys.path.insert(0, str(backend_dir))
 
 from arq import run_worker
 
-from app.infrastructure.worker.arq_settings import worker_settings
+from app.infrastructure.worker.arq_settings import WorkerSettings
 
 if __name__ == "__main__":
-    run_worker(worker_settings)
+    run_worker(WorkerSettings)

@@ -503,7 +503,7 @@ class AnimationIntelligenceService:
                 if asset == profile.asset_name:
                     score -= max(0.08, 0.62 / recency_index)
 
-            usage_penalty = min(1.2, profile_usage[profile.asset_name] * 0.12)
+            usage_penalty = min(1.2, profile_usage.get(profile.asset_name, 0) * 0.12)
             score -= usage_penalty
 
             if last_asset == profile.asset_name:
@@ -561,12 +561,13 @@ class AnimationIntelligenceService:
         }
 
         for asset in assets:
-            match = re.match(r"Talk(\d)\.(\d)", asset)
+            # Match Talk_0, Talk_1, etc.
+            match = re.match(r"Talk_(\d+)", asset)
             if not match:
                 continue
 
             talk_id = int(match.group(1))
-            variant = int(match.group(2))
+            variant = 1
             animation_id = f"talk{talk_id}"
 
             # Inferred frame windows favor easing in/out and avoid abrupt cuts.

@@ -20,6 +20,7 @@ RETRYABLE_TYPES = (
 )
 
 NON_RETRYABLE_TYPES = (
+    AttributeError,
     UnicodeDecodeError,
     EmptyDocumentError,
     UnsupportedFileType,

@@ -187,7 +187,7 @@ class TTSStage(BaseStage):
             tts_result = await self._tts.generate(
                 text=text_to_speak,
                 session_id=context.session_id,
-                message_id=context.message_id,
+                message_id=f"{context.message_id}_{context.sentence_index}",
                 trace_id=context.trace_id,
             )
             context.tts_result = tts_result
@@ -215,7 +215,8 @@ class AnimationStage(BaseStage):
         self._animation_service = animation_service
         self._viseme_generator = viseme_generator
         self._recent_animation_assets: list[str] = []
-        self._profile_usage: dict[str, int] = {}
+        import collections
+        self._profile_usage: dict[str, int] = collections.defaultdict(int)
         self._intent_history: list[str] = []
 
     async def process(self, context: TurnContext) -> None:
@@ -223,12 +224,14 @@ class AnimationStage(BaseStage):
         if context.aborted or not text_to_animate or not context.history:
             return
 
+        chunk_message_id = f"{context.message_id}_{context.sentence_index}"
+
         if context.tts_result and getattr(context.tts_result, "audio_ref", None):
             mouth_cues = await self._viseme_generator.generate_from_audio(
                 audio_path=context.tts_result.audio_ref,
                 text=text_to_animate,
                 session_id=context.session_id,
-                message_id=context.message_id,
+                message_id=chunk_message_id,
             )
         else:
             mouth_cues = []
@@ -261,7 +264,7 @@ class AnimationStage(BaseStage):
         context.timeline = timeline_payload["timeline"]
 
         audio_url = (
-            f"/api/v1/audio/{context.session_id}/{context.message_id}.mp3"
+            f"/api/v1/audio/{context.session_id}/{chunk_message_id}.mp3"
             if context.tts_result
             else ""
         )
@@ -272,7 +275,7 @@ class AnimationStage(BaseStage):
                 await context.send_callback(
                     make_tts_ready(
                         session_id=context.session_id,
-                        message_id=context.message_id,
+                        message_id=chunk_message_id,
                         audio_url=audio_url,
                         duration_ms=duration,
                     )
@@ -280,7 +283,7 @@ class AnimationStage(BaseStage):
             await context.send_callback(
                 make_visemes_ready(
                     session_id=context.session_id,
-                    message_id=context.message_id,
+                    message_id=chunk_message_id,
                     mouth_cues=mouth_cues,
                 )
             )
@@ -289,7 +292,7 @@ class AnimationStage(BaseStage):
                 await context.send_callback(
                     make_animation_timeline_v2(
                         session_id=context.session_id,
-                        message_id=context.message_id,
+                        message_id=chunk_message_id,
                         timeline=timeline_payload["timeline"],
                         meta=timeline_payload.get("meta", {}),
                     )

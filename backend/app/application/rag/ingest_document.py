@@ -15,7 +15,12 @@ from app.domain.rag.ports import (
 )
 from app.domain.storage.ports import StorageProvider
 from app.shared.config import get_settings
-from app.shared.errors import ChunkLimitExceeded, EmptyDocumentError, IngestionCancelledException
+from app.shared.errors import (
+    ChunkLimitExceeded,
+    EmptyDocumentError,
+    IngestionCancelledException,
+    RAGException,
+)
 from app.shared.ids import require_uuid
 
 
@@ -58,8 +63,10 @@ class IngestDocumentUseCase:
         async with self.db_session_factory() as db:
             repo = self.document_repo_factory(db)
             doc = await repo.get(doc_id)
-            retrieval_scope = doc.retrieval_scope
-            scope_id = doc.scope_id
+            if doc is None:
+                raise RAGException(f"Document not found: {doc_id}")
+            retrieval_scope = getattr(doc, "retrieval_scope", "GLOBAL") or "GLOBAL"
+            scope_id = getattr(doc, "scope_id", None)
             await db.commit()
 
         # 1. UPLOADING

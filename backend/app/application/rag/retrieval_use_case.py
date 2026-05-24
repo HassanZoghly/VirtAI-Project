@@ -1,10 +1,9 @@
 from loguru import logger
 
-from app.domain.rag.entities import DocumentChunk
-from app.domain.rag.ports import EmbeddingProvider, VectorStore, RerankerPort
-
-
 from app.application.rag.token_budget import TokenBudgetManager
+from app.domain.rag.entities import DocumentChunk
+from app.domain.rag.ports import EmbeddingProvider, RerankerPort, VectorStore
+from app.shared.ids import parse_uuid
 
 
 class RetrievalUseCase:
@@ -15,14 +14,16 @@ class RetrievalUseCase:
         embedder: EmbeddingProvider,
         vector_store: VectorStore,
         reranker: RerankerPort | None = None,
-        budget_manager: TokenBudgetManager | None = None
+        budget_manager: TokenBudgetManager | None = None,
     ):
         self.embedder = embedder
         self.vector_store = vector_store
         self.reranker = reranker
         self.budget_manager = budget_manager
 
-    async def retrieve(self, query: str, top_k: int = 5, session_id: str | None = None) -> list[DocumentChunk]:
+    async def retrieve(
+        self, query: str, top_k: int = 5, session_id: str | None = None
+    ) -> list[DocumentChunk]:
         """Retrieves relevant chunks via hybrid search and optional reranking."""
         if not query.strip():
             return []
@@ -30,18 +31,19 @@ class RetrievalUseCase:
         try:
             logger.info(f"Retrieving chunks for query: {query[:50]}")
             query_vector = await self.embedder.embed(query)
+            scope_uuid = parse_uuid(session_id) if session_id else None
 
             # 1. Hybrid Search
             results = await self.vector_store.hybrid_search(
                 query_text=query,
                 query_vector=query_vector,
                 limit=top_k * 2,  # fetch more for reranking
-                scope_id=session_id
+                scope_id=scope_uuid,
             )
-            
+
             if not results:
                 return []
-                
+
             chunks = [chunk for chunk, _ in results]
 
             # 2. Reranking
@@ -58,25 +60,25 @@ class RetrievalUseCase:
             return []
 
     async def inject_context(
-        self, 
-        query: str, 
-        system_prompt: str, 
-        top_k: int = 5, 
+        self,
+        query: str,
+        system_prompt: str,
+        top_k: int = 5,
         session_id: str | None = None,
-        max_context_tokens: int = 4000
+        max_context_tokens: int = 4000,
     ) -> str:
         """Retrieves relevant chunks and injects them into the system prompt."""
         chunks = await self.retrieve(query, top_k=top_k, session_id=session_id)
 
         if not chunks:
             return system_prompt
-            
+
         if self.budget_manager:
             chunks = self.budget_manager.fit_chunks_to_budget(
                 chunks=chunks,
                 system_prompt=system_prompt,
                 user_query=query,
-                max_context_tokens=max_context_tokens
+                max_context_tokens=max_context_tokens,
             )
 
         context_parts = []
@@ -107,6 +109,14 @@ class RetrievalUseCase:
 
             if not chunks:
                 return ""
+
+            if self.budget_manager and chunks:
+                chunks = self.budget_manager.fit_chunks_to_budget(
+                    chunks=chunks,
+                    system_prompt="",
+                    user_query=query,
+                    max_context_tokens=3000,
+                )
 
             # Format chunks into a single context string
             context_parts = []

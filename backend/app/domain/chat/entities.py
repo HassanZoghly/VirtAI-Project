@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import base64
+import logging
 import re
 import unicodedata
-from typing import ClassVar
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
+from typing import ClassVar
 
 _logger = logging.getLogger(__name__)
 
@@ -296,7 +296,7 @@ class PromptSanitizer:
         sanitized = cls.sanitize(text)
 
         if cls.is_suspicious(text):
-            logger.warning(
+            _logger.warning(
                 "Suspicious user input detected",
                 extra={
                     "raw_preview": text[:300],
@@ -307,6 +307,7 @@ class PromptSanitizer:
         return sanitized
 
 
+@dataclass
 class ConversationHistory:
     """
     Manages conversation history with automatic trimming.
@@ -358,7 +359,9 @@ class ConversationHistory:
             self._messages = self._messages[-max_raw:]
             _logger.warning(
                 "History trimmed by pair count | removed=%d messages | remaining=%d | max_pairs=%d",
-                trimmed, len(self._messages), self.max_messages,
+                trimmed,
+                len(self._messages),
+                self.max_messages,
             )
 
         while len(self._messages) >= 2:
@@ -371,7 +374,9 @@ class ConversationHistory:
             self._messages = self._messages[2:]
             _logger.warning(
                 "History trimmed by token budget | est_tokens=%d | max=%d | remaining=%d",
-                estimated_tokens, self.max_tokens, len(self._messages),
+                estimated_tokens,
+                self.max_tokens,
+                len(self._messages),
             )
 
     @property
@@ -427,7 +432,7 @@ def ev(
     event_type: PipelineEventType,
     session_id: str | None = None,
     trace_id: str | None = None,
-    **kwargs
+    **kwargs,
 ) -> PipelineEvent:
     """Shorthand to create a PipelineEvent."""
     return PipelineEvent(type=event_type, data=kwargs, session_id=session_id, trace_id=trace_id)

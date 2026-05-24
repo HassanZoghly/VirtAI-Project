@@ -10,14 +10,13 @@ from loguru import logger
 
 from app.application.chat.session_manager import Session
 from app.presentation.ws.connection_manager import WSConnectionManager
+from app.presentation.ws.outbound_sender import OutboundSender
+from app.presentation.ws.pipeline_bridge import PipelineBridge, _pipeline_task_done_callback
+from app.presentation.ws.protocol_router import ProtocolRouter
+from app.presentation.ws.session_bootstrap import SessionBootstrap
 from app.presentation.ws.voice_mode_handler import VoiceModeHandler
 from app.schemas.ws_messages import ServerMessage, ServerMessageType, make_error_msg
 from app.shared.config import get_settings
-
-from app.presentation.ws.outbound_sender import OutboundSender
-from app.presentation.ws.session_bootstrap import SessionBootstrap
-from app.presentation.ws.pipeline_bridge import PipelineBridge
-from app.presentation.ws.protocol_router import ProtocolRouter
 
 
 class WebSocketHandler:
@@ -25,6 +24,7 @@ class WebSocketHandler:
     Handles a single WebSocket connection.
     Composed of ProtocolRouter, SessionBootstrap, PipelineBridge, OutboundSender.
     """
+    _family_id: str | None = None
 
     def __init__(
         self,
@@ -60,7 +60,7 @@ class WebSocketHandler:
         # Connection state
         self._connected = True
         self._last_pong_time = time.time()
-        
+
         # Background tasks
         self._heartbeat_task: asyncio.Task | None = None
         self._voice_mode_handler: VoiceModeHandler | None = None
@@ -72,6 +72,7 @@ class WebSocketHandler:
         self.protocol_router = ProtocolRouter(self)
 
         from app.shared.metrics import ws_connections_active
+
         ws_connections_active.inc()
 
         logger.info(
@@ -85,20 +86,22 @@ class WebSocketHandler:
         self._connected = False
         if self._heartbeat_task and not self._heartbeat_task.done():
             self._heartbeat_task.cancel()
-        
+
         await self.pipeline_bridge.cancel_pipeline()
 
         if self._voice_mode_handler:
             self._voice_mode_handler.audio_pipeline.clear_buffer()
-        
+
         try:
             from starlette.websockets import WebSocketState
+
             if self.ws.client_state == WebSocketState.CONNECTED:
                 await self.ws.send_text('{"type":"chat.abort","data":{}}')
         except Exception as e:
             logger.debug(f"[WS] Could not send abort frame during cleanup: {e}")
 
         from app.shared.metrics import ws_connections_active
+
         ws_connections_active.dec()
 
     def _normalize_voice(self, voice_id: str) -> str:
@@ -110,8 +113,13 @@ class WebSocketHandler:
         if not self._session_pending:
             return
         self.session, self._session_pending = await self.session_bootstrap.ensure_session(
-            self.ws, self._user_id, self._avatar_id, self._voice_id,
-            self._requested_session_id, self._family_id, self._session_pending
+            self.ws,
+            self._user_id,
+            self._avatar_id,
+            self._voice_id,
+            self._requested_session_id,
+            self._family_id,
+            self._session_pending,
         )
         self.pipeline = self.session.pipeline
 
@@ -142,7 +150,9 @@ class WebSocketHandler:
                         ),
                         "timestamp": time.time(),
                     },
-                ), self.session.session_id, self._session_pending
+                ),
+                self.session.session_id,
+                self._session_pending,
             )
 
             if self.resumed:
@@ -156,6 +166,10 @@ class WebSocketHandler:
         except Exception as e:
             logger.error(f"[WS] Failed to send ready message: {e}")
             self._connected = False
+            try:
+                await self.ws.close(code=1011, reason="Internal server error")
+            except Exception:
+                pass
             return
 
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
@@ -190,11 +204,13 @@ class WebSocketHandler:
                     continue
                 except WebSocketDisconnect:
                     from app.shared.metrics import ws_connection_drops
+
                     ws_connection_drops.labels(reason="client_disconnect").inc()
                     self._connected = False
                     break
                 except RuntimeError as e:
                     from app.shared.metrics import ws_connection_drops
+
                     if "disconnect" in str(e).lower() or "receive" in str(e).lower():
                         ws_connection_drops.labels(reason="runtime_error_disconnect").inc()
                     else:
@@ -205,10 +221,13 @@ class WebSocketHandler:
                 except Exception as e:
                     logger.error(f"[WS] Error receiving message: {e}")
                     from app.shared.metrics import ws_connection_drops
+
                     ws_connection_drops.labels(reason="unexpected_error").inc()
                     await self.outbound_sender.safe_send(
                         make_error_msg(code="INTERNAL_ERROR", message="Error processing message"),
-                        self.session.session_id, self._session_pending, self._connected
+                        self.session.session_id,
+                        self._session_pending,
+                        self._connected,
                     )
         finally:
             await self._cleanup()
@@ -228,7 +247,8 @@ class WebSocketHandler:
             try:
                 await self.outbound_sender.send(
                     ServerMessage(type=ServerMessageType.PONG, data={"timestamp": time.time()}),
-                    self.session.session_id, self._session_pending
+                    self.session.session_id,
+                    self._session_pending,
                 )
             except Exception:
                 self._connected = False
@@ -237,7 +257,10 @@ class WebSocketHandler:
     async def _get_voice_mode_handler(self) -> VoiceModeHandler:
         await self._ensure_session()
         if self._voice_mode_handler is None:
-            asr_service = self.pipeline._asr
+            pipeline = self.pipeline
+            if not pipeline:
+                raise RuntimeError("Pipeline not initialized")
+            asr_service = pipeline._asr
             if asr_service is None:
                 raise ValueError("ASR service not injected into pipeline")
 
@@ -246,6 +269,7 @@ class WebSocketHandler:
                 session_id=self.session.session_id,
                 asr_service=asr_service,
                 turn_callback=self._run_text_turn,
+                outbound_sender=self.outbound_sender,
             )
         return self._voice_mode_handler
 
@@ -255,6 +279,9 @@ class WebSocketHandler:
 
         await self._ensure_session()
         await self.pipeline_bridge.cancel_pipeline()
+        pipeline = self.pipeline
+        if not pipeline:
+            raise RuntimeError("Pipeline not initialized")
 
         message_id = str(uuid.uuid4())
         session_id = self.session.session_id
@@ -264,13 +291,13 @@ class WebSocketHandler:
             await self.outbound_sender.send_protocol_message(
                 message, session_id, self._session_pending, self._connected
             )
-            
+
         async def send_binary_callback(data: bytes):
             if self._connected:
                 await self.outbound_sender.send_binary(data)
 
         self.pipeline_bridge.pipeline_task = asyncio.create_task(
-            self.pipeline.process_message(
+            pipeline.process_message(
                 message_id=message_id,
                 text=text,
                 session_id=session_id,
@@ -280,6 +307,7 @@ class WebSocketHandler:
             ),
             name=f"pipeline_voice_{session_id}",
         )
+        self.pipeline_bridge.pipeline_task.add_done_callback(_pipeline_task_done_callback)
 
     async def _handle_binary_frame(self, pcm_bytes: bytes) -> None:
         try:
@@ -305,7 +333,9 @@ class WebSocketHandler:
             logger.error(f"[WS] Error handling binary frame: {e}")
             await self.outbound_sender.safe_send(
                 make_error_msg(code="BINARY_FRAME_ERROR", message="Error processing audio data"),
-                self.session.session_id, self._session_pending, self._connected
+                self.session.session_id,
+                self._session_pending,
+                self._connected,
             )
 
     async def _close_for_message_too_large(self, size: int, max_size: int, frame_type: str) -> None:
@@ -314,7 +344,9 @@ class WebSocketHandler:
                 code="MESSAGE_TOO_LARGE",
                 message=f"WebSocket frame exceeds max size ({max_size} bytes)",
             ),
-            self.session.session_id, self._session_pending, self._connected
+            self.session.session_id,
+            self._session_pending,
+            self._connected,
         )
         try:
             await self.ws.close(code=1009)

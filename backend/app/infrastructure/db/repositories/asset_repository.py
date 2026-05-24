@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,16 +22,14 @@ class AssetRepository:
 
     async def get_by_project_and_type(self, project_id: int, asset_type: str) -> Sequence[Asset]:
         stmt = select(Asset).where(
-            Asset.asset_project_id == project_id,
-            Asset.asset_type == asset_type
+            Asset.asset_project_id == project_id, Asset.asset_type == asset_type
         )
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
     async def get_by_project_and_name(self, project_id: int, asset_name: str) -> Asset | None:
         stmt = select(Asset).where(
-            Asset.asset_project_id == project_id,
-            Asset.asset_name == asset_name
+            Asset.asset_project_id == project_id, Asset.asset_name == asset_name
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()

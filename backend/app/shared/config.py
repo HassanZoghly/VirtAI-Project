@@ -179,7 +179,7 @@ class Settings(BaseSettings):
 
     RERANKER_PROVIDER: Literal["cohere"] = "cohere"
     RERANKER_MODEL: str = "rerank-english-v3.0"
-    USE_DUMMY_RERANKER: bool = True
+    USE_DUMMY_RERANKER: bool = False
 
     OPENAI_API_KEY: str = ""
     COHERE_API_KEY: str = ""

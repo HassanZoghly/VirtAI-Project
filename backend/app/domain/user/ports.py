@@ -25,3 +25,11 @@ class UserRepositoryPort(ABC):
 
     @abstractmethod
     async def update(self, user: UserEntity) -> UserEntity: ...
+
+    @abstractmethod
+    async def increment_refresh_token_version(
+        self, user_id: UUID, expected_version: int
+    ) -> UserEntity | None: ...
+
+    @abstractmethod
+    async def force_increment_refresh_token_version(self, user_id: UUID) -> UserEntity | None: ...

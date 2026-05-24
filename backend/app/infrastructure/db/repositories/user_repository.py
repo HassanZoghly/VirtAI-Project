@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.user.entities import AuthProvider, UserEntity
@@ -10,7 +11,9 @@ from app.shared.ids import require_uuid
 
 
 class UserRepository(UserRepositoryPort):
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession | None):
+        if db is None:
+            raise RuntimeError("Database session required")
         self.db = db
 
     async def get_by_id(self, user_id: UUID) -> UserEntity | None:
@@ -29,7 +32,8 @@ class UserRepository(UserRepositoryPort):
         model = result.scalar_one_or_none()
         return self._to_entity(model) if model else None
 
-    async def create(self, entity: UserEntity) -> UserEntity:
+    async def create(self, user: UserEntity) -> UserEntity:
+        entity = user
         model = User(
             id=require_uuid(entity.id, field_name="user_id"),
             email=entity.email,
@@ -41,12 +45,17 @@ class UserRepository(UserRepositoryPort):
             setup_complete=entity.setup_complete,
             is_active=entity.is_active,
         )
-        self.db.add(model)
-        await self.db.commit()
-        await self.db.refresh(model)
-        return self._to_entity(model)
+        try:
+            self.db.add(model)
+            await self.db.commit()
+            await self.db.refresh(model)
+            return self._to_entity(model)
+        except IntegrityError:
+            await self.db.rollback()
+            raise ValueError("User already exists")
 
-    async def update(self, entity: UserEntity) -> UserEntity:
+    async def update(self, user: UserEntity) -> UserEntity:
+        entity = user
         """
         Update user fields.
         WARNING: Not safe for concurrent version bumps —

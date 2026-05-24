@@ -169,27 +169,32 @@ async def run_golden_test() -> None:
 
         # ── Step 4A: Retrieval Proof ─────────────────────────────────────────
         logger.info("Step 4A: Testing retrieval — searching for secret code...")
-        retrieval_uc = RetrievalUseCase(embedder)
-        top_chunks = await retrieval_uc.retrieve("What is the secret code?", top_k=3)
+        search_session = AsyncSessionLocal()
+        vector_store = PGVectorStore(search_session)
+        retrieval_uc = RetrievalUseCase(embedder=embedder, vector_store=vector_store)
+        try:
+            top_chunks = await retrieval_uc.retrieve("What is the secret code?", top_k=3)
 
-        assert top_chunks, "❌ Retrieval returned empty results — no chunks found!"
+            assert top_chunks, "❌ Retrieval returned empty results — no chunks found!"
 
-        retrieved_text = " ".join([c.chunk_text for c in top_chunks])
-        logger.info(f"  → Retrieved {len(top_chunks)} chunk(s)")
-        logger.info(f"  → Retrieved text sample: {retrieved_text[:120]!r}")
+            retrieved_text = " ".join([c.chunk_text for c in top_chunks])
+            logger.info(f"  → Retrieved {len(top_chunks)} chunk(s)")
+            logger.info(f"  → Retrieved text sample: {retrieved_text[:120]!r}")
 
-        assert SECRET_CODE in retrieved_text, (
-            f"❌ RETRIEVAL PROOF FAILED: '{SECRET_CODE}' NOT found in retrieved chunks.\n"
-            f"Retrieved: {retrieved_text!r}"
-        )
-        logger.info(f"  ✅ RETRIEVAL PROOF: '{SECRET_CODE}' found in retrieved chunks.")
+            assert SECRET_CODE in retrieved_text, (
+                f"❌ RETRIEVAL PROOF FAILED: '{SECRET_CODE}' NOT found in retrieved chunks.\n"
+                f"Retrieved: {retrieved_text!r}"
+            )
+            logger.info(f"  ✅ RETRIEVAL PROOF: '{SECRET_CODE}' found in retrieved chunks.")
 
-        # ── Step 4B: Prompt Injection Proof ──────────────────────────────────
-        logger.info("Step 4B: Testing context injection into system prompt...")
-        base_system_prompt = "You are a helpful assistant."
-        injected_prompt = await retrieval_uc.inject_context(
-            "What is the secret code?", base_system_prompt, top_k=3
-        )
+            # ── Step 4B: Prompt Injection Proof ──────────────────────────────────
+            logger.info("Step 4B: Testing context injection into system prompt...")
+            base_system_prompt = "You are a helpful assistant."
+            injected_prompt = await retrieval_uc.inject_context(
+                "What is the secret code?", base_system_prompt, top_k=3
+            )
+        finally:
+            await search_session.close()
 
         logger.info(f"  → Injected prompt length: {len(injected_prompt)} chars")
         logger.info(f"  → Prompt sample: {injected_prompt[:200]!r}")

@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections.abc import AsyncGenerator, Callable
+from typing import Any, cast
 
 from groq import AsyncGroq
 from loguru import logger
@@ -140,9 +141,10 @@ class GroqLLMProvider(BaseLLMProvider):
         )
 
         # ── Open Groq stream ──────────────────────────────────────────────────
+        groq_stream: Any = None
         try:
-            from tenacity import AsyncRetrying, wait_exponential, stop_after_attempt
-            
+            from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential
+
             async for attempt in AsyncRetrying(
                 wait=wait_exponential(multiplier=1, min=2, max=10),
                 stop=stop_after_attempt(3),
@@ -151,7 +153,7 @@ class GroqLLMProvider(BaseLLMProvider):
                 with attempt:
                     groq_stream = await self._client.chat.completions.create(
                         model=self.model,
-                        messages=messages,
+                        messages=cast("list[Any]", messages),
                         max_tokens=self.max_tokens,
                         temperature=self.temperature,
                         stream=True,
@@ -233,9 +235,10 @@ class GroqLLMProvider(BaseLLMProvider):
         messages = history.get_messages()
         start_time = time.perf_counter()
         logger.info(f"LLM complete | model={self.model} | messages={len(messages)}")
+        response: Any = None
         try:
-            from tenacity import AsyncRetrying, wait_exponential, stop_after_attempt
-            
+            from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential
+
             async for attempt in AsyncRetrying(
                 wait=wait_exponential(multiplier=1, min=2, max=10),
                 stop=stop_after_attempt(3),
@@ -244,7 +247,7 @@ class GroqLLMProvider(BaseLLMProvider):
                 with attempt:
                     response = await self._client.chat.completions.create(
                         model=self.model,
-                        messages=messages,  # type: ignore[arg-type]
+                        messages=cast("list[Any]", messages),
                         max_tokens=self.max_tokens,
                         temperature=self.temperature,
                         stream=False,
@@ -291,7 +294,7 @@ class GroqLLMProvider(BaseLLMProvider):
     async def is_available(self) -> bool:
         """Quick health check against Groq API."""
         try:
-            history = ConversationHistory(system_prompt="You are a helpful assistant.")
+            history = ConversationHistory(system_prompt="")
             history.add_user_message("Hi")
             result = await self.complete(history)
             return bool(result.full_text)

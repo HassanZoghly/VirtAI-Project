@@ -23,12 +23,10 @@ from dataclasses import dataclass, field
 from loguru import logger
 
 try:
-    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
 except ImportError:
     RecursiveCharacterTextSplitter = None
-    logger.warning(
-        "langchain text_splitter not installed — SmartChunker unavailable"
-    )
+    logger.warning("langchain text_splitter not installed — SmartChunker unavailable")
 
 
 @dataclass
@@ -56,15 +54,15 @@ class SmartChunker:
 
     # Markdown-aware separators (ordered by priority)
     SEPARATORS = [
-        "\n```",       # code blocks
-        "\n\n|",       # tables
-        "\n\n## ",     # h2
-        "\n\n### ",    # h3
-        "\n\n#### ",   # h4
-        "\n\n",        # paragraph break
-        "\n",          # line break
-        " ",           # word break
-        "",            # character break (last resort)
+        "\n```",  # code blocks
+        "\n\n|",  # tables
+        "\n\n## ",  # h2
+        "\n\n### ",  # h3
+        "\n\n#### ",  # h4
+        "\n\n",  # paragraph break
+        "\n",  # line break
+        " ",  # word break
+        "",  # character break (last resort)
     ]
 
     def __init__(self, chunk_size: int = 1000, overlap_size: int = 200):
@@ -102,10 +100,12 @@ class SmartChunker:
 
             # Small pages go in as single chunks
             if len(normalized) <= self.chunk_size:
-                chunks.append(ChunkedDocument(
-                    page_content=normalized,
-                    metadata=metadata,
-                ))
+                chunks.append(
+                    ChunkedDocument(
+                        page_content=normalized,
+                        metadata=metadata,
+                    )
+                )
                 continue
 
             # Extract structural blocks and build chunks
@@ -114,10 +114,12 @@ class SmartChunker:
 
             for chunk_text in page_chunks:
                 if chunk_text.strip():
-                    chunks.append(ChunkedDocument(
-                        page_content=chunk_text.strip(),
-                        metadata=metadata,
-                    ))
+                    chunks.append(
+                        ChunkedDocument(
+                            page_content=chunk_text.strip(),
+                            metadata=metadata,
+                        )
+                    )
 
         return chunks
 
@@ -244,7 +246,7 @@ class SmartChunker:
                 continue
 
             # Check if adding this block exceeds the limit
-            candidate = current_blocks + [block_text]
+            candidate = [*current_blocks, block_text]
             candidate_text = "\n\n".join(candidate)
             if current_blocks and len(candidate_text) > self.chunk_size:
                 flush()

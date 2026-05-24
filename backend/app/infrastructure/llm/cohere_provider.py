@@ -8,10 +8,10 @@ and SummarizerAgent for result quality improvement.
 
 from __future__ import annotations
 
-from typing import Any, Generator, Union
+from typing import Any, Union
 
-from loguru import logger
 import cohere
+from loguru import logger
 
 from app.domain.rag.ports import LLMGenerationProvider
 from app.infrastructure.llm.enums import CoHereRole, DocumentTypeEnum
@@ -71,6 +71,7 @@ class CoHereProvider(LLMGenerationProvider):
         chat_history: list | None = None,
         max_output_tokens: int | None = None,
         temperature: float | None = None,
+        **kwargs: Any,
     ) -> str | None:
         if not self.client or not self.generation_model_id:
             logger.error("Cohere client or generation model not configured")
@@ -96,6 +97,7 @@ class CoHereProvider(LLMGenerationProvider):
         chat_history: list | None = None,
         max_output_tokens: int | None = None,
         temperature: float | None = None,
+        **kwargs: Any,
     ):
         """Yields text chunks from a streaming Cohere completion."""
         if not self.client or not self.generation_model_id:
@@ -170,7 +172,9 @@ class CoHereProvider(LLMGenerationProvider):
             embedding_types=["float"],
         )
 
-        return list(response.embeddings.float) if response else None
+        if not response:
+            return None
+        return [[float(x) for x in embedding] for embedding in response.embeddings]
 
     # ── Prompt construction ──────────────────────────────────────────────
 

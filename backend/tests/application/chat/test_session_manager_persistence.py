@@ -7,6 +7,7 @@ an injected chat_repository_factory (not module-level functions).
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from uuid import uuid4
 
 import pytest
@@ -17,34 +18,46 @@ from app.application.chat.session_manager import SessionManager
 def _make_manager(get_session=None, create_session=None) -> SessionManager:
     """Build a SessionManager with a fake repository factory."""
 
-    class FakeRepo:
-        async def get_chat_session(self, session_id: str):
+    from app.domain.chat.ports import ChatRepositoryPort
+
+    class FakeRepo(ChatRepositoryPort):
+        async def create_chat_session(self, user_id: str, title: str = "New Chat", session_id: str | None = None) -> dict:
+            if create_session:
+                return await create_session(user_id=user_id, title=title, session_id=session_id)
+            return {"id": session_id}
+
+        async def get_chat_session(self, session_id: str) -> dict | None:
             if get_session:
                 return await get_session(session_id)
             return None
 
-        async def create_chat_session(self, **kwargs):
-            if create_session:
-                return await create_session(**kwargs)
-            return {"id": kwargs.get("session_id")}
+        async def list_user_sessions(self, user_id: str, archived: bool = False, limit: int = 50) -> list[dict]:
+            return []
+
+        async def delete_chat_session(self, session_id: str) -> bool:
+            return True
+
+        async def save_message(self, session_id: str, role: str, content: str, input_type: str = "text", tts_cache_key: str | None = None, sources: list[dict] | None = None) -> dict:
+            return {}
+
+        async def get_session_messages(self, session_id: str, limit: int = 50) -> list[dict]:
+            return []
+
+        async def get_message_count(self, session_id: str) -> int:
+            return 0
 
     class FakeSession:
         pass
 
+    @asynccontextmanager
     async def factory():
-        return FakeSession()
+        yield FakeRepo()
 
     manager = SessionManager(
         chat_repository_factory=factory,
         session_timeout_sec=300,
         session_cleanup_interval=60,
     )
-
-    # Patch _get_repo to return our fake repo directly
-    async def _get_repo():
-        return FakeRepo()
-
-    manager._get_repo = _get_repo
     return manager
 
 

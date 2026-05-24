@@ -8,32 +8,48 @@ and user lookup at the module level in router.py to bypass cryptographic checks.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from fastapi import WebSocket
+from starlette.datastructures import Address, Headers
 
 from app.presentation.http.v1 import router as v1_router
+from app.presentation.ws.connection_manager import WSConnectionManager
 
 MOCK_TOKEN = "valid.mock.token"
 MOCK_USER_ID = str(uuid4())
 MOCK_SESSION_ID = str(uuid4())
 
 
-class _FakeWebSocket:
+class _FakeWebSocket(WebSocket):
     """Simulates a WebSocket that carries the auth token in subprotocols."""
 
     def __init__(self, token: str = MOCK_TOKEN) -> None:
-        self.client = SimpleNamespace(host="127.0.0.1")
         self.accepted = False
         self.closed = False
-        # Router reads token from subprotocols: ["access_token", "<token_value>"]
-        self.scope = {"subprotocols": ["access_token", token]}
+        self._token = token
 
-    async def accept(self, subprotocol: str | None = None) -> None:
+    @property
+    def client(self) -> Address:
+        return Address("127.0.0.1", 1234)
+
+    @property
+    def headers(self) -> Headers:
+        return Headers({})
+
+    @property
+    def scope(self):
+        return {"subprotocols": ["access_token", self._token]}
+
+    async def accept(
+        self, subprotocol: str | None = None, headers: Iterable[tuple[bytes, bytes]] | None = None
+    ) -> None:
         self.accepted = True
 
-    async def close(self, code: int | None = None, reason: str | None = None) -> None:
+    async def close(self, code: int = 1000, reason: str | None = None) -> None:
         self.closed = True
 
 
@@ -53,10 +69,9 @@ class _FakeSessionManager:
         self.disconnect_calls.append(session_id)
 
 
-class _FakeConnectionManager:
+class _FakeConnectionManager(WSConnectionManager):
     def __init__(self) -> None:
         self.unregister_calls: list[str] = []
-        self.active_count = 0
 
     async def unregister(self, session_id: str, websocket) -> None:
         self.unregister_calls.append(session_id)
@@ -110,8 +125,8 @@ async def test_ws_does_not_create_session_on_connect_when_not_resuming(
         resume=False,
         last_seq=0,
         session_manager=fake_sm,
-        connection_manager=fake_cm,  # type: ignore
-        db=None,  # type: ignore
+        connection_manager=fake_cm,
+        db=None,
     )
 
     assert fake_ws.accepted is True
@@ -161,8 +176,8 @@ async def test_ws_resume_uses_existing_session(monkeypatch: pytest.MonkeyPatch) 
         resume=True,
         last_seq=2,
         session_manager=fake_sm,
-        connection_manager=fake_cm,  # type: ignore
-        db=None,  # type: ignore
+        connection_manager=fake_cm,
+        db=None,
     )
 
     assert fake_ws.accepted is True
@@ -202,8 +217,8 @@ async def test_ws_non_resume_forwards_requested_session_id(monkeypatch: pytest.M
         resume=False,
         last_seq=0,
         session_manager=fake_sm,
-        connection_manager=fake_cm,  # type: ignore
-        db=None,  # type: ignore
+        connection_manager=fake_cm,
+        db=None,
     )
 
     assert fake_ws.accepted is True

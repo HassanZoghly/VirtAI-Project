@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Sequence
-from sqlalchemy import func, select, delete
+from collections.abc import Sequence
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.db.models import Project

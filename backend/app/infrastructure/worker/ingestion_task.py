@@ -1,10 +1,13 @@
 import time
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from typing import Any, cast
 
-import redis.asyncio as redis
-from loguru import logger
 import httpx
+import redis.asyncio as redis
 from arq import Retry
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.rag.stage_machine import IngestionStage
@@ -17,9 +20,12 @@ from app.shared.errors import IngestionCancelledException
 LOCK_TTL = 620  # job_timeout (600) + 20s buffer
 
 
-async def get_short_session() -> AsyncSession:
+
+@asynccontextmanager
+async def get_short_session() -> AsyncGenerator[AsyncSession, None]:
     """Helper to get a short-lived database session without FastAPI dependency injection."""
-    return AsyncSessionLocal()
+    async with AsyncSessionLocal() as session:
+        yield session
 
 
 async def run_ingestion_task(
@@ -52,13 +58,13 @@ async def run_ingestion_task(
     except IngestionCancelledException:
         logger.info({**log_ctx, "event": "ingestion_cancelled"})
         # The usecase already cleans up. We just mark as CANCELLED.
-        async with await get_short_session() as db:
+        async with get_short_session() as db:
             repo = DocumentRepository(db)
             await repo.mark_cancelled(doc_id)
             await db.commit()
     except Exception as e:
         from app.application.rag.ingest_document import IngestDocumentUseCase
-        
+
         is_retryable, reason = classify(e)
         logger.error(
             {
@@ -69,30 +75,30 @@ async def run_ingestion_task(
                 "error": str(e),
             }
         )
-        
+
         # If not retryable or we are aborting, clean up first
         if not is_retryable:
             logger.warning({**log_ctx, "event": "cleaning_up_failed_job"})
             try:
                 # Instantiate use case just to call cleanup_failed_job
                 use_case = IngestDocumentUseCase(
-                    storage=ctx["storage"], 
-                    parser=None, 
-                    chunker=None, 
+                    storage=ctx["storage"],
+                    parser=None,
+                    chunker=None,
                     embedder=None,
-                    db_session_factory=get_short_session,
+                    db_session_factory=cast("Any", get_short_session),
                     document_repo_factory=DocumentRepository,
                     vector_store_factory=PGVectorStore,
                 )
                 await use_case.cleanup_failed_job(doc_id, storage_key)
             except Exception as cleanup_err:
                 logger.error({**log_ctx, "event": "cleanup_failed", "error": str(cleanup_err)})
-                
-        async with await get_short_session() as db:
+
+        async with get_short_session() as db:
             repo = DocumentRepository(db)
             await repo.mark_failed(doc_id, str(e), is_retryable)
             await db.commit()
-            
+
         if is_retryable:
             # Handle rate limiting / backoff explicitly
             if isinstance(e, httpx.HTTPStatusError) and e.response.status_code in (429, 503):
@@ -118,14 +124,14 @@ async def _run_ingestion(
 ) -> None:
     from app.application.rag.ingest_document import IngestDocumentUseCase
     from app.infrastructure.rag.markdown_chunker import MarkdownChunker
-    from app.infrastructure.rag.smart_chunker import SmartChunker
     from app.infrastructure.rag.pdf_parser import PyMuPDFParser
+    from app.infrastructure.rag.smart_chunker import SmartChunker
     from app.shared.config import get_settings
 
     embedder = ctx["embedder"]
     storage = ctx["storage"]
 
-    async with await get_short_session() as db:
+    async with get_short_session() as db:
         repo = DocumentRepository(db)
         doc = await repo.get(doc_id)
         if not doc:
@@ -149,17 +155,17 @@ async def _run_ingestion(
     async def progress_callback(stage: str, pct: int, processed: int, total: int) -> None:
         redis_client = ctx["redis"]
         await redis_client.set(f"doc_progress:{doc_id}", pct, ex=3600)
-        async with await get_short_session() as db:
+        async with get_short_session() as db:
             repo = DocumentRepository(db)
             await repo.update_progress(doc_id, stage, pct, processed, total)
             await db.commit()
 
     # Cancellation Check
     async def cancellation_check() -> bool:
-        async with await get_short_session() as db:
+        async with get_short_session() as db:
             repo = DocumentRepository(db)
-            stage = await repo.get_stage(doc_id)
-            return stage == IngestionStage.CANCELLED
+            doc = await repo.get(doc_id)
+            return doc is not None and doc.current_stage == IngestionStage.CANCELLED.value
 
     settings = get_settings()
     chunker = (
@@ -172,9 +178,9 @@ async def _run_ingestion(
     use_case = IngestDocumentUseCase(
         storage=storage,
         parser=PyMuPDFParser(),
-        chunker=chunker,
+        chunker=cast("Any", chunker),
         embedder=embedder,
-        db_session_factory=get_short_session,
+        db_session_factory=cast("Any", get_short_session),
         document_repo_factory=DocumentRepository,
         vector_store_factory=PGVectorStore,
     )

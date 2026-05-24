@@ -45,10 +45,11 @@ async def blacklist_token(jti: str, ttl_seconds: int | None = None) -> None:
         key = jwt_blacklist_key(jti)
         await get_redis().setex(key, ttl, "1")
         await cache_token_status(jti, is_revoked=True, ttl_seconds=min(ttl, 300))
-        
+
         from app.shared.metrics import auth_token_revocations
+
         auth_token_revocations.labels(reason="blacklist").inc()
-        
+
         logger.debug(f"[JWTBlacklist] Token blacklisted | jti={jti[:8]}... | ttl={ttl}s")
     except Exception as e:
         logger.error(f"[JWTBlacklist] blacklist_token failed | jti={jti[:8]}... | {e}")

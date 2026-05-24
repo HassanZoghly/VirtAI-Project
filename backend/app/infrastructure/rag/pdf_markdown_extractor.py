@@ -14,10 +14,10 @@ The resulting Markdown pages can be fed to ``SmartChunker`` for chunking.
 
 from __future__ import annotations
 
-import os
 import re
 import statistics
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from loguru import logger
 
@@ -39,6 +39,8 @@ try:
 
     _HAS_OCR = True
 except ImportError:
+    pytesseract = None
+    convert_from_path = None
     pass
 
 
@@ -75,16 +77,15 @@ class PDFMarkdownExtractor:
         pages: list[ExtractedPage] = []
 
         try:
-            for page_index, page in enumerate(doc):
+            for page_index in range(len(doc)):
+                page = doc[page_index]
                 page_md = self._extract_page_markdown(page)
                 cleaned = self._clean_markdown_text(page_md)
 
                 # OCR fallback for scanned/image pages
                 if len(cleaned.strip()) < 50:
                     if _HAS_OCR:
-                        logger.debug(
-                            f"Page {page_index + 1}: <50 chars — running OCR fallback"
-                        )
+                        logger.debug(f"Page {page_index + 1}: <50 chars — running OCR fallback")
                         cleaned = self._extract_page_via_ocr(file_path, page_index + 1)
                     else:
                         logger.debug(
@@ -94,13 +95,15 @@ class PDFMarkdownExtractor:
                 if not cleaned.strip():
                     continue
 
-                pages.append(ExtractedPage(
-                    page_content=cleaned,
-                    metadata={
-                        "page": page_index + 1,
-                        "source": os.path.basename(file_path),
-                    },
-                ))
+                pages.append(
+                    ExtractedPage(
+                        page_content=cleaned,
+                        metadata={
+                            "page": page_index + 1,
+                            "source": Path(file_path).name,
+                        },
+                    )
+                )
         finally:
             doc.close()
 
@@ -137,9 +140,7 @@ class PDFMarkdownExtractor:
                 if not text:
                     continue
 
-                normalized = self._normalize_line(
-                    text, max_font_size, font_names, body_font_size
-                )
+                normalized = self._normalize_line(text, max_font_size, font_names, body_font_size)
                 line_texts.append(normalized)
 
             if line_texts:
@@ -285,16 +286,11 @@ class PDFMarkdownExtractor:
     @staticmethod
     def _extract_page_via_ocr(file_path: str, page_number: int) -> str:
         """Run Tesseract OCR on a single PDF page (optional dependency)."""
-        if not _HAS_OCR:
+        if not _HAS_OCR or not convert_from_path or not pytesseract:
             return ""
         try:
-            images = convert_from_path(
-                file_path, first_page=page_number, last_page=page_number
-            )
-            parts = [
-                pytesseract.image_to_string(img, lang="eng")
-                for img in images
-            ]
+            images = convert_from_path(file_path, first_page=page_number, last_page=page_number)
+            parts = [pytesseract.image_to_string(img, lang="eng") for img in images]
             return "\n\n".join(p for p in parts if p.strip())
         except Exception as e:
             logger.warning(f"OCR failed for page {page_number}: {e}")

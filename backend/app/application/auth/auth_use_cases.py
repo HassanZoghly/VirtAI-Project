@@ -10,11 +10,9 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 import httpx
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.user.entities import AuthProvider, UserEntity
-from app.infrastructure.db.repositories.user_repository import UserRepository
+from app.domain.user.ports import UserRepositoryPort
 from app.shared.config import get_settings
 from app.shared.security import hash_password, verify_password
 
@@ -33,21 +31,18 @@ def _now() -> datetime:
 # ---------------------------------------------------------------------------
 
 
-async def get_user_by_id(db: AsyncSession, user_id: UUID) -> UserEntity | None:
-    repo = UserRepository(db)
+async def get_user_by_id(repo: UserRepositoryPort, user_id: UUID) -> UserEntity | None:
     return await repo.get_by_id(user_id)
 
 
-async def get_user_by_email(db: AsyncSession, email: str) -> UserEntity | None:
-    repo = UserRepository(db)
+async def get_user_by_email(repo: UserRepositoryPort, email: str) -> UserEntity | None:
     return await repo.get_by_email(email)
 
 
 async def set_user_setup_complete(
-    db: AsyncSession, user_id: UUID, setup_complete: bool
+    repo: UserRepositoryPort, user_id: UUID, setup_complete: bool
 ) -> UserEntity | None:
     """Update setup completion status for an existing user."""
-    repo = UserRepository(db)
     user = await repo.get_by_id(user_id)
     if user is None:
         return None
@@ -58,10 +53,9 @@ async def set_user_setup_complete(
 
 
 async def register_user(
-    db: AsyncSession, full_name: str, email: str, password: str, username: str | None = None
+    repo: UserRepositoryPort, full_name: str, email: str, password: str, username: str | None = None
 ) -> UserEntity:
     """Create a new local user. Raises ValueError if email already exists."""
-    repo = UserRepository(db)
     existing = await repo.get_by_email(email)
     if existing is not None:
         raise ValueError(f"Email already registered: {email}")
@@ -79,14 +73,15 @@ async def register_user(
     return await repo.create(entity)
 
 
-async def authenticate_user(db: AsyncSession, email: str, password: str) -> UserEntity | None:
+async def authenticate_user(
+    repo: UserRepositoryPort, email: str, password: str
+) -> UserEntity | None:
     """Verify credentials. Returns UserEntity on success, None on failure.
 
     Always runs a bcrypt verify even for non-existent users so that an
     attacker cannot distinguish "wrong email" from "wrong password" via
     response timing.
     """
-    repo = UserRepository(db)
     user = await repo.get_by_email(email)
     if user is None or user.password_hash is None:
         # Burn the same CPU time as a real verification
@@ -98,13 +93,12 @@ async def authenticate_user(db: AsyncSession, email: str, password: str) -> User
 
 
 async def change_user_password(
-    db: AsyncSession, user_id: UUID, current_password: str, new_password: str
+    repo: UserRepositoryPort, user_id: UUID, current_password: str, new_password: str
 ) -> UserEntity | None:
     """
     Change user password if the current password is valid.
     This also increments the token version to revoke all existing sessions.
     """
-    repo = UserRepository(db)
     user = await repo.get_by_id(user_id)
     if user is None or user.password_hash is None or user.provider != AuthProvider.LOCAL:
         # Burn CPU time if user not found or wrong provider
@@ -170,9 +164,8 @@ async def exchange_google_code(code: str) -> dict:
         return info_resp.json()
 
 
-async def get_or_create_google_user(db: AsyncSession, google_info: dict) -> UserEntity:
+async def get_or_create_google_user(repo: UserRepositoryPort, google_info: dict) -> UserEntity:
     """Find or create a user from Google OAuth info."""
-    repo = UserRepository(db)
     google_id: str = str(google_info["id"])
     email: str = google_info["email"]
     name: str = google_info.get("name", "")
@@ -207,9 +200,8 @@ async def get_or_create_google_user(db: AsyncSession, google_info: dict) -> User
 
     try:
         return await repo.create(entity)
-    except IntegrityError:
-        # Created concurrently — rollback and re-fetch
-        await db.rollback()
+    except ValueError:
+        # Created concurrently — re-fetch
         existing = await repo.get_by_email(email)
         if existing is not None:
             return existing
@@ -217,13 +209,11 @@ async def get_or_create_google_user(db: AsyncSession, google_info: dict) -> User
 
 
 async def rotate_refresh_token_version(
-    db: AsyncSession, user_id: UUID, expected_version: int
+    repo: UserRepositoryPort, user_id: UUID, expected_version: int
 ) -> UserEntity | None:
-    repo = UserRepository(db)
     return await repo.increment_refresh_token_version(user_id, expected_version)
 
 
-async def revoke_user_token_version(db: AsyncSession, user_id: UUID) -> UserEntity | None:
+async def revoke_user_token_version(repo: UserRepositoryPort, user_id: UUID) -> UserEntity | None:
     """Force all existing access and refresh tokens for a user to become stale."""
-    repo = UserRepository(db)
     return await repo.force_increment_refresh_token_version(user_id)

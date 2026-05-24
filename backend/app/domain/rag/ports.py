@@ -1,8 +1,24 @@
 from abc import ABC, abstractmethod
-from typing import Any, List, Optional
+from collections.abc import Sequence
+from typing import Any
 from uuid import UUID
 
 from app.domain.rag.entities import Document, DocumentChunk
+
+
+class TemplateParserPort(ABC):
+    @abstractmethod
+    def get(self, category: str, key: str, variables: dict | None = None) -> str: ...
+
+
+class GuardrailPort:
+    @classmethod
+    def validate_input(cls, text: str) -> tuple[bool, str | None]:
+        return True, None
+
+    @classmethod
+    def validate_output(cls, text: str | None) -> str | None:
+        return text
 
 
 # ── Agentic RAG Ports (from RAG_project integration) ────────────────────────
@@ -30,6 +46,7 @@ class LLMGenerationProvider(ABC):
         chat_history: list | None = None,
         max_output_tokens: int | None = None,
         temperature: float | None = None,
+        **kwargs: Any,
     ) -> str | None: ...
 
     @abstractmethod
@@ -39,7 +56,8 @@ class LLMGenerationProvider(ABC):
         chat_history: list | None = None,
         max_output_tokens: int | None = None,
         temperature: float | None = None,
-    ): ...
+        **kwargs: Any,
+    ) -> Any: ...
 
     @abstractmethod
     def embed_text(self, text: str | list[str], document_type: str | None = None) -> Any: ...
@@ -163,6 +181,7 @@ class VectorStore(ABC):
 
 class RerankerPort(ABC):
     """Abstract interface for a document reranker (e.g., Cross-Encoder)."""
+
     @abstractmethod
     async def rerank(
         self, query: str, chunks: list[DocumentChunk], top_k: int = 5
@@ -173,6 +192,10 @@ class RerankerPort(ABC):
 class DocumentParser(ABC):
     @abstractmethod
     async def parse(self, file_path: str, file_type: str) -> str:
+        pass
+
+    @abstractmethod
+    async def parse_bytes(self, data: bytes, file_type: str) -> str:
         pass
 
 
@@ -186,7 +209,9 @@ class DocumentRepositoryPort(ABC):
     """Abstract interface for document persistence operations."""
 
     @abstractmethod
-    async def create(self, user_id: str, filename: str, file_type: str, session_id: str | None = None) -> Document: ...
+    async def create(
+        self, user_id: str, filename: str, file_type: str, session_id: str | None = None
+    ) -> Document: ...
 
     @abstractmethod
     async def get(self, document_id: str) -> Document | None: ...
@@ -194,7 +219,7 @@ class DocumentRepositoryPort(ABC):
     @abstractmethod
     async def list_by_user(
         self, user_id: str, status: str | None = None, limit: int = 100
-    ) -> list[Document]: ...
+    ) -> Sequence[Document]: ...
 
     @abstractmethod
     async def update_status(

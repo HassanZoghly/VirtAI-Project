@@ -8,9 +8,13 @@ from app.domain.rag.agents import (
     SummarizerAgent,
 )
 from app.domain.rag.entities import AgentAction, AgentInput, AgentOutput, AgentTrace
-from app.domain.rag.ports import EmbeddingProvider, LLMGenerationProvider, VectorCollectionStore
-from app.infrastructure.rag.guardrail_service import GuardrailService
-from app.infrastructure.rag.template_parser import TemplateParser
+from app.domain.rag.ports import (
+    EmbeddingProvider,
+    GuardrailPort,
+    LLMGenerationProvider,
+    TemplateParserPort,
+    VectorCollectionStore,
+)
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -27,7 +31,7 @@ class AgentOrchestrator:
         vector_store: VectorCollectionStore,
         llm_provider: LLMGenerationProvider,
         embedding_provider: EmbeddingProvider,
-        template_parser: TemplateParser,
+        template_parser: TemplateParserPort,
     ):
         shared_dependencies = {
             "llm_provider": llm_provider,
@@ -58,7 +62,7 @@ class AgentOrchestrator:
         input_data.stream = stream
 
         # ── step 0: Guardrails Validation ─────────────────────────────
-        is_valid, error_msg = GuardrailService.validate_input(input_data.query)
+        is_valid, error_msg = GuardrailPort.validate_input(input_data.query)
         if not is_valid:
             trace.success = False
             trace.add_step(

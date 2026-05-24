@@ -25,6 +25,7 @@ from app.infrastructure.asr.audio_pipeline import (
     BufferTimeoutError,
     ChunkSizeError,
 )
+from app.presentation.ws.outbound_sender import OutboundSender
 
 if TYPE_CHECKING:
     from fastapi import WebSocket
@@ -60,6 +61,7 @@ class VoiceModeHandler:
         asr_service: StreamingASRService,
         conversation_pipeline: ConversationPipeline | None = None,
         turn_callback=None,
+        outbound_sender: OutboundSender | None = None,
         max_buffer_size: int = 10 * 1024 * 1024,
         max_chunk_size: int = 1 * 1024 * 1024,
         buffer_timeout: float = 30.0,
@@ -102,6 +104,7 @@ class VoiceModeHandler:
         self.session_id = session_id
         self.asr_service = asr_service
         self.conversation_pipeline = conversation_pipeline
+        self.outbound_sender = outbound_sender
         # turn_callback takes priority; fall back to pipeline.process_text if available
         self.turn_callback = turn_callback
         self.audio_pipeline = AudioPipeline(
@@ -230,25 +233,29 @@ class VoiceModeHandler:
 
         except RateLimitError as e:
             logger.warning(f"Rate limit exceeded | session={self.session_id} | error={e!s}")
-            await self.websocket.send_json(
-                {
-                    "type": "error",
-                    "code": "RATE_LIMIT_EXCEEDED",
-                    "message": f"Too many audio chunks. Please slow down. ({e!s})",
-                    "session_id": self.session_id,
-                }
-            )
+            payload = {
+                "type": "error",
+                "code": "RATE_LIMIT_EXCEEDED",
+                "message": f"Too many audio chunks. Please slow down. ({e!s})",
+                "session_id": self.session_id,
+            }
+            if self.outbound_sender:
+                await self.outbound_sender.safe_send_raw(payload, self.session_id)
+            else:
+                await self.websocket.send_json(payload)
 
         except ChunkSizeError as e:
             logger.error(f"Chunk size exceeded | session={self.session_id} | error={e!s}")
-            await self.websocket.send_json(
-                {
-                    "type": "error",
-                    "code": "CHUNK_SIZE_EXCEEDED",
-                    "message": "Audio chunk is too large. Please use smaller chunks.",
-                    "session_id": self.session_id,
-                }
-            )
+            payload = {
+                "type": "error",
+                "code": "CHUNK_SIZE_EXCEEDED",
+                "message": "Audio chunk is too large. Please use smaller chunks.",
+                "session_id": self.session_id,
+            }
+            if self.outbound_sender:
+                await self.outbound_sender.safe_send_raw(payload, self.session_id)
+            else:
+                await self.websocket.send_json(payload)
 
         except BufferTimeoutError as e:
             # Comprehensive error logging for buffer timeout with session info (Requirement 9.2, 9.3)
@@ -259,14 +266,16 @@ class VoiceModeHandler:
                 f"timeout={self.audio_pipeline.buffer_timeout}s | "
                 f"error={e!s}"
             )
-            await self.websocket.send_json(
-                {
-                    "type": "error",
-                    "code": "BUFFER_TIMEOUT",
-                    "message": "Audio buffer timeout. Please speak in shorter segments.",
-                    "session_id": self.session_id,
-                }
-            )
+            payload = {
+                "type": "error",
+                "code": "BUFFER_TIMEOUT",
+                "message": "Audio buffer timeout. Please speak in shorter segments.",
+                "session_id": self.session_id,
+            }
+            if self.outbound_sender:
+                await self.outbound_sender.safe_send_raw(payload, self.session_id)
+            else:
+                await self.websocket.send_json(payload)
             # Clear buffer to recover
             self.audio_pipeline.clear_buffer()
 
@@ -279,38 +288,44 @@ class VoiceModeHandler:
                 f"max_buffer_size={self.audio_pipeline.max_buffer_size:,}B | "
                 f"error={e!s}"
             )
-            await self.websocket.send_json(
-                {
-                    "type": "error",
-                    "code": "BUFFER_OVERFLOW",
-                    "message": "Audio buffer exceeded maximum size. Please speak in shorter segments.",
-                    "session_id": self.session_id,
-                }
-            )
+            payload = {
+                "type": "error",
+                "code": "BUFFER_OVERFLOW",
+                "message": "Audio buffer exceeded maximum size. Please speak in shorter segments.",
+                "session_id": self.session_id,
+            }
+            if self.outbound_sender:
+                await self.outbound_sender.safe_send_raw(payload, self.session_id)
+            else:
+                await self.websocket.send_json(payload)
             # Clear buffer to recover
             self.audio_pipeline.clear_buffer()
 
         except ValueError as e:
             logger.error(f"Invalid PCM audio data | session={self.session_id} | error={e!s}")
-            await self.websocket.send_json(
-                {
-                    "type": "error",
-                    "code": "INVALID_AUDIO_DATA",
-                    "message": f"Invalid PCM audio data: {e!s}",
-                    "session_id": self.session_id,
-                }
-            )
+            payload = {
+                "type": "error",
+                "code": "INVALID_AUDIO_DATA",
+                "message": f"Invalid PCM audio data: {e!s}",
+                "session_id": self.session_id,
+            }
+            if self.outbound_sender:
+                await self.outbound_sender.safe_send_raw(payload, self.session_id)
+            else:
+                await self.websocket.send_json(payload)
 
         except Exception:
             logger.exception(f"Unexpected error handling audio chunk | session={self.session_id}")
-            await self.websocket.send_json(
-                {
-                    "type": "error",
-                    "code": "AUDIO_PROCESSING_ERROR",
-                    "message": "An unexpected error occurred while processing audio.",
-                    "session_id": self.session_id,
-                }
-            )
+            payload = {
+                "type": "error",
+                "code": "AUDIO_PROCESSING_ERROR",
+                "message": "An unexpected error occurred while processing audio.",
+                "session_id": self.session_id,
+            }
+            if self.outbound_sender:
+                await self.outbound_sender.safe_send_raw(payload, self.session_id)
+            else:
+                await self.websocket.send_json(payload)
 
     async def process_accumulated_audio(self) -> None:
         """Process buffered PCM audio through ASR and conversation pipeline.
@@ -332,6 +347,7 @@ class VoiceModeHandler:
             - Audio buffer is cleared
             - If transcription fails, error is sent to client and buffer is cleared
         """
+        total_size = 0
         try:
             # Get buffer size for logging
             total_size = self.audio_pipeline.get_buffer_size()
@@ -390,7 +406,10 @@ class VoiceModeHandler:
                 # For generic exceptions, include error type and message
                 error_message["details"] = {"error_type": type(e).__name__, "error": str(e)}
 
-            await self.websocket.send_json(error_message)
+            if self.outbound_sender:
+                await self.outbound_sender.safe_send_raw(error_message, self.session_id)
+            else:
+                await self.websocket.send_json(error_message)
 
             # Clear buffer to prepare for next attempt
             self.audio_pipeline.clear_buffer()
@@ -460,7 +479,10 @@ class VoiceModeHandler:
                 # For generic exceptions, include error type and message
                 error_message["details"] = {"error_type": type(e).__name__, "error": str(e)}
 
-            await self.websocket.send_json(error_message)
+            if self.outbound_sender:
+                await self.outbound_sender.safe_send_raw(error_message, self.session_id)
+            else:
+                await self.websocket.send_json(error_message)
 
     async def shutdown(self) -> None:
         if not self._transcription_tasks:
@@ -494,16 +516,18 @@ class VoiceModeHandler:
             - Message includes session_id, text, confidence, language, and is_final flag
         """
         try:
-            await self.websocket.send_json(
-                {
-                    "type": "transcript",
-                    "session_id": self.session_id,
-                    "text": text,
-                    "confidence": confidence,
-                    "language": language,
-                    "is_final": True,
-                }
-            )
+            payload = {
+                "type": "transcript",
+                "session_id": self.session_id,
+                "text": text,
+                "confidence": confidence,
+                "language": language,
+                "is_final": True,
+            }
+            if self.outbound_sender:
+                await self.outbound_sender.safe_send_raw(payload, self.session_id)
+            else:
+                await self.websocket.send_json(payload)
 
             logger.debug(
                 f"Transcript sent | "

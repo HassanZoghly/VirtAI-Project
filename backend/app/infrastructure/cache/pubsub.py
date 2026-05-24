@@ -3,8 +3,9 @@ Redis Pub/Sub Broadcaster for real-time events.
 Used primarily to notify WebSocket gateway nodes of state changes (e.g., session revocation).
 """
 
-from typing import Literal
 import json
+from typing import Literal
+
 from loguru import logger
 
 from app.infrastructure.cache.redis_client import get_redis_or_none
@@ -13,7 +14,7 @@ from app.infrastructure.cache.redis_client import get_redis_or_none
 async def publish_session_invalidation(user_id: str, family_id: str | Literal["all"]) -> None:
     """
     Broadcasts a session invalidation event to all WebSocket nodes.
-    
+
     Args:
         user_id: The ID of the user whose session was invalidated.
         family_id: The specific session family ID, or "all" to invalidate all sessions for the user.
@@ -32,7 +33,7 @@ async def publish_session_invalidation(user_id: str, family_id: str | Literal["a
         "user_id": user_id,
         "family_id": family_id,
     }
-    
+
     try:
         subscribers = await redis.publish(channel, json.dumps(payload))
         logger.debug(

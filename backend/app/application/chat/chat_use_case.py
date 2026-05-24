@@ -1,7 +1,7 @@
+from app.application.chat.prompt_builder import PromptBuilder
 from app.application.rag.retrieval_use_case import RetrievalUseCase
 from app.domain.chat.policies import build_conversation
 from app.domain.chat.ports import BaseLLMProvider
-from app.application.chat.prompt_builder import PromptBuilder
 
 
 class ChatUseCase:

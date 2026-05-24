@@ -6,11 +6,14 @@ Create Date: 2026-05-17 00:00:00.000000
 
 """
 
-from typing import Sequence, Union
-from alembic import op
+from collections.abc import Sequence
+from typing import Union
+
+import pgvector.sqlalchemy
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-import pgvector.sqlalchemy
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "001"

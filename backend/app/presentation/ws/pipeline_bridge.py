@@ -1,14 +1,30 @@
 import asyncio
-import uuid
+
 from loguru import logger
+
 from app.domain.chat.entities import PipelineEvent, PipelineEventType
-from app.schemas.audio import AudioBuffer
 from app.schemas.ws_messages import (
-    AvatarStatus, ServerMessage, ServerMessageType, VisemeEvent, VisemesData,
-    make_status_msg, make_transcript_msg, make_llm_chunk_msg, make_visemes_msg,
-    make_tts_chunk_msg, make_error_msg
+    AvatarStatus,
+    ServerMessage,
+    ServerMessageType,
+    VisemeEvent,
+    VisemesData,
+    make_error_msg,
+    make_llm_chunk_msg,
+    make_status_msg,
+    make_transcript_msg,
+    make_tts_chunk_msg,
+    make_visemes_msg,
 )
-from app.presentation.ws.outbound_sender import OutboundSender
+
+
+def _pipeline_task_done_callback(task: asyncio.Task) -> None:
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        logger.error(f"Pipeline task raised unhandled exception: {exc!r}")
+
 
 class PipelineBridge:
     """Bridges the WebSocket connection with the ConversationPipeline."""
@@ -37,26 +53,34 @@ class PipelineBridge:
             logger.debug("Pipeline task cancelled")
         self.pipeline_task = None
 
-
-
     async def forward_pipeline_event(self, event: PipelineEvent) -> None:
         """Convert PipelineEvent to WebSocket message and send."""
         sid = self.ctx.session.session_id
         pending = self.ctx._session_pending
-        
+
         match event.type:
             case PipelineEventType.PROCESSING:
-                await self.ctx.outbound_sender.send(make_status_msg(AvatarStatus.PROCESSING), sid, pending)
+                await self.ctx.outbound_sender.send(
+                    make_status_msg(AvatarStatus.PROCESSING), sid, pending
+                )
             case PipelineEventType.THINKING:
-                await self.ctx.outbound_sender.send(make_status_msg(AvatarStatus.THINKING), sid, pending)
+                await self.ctx.outbound_sender.send(
+                    make_status_msg(AvatarStatus.THINKING), sid, pending
+                )
             case PipelineEventType.SPEAKING:
-                await self.ctx.outbound_sender.send(make_status_msg(AvatarStatus.SPEAKING), sid, pending)
+                await self.ctx.outbound_sender.send(
+                    make_status_msg(AvatarStatus.SPEAKING), sid, pending
+                )
             case PipelineEventType.IDLE | PipelineEventType.ABORT:
-                await self.ctx.outbound_sender.send(make_status_msg(AvatarStatus.IDLE), sid, pending)
+                await self.ctx.outbound_sender.send(
+                    make_status_msg(AvatarStatus.IDLE), sid, pending
+                )
 
             case PipelineEventType.TRANSCRIPT:
                 await self.ctx.outbound_sender.send(
-                    make_transcript_msg(text=event.data.get("text", ""), is_final=True), sid, pending
+                    make_transcript_msg(text=event.data.get("text", ""), is_final=True),
+                    sid,
+                    pending,
                 )
 
             case PipelineEventType.LLM_TOKEN:
@@ -65,7 +89,9 @@ class PipelineBridge:
                     await self.ctx.outbound_sender.send(make_llm_chunk_msg(token), sid, pending)
 
             case PipelineEventType.LLM_DONE:
-                await self.ctx.outbound_sender.send(ServerMessage(type=ServerMessageType.LLM_END, data={}), sid, pending)
+                await self.ctx.outbound_sender.send(
+                    ServerMessage(type=ServerMessageType.LLM_END, data={}), sid, pending
+                )
 
             case PipelineEventType.TTS_VISEMES:
                 raw_events = event.data.get("events", [])
@@ -85,7 +111,9 @@ class PipelineBridge:
                             events=viseme_objs,
                             audio_duration_ms=audio_dur,
                         )
-                    ), sid, pending
+                    ),
+                    sid,
+                    pending,
                 )
 
             case PipelineEventType.TTS_AUDIO:
@@ -97,25 +125,33 @@ class PipelineBridge:
                         ServerMessage(
                             type=ServerMessageType.TTS_START,
                             data={"sentence_index": event.data.get("sentence_index", 0)},
-                        ), sid, pending
+                        ),
+                        sid,
+                        pending,
                     )
 
                 await self.ctx.outbound_sender.send(
                     make_tts_chunk_msg(
                         audio_b64=audio_b64,
                         chunk_index=chunk_idx,
-                    ), sid, pending
+                    ),
+                    sid,
+                    pending,
                 )
 
             case PipelineEventType.TTS_DONE:
-                await self.ctx.outbound_sender.send(ServerMessage(type=ServerMessageType.TTS_END, data={}), sid, pending)
+                await self.ctx.outbound_sender.send(
+                    ServerMessage(type=ServerMessageType.TTS_END, data={}), sid, pending
+                )
 
             case PipelineEventType.ERROR:
                 await self.ctx.outbound_sender.send(
                     make_error_msg(
                         code=event.data.get("code", "UNKNOWN_ERROR"),
                         message=event.data.get("message", "Unknown error"),
-                    ), sid, pending
+                    ),
+                    sid,
+                    pending,
                 )
 
             case _:

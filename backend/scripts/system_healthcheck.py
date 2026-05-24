@@ -115,12 +115,15 @@ async def run_healthcheck() -> None:
 
     # ── 5. Embedding provider ────────────────────────────────────────────────
     logger.info(f"3. Verifying embedding provider: {settings.EMBEDDING_PROVIDER}...")
+    test_vec: list[float] | None = None
     try:
         if settings.EMBEDDING_PROVIDER == "fastembed":
             from app.infrastructure.rag.fastembed_provider import FastEmbedProvider
 
             provider = FastEmbedProvider(model_name=settings.EMBEDDING_MODEL)
             test_vec = await provider.embed("Healthcheck test sentence for dimension verification.")
+            if test_vec is None:
+                raise RuntimeError("Embedding failed")
             dim = len(test_vec)
             if dim != settings.EMBEDDING_DIMENSION:
                 fail(
@@ -139,6 +142,8 @@ async def run_healthcheck() -> None:
 
     # ── 6. Vector insertion & retrieval ──────────────────────────────────────
     logger.info("4. Testing vector insertion and retrieval...")
+    if test_vec is None:
+        raise RuntimeError("Embedding failed")
     test_user_id = uuid.uuid4()
     test_doc_id = uuid.uuid4()
     test_chunk_id = uuid.uuid4()
@@ -193,7 +198,7 @@ async def run_healthcheck() -> None:
             )
             row = result.first()
             if row is None:
-                fail("Vector retrieval returned no results")
+                raise RuntimeError("Vector retrieval returned no results")
             logger.info(f"  ✅ Vector retrieved — similarity={float(row[1]):.6f}")
 
             # Cleanup test data

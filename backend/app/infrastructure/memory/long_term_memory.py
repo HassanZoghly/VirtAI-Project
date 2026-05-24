@@ -1,4 +1,5 @@
 from typing import Any
+
 from loguru import logger
 
 from app.infrastructure.db.models import Conversation

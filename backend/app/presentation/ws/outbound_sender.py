@@ -1,5 +1,6 @@
 import json
 import re
+
 from fastapi import WebSocket
 from loguru import logger
 from pydantic import BaseModel
@@ -10,14 +11,16 @@ from app.schemas.ws_messages import ServerMessage, ServerMessageType, make_error
 
 class OutboundSender:
     """Handles sending outbound messages via WebSocket."""
-    
+
     _PROTOCOL_MESSAGE_TYPES: dict[str, str] = {}
 
     def __init__(self, websocket: WebSocket, connection_manager: WSConnectionManager):
         self.ws = websocket
         self.connection_manager = connection_manager
 
-    async def send(self, message: ServerMessage, session_id: str | None, session_pending: bool) -> None:
+    async def send(
+        self, message: ServerMessage, session_id: str | None, session_pending: bool
+    ) -> None:
         """Send message (raises exception on failure)."""
         envelope = {
             "type": message.type.value,
@@ -28,21 +31,33 @@ class OutboundSender:
             await self.ws.send_text(serialized)
             return
 
-        serialized = await self.connection_manager.stamp_and_record(
-            session_id, envelope
-        )
+        serialized = await self.connection_manager.stamp_and_record(session_id, envelope)
         await self.ws.send_text(serialized)
 
     async def send_binary(self, data: bytes) -> None:
         """Send raw binary data to the client over WebSocket."""
         await self.ws.send_bytes(data)
 
-    async def safe_send(self, message: ServerMessage, session_id: str | None, session_pending: bool, connected: bool) -> None:
+    async def safe_send(
+        self, message: ServerMessage, session_id: str | None, session_pending: bool, connected: bool
+    ) -> None:
         """Send message, ignore errors (used during cleanup)."""
         if not connected:
             return
         try:
             await self.send(message, session_id, session_pending)
+        except Exception:
+            pass
+
+    async def safe_send_raw(self, payload: dict, session_id: str | None) -> None:
+        """Send a raw dictionary payload."""
+        try:
+            if not session_id:
+                await self.ws.send_text(json.dumps(payload))
+                return
+
+            serialized = await self.connection_manager.stamp_and_record(session_id, payload)
+            await self.ws.send_text(serialized)
         except Exception:
             pass
 
@@ -71,7 +86,9 @@ class OutboundSender:
 
         await self.safe_send(server_msg, session_id, session_pending, connected)
 
-    async def send_protocol_message(self, message: BaseModel, session_id: str | None, session_pending: bool, connected: bool) -> None:
+    async def send_protocol_message(
+        self, message: BaseModel, session_id: str | None, session_pending: bool, connected: bool
+    ) -> None:
         """Send new protocol message (Pydantic model) to client."""
         if not connected:
             return
@@ -96,9 +113,7 @@ class OutboundSender:
                 await self.ws.send_text(serialized)
                 return
 
-            serialized = await self.connection_manager.stamp_and_record(
-                session_id, envelope
-            )
+            serialized = await self.connection_manager.stamp_and_record(session_id, envelope)
             await self.ws.send_text(serialized)
 
         except Exception as e:

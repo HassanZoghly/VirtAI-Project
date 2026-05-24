@@ -4,10 +4,10 @@ API v1 Router - registers all endpoints.
 Canonical location: app.presentation.http.v1.router
 """
 
+import uuid
 from contextlib import suppress
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
-import uuid
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +15,7 @@ from app.application.auth.auth_use_cases import get_user_by_id
 from app.infrastructure.cache.jwt_blacklist import is_blacklisted
 from app.infrastructure.cache.rate_limiter import check_rate_limit
 from app.infrastructure.db.database import get_db
+from app.infrastructure.db.repositories.user_repository import UserRepository
 from app.presentation.http.v1.dependencies import get_session_manager, get_ws_connection_manager
 from app.presentation.http.v1.endpoints.audio import router as audio_router
 from app.presentation.http.v1.endpoints.auth import router as auth_router
@@ -57,7 +58,7 @@ async def websocket_endpoint(
     last_seq: int = Query(default=0, ge=0),
     session_manager=Depends(get_session_manager),
     connection_manager: WSConnectionManager = Depends(get_ws_connection_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession | None = Depends(get_db),
 ):
     """
     WebSocket endpoint for real-time communication.
@@ -65,7 +66,7 @@ async def websocket_endpoint(
     Supported avatar_id: avatar1, avatar2, avatar3
     """
     from app.shared.request_context import set_trace_id
-    
+
     trace_id = websocket.headers.get("x-request-id") or str(uuid.uuid4())
     set_trace_id(trace_id)
 
@@ -119,25 +120,33 @@ async def websocket_endpoint(
         await websocket.close(code=4401, reason="Invalid token")
         return
 
-    if await is_blacklisted(token_payload.jti):
-        logger.warning("[WS] Revoked token")
-        await websocket.close(code=4401, reason="Invalid token")
-        return
+    try:
+        if await is_blacklisted(token_payload.jti):
+            logger.warning("[WS] Revoked token")
+            await websocket.close(code=4401, reason="Invalid token")
+            return
 
-    parsed_user_id = parse_uuid(token_payload.user_id)
-    if parsed_user_id is None:
-        logger.warning("[WS] Token subject is not a UUID")
-        await websocket.close(code=4401, reason="Invalid token")
-        return
-
-    user = await get_user_by_id(db, parsed_user_id)
-    if user is None or not user.is_active:
-        logger.warning("[WS] User not found or inactive")
-        await websocket.close(code=4401, reason="Invalid token")
-        return
-    if token_payload.token_version != user.refresh_token_version:
-        logger.warning("[WS] Stale access token")
-        await websocket.close(code=4401, reason="Invalid token")
+        parsed_user_id = parse_uuid(token_payload.user_id)
+        if parsed_user_id is None:
+            logger.warning("[WS] Token subject is not a UUID")
+            await websocket.close(code=4401, reason="Invalid token")
+            return
+        if db is None:
+            raise RuntimeError("Database session required")
+        repo = UserRepository(db)
+        user = await get_user_by_id(repo, parsed_user_id)
+        if user is None or not user.is_active:
+            logger.warning("[WS] User not found or inactive")
+            await websocket.close(code=4401, reason="Invalid token")
+            return
+        if token_payload.token_version != user.refresh_token_version:
+            logger.warning("[WS] Stale access token")
+            await websocket.close(code=4401, reason="Invalid token")
+            return
+    except Exception as e:
+        logger.error(f"[WS] DB/Redis error during connection: {e}")
+        with suppress(Exception):
+            await websocket.close(code=1011, reason="Internal server error")
         return
 
     parsed_session_id = None

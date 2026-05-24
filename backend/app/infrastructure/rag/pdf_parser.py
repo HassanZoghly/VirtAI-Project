@@ -32,6 +32,9 @@ class PyMuPDFParser(DocumentParser):
                     page = doc.load_page(page_num)
                     page_text = page.get_text()
 
+                    if not isinstance(page_text, str):
+                        page_text = str(page_text)
+
                     if not page_text.strip():
                         # Fallback to OCR if no text found
                         logger.warning(f"No text found on page {page_num}, falling back to OCR")
@@ -48,20 +51,23 @@ class PyMuPDFParser(DocumentParser):
 
         raise ValueError(f"Unsupported file type: {file_type}")
 
-    async def parse_bytes(self, file_bytes: bytes, file_type: str) -> str:
+    async def parse_bytes(self, data: bytes, file_type: str) -> str:
         logger.info(f"Parsing document from bytes of type {file_type}")
         file_type = file_type.lower()
 
         if file_type in ["txt", "md"]:
-            return file_bytes.decode("utf-8")
+            return data.decode("utf-8")
 
         if file_type == "pdf":
             text = ""
             try:
-                doc = fitz.open(stream=file_bytes, filetype="pdf")
+                doc = fitz.open(stream=data, filetype="pdf")
                 for page_num in range(len(doc)):
                     page = doc.load_page(page_num)
                     page_text = page.get_text()
+
+                    if not isinstance(page_text, str):
+                        page_text = str(page_text)
 
                     if not page_text.strip():
                         # Fallback to OCR if no text found

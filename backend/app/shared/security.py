@@ -73,9 +73,9 @@ def _create_token(
             "jti": jti,
         }
     )
-    
+
     key, algorithm, headers = get_signing_key()
-    
+
     return jwt.encode(
         payload,
         key,
@@ -92,7 +92,7 @@ def _normalize_token_user_id(user_id: str | UUID) -> UUID:
 
 
 def create_access_token(
-    user_id: str | UUID, 
+    user_id: str | UUID,
     token_version: int = 0,
     family_id: str | UUID | None = None,
 ) -> str:
@@ -103,7 +103,7 @@ def create_access_token(
         parsed_family = parse_uuid(family_id)
         if parsed_family:
             data["family_id"] = str(parsed_family)
-            
+
     return _create_token(
         data=data,
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
@@ -130,7 +130,10 @@ def create_refresh_token(
 
 def _required_int_claim(payload: dict, claim: str) -> int:
     try:
-        value = int(payload.get(claim))
+        raw_val = payload.get(claim)
+        if raw_val is None:
+            raise InvalidTokenError(f"Token missing {claim}")
+        value = int(raw_val)
     except (TypeError, ValueError) as exc:
         raise InvalidTokenError(f"Token missing {claim}") from exc
     return value
@@ -142,7 +145,7 @@ def _validate_temporal_claims(payload: dict) -> tuple[int, int, int | None]:
     iat = _required_int_claim(payload, "iat")
     nbf = _required_int_claim(payload, "nbf")
     exp = payload.get("exp")
-    exp_int = int(exp) if isinstance(exp, int) else None
+    exp_int = int(exp) if exp is not None else None
 
     if iat > now + settings.JWT_MAX_IAT_SKEW_SECONDS:
         raise InvalidTokenError("Token issued in the future")
@@ -165,10 +168,10 @@ def decode_auth_token(token: str, expected_type: str = "access") -> AuthTokenPay
     """
     settings = get_settings()
     valid_keys = get_verification_keys()
-    
+
     payload = None
     last_expired_error = None
-    
+
     for key, algorithm in valid_keys:
         try:
             payload = jwt.decode(
@@ -179,18 +182,18 @@ def decode_auth_token(token: str, expected_type: str = "access") -> AuthTokenPay
                 issuer=settings.JWT_ISSUER,
                 options={"leeway": settings.JWT_LEEWAY_SECONDS},
             )
-            break # Successfully decoded
+            break  # Successfully decoded
         except ExpiredSignatureError as exc:
             last_expired_error = exc
         except JWTError:
             continue
-            
+
     if payload is None:
         if last_expired_error:
             raise ExpiredTokenError() from last_expired_error
         raise InvalidTokenError()
 
-    token_type = payload.get("type")
+    token_type = payload.get("type", "")
     if token_type != expected_type:
         raise InvalidTokenError("Invalid token type")
 
@@ -208,7 +211,10 @@ def decode_auth_token(token: str, expected_type: str = "access") -> AuthTokenPay
         raise InvalidTokenError("Token missing identifier")
 
     try:
-        token_version = int(payload.get("token_version"))
+        token_version_raw = payload.get("token_version")
+        if token_version_raw is None:
+            raise InvalidAuthStateError("Token missing version")
+        token_version = int(token_version_raw)
     except (TypeError, ValueError) as exc:
         raise InvalidAuthStateError("Token missing version") from exc
 
@@ -219,7 +225,7 @@ def decode_auth_token(token: str, expected_type: str = "access") -> AuthTokenPay
     raw_family_id = payload.get("family_id")
     if raw_family_id:
         family_id = parse_uuid(raw_family_id)
-        
+
     if expected_type == "refresh" and family_id is None:
         raise InvalidAuthStateError("Refresh token missing valid family id")
 

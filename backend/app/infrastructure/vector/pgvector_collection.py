@@ -27,7 +27,7 @@ from app.infrastructure.vector.enums import (
 class RetrievedDocument:
     """Lightweight result object from vector search."""
 
-    __slots__ = ("text", "score", "metadata", "id")
+    __slots__ = ("id", "metadata", "score", "text")
 
     def __init__(
         self,
@@ -105,21 +105,15 @@ class PGVectorCollectionProvider(VectorCollectionStore):
     async def is_collection_existed(self, collection_name: str) -> bool:
         async with self.db_client() as session:
             async with session.begin():
-                stmt = sql_text(
-                    "SELECT 1 FROM pg_tables WHERE tablename = :name"
-                )
+                stmt = sql_text("SELECT 1 FROM pg_tables WHERE tablename = :name")
                 result = await session.execute(stmt, {"name": collection_name})
                 return result.scalar_one_or_none() is not None
 
     async def list_all_collections(self) -> list:
         async with self.db_client() as session:
             async with session.begin():
-                stmt = sql_text(
-                    "SELECT tablename FROM pg_tables WHERE tablename LIKE :prefix"
-                )
-                result = await session.execute(
-                    stmt, {"prefix": f"{self._table_prefix}%"}
-                )
+                stmt = sql_text("SELECT tablename FROM pg_tables WHERE tablename LIKE :prefix")
+                result = await session.execute(stmt, {"prefix": f"{self._table_prefix}%"})
                 return result.scalars().all()
 
     async def get_collection_info(self, collection_name: str) -> dict | None:
@@ -152,9 +146,7 @@ class PGVectorCollectionProvider(VectorCollectionStore):
         async with self.db_client() as session:
             async with session.begin():
                 logger.info(f"Dropping collection table: {collection_name}")
-                await session.execute(
-                    sql_text(f"DROP TABLE IF EXISTS {collection_name}")
-                )
+                await session.execute(sql_text(f"DROP TABLE IF EXISTS {collection_name}"))
                 await session.commit()
         return True
 
@@ -194,12 +186,9 @@ class PGVectorCollectionProvider(VectorCollectionStore):
         async with self.db_client() as session:
             async with session.begin():
                 stmt = sql_text(
-                    "SELECT 1 FROM pg_indexes "
-                    "WHERE tablename = :tbl AND indexname = :idx"
+                    "SELECT 1 FROM pg_indexes " "WHERE tablename = :tbl AND indexname = :idx"
                 )
-                result = await session.execute(
-                    stmt, {"tbl": collection_name, "idx": idx_name}
-                )
+                result = await session.execute(stmt, {"tbl": collection_name, "idx": idx_name})
                 return bool(result.scalar_one_or_none())
 
     async def _create_vector_index(
@@ -213,9 +202,7 @@ class PGVectorCollectionProvider(VectorCollectionStore):
 
         async with self.db_client() as session:
             async with session.begin():
-                count = await session.execute(
-                    sql_text(f"SELECT COUNT(*) FROM {collection_name}")
-                )
+                count = await session.execute(sql_text(f"SELECT COUNT(*) FROM {collection_name}"))
                 if count.scalar_one() < self.index_threshold:
                     return False
 
@@ -257,12 +244,15 @@ class PGVectorCollectionProvider(VectorCollectionStore):
                     f"({col.TEXT.value}, {col.VECTOR.value}, {col.METADATA.value}, {col.CHUNK_ID.value}) "
                     f"VALUES (:text, :vector, :metadata, :chunk_id)"
                 )
-                await session.execute(stmt, {
-                    "text": text,
-                    "vector": self._vector_literal(vector),
-                    "metadata": json.dumps(metadata or {}, ensure_ascii=False),
-                    "chunk_id": record_id,
-                })
+                await session.execute(
+                    stmt,
+                    {
+                        "text": text,
+                        "vector": self._vector_literal(vector),
+                        "metadata": json.dumps(metadata or {}, ensure_ascii=False),
+                        "chunk_id": record_id,
+                    },
+                )
                 await session.commit()
 
         await self._create_vector_index(collection_name)
@@ -292,12 +282,14 @@ class PGVectorCollectionProvider(VectorCollectionStore):
         async with self.db_client() as session:
             async with session.begin():
                 for i in range(0, len(texts), batch_size):
-                    batch = list(zip(
-                        texts[i:i + batch_size],
-                        vectors[i:i + batch_size],
-                        metadata[i:i + batch_size],
-                        (record_ids or [None] * len(texts))[i:i + batch_size],
-                    ))
+                    batch = list(
+                        zip(
+                            texts[i : i + batch_size],
+                            vectors[i : i + batch_size],
+                            metadata[i : i + batch_size],
+                            (record_ids or [None] * len(texts))[i : i + batch_size],
+                        )
+                    )
 
                     values = [
                         {
@@ -346,7 +338,4 @@ class PGVectorCollectionProvider(VectorCollectionStore):
                 result = await session.execute(stmt, {"vector": vec_literal, "limit": limit})
                 rows = result.fetchall()
 
-        return [
-            RetrievedDocument(text=row.text, score=row.score)
-            for row in rows
-        ]
+        return [RetrievedDocument(text=row.text, score=row.score) for row in rows]

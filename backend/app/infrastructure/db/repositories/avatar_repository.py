@@ -73,7 +73,10 @@ class AvatarRepository:
             delete(Avatar).where(Avatar.user_id == require_uuid(user_id, field_name="user_id"))
         )
         await self.db.flush()
-        return result.rowcount > 0
+        from typing import cast
+
+        from sqlalchemy import CursorResult
+        return cast("CursorResult", result).rowcount > 0
 
     def _serialize(self, avatar: Avatar) -> dict:
         return {

@@ -27,7 +27,7 @@ class FallbackLLMChain(BaseLLMProvider):
         on_sentence: Callable[[str], None] | None = None,
         trace_id: str | None = None,
     ) -> AsyncGenerator[LLMChunk, None]:
-        providers = [self.primary] + self.fallbacks
+        providers = [self.primary, *self.fallbacks]
         for idx, provider in enumerate(providers):
             try:
                 # Try to stream from this provider
@@ -49,7 +49,7 @@ class FallbackLLMChain(BaseLLMProvider):
                     raise e
 
     async def complete(self, history: ConversationHistory) -> LLMResult:
-        providers = [self.primary] + self.fallbacks
+        providers = [self.primary, *self.fallbacks]
         for idx, provider in enumerate(providers):
             try:
                 return await provider.complete(history)
@@ -60,10 +60,11 @@ class FallbackLLMChain(BaseLLMProvider):
                 else:
                     logger.error(f"All LLM providers failed complete(). Last error: {e}")
                     raise e
+        raise RuntimeError("No LLM providers available")
 
     async def is_available(self) -> bool:
         # Check if any of the providers in the chain are available
-        providers = [self.primary] + self.fallbacks
+        providers = [self.primary, *self.fallbacks]
         for provider in providers:
             if await provider.is_available():
                 return True
@@ -78,7 +79,7 @@ class FallbackTTSChain(BaseTTSProvider):
         self.fallbacks = fallbacks
 
     async def synthesize(self, text: str) -> TTSResult:
-        providers = [self.primary] + self.fallbacks
+        providers = [self.primary, *self.fallbacks]
         for idx, provider in enumerate(providers):
             try:
                 return await provider.synthesize(text)
@@ -89,9 +90,10 @@ class FallbackTTSChain(BaseTTSProvider):
                 else:
                     logger.error(f"All TTS providers failed synthesize(). Last error: {e}")
                     raise e
+        raise RuntimeError("No TTS providers available")
 
     async def synthesize_streaming(self, text: str) -> AsyncGenerator[TTSChunk, None]:
-        providers = [self.primary] + self.fallbacks
+        providers = [self.primary, *self.fallbacks]
         for idx, provider in enumerate(providers):
             try:
                 async for chunk in provider.synthesize_streaming(text):
@@ -106,7 +108,7 @@ class FallbackTTSChain(BaseTTSProvider):
                     raise e
 
     async def generate(self, text: str, session_id: str, message_id: str, trace_id: str | None = None) -> TTSResult:
-        providers = [self.primary] + self.fallbacks
+        providers = [self.primary, *self.fallbacks]
         for idx, provider in enumerate(providers):
             try:
                 return await provider.generate(text, session_id, message_id, trace_id)
@@ -117,6 +119,7 @@ class FallbackTTSChain(BaseTTSProvider):
                 else:
                     logger.error(f"All TTS providers failed generate(). Last error: {e} | trace_id={trace_id}")
                     raise e
+        raise RuntimeError("No TTS providers available")
 
     async def get_available_voices(self) -> list[dict[str, str]]:
         return await self.primary.get_available_voices()
@@ -150,7 +153,7 @@ class ModelRegistry:
 
     def get_tts(self, name: str) -> BaseTTSProvider | None:
         return self.tts_providers[name][0] if name in self.tts_providers else None
-        
+
     def find_llms_by_capability(self, **kwargs) -> list[BaseLLMProvider]:
         results = []
         for name, (provider, caps) in self.llm_providers.items():
@@ -174,7 +177,7 @@ class PolicyRouter:
             candidates = self.registry.find_llms_by_capability(latency_tier="fast")
             if candidates:
                 return FallbackLLMChain(candidates[0], fallbacks=candidates[1:])
-                
+
         # Default policy: Currently we only have Groq, use it as primary.
         primary = self.registry.get_llm("groq_llm")
         if not primary:

@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import Response
 from jose import jwt
 from starlette.requests import Request
 
+from app.domain.user.entities import UserEntity
+from app.domain.user.ports import UserRepositoryPort
 from app.presentation.http.v1.endpoints import auth as auth_endpoint
 from app.shared.config import Environment, get_settings
 from app.shared.errors import InvalidUserIdError, RevokedTokenError
@@ -23,6 +25,15 @@ def _build_request() -> Request:
         "client": ("127.0.0.1", 8080),
     }
     return Request(scope)
+
+class MockUserRepository(UserRepositoryPort):
+    async def get_by_id(self, user_id: UUID) -> UserEntity | None: return None
+    async def get_by_email(self, email: str) -> UserEntity | None: return None
+    async def get_by_google_id(self, google_id: str) -> UserEntity | None: return None
+    async def create(self, user: UserEntity) -> UserEntity: return user
+    async def update(self, user: UserEntity) -> UserEntity: return user
+    async def increment_refresh_token_version(self, user_id: UUID, expected_version: int) -> UserEntity | None: return None
+    async def force_increment_refresh_token_version(self, user_id: UUID) -> UserEntity | None: return None
 
 
 @pytest.mark.asyncio
@@ -91,6 +102,7 @@ async def test_refresh_reissues_refresh_cookie(monkeypatch: pytest.MonkeyPatch) 
     payload = await auth_endpoint.refresh(
         request=_build_request(),
         response=response,
+        repo=MockUserRepository(),
         refresh_token="old-refresh-token",
     )
 
@@ -137,6 +149,7 @@ async def test_refresh_rejects_legacy_object_id_before_db(
         await auth_endpoint.refresh(
             request=_build_request(),
             response=response,
+            repo=MockUserRepository(),
             refresh_token=token,
         )
 
@@ -229,6 +242,7 @@ async def test_refresh_reuse_revokes_family_and_user_tokens(
         await auth_endpoint.refresh(
             request=_build_request(),
             response=response,
+            repo=MockUserRepository(),
             refresh_token="old-refresh-token",
         )
 

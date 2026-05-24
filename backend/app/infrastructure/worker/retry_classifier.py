@@ -1,5 +1,5 @@
-import httpx
 import asyncpg
+import httpx
 import redis.asyncio as redis
 
 from app.domain.rag.stage_machine import InvalidStageTransition

@@ -6,7 +6,9 @@ Create Date: 2026-05-22 11:49:41.216316
 
 """
 
-from typing import Sequence, Union
+from collections.abc import Sequence
+from typing import Union
+
 from alembic import op
 
 # revision identifiers, used by Alembic.

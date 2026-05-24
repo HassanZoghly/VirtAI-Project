@@ -7,8 +7,6 @@ implementation based on configuration.
 
 from __future__ import annotations
 
-from loguru import logger
-
 from app.domain.rag.ports import VectorCollectionStore
 from app.infrastructure.vector.enums import VectorDBBackend
 from app.shared.config import Settings

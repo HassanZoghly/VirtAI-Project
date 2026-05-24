@@ -1,12 +1,11 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
-from uuid import UUID, uuid4
 from enum import Enum
+from typing import Any, Protocol
+from uuid import UUID, uuid4
 
 
-@dataclass
-class Document:
+class Document(Protocol):
     id: UUID | None
     user_id: UUID
     filename: str

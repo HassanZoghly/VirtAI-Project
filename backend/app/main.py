@@ -17,7 +17,7 @@ from app.infrastructure.db.database import close_db, init_db
 from app.presentation.http.v1.dependencies import init_session_manager, init_ws_connection_manager
 from app.presentation.http.v1.router import router as api_v1_router
 from app.presentation.ws.connection_manager import WSConnectionManager
-from app.shared.config import Environment, get_settings
+from app.shared.config import get_settings
 from app.shared.errors import (
     AvatarBaseException,
     avatar_exception_handler,
@@ -50,10 +50,7 @@ async def lifespan(app: FastAPI):
 
     # ── Check GROQ_API_KEY ──────────────────────────────────────────────────
     if not settings.GROQ_API_KEY:
-        logger.error(
-            "❌ GROQ_API_KEY is missing! "
-            "Please set GROQ_API_KEY environment variable."
-        )
+        logger.error("❌ GROQ_API_KEY is missing! " "Please set GROQ_API_KEY environment variable.")
         raise ValueError("GROQ_API_KEY is required")
 
     # ── RAG Infrastructure ───────────────────────────────────────────────────
@@ -109,21 +106,27 @@ async def lifespan(app: FastAPI):
     app.state.embedder = embedder
     app.state.storage = LocalStorageProvider(base_path=settings.UPLOAD_BASE_PATH)
 
+    from app.infrastructure.rag.reranker import CrossEncoderReranker, DummyCrossEncoderReranker
+
+    if settings.USE_DUMMY_RERANKER:
+        app.state.reranker = DummyCrossEncoderReranker()
+    else:
+        app.state.reranker = CrossEncoderReranker(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
+
     redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
     app.state.arq_pool = await create_pool(redis_settings)
     logger.info("ARQ pool initialized")
 
     from app.application.rag.retrieval_use_case import RetrievalUseCase
+    from app.application.services.model_policy import ModelPolicyService
+    from app.domain.chat.ports import BaseLLMProvider
+    from app.domain.voice.ports import BaseTTSProvider
     from app.infrastructure.asr.groq_whisper import GroqWhisperASR
     from app.infrastructure.llm.groq_provider import GroqLLMProvider
     from app.infrastructure.tts.openai_tts_provider import OpenAITTSProvider
 
-    from app.application.services.model_policy import ModelPolicyService
-    from app.domain.chat.ports import BaseLLMProvider
-    from app.domain.voice.ports import BaseTTSProvider
-
     app.state.model_policy = ModelPolicyService()
-    
+
     groq_llm = GroqLLMProvider(
         model=settings.LLM_MODEL,
         max_tokens=settings.LLM_MAX_TOKENS,
@@ -131,7 +134,7 @@ async def lifespan(app: FastAPI):
         api_key=settings.GROQ_API_KEY,
     )
     openai_tts = OpenAITTSProvider(voice="aria", speed=0.8)
-    
+
     app.state.model_policy.registry.register_llm("groq_llm", groq_llm)
     app.state.model_policy.registry.register_tts("openai_tts", openai_tts)
 
@@ -146,32 +149,47 @@ async def lifespan(app: FastAPI):
         return app.state.model_policy.router.get_tts_chain()
 
     async def create_retrieval_service() -> RetrievalUseCase:
-        from app.infrastructure.vector.pgvector_store import SessionManagedPGVectorStore
-        from app.infrastructure.rag.reranker import DummyCrossEncoderReranker, CrossEncoderReranker
-        from app.shared.config import get_settings
         from app.application.rag.token_budget import TokenBudgetManager
+        from app.infrastructure.vector.pgvector_store import SessionManagedPGVectorStore
+
         return RetrievalUseCase(
             embedder=app.state.embedder,
             vector_store=SessionManagedPGVectorStore(),
-            reranker=DummyCrossEncoderReranker() if get_settings().USE_DUMMY_RERANKER else CrossEncoderReranker(),
-            budget_manager=TokenBudgetManager()
+            reranker=app.state.reranker,
+            budget_manager=TokenBudgetManager(),
         )
 
     # ── Chat database session factory (provides a fresh AsyncSession per call) ─────
-    async def get_chat_db_session():
-        from app.infrastructure.db.database import AsyncSessionLocal
+    import contextlib
 
-        return AsyncSessionLocal()
+    @contextlib.asynccontextmanager
+    async def get_chat_repo():
+        from app.infrastructure.db.database import AsyncSessionLocal
+        from app.infrastructure.db.repositories.chat_repository import ChatRepository
+
+        async with AsyncSessionLocal() as db:
+            yield ChatRepository(db)
+            await db.commit()
+
+    def create_animation_stage():
+        from app.application.animation.intelligence_service import AnimationIntelligenceService
+        from app.application.voice.pipeline_stages import AnimationStage
+        from app.infrastructure.tts.viseme_generator import VisemeGenerator
+
+        return AnimationStage(
+            animation_service=AnimationIntelligenceService(), viseme_generator=VisemeGenerator()
+        )
 
     # ── Session manager (needs to be updated to accept a repo factory) ───────
     session_manager = SessionManager(
-        chat_repository_factory=get_chat_db_session,
+        chat_repository_factory=get_chat_repo,
         session_timeout_sec=settings.SESSION_TIMEOUT_SEC,
         session_cleanup_interval=settings.SESSION_CLEANUP_INTERVAL,
         asr_service_factory=create_asr_service,
         llm_service_factory=create_llm_service,
         tts_service_factory=create_tts_service,
         retrieval_service_factory=create_retrieval_service,
+        animation_stage_factory=create_animation_stage,
     )
     init_session_manager(session_manager)
 
@@ -179,9 +197,10 @@ async def lifespan(app: FastAPI):
     ws_connection_manager = WSConnectionManager(history_size=250)
     init_ws_connection_manager(ws_connection_manager)
     await ws_connection_manager.start_pubsub_listener()
-    if getattr(ws_connection_manager, "_pubsub_task", None):
-        background_tasks.add(ws_connection_manager._pubsub_task)
-        ws_connection_manager._pubsub_task.add_done_callback(background_tasks.discard)
+    pubsub_task = getattr(ws_connection_manager, "_pubsub_task", None)
+    if pubsub_task:
+        background_tasks.add(pubsub_task)
+        pubsub_task.add_done_callback(background_tasks.discard)
 
     # ── Background task: cleanup idle sessions ──────────────────────────────
     async def cleanup_task():
@@ -213,8 +232,8 @@ async def lifespan(app: FastAPI):
                         SELECT id, user_id, filename, file_type, upload_source, storage_key
                         FROM documents
                         WHERE current_stage = 'QUEUED'
-                          AND upload_date < NOW() - INTERVAL '{settings.STALE_QUEUE_THRESHOLD_MINUTES} minutes'
-                          AND started_at IS NULL
+                        AND upload_date < NOW() - INTERVAL '{settings.STALE_QUEUE_THRESHOLD_MINUTES} minutes'
+                        AND started_at IS NULL
                     """)
                     result = await db.execute(stmt)
                     rows = result.fetchall()
@@ -231,6 +250,7 @@ async def lifespan(app: FastAPI):
                         logger.warning({"event": "stale_job_recovered", "document_id": str(row.id)})
         except asyncio.CancelledError:
             logger.info("Stale queue recovery task cancelled")
+            raise
 
     stale_task = asyncio.create_task(stale_queue_recovery_task(), name="stale_queue_recovery")
     background_tasks.add(stale_task)
@@ -271,12 +291,13 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def correlation_id_middleware(request: Request, call_next) -> Response:
         from app.shared.request_context import set_trace_id
+
         request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
         request.state.request_id = request_id
-        
+
         # Set unified trace context
         set_trace_id(request_id)
-        
+
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
         return response
@@ -303,13 +324,15 @@ def create_app() -> FastAPI:
     @app.get("/.well-known/jwks.json", tags=["auth"])
     async def jwks_endpoint():
         from app.shared.key_manager import get_jwks
+
         return get_jwks()
 
     # ── Routers ───────────────────────────────────────────────────────────────
     app.include_router(api_v1_router)
-    
+
     # ── Prometheus Metrics ────────────────────────────────────────────────────
     from prometheus_fastapi_instrumentator import Instrumentator
+
     Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
     return app

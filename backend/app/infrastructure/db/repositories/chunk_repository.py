@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
+
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,9 +36,14 @@ class ChunkRepository:
         stmt = delete(DataChunk).where(DataChunk.chunk_project_id == project_id)
         result = await self.db.execute(stmt)
         await self.db.flush()
-        return result.rowcount
+        from typing import cast
 
-    async def get_by_project(self, project_id: int, page: int = 1, page_size: int = 50) -> Sequence[DataChunk]:
+        from sqlalchemy import CursorResult
+        return cast("CursorResult", result).rowcount
+
+    async def get_by_project(
+        self, project_id: int, page: int = 1, page_size: int = 50
+    ) -> Sequence[DataChunk]:
         stmt = (
             select(DataChunk)
             .where(DataChunk.chunk_project_id == project_id)
@@ -48,6 +54,8 @@ class ChunkRepository:
         return result.scalars().all()
 
     async def count_by_project(self, project_id: int) -> int:
-        stmt = select(func.count(DataChunk.chunk_id)).where(DataChunk.chunk_project_id == project_id)
+        stmt = select(func.count(DataChunk.chunk_id)).where(
+            DataChunk.chunk_project_id == project_id
+        )
         result = await self.db.execute(stmt)
         return result.scalar_one()

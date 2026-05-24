@@ -12,12 +12,12 @@ from __future__ import annotations
 
 import asyncio
 
-import redis.asyncio as aioredis
 from loguru import logger
+from redis.asyncio import Redis
 
 from app.shared.config import get_settings
 
-_redis: aioredis.Redis | None = None
+_redis: Redis | None = None
 
 
 async def init_redis() -> None:
@@ -33,7 +33,7 @@ async def init_redis() -> None:
 
     last_error: Exception | None = None
     for attempt in range(1, settings.REDIS_CONNECT_RETRIES + 1):
-        _redis = aioredis.from_url(
+        _redis = Redis.from_url(
             settings.REDIS_URL,
             encoding="utf-8",
             decode_responses=False,  # keep bytes; callers encode/decode as needed
@@ -72,7 +72,7 @@ async def close_redis() -> None:
         logger.info("Redis connection closed")
 
 
-def get_redis() -> aioredis.Redis:
+def get_redis() -> Redis:
     """
     Return the active Redis client.
     Raises RuntimeError if init_redis() has not been called.
@@ -95,6 +95,6 @@ async def is_redis_healthy() -> bool:
         return False
 
 
-def get_redis_or_none() -> aioredis.Redis | None:
+def get_redis_or_none() -> Redis | None:
     """Return Redis client or None if unavailable (for fail-closed paths)."""
     return _redis

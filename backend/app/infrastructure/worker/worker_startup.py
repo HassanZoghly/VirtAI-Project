@@ -1,18 +1,17 @@
 import time
+from typing import Any
 
 from loguru import logger
 from sqlalchemy import text
 
-from app.infrastructure.cache.redis_client import get_redis
+from app.infrastructure.cache.redis_client import get_redis, init_redis
 from app.infrastructure.db.database import AsyncSessionLocal
 from app.infrastructure.rag.fastembed_provider import FastEmbedProvider
 from app.infrastructure.storage.local_storage import LocalStorageProvider
 from app.shared.config import get_settings
 
 
-from app.infrastructure.cache.redis_client import get_redis, init_redis
-
-async def worker_startup_validation(ctx: dict) -> None:
+async def worker_startup_validation(ctx: dict[Any, Any]) -> None:
     settings = get_settings()
 
     # 1. Ping Redis
@@ -51,7 +50,7 @@ async def worker_startup_validation(ctx: dict) -> None:
     logger.info("Worker startup: All checks passed. Ready to process jobs.")
 
 
-async def worker_shutdown(ctx: dict) -> None:
+async def worker_shutdown(ctx: dict[Any, Any]) -> None:
     logger.info("Worker shutting down...")
     redis_client = ctx.get("redis")
     if redis_client:

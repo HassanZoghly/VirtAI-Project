@@ -54,7 +54,7 @@ class OpenAITTSProvider(BaseTTSProvider):
             return v
         return self.VOICE_MAPPING.get(v, "nova")
 
-    def get_voice_settings(self) -> dict:
+    async def get_voice_settings(self, voice_name: str) -> dict:
         return {"voice": self.voice, "speed": getattr(self, "speed", 1.0)}
 
     def _is_safe_path_component(self, component: str) -> bool:
@@ -161,7 +161,6 @@ class OpenAITTSProvider(BaseTTSProvider):
         if not text.strip():
             raise TTSException("Empty text provided")
 
-        settings = get_settings()
         for attempt in range(max_retries):
             try:
                 async with self._client.stream(

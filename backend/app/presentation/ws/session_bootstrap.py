@@ -1,7 +1,9 @@
-from loguru import logger
 from fastapi import WebSocket
+from loguru import logger
+
 from app.application.chat.session_manager import Session, SessionManager
 from app.presentation.ws.connection_manager import WSConnectionManager
+
 
 class SessionBootstrap:
     """Handles WebSocket session initialization."""
@@ -32,7 +34,7 @@ class SessionBootstrap:
             avatar_id=avatar_id,
             voice_id=voice_id,
         )
-        
+
         await self.connection_manager.register(
             session.session_id, websocket, user_id=user_id, family_id=family_id
         )

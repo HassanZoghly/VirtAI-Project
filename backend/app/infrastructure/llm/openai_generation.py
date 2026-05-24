@@ -7,7 +7,7 @@ Uses the OpenAI SDK for both generation and embedding.
 
 from __future__ import annotations
 
-from typing import Any, Generator, Union
+from typing import Any, Union
 
 from loguru import logger
 from openai import OpenAI
@@ -70,6 +70,7 @@ class OpenAIGenerationProvider(LLMGenerationProvider):
         chat_history: list | None = None,
         max_output_tokens: int | None = None,
         temperature: float | None = None,
+        **kwargs: Any,
     ) -> str | None:
         if not self.client or not self.generation_model_id:
             logger.error("OpenAI client or generation model not configured")
@@ -80,9 +81,7 @@ class OpenAIGenerationProvider(LLMGenerationProvider):
         max_output_tokens = max_output_tokens or self.default_generation_max_output_tokens
         temperature = temperature or self.default_generation_temperature
 
-        chat_history.append(
-            self.construct_prompt(prompt=prompt, role=OpenAIRole.USER.value)
-        )
+        chat_history.append(self.construct_prompt(prompt=prompt, role=OpenAIRole.USER.value))
 
         response = self.client.chat.completions.create(
             model=self.generation_model_id,
@@ -108,7 +107,8 @@ class OpenAIGenerationProvider(LLMGenerationProvider):
         chat_history: list | None = None,
         max_output_tokens: int | None = None,
         temperature: float | None = None,
-    ) -> Generator[str, None, None]:
+        **kwargs: Any,
+    ) -> Any:
         """Yields text chunks from a streaming completion."""
         if not self.client or not self.generation_model_id:
             yield "Error: OpenAI client or model not configured."
@@ -118,9 +118,7 @@ class OpenAIGenerationProvider(LLMGenerationProvider):
         max_output_tokens = max_output_tokens or self.default_generation_max_output_tokens
         temperature = temperature or self.default_generation_temperature
 
-        chat_history.append(
-            self.construct_prompt(prompt=prompt, role=OpenAIRole.USER.value)
-        )
+        chat_history.append(self.construct_prompt(prompt=prompt, role=OpenAIRole.USER.value))
 
         try:
             response = self.client.chat.completions.create(

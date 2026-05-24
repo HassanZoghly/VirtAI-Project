@@ -4,10 +4,14 @@ from typing import Any
 
 from app.application.rag.orchestrator import AgentOrchestrator
 from app.domain.rag.entities import AgentAction, AgentInput, AgentTrace
-from app.domain.rag.ports import EmbeddingProvider, LLMGenerationProvider, VectorCollectionStore
+from app.domain.rag.ports import (
+    EmbeddingProvider,
+    LLMGenerationProvider,
+    TemplateParserPort,
+    VectorCollectionStore,
+)
 from app.infrastructure.db.models import DataChunk, Project
 from app.infrastructure.memory.memory_manager import MemoryManager
-from app.infrastructure.rag.template_parser import TemplateParser
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -24,7 +28,7 @@ class NLPOperations:
         vector_store: VectorCollectionStore,
         llm_provider: LLMGenerationProvider,
         embedding_provider: EmbeddingProvider,
-        template_parser: TemplateParser,
+        template_parser: TemplateParserPort,
         memory_manager: MemoryManager,
     ):
         self.vector_store = vector_store

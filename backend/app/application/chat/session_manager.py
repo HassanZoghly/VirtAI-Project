@@ -13,8 +13,9 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
+from contextlib import AbstractAsyncContextManager
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -22,10 +23,8 @@ from app.application.voice.handle_voice_turn import ConversationPipeline
 from app.shared.ids import parse_uuid
 
 if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
-
     from app.application.rag.retrieval_use_case import RetrievalUseCase
-    from app.domain.chat.ports import BaseLLMProvider
+    from app.domain.chat.ports import BaseLLMProvider, ChatRepositoryPort
     from app.domain.voice.ports import BaseTTSProvider, StreamingASRService
 
 
@@ -43,6 +42,7 @@ class ConversationSession:
         llm_service: BaseLLMProvider | None = None,
         tts_service: BaseTTSProvider | None = None,
         retrieval_service: RetrievalUseCase | None = None,
+        animation_stage: Any | None = None,
     ):
         self.session_id: str = session_id
         self.user_id: str = user_id
@@ -52,6 +52,7 @@ class ConversationSession:
             llm=llm_service,
             tts=tts_service,
             retrieval=retrieval_service,
+            animation_stage=animation_stage,
             avatar_id=avatar_id,
         )
         self.created_at: datetime = datetime.now(timezone.utc)
@@ -98,13 +99,14 @@ class SessionManager:
 
     def __init__(
         self,
-        chat_repository_factory: Callable[[], Awaitable[AsyncSession]],
+        chat_repository_factory: Callable[[], AbstractAsyncContextManager[ChatRepositoryPort]],
         session_timeout_sec: int = 300,
         session_cleanup_interval: int = 60,
         asr_service_factory: Callable[[], StreamingASRService] | None = None,
         llm_service_factory: Callable[[], BaseLLMProvider] | None = None,
         tts_service_factory: Callable[[], BaseTTSProvider] | None = None,
         retrieval_service_factory: Callable[[], Awaitable[RetrievalUseCase]] | None = None,
+        animation_stage_factory: Callable[[], Any] | None = None,
     ):
         if session_timeout_sec <= 0:
             raise ValueError("session_timeout_sec must be positive")
@@ -120,6 +122,7 @@ class SessionManager:
         self._llm_service_factory = llm_service_factory
         self._tts_service_factory = tts_service_factory
         self._retrieval_service_factory = retrieval_service_factory
+        self._animation_stage_factory = animation_stage_factory
         self._lock = asyncio.Lock()
 
         logger.info(
@@ -128,24 +131,23 @@ class SessionManager:
             f"cleanup_interval={session_cleanup_interval}s"
         )
 
-    async def _get_repo(self):
-        """Returns a ChatRepository with a fresh AsyncSession."""
-        from app.infrastructure.db.repositories.chat_repository import ChatRepository
-
-        db = await self._repo_factory()
-        return ChatRepository(db)
-
-    async def _commit_repo(self, repo) -> None:
-        db = getattr(repo, "db", None)
-        commit = getattr(db, "commit", None)
-        if commit is not None:
-            await commit()
-
-    async def _close_repo(self, repo) -> None:
-        db = getattr(repo, "db", None)
-        close = getattr(db, "close", None)
-        if close is not None:
-            await close()
+    async def persist_turn(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        input_type: str,
+        tts_cache_key: str | None = None,
+    ) -> None:
+        """Persist a conversation turn to the database."""
+        async with self._repo_factory() as repo:
+            await repo.save_message(
+                session_id=session_id,
+                role=role,
+                content=content,
+                input_type=input_type,
+                tts_cache_key=tts_cache_key,
+            )
 
     async def create_session(
         self,
@@ -171,35 +173,35 @@ class SessionManager:
             session_id = str(parsed_session_id)
 
         # If session already exists in memory, reuse it
-        if session_id and session_id in self._sessions:
-            existing = self._sessions[session_id]
-            if existing.user_id != user_id:
-                raise PermissionError("Cannot attach to another user's session.")
-            existing.mark_connected()
-            if voice_id and hasattr(existing.pipeline._tts, "voice"):
-                try:
-                    existing.pipeline._tts.voice = voice_id  # type: ignore
-                    logger.info(f"Session TTS voice updated | id={session_id} | voice={voice_id}")
-                except Exception as e:
-                    logger.warning(f"Failed to update TTS voice on reconnect: {e}")
-            return existing
+        async with self._lock:
+            if session_id and session_id in self._sessions:
+                existing = self._sessions[session_id]
+                if existing.user_id != user_id:
+                    raise PermissionError("Cannot attach to another user's session.")
+                existing.mark_connected()
+                if voice_id and existing.pipeline._tts is not None and hasattr(existing.pipeline._tts, "voice"):
+                    try:
+                        existing.pipeline._tts.voice = voice_id
+                        logger.info(
+                            f"Session TTS voice updated | id={session_id} | voice={voice_id}"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to update TTS voice on reconnect: {e}")
+                return existing
 
         sid = session_id or str(uuid.uuid4())
-        if session_id is None and sid in self._sessions:
-            sid = str(uuid.uuid4())
+        async with self._lock:
+            if session_id is None and sid in self._sessions:
+                sid = str(uuid.uuid4())
 
         # Check persistence using a fresh repository
-        repo = await self._get_repo()
-        try:
+        async with self._repo_factory() as repo:
             persisted = await repo.get_chat_session(sid)
             if persisted is not None:
                 if persisted.get("user_id") != user_id:
                     raise PermissionError("Cannot attach to another user's session.")
             else:
                 await repo.create_chat_session(user_id=user_id, session_id=sid)
-                await self._commit_repo(repo)
-        finally:
-            await self._close_repo(repo)
 
         # Create service instances
         asr = asr_service or (self._asr_service_factory() if self._asr_service_factory else None)
@@ -208,6 +210,7 @@ class SessionManager:
         retrieval = retrieval_service or (
             await self._retrieval_service_factory() if self._retrieval_service_factory else None
         )
+        animation = self._animation_stage_factory() if self._animation_stage_factory else None
 
         session = ConversationSession(
             session_id=sid,
@@ -217,21 +220,26 @@ class SessionManager:
             llm_service=llm,
             tts_service=tts,
             retrieval_service=retrieval,
+            animation_stage=animation,
         )
+        session.pipeline._persist_turn = self.persist_turn
         session.on_cleanup = on_cleanup
-        self._sessions[sid] = session
+        async with self._lock:
+            self._sessions[sid] = session
 
-        if voice_id and hasattr(session.pipeline._tts, "voice"):
+        if voice_id and session.pipeline._tts is not None and hasattr(session.pipeline._tts, "voice"):
             try:
                 session.pipeline._tts.voice = voice_id
                 logger.info(f"Session TTS voice set | id={sid} | voice={voice_id}")
             except Exception as e:
                 logger.warning(f"Failed to set TTS voice: {e}")
 
-        connected_count = sum(1 for s in self._sessions.values() if s.connected)
+        async with self._lock:
+            connected_count = sum(1 for s in self._sessions.values() if s.connected)
+            resumable_count = len(self._sessions)
         logger.info(
             f"Session created | id={sid} | user={user_id} | avatar={avatar_id} | "
-            f"voice={voice_id or 'default'} | active_ws={connected_count} | resumable={len(self._sessions)}"
+            f"voice={voice_id or 'default'} | active_ws={connected_count} | resumable={resumable_count}"
         )
         return session
 
@@ -240,7 +248,8 @@ class SessionManager:
         if parsed_session_id is None:
             return None
         session_id = str(parsed_session_id)
-        session = self._sessions.get(session_id)
+        async with self._lock:
+            session = self._sessions.get(session_id)
         if session:
             session.touch()
         return session
@@ -250,9 +259,10 @@ class SessionManager:
         if parsed_session_id is None:
             return None
         session_id = str(parsed_session_id)
-        session = self._sessions.get(session_id)
-        if session:
-            session.mark_connected()
+        async with self._lock:
+            session = self._sessions.get(session_id)
+            if session:
+                session.mark_connected()
         return session
 
     async def disconnect_session(self, session_id: str) -> None:
@@ -260,15 +270,17 @@ class SessionManager:
         if parsed_session_id is None:
             return
         session_id = str(parsed_session_id)
-        session = self._sessions.get(session_id)
-        if session is None:
-            return
-        session.pipeline.abort()
-        session.mark_disconnected()
-        connected_count = sum(1 for s in self._sessions.values() if s.connected)
+        async with self._lock:
+            session = self._sessions.get(session_id)
+            if session is None:
+                return
+            session.pipeline.abort()
+            session.mark_disconnected()
+            connected_count = sum(1 for s in self._sessions.values() if s.connected)
+            resumable_count = len(self._sessions)
         logger.info(
             f"Session disconnected | id={session_id} | "
-            f"active_ws={connected_count} | resumable={len(self._sessions)}"
+            f"active_ws={connected_count} | resumable={resumable_count}"
         )
 
     async def remove_session(self, session_id: str) -> None:
@@ -284,7 +296,8 @@ class SessionManager:
         logger.info(f"Session removed | id={session_id}")
 
     async def cleanup_idle(self) -> int:
-        idle_ids = [sid for sid, s in self._sessions.items() if s.idle_seconds > self._timeout]
+        async with self._lock:
+            idle_ids = [sid for sid, s in self._sessions.items() if s.idle_seconds > self._timeout]
         for sid in idle_ids:
             await self.remove_session(sid)
         if idle_ids:
@@ -296,35 +309,11 @@ class SessionManager:
         if parsed_session_id is None:
             return
         session_id = str(parsed_session_id)
-        session = self._sessions.get(session_id)
-        if session:
-            session.pipeline.abort()
-            logger.info(f"Session aborted | session_id={session_id} | message_id={message_id}")
-
-    async def _cleanup_loop(self, interval: int = 60) -> None:
-        try:
-            while True:
-                await asyncio.sleep(interval)
-                await self.cleanup_idle()
-        except asyncio.CancelledError:
-            logger.info("Cleanup loop stopped")
-            raise
-
-    def start_cleanup_task(self, interval: int | None = None) -> None:
-        if self._cleanup_task is None:
-            cleanup_interval = interval if interval is not None else self._cleanup_interval
-            self._cleanup_task = asyncio.create_task(self._cleanup_loop(cleanup_interval))
-            logger.info(f"Cleanup task started | interval={cleanup_interval}s")
-
-    async def stop_cleanup_task(self) -> None:
-        if self._cleanup_task:
-            self._cleanup_task.cancel()
-            try:
-                await self._cleanup_task
-            except asyncio.CancelledError:
-                pass
-            self._cleanup_task = None
-            logger.info("Cleanup task stopped")
+        async with self._lock:
+            session = self._sessions.get(session_id)
+            if session:
+                session.pipeline.abort()
+        logger.info(f"Session aborted | session_id={session_id} | message_id={message_id}")
 
     @property
     def active_count(self) -> int:

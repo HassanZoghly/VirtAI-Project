@@ -4,10 +4,8 @@ RAG-specific guardrail service.
 Builds on the production ``PromptSanitizer`` (domain/chat/policies.py)
 for prompt injection detection, and adds RAG-specific safety layers:
 
-1. **Input validation** — delegates injection detection to PromptSanitizer,
-   adds profanity filtering for RAG-specific queries.
-2. **Output filtering** — PII masking and profanity replacement on LLM output
-   before returning to the user.
+1. **Input validation** — delegates injection detection to PromptSanitizer, adds profanity filtering for RAG-specific queries.
+2. **Output filtering** — PII masking and profanity replacement on LLM output before returning to the user.
 
 This service is stateless — all methods are classmethods.
 """
@@ -34,8 +32,21 @@ class GuardrailService:
 
     # ── Profanity / Harmful content dictionary ───────────────────────────
     PROFANITY_WORDS: set[str] = {
-        "fuck", "shit", "bitch", "asshole", "cunt", "dick", "bastard",
-        "whore", "slut", "fag", "kill", "murder", "suicide", "rape", "bomb",
+        "fuck",
+        "shit",
+        "bitch",
+        "asshole",
+        "cunt",
+        "dick",
+        "bastard",
+        "whore",
+        "slut",
+        "fag",
+        "kill",
+        "murder",
+        "suicide",
+        "rape",
+        "bomb",
     }
 
     # ── PII Patterns (emails, SSN, phone numbers) ────────────────────────
@@ -65,9 +76,7 @@ class GuardrailService:
         # sanitize() returns (cleaned_text, is_suspicious).
         _, is_suspicious = PromptSanitizer.sanitize(query)
         if is_suspicious:
-            logger.warning(
-                f"[Guardrails] PromptSanitizer flagged input: {query[:80]}"
-            )
+            logger.warning(f"[Guardrails] PromptSanitizer flagged input: {query[:80]}")
             return False, (
                 "I cannot process this request as it appears to be an "
                 "attempt to override system instructions."
@@ -108,8 +117,6 @@ class GuardrailService:
         # Mask profanity in output (LLM hallucination safety net)
         for word in re.findall(r"\b\w+\b", safe_output):
             if word.lower() in cls.PROFANITY_WORDS:
-                safe_output = re.sub(
-                    rf"\b{word}\b", "***", safe_output, flags=re.IGNORECASE
-                )
+                safe_output = re.sub(rf"\b{word}\b", "***", safe_output, flags=re.IGNORECASE)
 
         return safe_output

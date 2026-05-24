@@ -234,7 +234,10 @@ class WebSocketException(Exception):
         super().__init__(message)
 
 
-async def avatar_exception_handler(request: Request, exc: AvatarBaseException) -> JSONResponse:
+async def avatar_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    if not isinstance(exc, AvatarBaseException):
+        raise exc
+
     if exc.status_code >= 500:
         logger.error(f"[{exc.code}] {exc.message} | Details: {exc.details}")
     else:
@@ -257,7 +260,7 @@ async def avatar_exception_handler(request: Request, exc: AvatarBaseException) -
     )
 
 
-async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+async def generic_exception_handler(request: Request[Any], exc: Exception) -> JSONResponse:
     settings = get_settings()
     if settings.DEBUG:
         logger.exception(f"Unhandled exception: {exc}")

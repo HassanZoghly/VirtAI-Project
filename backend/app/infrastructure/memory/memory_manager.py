@@ -1,7 +1,5 @@
 from typing import Any
 
-from loguru import logger
-
 from app.infrastructure.db.repositories.conversation_repository import ConversationRepository
 from app.infrastructure.memory.long_term_memory import LongTermMemory
 from app.infrastructure.memory.short_term_memory import ShortTermMemory

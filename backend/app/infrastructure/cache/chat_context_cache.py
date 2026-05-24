@@ -18,9 +18,12 @@ TTL: REDIS_CHAT_CONTEXT_TTL seconds (refreshed on each push)
 
 from __future__ import annotations
 
+import asyncio
 import json
+from weakref import WeakValueDictionary
 
 from loguru import logger
+from redis.asyncio.client import Redis as AsyncRedis
 
 from app.infrastructure.cache.cache_keys import chat_context_key
 from app.infrastructure.cache.redis_client import get_redis
@@ -38,13 +41,17 @@ async def get_context(session_id: str) -> list[dict]:
     Does NOT trigger a PostgreSQL rebuild — call rebuild_context() explicitly.
     """
     try:
-        redis = get_redis()
+        redis_client: AsyncRedis = get_redis()
         key = chat_context_key(session_id)
-        raw_messages = await redis.lrange(key, 0, -1)
+        result = await redis_client.execute_command("LRANGE", key, 0, -1)
+        raw_messages: list[bytes] = result if isinstance(result, list) else []
         return [json.loads(m) for m in raw_messages]
     except Exception as e:
         logger.warning(f"[ChatContextCache] get_context failed | session={session_id} | {e}")
         return []
+
+
+_rebuild_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
 
 
 async def get_or_rebuild_context(session_id: str) -> list[dict]:
@@ -56,8 +63,16 @@ async def get_or_rebuild_context(session_id: str) -> list[dict]:
     """
     messages = await get_context(session_id)
     if not messages:
-        logger.info(f"[ChatContextCache] Cache miss — rebuilding | session={session_id}")
-        messages = await rebuild_context(session_id)
+        lock = _rebuild_locks.get(session_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            _rebuild_locks[session_id] = lock
+
+        async with lock:
+            messages = await get_context(session_id)
+            if not messages:
+                logger.info(f"[ChatContextCache] Cache miss — rebuilding | session={session_id}")
+                messages = await rebuild_context(session_id)
     return messages
 
 
@@ -79,14 +94,15 @@ async def push_message(
     """
     try:
         settings = get_settings()
-        redis = get_redis()
+        redis_client: AsyncRedis = get_redis()
         key = chat_context_key(session_id)
 
         message = {"role": role, "content": content}
         if extra:
             message.update(extra)
 
-        pipe = redis.pipeline()
+        from redis.asyncio.client import Pipeline
+        pipe: Pipeline = redis_client.pipeline()
         pipe.rpush(key, json.dumps(message))
         pipe.ltrim(key, -MAX_MESSAGES, -1)  # keep last N
         pipe.expire(key, settings.REDIS_CHAT_CONTEXT_TTL)  # refresh TTL
@@ -113,11 +129,12 @@ async def rebuild_context(session_id: str) -> list[dict]:
                 return []
 
         settings = get_settings()
-        redis = get_redis()
+        redis_client: AsyncRedis = get_redis()
         key = chat_context_key(session_id)
 
         # Rebuild atomically
-        pipe = redis.pipeline()
+        from redis.asyncio.client import Pipeline
+        pipe: Pipeline = redis_client.pipeline()
         pipe.delete(key)
         for msg in messages:
             pipe.rpush(key, json.dumps({"role": msg["role"], "content": msg["content"]}))
@@ -137,7 +154,8 @@ async def rebuild_context(session_id: str) -> list[dict]:
 async def invalidate(session_id: str) -> None:
     """Delete the context key for a session (e.g. on session end)."""
     try:
-        await get_redis().delete(chat_context_key(session_id))
+        redis_client: AsyncRedis = get_redis()
+        await redis_client.execute_command("DEL", chat_context_key(session_id))
         logger.debug(f"[ChatContextCache] Context invalidated | session={session_id}")
     except Exception as e:
         logger.warning(f"[ChatContextCache] invalidate failed | session={session_id} | {e}")

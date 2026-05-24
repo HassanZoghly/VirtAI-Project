@@ -464,43 +464,6 @@ class AnimationIntelligenceService:
             result.extend(parts or [chunk])
         return result[:16]
 
-    def _score_intents(self, segment: str, previous_intent: str | None = None) -> dict[str, float]:
-        lower = segment.lower()
-        base_scores: dict[str, float] = dict.fromkeys(self._INTENT_KEYWORDS, 0.12)
-
-        for intent, keywords in self._INTENT_KEYWORDS.items():
-            for keyword in keywords:
-                if keyword in lower:
-                    base_scores[intent] += 0.65
-
-        # Punctuation and style cues.
-        if "?" in segment:
-            base_scores["question"] += 0.7
-        if "!" in segment:
-            base_scores["emphasis"] += 0.45
-        if ";" in segment or ":" in segment:
-            base_scores["explanation"] += 0.3
-
-        # Context-awareness: avoid monotony by down-biasing immediate repeats.
-        if previous_intent and previous_intent in base_scores:
-            base_scores[previous_intent] *= 0.82
-            for intent in base_scores:
-                if intent != previous_intent:
-                    base_scores[intent] += 0.06
-
-        return self._softmax_distribution(base_scores, temperature=0.9)
-
-    def _sample_intent(self, scores: dict[str, float]) -> str:
-        threshold = random.random()
-        cumulative = 0.0
-        for intent, probability in scores.items():
-            cumulative += probability
-            if cumulative >= threshold:
-                return intent
-        if not scores:
-            return "neutral"
-        return max(scores, key=lambda k: scores[k])
-
     def _detect_tone(self, segment: str, emotion: str | None) -> str:
         if emotion:
             return emotion.lower()

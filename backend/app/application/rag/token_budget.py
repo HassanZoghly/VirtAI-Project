@@ -3,15 +3,17 @@ from loguru import logger
 
 from app.domain.rag.entities import DocumentChunk
 
+
 class TokenBudgetManager:
-    """
-    Manages the LLM context window by accurately counting tokens and truncating retrieved chunks.
-    """
+    """Manages the LLM context window by accurately counting tokens and truncating retrieved chunks."""
+
     def __init__(self, model_encoding: str = "cl100k_base"):
         try:
             self.encoding = tiktoken.get_encoding(model_encoding)
         except Exception as e:
-            logger.warning(f"[TokenBudgetManager] Failed to load {model_encoding}: {e}. Falling back to character heuristic.")
+            logger.warning(
+                f"[TokenBudgetManager] Failed to load {model_encoding}: {e}. Falling back to character heuristic."
+            )
             self.encoding = None
 
     def count_tokens(self, text: str) -> int:
@@ -20,11 +22,11 @@ class TokenBudgetManager:
         return len(text) // 4  # Fallback heuristic
 
     def fit_chunks_to_budget(
-        self, 
-        chunks: list[DocumentChunk], 
-        system_prompt: str, 
-        user_query: str, 
-        max_context_tokens: int
+        self,
+        chunks: list[DocumentChunk],
+        system_prompt: str,
+        user_query: str,
+        max_context_tokens: int,
     ) -> list[DocumentChunk]:
         """
         Calculates the available token budget and returns only the chunks that fit.
@@ -33,11 +35,11 @@ class TokenBudgetManager:
         system_tokens = self.count_tokens(system_prompt)
         query_tokens = self.count_tokens(user_query)
         base_tokens = system_tokens + query_tokens
-        
+
         # Add some buffer for formatting and structural tokens
-        buffer_tokens = 100 
+        buffer_tokens = 100
         available_budget = max_context_tokens - base_tokens - buffer_tokens
-        
+
         if available_budget <= 0:
             logger.warning(
                 f"[TokenBudgetManager] Zero or negative budget available! "
@@ -50,7 +52,7 @@ class TokenBudgetManager:
 
         for chunk in chunks:
             chunk_tokens = self.count_tokens(chunk.chunk_text)
-            
+
             # Additional tokens for formatting like "--- Source: X ---\n"
             source = chunk.metadata.get("filename", "Unknown") if chunk.metadata else "Unknown"
             formatting_tokens = self.count_tokens(f"--- Document: {source} ---\n\n")
@@ -62,7 +64,7 @@ class TokenBudgetManager:
             else:
                 # We stop adding chunks once we hit the limit
                 break
-                
+
         logger.debug(
             f"[TokenBudgetManager] Budget check: max={max_context_tokens}, "
             f"base={base_tokens}, used_by_chunks={current_used}, "

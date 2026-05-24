@@ -1,8 +1,8 @@
 import hashlib
 import re
 from typing import Any
-import filetype
 
+import filetype
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from loguru import logger
 from sqlalchemy.exc import IntegrityError
@@ -20,8 +20,9 @@ from app.shared.ids import parse_uuid
 router = APIRouter()
 settings = get_settings()
 
-def sanitize_filename(filename: str) -> str:
+def sanitize_filename(filename: str | None) -> str:
     """Strip path traversal sequences and special characters."""
+    filename = filename or "unnamed_file"
     if not filename:
         return "unnamed_document"
     # Replace anything that isn't alphanumeric, dot, dash, or underscore
@@ -116,11 +117,11 @@ async def upload_document(
             raise HTTPException(
                 status_code=413, detail=f"File exceeds maximum size of {settings.MAX_UPLOAD_SIZE_MB}MB"
             )
-            
+
     file_bytes = bytes(file_bytes_array)
     if not file_bytes:
         raise HTTPException(status_code=400, detail="File is empty")
-        
+
     await validate_file_magic(file_bytes, ext)
 
     # 4. Compute sha256
@@ -129,7 +130,7 @@ async def upload_document(
     # 5. Check dedup
     existing = await repo.find_by_sha256(str(user.id), file_sha256, session_id)
     if existing:
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
         is_stale = False
         if existing.upload_date:
             # Ensure upload_date is timezone aware for comparison
@@ -150,8 +151,9 @@ async def upload_document(
         elif existing.current_stage == IngestionStage.COMPLETE:
             if session_id and str(existing.scope_id) != session_id:
                 from sqlalchemy import update
+
                 from app.infrastructure.db.models import Document, DocumentChunk
-                
+
                 parsed_session_id = parse_uuid(session_id)
                 if parsed_session_id:
                     await db.execute(
@@ -215,10 +217,10 @@ async def upload_document(
                 "status": winner.current_stage,
                 "message": "Document already exists (concurrent upload resolved)",
             }
-        
+
         # If no winner is found (e.g., due to different constraint triggering), gracefully reject
         raise HTTPException(
-            status_code=409, 
+            status_code=409,
             detail="Conflict: A document with this SHA256 already exists in the requested scope."
         )
 
@@ -265,7 +267,7 @@ async def list_statuses(
 ) -> list[dict[str, Any]]:
     """List statuses for all documents."""
     from app.infrastructure.cache.redis_client import get_redis_or_none
-    
+
     repo = DocumentRepository(db)
     if active_only:
         docs = await repo.list_active(str(user.id))
@@ -273,7 +275,7 @@ async def list_statuses(
         docs = await repo.list_by_user(str(user.id))
 
     redis_client = get_redis_or_none()
-    
+
     results = []
     for d in docs:
         progress_pct = d.progress_pct
@@ -284,7 +286,7 @@ async def list_statuses(
                     progress_pct = int(cached_pct.decode())
                 except ValueError:
                     pass
-                    
+
         results.append({
             "id": str(d.id),
             "filename": d.filename,
@@ -295,7 +297,7 @@ async def list_statuses(
             "total_chunks": d.total_chunks,
             "error_message": d.error_message,
         })
-        
+
     return results
 
 
@@ -307,14 +309,14 @@ async def get_document_status(
 ) -> dict[str, Any]:
     """Get status of a specific document."""
     from app.infrastructure.cache.redis_client import get_redis_or_none
-    
+
     if parse_uuid(document_id) is None:
         raise HTTPException(status_code=400, detail="Invalid document_id")
     repo = DocumentRepository(db)
     status = await repo.get_status(document_id, str(user.id))
     if not status:
         raise HTTPException(status_code=404, detail="Document not found")
-        
+
     redis_client = get_redis_or_none()
     if redis_client and status["current_stage"] not in {"COMPLETE", "FAILED", "CANCELLED"}:
         cached_pct = await redis_client.get(f"doc_progress:{document_id}")
@@ -323,7 +325,7 @@ async def get_document_status(
                 status["progress_pct"] = int(cached_pct.decode())
             except ValueError:
                 pass
-                
+
     return status
 
 

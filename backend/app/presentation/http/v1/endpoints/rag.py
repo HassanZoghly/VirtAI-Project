@@ -3,7 +3,6 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.application.rag.nlp_operations import NLPOperations
 from app.domain.rag.entities import AgentAction
 from app.infrastructure.db.database import get_db
 from app.infrastructure.db.repositories.chunk_repository import ChunkRepository
@@ -19,7 +18,9 @@ class RAGQueryRequest(BaseModel):
     limit: int = Field(default=5, description="Number of documents to retrieve for context.")
 
 
-@router.post("/projects/{project_id}/documents/index", summary="Index project documents into Vector DB")
+@router.post(
+    "/projects/{project_id}/documents/index", summary="Index project documents into Vector DB"
+)
 async def index_project_documents(
     project_id: int,
     nlp: NLPOperationsDep,
@@ -119,7 +120,14 @@ async def summarize(
         last_error = trace.steps[-1].error if trace.steps else "Unknown error"
         raise HTTPException(status_code=500, detail=last_error)
 
-    return {"status": "success", "summary": trace.final_answer.get("summary") if isinstance(trace.final_answer, dict) else trace.final_answer}
+    return {
+        "status": "success",
+        "summary": (
+            trace.final_answer.get("summary")
+            if isinstance(trace.final_answer, dict)
+            else trace.final_answer
+        ),
+    }
 
 
 @router.post("/projects/{project_id}/quiz", summary="Generate a quiz")
@@ -144,4 +152,11 @@ async def quiz(
         last_error = trace.steps[-1].error if trace.steps else "Unknown error"
         raise HTTPException(status_code=500, detail=last_error)
 
-    return {"status": "success", "quiz": trace.final_answer.get("quiz") if isinstance(trace.final_answer, dict) else trace.final_answer}
+    return {
+        "status": "success",
+        "quiz": (
+            trace.final_answer.get("quiz")
+            if isinstance(trace.final_answer, dict)
+            else trace.final_answer
+        ),
+    }

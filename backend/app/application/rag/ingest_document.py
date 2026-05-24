@@ -1,5 +1,6 @@
 import time
-from collections.abc import Awaitable, Callable, AsyncContextManager
+from collections.abc import Awaitable, Callable
+from contextlib import AbstractAsyncContextManager
 from typing import Any
 
 from loguru import logger
@@ -22,10 +23,10 @@ class IngestDocumentUseCase:
     def __init__(
         self,
         storage: StorageProvider,
-        parser: DocumentParser,
-        chunker: ChunkingStrategy,
-        embedder: EmbeddingProvider,
-        db_session_factory: Callable[[], AsyncContextManager[AsyncSession]],
+        parser: DocumentParser | None,
+        chunker: ChunkingStrategy | None,
+        embedder: EmbeddingProvider | None,
+        db_session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]],
         document_repo_factory: Callable[[AsyncSession], Any],
         vector_store_factory: Callable[[AsyncSession], Any],
     ):
@@ -69,6 +70,8 @@ class IngestDocumentUseCase:
         # 2. PARSING
         t_parse = time.monotonic()
         await progress_callback("PARSING", 10, 0, 0)
+        if not self.parser:
+            raise ValueError("Parser is required for this stage")
         raw_text = await self.parser.parse_bytes(file_bytes, file_type)
 
         normalized = normalize_text(raw_text)
@@ -103,6 +106,8 @@ class IngestDocumentUseCase:
         # 3. CHUNKING
         t_chunk = time.monotonic()
         await progress_callback("CHUNKING", 25, 0, 0)
+        if not self.chunker:
+            raise ValueError("Chunker is required for this stage")
         chunks_text = self.chunker.chunk(normalized)
 
         total_chunks = len(chunks_text)
@@ -143,6 +148,8 @@ class IngestDocumentUseCase:
             batch_texts = chunks_text[i : i + batch_size]
 
             # Embed outside transaction
+            if not self.embedder:
+                raise ValueError("Embedder is required for this stage")
             embeddings = await self.embedder.embed_batch(batch_texts)
 
             # Index batch in short transaction

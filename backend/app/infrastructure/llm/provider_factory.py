@@ -18,9 +18,7 @@ from app.shared.config import Settings
 class LLMProviderFactory:
     """
     Creates LLMGenerationProvider instances based on backend setting.
-
     Usage::
-
         factory = LLMProviderFactory(settings)
         gen_client = factory.create(provider="OPENAI")
         gen_client.set_generation_model("gpt-3.5-turbo")
@@ -32,10 +30,8 @@ class LLMProviderFactory:
     def create(self, provider: str) -> LLMGenerationProvider:
         """
         Instantiate an LLM provider by name.
-
         Args:
             provider: One of "OPENAI" or "COHERE" (case-insensitive).
-
         Raises:
             ValueError: If the provider string is not recognized.
         """

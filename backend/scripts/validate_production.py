@@ -42,9 +42,11 @@ async def test_rag_pipeline():
         assert len(vector) == 1536, "Embedding dimension mismatch"
 
         # Test RetrievalUseCase
-        retrieval = RetrievalUseCase(embedder)
-        # Should not crash
-        await retrieval.execute("Test query")
+        async with AsyncSessionLocal() as session:
+            from app.infrastructure.vector.pgvector_store import PGVectorStore
+            retrieval = RetrievalUseCase(embedder=embedder, vector_store=PGVectorStore(session))
+            # Should not crash
+            await retrieval.execute("Test query")
 
         # Test Chunking
         chunker = MarkdownChunker()

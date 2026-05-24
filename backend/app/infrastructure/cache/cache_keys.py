@@ -7,12 +7,12 @@ This prevents key collisions and makes TTL/scope reasoning clear.
 Key format: virtai:{namespace}:{identifier}
 
 Namespaces:
-  chat:ctx    — active chat context (last 50 messages per session)
-  tts         — synthesised TTS audio cache
-  llm         — LLM completion cache
-  jwt         — JWT blacklist for invalidated tokens
-  rate        — rate limiting counters
-  ws          — WebSocket session metadata
+    chat:ctx    — active chat context (last 50 messages per session)
+    tts         — synthesised TTS audio cache
+    llm         — LLM completion cache
+    jwt         — JWT blacklist for invalidated tokens
+    rate        — rate limiting counters
+    ws          — WebSocket session metadata
 """
 
 from __future__ import annotations

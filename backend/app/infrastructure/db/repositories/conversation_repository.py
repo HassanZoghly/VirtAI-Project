@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Sequence
+from collections.abc import Sequence
+
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -67,7 +68,10 @@ class ConversationRepository:
         )
         result = await self.db.execute(stmt)
         await self.db.flush()
-        return result.rowcount
+        from typing import cast
+
+        from sqlalchemy import CursorResult
+        return cast("CursorResult", result).rowcount
 
     async def get_all_sessions(self, project_id: int) -> Sequence[str]:
         stmt = select(Conversation.session_id).where(

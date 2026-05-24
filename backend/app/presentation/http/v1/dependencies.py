@@ -10,7 +10,7 @@ Provides FastAPI dependency injection for:
 - Settings
 """
 
-from typing import Annotated
+from typing import Annotated, Any, cast
 
 import redis.asyncio as aioredis
 from fastapi import Depends, Request
@@ -97,26 +97,16 @@ from app.application.chat.chat_use_case import ChatUseCase
 async def get_chat_use_case(request: Request) -> ChatUseCase:
     """Dependency injection for ChatUseCase."""
     from app.application.rag.retrieval_use_case import RetrievalUseCase
-    from app.infrastructure.llm.groq_provider import GroqLLMProvider
-    from app.shared.config import get_settings
-
-    settings = get_settings()
-    llm = GroqLLMProvider(
-        model=settings.LLM_MODEL,
-        max_tokens=settings.LLM_MAX_TOKENS,
-        temperature=settings.LLM_TEMPERATURE,
-        api_key=settings.GROQ_API_KEY,
-    )
-    from app.infrastructure.vector.pgvector_store import SessionManagedPGVectorStore
-    from app.infrastructure.rag.reranker import DummyCrossEncoderReranker, CrossEncoderReranker
-    from app.shared.config import get_settings
     from app.application.rag.token_budget import TokenBudgetManager
-    
+    from app.infrastructure.vector.pgvector_store import SessionManagedPGVectorStore
+
+    llm = request.app.state.model_policy.router.get_llm_chain()
+
     retrieval = RetrievalUseCase(
         embedder=request.app.state.embedder,
         vector_store=SessionManagedPGVectorStore(),
-        reranker=DummyCrossEncoderReranker() if get_settings().USE_DUMMY_RERANKER else CrossEncoderReranker(),
-        budget_manager=TokenBudgetManager()
+        reranker=request.app.state.reranker,
+        budget_manager=TokenBudgetManager(),
     )
     return ChatUseCase(llm_provider=llm, retrieval_use_case=retrieval)
 
@@ -126,23 +116,39 @@ ChatUseCaseDep = Annotated[ChatUseCase, Depends(get_chat_use_case)]
 
 # ── RAG Dependencies ─────────────────────────────────────────────────────────
 
-from app.domain.rag.ports import LLMGenerationProvider, VectorCollectionStore, EmbeddingProvider
-from app.infrastructure.llm.provider_factory import LLMProviderFactory
-from app.infrastructure.vector.provider_factory import VectorDBProviderFactory
-from app.infrastructure.db.database import AsyncSessionLocal, get_db
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.infrastructure.memory.memory_manager import MemoryManager
-from app.infrastructure.db.repositories.conversation_repository import ConversationRepository
+
 from app.application.rag.nlp_operations import NLPOperations
+from app.domain.rag.ports import EmbeddingProvider, LLMGenerationProvider, VectorCollectionStore
+from app.domain.user.ports import UserRepositoryPort
+from app.infrastructure.db.database import AsyncSessionLocal, get_db
+from app.infrastructure.db.repositories.conversation_repository import ConversationRepository
+from app.infrastructure.db.repositories.user_repository import UserRepository
+from app.infrastructure.llm.provider_factory import LLMProviderFactory
+from app.infrastructure.memory.memory_manager import MemoryManager
 from app.infrastructure.rag.template_parser import TemplateParser
+from app.infrastructure.vector.provider_factory import VectorDBProviderFactory
 
 
-def get_llm_generation_provider(settings: Settings = Depends(get_settings)) -> LLMGenerationProvider:
+def get_llm_generation_provider(
+    settings: Settings = Depends(get_settings),
+) -> LLMGenerationProvider:
     factory = LLMProviderFactory(settings=settings)
-    return factory.create(provider=settings.LLM_PROVIDER if hasattr(settings, "LLM_PROVIDER") else "OPENAI")
+    return factory.create(
+        provider=settings.GENERATION_PROVIDER if hasattr(settings, "GENERATION_PROVIDER") else "OPENAI"
+    )
 
 
-def get_vector_collection_store(settings: Settings = Depends(get_settings)) -> VectorCollectionStore:
+def get_user_repository(db: AsyncSession = Depends(get_db)) -> UserRepositoryPort:
+    return UserRepository(db)
+
+
+UserRepositoryDep = Annotated[UserRepositoryPort, Depends(get_user_repository)]
+
+
+def get_vector_collection_store(
+    settings: Settings = Depends(get_settings),
+) -> VectorCollectionStore:
     # Use AsyncSessionLocal as the session factory since PGVectorCollectionProvider uses `async with self.db_client():`
     factory = VectorDBProviderFactory(settings=settings, db_client=AsyncSessionLocal)
     return factory.create()
@@ -162,13 +168,14 @@ def get_nlp_operations(
     # Get embedding provider from app state just like get_chat_use_case
     embedding_provider: EmbeddingProvider = request.app.state.embedder
     template_parser = TemplateParser()
-    
+
     return NLPOperations(
         vector_store=vector_store,
         llm_provider=llm_provider,
         embedding_provider=embedding_provider,
-        template_parser=template_parser,
+        template_parser=cast("Any", template_parser),
         memory_manager=memory_manager,
     )
+
 
 NLPOperationsDep = Annotated[NLPOperations, Depends(get_nlp_operations)]

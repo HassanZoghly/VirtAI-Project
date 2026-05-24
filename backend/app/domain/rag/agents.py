@@ -1,12 +1,17 @@
 import logging
 import re
 from abc import ABC, abstractmethod
-from typing import Any, AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from app.domain.rag.entities import AgentAction, AgentInput, AgentOutput
-from app.domain.rag.ports import LLMGenerationProvider, VectorCollectionStore, EmbeddingProvider
-from app.infrastructure.rag.template_parser import TemplateParser
-from app.infrastructure.rag.guardrail_service import GuardrailService
+from app.domain.rag.ports import (
+    EmbeddingProvider,
+    GuardrailPort,
+    LLMGenerationProvider,
+    TemplateParserPort,
+    VectorCollectionStore,
+)
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -46,7 +51,7 @@ class BaseAgent(ABC):
         llm_provider: LLMGenerationProvider | None = None,
         vector_store: VectorCollectionStore | None = None,
         embedding_provider: EmbeddingProvider | None = None,
-        template_parser: TemplateParser | None = None,
+        template_parser: TemplateParserPort | None = None,
     ):
         self.llm_provider = llm_provider
         self.vector_store = vector_store
@@ -62,7 +67,9 @@ class BaseAgent(ABC):
         pass
 
     @abstractmethod
-    async def run(self, input_data: AgentInput, retrieved_documents: list[dict] | None = None) -> AgentOutput:
+    async def run(
+        self, input_data: AgentInput, retrieved_documents: list[dict] | None = None
+    ) -> AgentOutput:
         """
         Core execution logic. Must return AgentOutput.
         """
@@ -115,7 +122,9 @@ class RouterAgent(BaseAgent):
     def can_handle(self, input_data: AgentInput) -> bool:
         return True
 
-    async def run(self, input_data: AgentInput, retrieved_documents: list[dict] | None = None) -> AgentOutput:
+    async def run(
+        self, input_data: AgentInput, retrieved_documents: list[dict] | None = None
+    ) -> AgentOutput:
         query_lower = input_data.query.lower().strip()
 
         # ── keyword routing (strict matching) ─────────────────────
@@ -191,7 +200,9 @@ class RetrieverAgent(BaseAgent):
             AgentAction.QUIZ,
         )
 
-    async def run(self, input_data: AgentInput, retrieved_documents: list[dict] | None = None) -> AgentOutput:
+    async def run(
+        self, input_data: AgentInput, retrieved_documents: list[dict] | None = None
+    ) -> AgentOutput:
         try:
             if not self.vector_store or not self.embedding_provider:
                 raise ValueError("Vector store and embedding provider required for RetrieverAgent")
@@ -209,7 +220,7 @@ class RetrieverAgent(BaseAgent):
             raw_vec = await self.embedding_provider.embed(text=search_query)
 
             collection_name = f"collection_1536_{input_data.project_id}"
-            
+
             results = await self.vector_store.search_by_vector(
                 collection_name=collection_name,
                 vector=raw_vec,
@@ -244,7 +255,9 @@ class AnswerAgent(BaseAgent):
     def can_handle(self, input_data: AgentInput) -> bool:
         return input_data.action == AgentAction.ANSWER
 
-    async def run(self, input_data: AgentInput, retrieved_documents: list[dict] | None = None) -> AgentOutput:
+    async def run(
+        self, input_data: AgentInput, retrieved_documents: list[dict] | None = None
+    ) -> AgentOutput:
         try:
             if not self.llm_provider or not self.template_parser:
                 raise ValueError("LLM provider and Template Parser required for AnswerAgent")
@@ -256,7 +269,7 @@ class AnswerAgent(BaseAgent):
                 )
 
             base_system_prompt = self.template_parser.get("rag", "system_prompt")
-            
+
             chat_history = [
                 self.llm_provider.construct_prompt(
                     prompt=base_system_prompt,
@@ -302,12 +315,13 @@ class AnswerAgent(BaseAgent):
             full_prompt = "\n\n".join([documents_prompts, footer])
 
             if input_data.stream:
+                llm = self.llm_provider
                 async def answer_stream():
-                    for chunk in self.llm_provider.generate_stream(
+                    for chunk in llm.generate_stream(
                         prompt=full_prompt,
                         chat_history=chat_history,
                     ):
-                        filtered_chunk = GuardrailService.validate_output(chunk)
+                        filtered_chunk = GuardrailPort.validate_output(chunk)
                         if filtered_chunk:
                             yield filtered_chunk
 
@@ -323,7 +337,7 @@ class AnswerAgent(BaseAgent):
                 prompt=full_prompt,
                 chat_history=chat_history,
             )
-            answer = GuardrailService.validate_output(answer)
+            answer = GuardrailPort.validate_output(answer)
 
             return self._make_output(
                 input_data,
@@ -341,7 +355,9 @@ class SummarizerAgent(BaseAgent):
     def can_handle(self, input_data: AgentInput) -> bool:
         return input_data.action == AgentAction.SUMMARIZE
 
-    async def run(self, input_data: AgentInput, retrieved_documents: list[dict] | None = None) -> AgentOutput:
+    async def run(
+        self, input_data: AgentInput, retrieved_documents: list[dict] | None = None
+    ) -> AgentOutput:
         try:
             if not self.llm_provider or not self.template_parser:
                 raise ValueError("LLM provider and Template Parser required for SummarizerAgent")
@@ -354,7 +370,7 @@ class SummarizerAgent(BaseAgent):
 
             system_prompt = self.template_parser.get("rag", "summarize_system_prompt")
             footer_prompt = self.template_parser.get("rag", "summarize_footer_prompt")
-            
+
             user_lang_code = _detect_language(input_data.query or "")
             target_lang = "Arabic" if user_lang_code == "ar" else "English"
             language_enforcement = (
@@ -388,8 +404,9 @@ class SummarizerAgent(BaseAgent):
             full_prompt = "\n\n".join([documents_prompts, footer_prompt])
 
             if input_data.stream:
+                llm = self.llm_provider
                 async def summary_stream():
-                    for chunk in self.llm_provider.generate_stream(
+                    for chunk in llm.generate_stream(
                         prompt=full_prompt,
                         chat_history=chat_history,
                     ):
@@ -421,7 +438,9 @@ class QuizAgent(BaseAgent):
     def can_handle(self, input_data: AgentInput) -> bool:
         return input_data.action == AgentAction.QUIZ
 
-    async def run(self, input_data: AgentInput, retrieved_documents: list[dict] | None = None) -> AgentOutput:
+    async def run(
+        self, input_data: AgentInput, retrieved_documents: list[dict] | None = None
+    ) -> AgentOutput:
         try:
             if not self.llm_provider or not self.template_parser:
                 raise ValueError("LLM provider and Template Parser required for QuizAgent")
@@ -432,8 +451,12 @@ class QuizAgent(BaseAgent):
                     input_data, success=False, error="No documents to generate quiz from"
                 )
 
-            system_prompt = self.template_parser.get("rag", "quiz_system_prompt", {"num_questions": 3})
-            footer_prompt = self.template_parser.get("rag", "quiz_footer_prompt", {"num_questions": 3})
+            system_prompt = self.template_parser.get(
+                "rag", "quiz_system_prompt", {"num_questions": 3}
+            )
+            footer_prompt = self.template_parser.get(
+                "rag", "quiz_footer_prompt", {"num_questions": 3}
+            )
 
             user_lang_code = _detect_language(input_data.query or "")
             target_lang = "Arabic" if user_lang_code == "ar" else "English"
@@ -468,8 +491,9 @@ class QuizAgent(BaseAgent):
             full_prompt = "\n\n".join([documents_prompts, footer_prompt])
 
             if input_data.stream:
+                llm = self.llm_provider
                 async def quiz_stream():
-                    for chunk in self.llm_provider.generate_stream(
+                    for chunk in llm.generate_stream(
                         prompt=full_prompt,
                         chat_history=chat_history,
                     ):

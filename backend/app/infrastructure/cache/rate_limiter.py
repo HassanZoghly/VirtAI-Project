@@ -2,10 +2,10 @@
 Sliding window rate limiter using Redis sorted sets.
 
 Algorithm:
-  1. Remove all entries older than `window` seconds
-  2. Count remaining entries
-  3. If count >= limit → deny
-  4. Otherwise → add current timestamp + allow
+    1. Remove all entries older than `window` seconds
+    2. Count remaining entries
+    3. If count >= limit → deny
+    4. Otherwise → add current timestamp + allow
 
 The sorted set score is the Unix timestamp in milliseconds,
 which gives sub-second precision.

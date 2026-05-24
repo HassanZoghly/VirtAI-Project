@@ -28,6 +28,7 @@ def _redact_secrets(record: Record) -> None:
 def _inject_trace_id(record: Record) -> None:
     """Inject trace_id from contextvar into log record extra."""
     from app.shared.request_context import get_trace_id
+
     record["extra"]["request_id"] = get_trace_id()
 
 

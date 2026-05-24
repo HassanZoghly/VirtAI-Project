@@ -19,7 +19,10 @@ class FastEmbedProvider(EmbeddingProvider):
         self.cache_dir = cache_dir or settings.FASTEMBED_CACHE_DIR
         Path(self.cache_dir).mkdir(parents=True, exist_ok=True)
 
-        if FastEmbedProvider._model_instance is not None and FastEmbedProvider._model_name_cache == self.model_name:
+        if (
+            FastEmbedProvider._model_instance is not None
+            and FastEmbedProvider._model_name_cache == self.model_name
+        ):
             self.model = FastEmbedProvider._model_instance
             logger.debug("FastEmbed model loaded from class singleton cache.")
             return
@@ -33,7 +36,8 @@ class FastEmbedProvider(EmbeddingProvider):
                 "cache_dir": self.cache_dir,
             }
         )
-        kwargs = {"model_name": self.model_name}
+        from typing import Any
+        kwargs: dict[str, Any] = {"model_name": self.model_name}
         signature = inspect.signature(TextEmbedding)
         if "cache_dir" in signature.parameters:
             kwargs["cache_dir"] = self.cache_dir

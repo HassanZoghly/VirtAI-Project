@@ -25,7 +25,7 @@ class WSConnectionManager:
         self._user_to_ws: dict[str, set[WebSocket]] = defaultdict(set)
         self._family_to_ws: dict[str, set[WebSocket]] = defaultdict(set)
         self._ws_metadata: dict[WebSocket, dict[str, str]] = {}
-        
+
         self._history: dict[str, deque[tuple[int, str]]] = defaultdict(
             lambda: deque(maxlen=self._history_size)
         )
@@ -35,18 +35,22 @@ class WSConnectionManager:
         self._pubsub_task: asyncio.Task | None = None
 
     async def register(
-        self, session_id: str, websocket: WebSocket, user_id: str | None = None, family_id: str | None = None
+        self,
+        session_id: str,
+        websocket: WebSocket,
+        user_id: str | None = None,
+        family_id: str | None = None,
     ) -> None:
         """Register/replace active websocket for a session."""
         async with self._lock:
             old = self._active.get(session_id)
             self._active[session_id] = websocket
-            
+
             if user_id:
                 self._user_to_ws[user_id].add(websocket)
             if family_id:
                 self._family_to_ws[family_id].add(websocket)
-            
+
             self._ws_metadata[websocket] = {
                 "session_id": session_id,
                 "user_id": user_id or "",
@@ -67,7 +71,7 @@ class WSConnectionManager:
             if current is websocket:
                 self._active.pop(session_id, None)
         await self._cleanup_websocket(websocket)
-        
+
     async def _cleanup_websocket(self, websocket: WebSocket) -> None:
         async with self._lock:
             meta = self._ws_metadata.pop(websocket, None)
@@ -133,12 +137,13 @@ class WSConnectionManager:
 
     def latest_acked(self, session_id: str) -> int:
         return self._acked.get(session_id, 0)
-        
+
     async def start_pubsub_listener(self) -> None:
         """Listen for session revocation events cluster-wide and close sockets."""
         from loguru import logger
+
         from app.infrastructure.cache.redis_client import get_redis
-        
+
         async def _listen():
             while True:
                 pubsub = None
@@ -206,9 +211,11 @@ class WSConnectionManager:
                     break
                 except Exception as e:
                     # Only genuine connection failures reach here (e.g. Redis unreachable).
-                    logger.error(f"[WSManager] Redis pub/sub connection error: {e}, reconnecting in 5s...")
+                    logger.error(
+                        f"[WSManager] Redis pub/sub connection error: {e}, reconnecting in 5s..."
+                    )
                     await asyncio.sleep(5)
-                
+
         self._pubsub_task = asyncio.create_task(_listen(), name="ws_pubsub_listener")
 
 

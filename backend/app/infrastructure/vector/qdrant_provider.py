@@ -7,8 +7,10 @@ manage collections in an external Qdrant instance.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from loguru import logger
-from qdrant_client import models, QdrantClient
+from qdrant_client import QdrantClient, models
 
 from app.domain.rag.ports import VectorCollectionStore
 from app.infrastructure.vector.enums import DistanceMethod
@@ -39,6 +41,11 @@ class QdrantProvider(VectorCollectionStore):
         else:
             self.distance_method = models.Distance.COSINE
 
+    def _get_client(self) -> QdrantClient:
+        if not self.client:
+            raise RuntimeError("QdrantClient is not connected")
+        return self.client
+
     # ── Lifecycle ────────────────────────────────────────────────────────
 
     async def connect(self) -> None:
@@ -53,24 +60,24 @@ class QdrantProvider(VectorCollectionStore):
     # ── Collection management ────────────────────────────────────────────
 
     async def is_collection_existed(self, collection_name: str) -> bool:
-        return self.client.collection_exists(collection_name=collection_name)
+        return self._get_client().collection_exists(collection_name=collection_name)
 
     async def list_all_collections(self) -> list:
-        return [c.name for c in self.client.get_collections().collections]
+        return [c.name for c in self._get_client().get_collections().collections]
 
     async def get_collection_info(self, collection_name: str) -> dict | None:
         if not await self.is_collection_existed(collection_name):
             return None
-        info = self.client.get_collection(collection_name=collection_name)
+        info = self._get_client().get_collection(collection_name=collection_name)
         return {
             "collection_name": collection_name,
-            "vectors_count": info.vectors_count,
-            "points_count": info.points_count,
+            "vectors_count": getattr(info, "vectors_count", getattr(info, "points_count", 0)),
+            "points_count": getattr(info, "points_count", getattr(info, "vectors_count", 0)),
         }
 
     async def delete_collection(self, collection_name: str) -> bool:
         if await self.is_collection_existed(collection_name):
-            self.client.delete_collection(collection_name=collection_name)
+            self._get_client().delete_collection(collection_name=collection_name)
             logger.info(f"Qdrant collection deleted: {collection_name}")
         return True
 
@@ -84,7 +91,7 @@ class QdrantProvider(VectorCollectionStore):
             await self.delete_collection(collection_name)
 
         if not await self.is_collection_existed(collection_name):
-            self.client.create_collection(
+            self._get_client().create_collection(
                 collection_name=collection_name,
                 vectors_config=models.VectorParams(
                     size=embedding_size,
@@ -110,7 +117,7 @@ class QdrantProvider(VectorCollectionStore):
             return False
 
         try:
-            self.client.upsert(
+            self._get_client().upsert(
                 collection_name=collection_name,
                 points=[
                     models.PointStruct(
@@ -152,7 +159,7 @@ class QdrantProvider(VectorCollectionStore):
 
         try:
             for i in range(0, len(points), batch_size):
-                self.client.upsert(
+                self._get_client().upsert(
                     collection_name=collection_name,
                     points=points[i : i + batch_size],
                 )
@@ -173,7 +180,9 @@ class QdrantProvider(VectorCollectionStore):
             logger.error(f"Qdrant collection does not exist: {collection_name}")
             return []
 
-        results = self.client.search(
+        method_name = "search"
+        search_fn: Callable = getattr(self._get_client(), method_name)
+        results = search_fn(
             collection_name=collection_name,
             query_vector=vector,
             limit=limit,

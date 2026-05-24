@@ -64,6 +64,7 @@ class StreamingASRService(ABC):
 
 class BaseTTSProvider(ABC):
     """Abstract TTS provider interface."""
+    voice: str | None = None
 
     @abstractmethod
     async def synthesize(self, text: str) -> TTSResult:

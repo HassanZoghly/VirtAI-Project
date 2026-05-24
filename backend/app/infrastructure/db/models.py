@@ -136,7 +136,9 @@ class Document(Base):
         Index("ix_documents_sha256", "document_sha256"),
         Index("ix_documents_scope", "retrieval_scope", "scope_id"),
         Index("ix_documents_active_stage", "current_stage"),
-        UniqueConstraint("user_id", "scope_id", "document_sha256", name="uq_user_scope_document_sha256"),
+        UniqueConstraint(
+            "user_id", "scope_id", "document_sha256", name="uq_user_scope_document_sha256"
+        ),
     )
 
 
@@ -178,6 +180,7 @@ class DocumentChunk(Base):
 
 # ── RAG Project Schemas ──────────────────────────────────────────────────
 
+
 class Project(Base):
     __tablename__ = "projects"
 
@@ -185,12 +188,22 @@ class Project(Base):
     project_uuid: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), default=uuid.uuid4, unique=True, nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
 
-    chunks: Mapped[list["DataChunk"]] = relationship("DataChunk", back_populates="project", cascade="all, delete-orphan")
-    assets: Mapped[list["Asset"]] = relationship("Asset", back_populates="project", cascade="all, delete-orphan")
-    conversations: Mapped[list["Conversation"]] = relationship("Conversation", back_populates="project", cascade="all, delete-orphan")
+    chunks: Mapped[list["DataChunk"]] = relationship(
+        "DataChunk", back_populates="project", cascade="all, delete-orphan"
+    )
+    assets: Mapped[list["Asset"]] = relationship(
+        "Asset", back_populates="project", cascade="all, delete-orphan"
+    )
+    conversations: Mapped[list["Conversation"]] = relationship(
+        "Conversation", back_populates="project", cascade="all, delete-orphan"
+    )
 
 
 class Asset(Base):
@@ -204,16 +217,22 @@ class Asset(Base):
     asset_name: Mapped[str] = mapped_column(String, nullable=False)
     asset_size: Mapped[int] = mapped_column(Integer, nullable=False)
     asset_config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    
+
     asset_project_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("projects.project_id", ondelete="CASCADE"), nullable=False
     )
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
 
     project: Mapped["Project"] = relationship("Project", back_populates="assets")
-    chunks: Mapped[list["DataChunk"]] = relationship("DataChunk", back_populates="asset", cascade="all, delete-orphan")
+    chunks: Mapped[list["DataChunk"]] = relationship(
+        "DataChunk", back_populates="asset", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         Index("ix_asset_project_id", "asset_project_id"),
@@ -239,8 +258,12 @@ class DataChunk(Base):
         Integer, ForeignKey("assets.asset_id", ondelete="CASCADE"), nullable=False
     )
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
 
     project: Mapped["Project"] = relationship("Project", back_populates="chunks")
     asset: Mapped["Asset"] = relationship("Asset", back_populates="chunks")
@@ -259,18 +282,22 @@ class Conversation(Base):
         UUID(as_uuid=True), default=uuid.uuid4, unique=True, nullable=False
     )
     session_id: Mapped[str] = mapped_column(String, nullable=False)
-    
+
     conversation_project_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("projects.project_id", ondelete="CASCADE"), nullable=False
     )
-    
+
     role: Mapped[str] = mapped_column(String, nullable=False)
     content: Mapped[str] = mapped_column(String, nullable=False)
     vector_collection: Mapped[str | None] = mapped_column(String, nullable=True)
     conv_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
 
     project: Mapped["Project"] = relationship("Project", back_populates="conversations")
 

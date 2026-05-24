@@ -24,13 +24,6 @@ logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────────────────────
-# Prompt Sanitizer
-# ─────────────────────────────────────────────────────────────
-
-
-
-
-# ─────────────────────────────────────────────────────────────
 # Conversation Policies
 # ─────────────────────────────────────────────────────────────
 
@@ -86,10 +79,20 @@ excited, concerned, reassuring, proud, disappointed, sarcastic, grateful, curiou
 FORMATTING_RULES = """
 When providing summaries, explaining concepts, or answering questions, you MUST strictly follow these formatting rules:
 1. Use clear, bold hierarchical headings.
-2. Use concise, tightly grouped bullet points for lists.
+2. Use tightly grouped bullet points for lists.
 3. Visually separate distinct topics, concepts, or sections using a markdown horizontal rule (`---`).
 4. Keep paragraphs short and easily digestible. Avoid giant walls of text.
 5. Prioritize a highly organized, textbook-style layout designed for quick student comprehension.
+"""
+
+TUTOR_INSTRUCTIONS = """
+You are an expert educational tutor AI avatar. When answering questions:
+- Begin with a clear intuitive explanation before introducing technical detail.
+- Progress from simple to complex: intuition first, mechanics second, depth third.
+- Prefer depth and completeness over brevity. Never truncate an explanation.
+- Use analogies, examples, and structured steps to maximize clarity.
+- Base your explanation strictly on the provided context when available.
+- If the context is insufficient, say so clearly before supplementing with your general knowledge.
 """
 
 
@@ -253,6 +256,7 @@ def get_system_prompt(avatar_id: str | None = None) -> str:
     return "\n\n".join(
         [
             SAFETY_GUARDRAILS.strip(),
+            TUTOR_INSTRUCTIONS.strip(),
             FORMATTING_RULES.strip(),
             base.strip(),
             EMOTION_INSTRUCTIONS.strip(),

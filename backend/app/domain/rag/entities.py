@@ -108,3 +108,20 @@ class RetrievedDocument:
     score: float
     metadata: dict[str, Any] = field(default_factory=dict)
     id: str | None = None
+
+
+class RetrievalStatus(str, Enum):
+    SUCCESS = "success"
+    LOW_CONFIDENCE = "low_confidence"
+    NO_RESULTS = "no_results"
+    DEGRADED = "degraded"
+    FAILED = "failed"
+
+
+@dataclass
+class RetrievalResult:
+    status: RetrievalStatus
+    documents: list[RetrievedDocument] = field(default_factory=list)
+    error: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+

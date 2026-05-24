@@ -92,6 +92,9 @@ def get_storage(request: Request) -> StorageProvider:
 StorageDep = Annotated[StorageProvider, Depends(get_storage)]
 
 from app.application.chat.chat_use_case import ChatUseCase
+from app.application.rag.retrieval_use_case import RetrievalUseCase
+from app.application.rag.token_budget import TokenBudgetManager
+from app.infrastructure.vector.pgvector_store import SessionManagedPGVectorStore
 
 _chat_use_case: ChatUseCase | None = None
 
@@ -99,9 +102,6 @@ async def get_chat_use_case(request: Request) -> ChatUseCase:
     """Dependency injection for ChatUseCase."""
     global _chat_use_case
     if _chat_use_case is None:
-        from app.application.rag.retrieval_use_case import RetrievalUseCase
-        from app.application.rag.token_budget import TokenBudgetManager
-        from app.infrastructure.vector.pgvector_store import SessionManagedPGVectorStore
 
         llm = request.app.state.model_policy.router.get_llm_chain()
 
@@ -168,9 +168,15 @@ def get_vector_collection_store(
     return _vector_store
 
 
-def get_memory_manager(db: AsyncSession = Depends(get_db)) -> MemoryManager:
+def get_memory_manager(
+    request: Request, 
+    db: AsyncSession = Depends(get_db),
+    llm_provider: LLMGenerationProvider = Depends(get_llm_generation_provider)
+) -> MemoryManager:
+    from app.infrastructure.memory.semantic_memory_store import SemanticMemoryStore
     repo = ConversationRepository(db=db)
-    return MemoryManager(conversation_repo=repo)
+    semantic_store = SemanticMemoryStore(embedder=request.app.state.embedder, llm_provider=llm_provider)
+    return MemoryManager(conversation_repo=repo, semantic_store=semantic_store)
 
 
 _template_parser: TemplateParser | None = None

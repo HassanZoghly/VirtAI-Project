@@ -4,6 +4,8 @@ from loguru import logger
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.infrastructure.db.database import AsyncSessionLocal
+
 from app.domain.rag.entities import DocumentChunk
 from app.domain.rag.ports import VectorStore
 from app.infrastructure.db.models import DocumentChunk as ChunkModel
@@ -53,6 +55,7 @@ class PGVectorStore(VectorStore):
         document_id: UUID | None = None,
         scope: str | None = None,
         scope_id: UUID | None = None,
+        min_dense_score: float = 0.5,
     ) -> list[tuple[DocumentChunk, float]]:
         stmt = (
             select(
@@ -80,6 +83,8 @@ class PGVectorStore(VectorStore):
         for row in rows:
             model = row[0]
             similarity = row[1]
+            if similarity < min_dense_score:
+                continue
             chunk = DocumentChunk(
                 id=model.id,
                 document_id=model.document_id,
@@ -102,7 +107,7 @@ class PGVectorStore(VectorStore):
                 f"[VectorStore] Dense search found {len(output)} chunks | avg_sim={avg_sim:.3f}"
             )
         else:
-            logger.debug("[VectorStore] Dense search found 0 chunks")
+            logger.debug("[VectorStore] Dense search found 0 chunks above threshold")
 
         return output
 
@@ -114,40 +119,81 @@ class PGVectorStore(VectorStore):
         document_id: UUID | None = None,
         scope: str | None = None,
         scope_id: UUID | None = None,
+        min_hybrid_score: float = 0.015,
+        min_dense_score: float = 0.5,
     ) -> list[tuple[DocumentChunk, float]]:
-        dense_similarity = 1 - ChunkModel.embedding.cosine_distance(query_vector)
-        text_query = func.websearch_to_tsquery("english", query_text)
-        text_vector = func.to_tsvector("english", ChunkModel.chunk_text)
-        text_rank = func.ts_rank(text_vector, text_query)
-
-        final_score = dense_similarity * 0.7 + text_rank * 0.3
-
-        stmt = (
+        # Dense query
+        stmt_dense = (
             select(
                 ChunkModel,
-                final_score.label("hybrid_score"),
+                (1 - ChunkModel.embedding.cosine_distance(query_vector)).label("similarity"),
             )
             .where(ChunkModel.is_active == True)
-            .order_by(final_score.desc())
-            .limit(limit)
         )
-
         if document_id:
-            stmt = stmt.where(ChunkModel.document_id == document_id)
-
+            stmt_dense = stmt_dense.where(ChunkModel.document_id == document_id)
         if scope:
-            stmt = stmt.where(ChunkModel.retrieval_scope == scope)
+            stmt_dense = stmt_dense.where(ChunkModel.retrieval_scope == scope)
             if scope_id:
-                stmt = stmt.where(ChunkModel.scope_id == scope_id)
+                stmt_dense = stmt_dense.where(ChunkModel.scope_id == scope_id)
             else:
-                stmt = stmt.where(ChunkModel.scope_id.is_(None))
+                stmt_dense = stmt_dense.where(ChunkModel.scope_id.is_(None))
+        stmt_dense = stmt_dense.order_by(ChunkModel.embedding.cosine_distance(query_vector)).limit(limit * 2)
 
-        result = await self.db.execute(stmt)
-        rows = result.all()
-        output = []
-        for row in rows:
+        # Lexical query
+        text_query = func.websearch_to_tsquery("english", query_text)
+        text_vector = func.to_tsvector("english", ChunkModel.chunk_text)
+        stmt_lexical = (
+            select(
+                ChunkModel,
+                func.ts_rank(text_vector, text_query).label("ts_rank"),
+            )
+            .where(ChunkModel.is_active == True)
+            .where(text_vector.op("@@")(text_query))
+        )
+        if document_id:
+            stmt_lexical = stmt_lexical.where(ChunkModel.document_id == document_id)
+        if scope:
+            stmt_lexical = stmt_lexical.where(ChunkModel.retrieval_scope == scope)
+            if scope_id:
+                stmt_lexical = stmt_lexical.where(ChunkModel.scope_id == scope_id)
+            else:
+                stmt_lexical = stmt_lexical.where(ChunkModel.scope_id.is_(None))
+        stmt_lexical = stmt_lexical.order_by(func.ts_rank(text_vector, text_query).desc()).limit(limit * 2)
+
+        res_dense = await self.db.execute(stmt_dense)
+        res_lexical = await self.db.execute(stmt_lexical)
+        
+        dense_rows = res_dense.all()
+        lexical_rows = res_lexical.all()
+
+        rrf_k = 60
+        scores: dict[UUID, float] = {}
+        models: dict[UUID, ChunkModel] = {}
+        
+        for rank, row in enumerate(dense_rows):
             model = row[0]
-            hybrid_score = row[1]
+            sim = float(row[1])
+            if sim < min_dense_score:
+                continue
+            models[model.id] = model
+            scores[model.id] = 1.0 / (rrf_k + rank + 1)
+            
+        for rank, row in enumerate(lexical_rows):
+            model = row[0]
+            models[model.id] = model
+            scores[model.id] = scores.get(model.id, 0.0) + (1.0 / (rrf_k + rank + 1))
+            
+        # Sort and threshold
+        sorted_results = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+        
+        output = []
+        for chunk_id, hybrid_score in sorted_results:
+            if hybrid_score < min_hybrid_score:
+                break
+            if len(output) >= limit:
+                break
+            model = models[chunk_id]
             chunk = DocumentChunk(
                 id=model.id,
                 document_id=model.document_id,
@@ -166,10 +212,10 @@ class PGVectorStore(VectorStore):
         if output:
             avg_score = sum(score for _, score in output) / len(output)
             logger.debug(
-                f"[VectorStore] Hybrid search found {len(output)} chunks | avg_score={avg_score:.3f}"
+                f"[VectorStore] Hybrid search (RRF) found {len(output)} chunks | avg_score={avg_score:.3f}"
             )
         else:
-            logger.debug("[VectorStore] Hybrid search found 0 chunks")
+            logger.debug("[VectorStore] Hybrid search found 0 chunks above threshold")
 
         return output
 
@@ -183,8 +229,6 @@ class SessionManagedPGVectorStore(VectorStore):
     async def store_chunks_batch(
         self, chunks: list[DocumentChunk], embeddings: list[list[float]]
     ) -> None:
-        from app.infrastructure.db.database import AsyncSessionLocal
-
         async with AsyncSessionLocal() as db:
             store = PGVectorStore(db)
             await store.store_chunks_batch(chunks, embeddings)
@@ -197,12 +241,11 @@ class SessionManagedPGVectorStore(VectorStore):
         document_id: UUID | None = None,
         scope: str | None = None,
         scope_id: UUID | None = None,
+        min_dense_score: float = 0.5,
     ) -> list[tuple[DocumentChunk, float]]:
-        from app.infrastructure.db.database import AsyncSessionLocal
-
         async with AsyncSessionLocal() as db:
             store = PGVectorStore(db)
-            return await store.search(query_vector, limit, document_id, scope, scope_id)
+            return await store.search(query_vector, limit, document_id, scope, scope_id, min_dense_score)
 
     async def hybrid_search(
         self,
@@ -212,11 +255,11 @@ class SessionManagedPGVectorStore(VectorStore):
         document_id: UUID | None = None,
         scope: str | None = None,
         scope_id: UUID | None = None,
+        min_hybrid_score: float = 0.015,
+        min_dense_score: float = 0.5,
     ) -> list[tuple[DocumentChunk, float]]:
-        from app.infrastructure.db.database import AsyncSessionLocal
-
         async with AsyncSessionLocal() as db:
             store = PGVectorStore(db)
             return await store.hybrid_search(
-                query_text, query_vector, limit, document_id, scope, scope_id
+                query_text, query_vector, limit, document_id, scope, scope_id, min_hybrid_score, min_dense_score
             )

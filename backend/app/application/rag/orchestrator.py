@@ -7,7 +7,7 @@ from app.domain.rag.agents import (
     RouterAgent,
     SummarizerAgent,
 )
-from app.domain.rag.entities import AgentAction, AgentInput, AgentOutput, AgentTrace
+from app.domain.rag.entities import AgentAction, AgentInput, AgentOutput, AgentTrace, RetrievalResult, RetrievalStatus, RetrievedDocument
 from app.domain.rag.ports import (
     EmbeddingProvider,
     GuardrailPort,
@@ -100,7 +100,20 @@ class AgentOrchestrator:
 
         retrieved_docs = retriever_output.result or []
 
-        if not retrieved_docs:
+        if isinstance(retrieved_docs, RetrievalResult) and retrieved_docs.status == RetrievalStatus.FAILED:
+            logger.warning("[Orchestrator] Retrieval failed. Passing generic fallback context.")
+            retrieved_docs = RetrievalResult(
+                status=RetrievalStatus.SUCCESS,
+                documents=[
+                    RetrievedDocument(
+                        text="[System Note: Memory retrieval is temporarily unavailable. Please continue the conversation smoothly using your general knowledge.]",
+                        score=1.0,
+                        metadata={"fallback": True}
+                    )
+                ]
+            )
+
+        if not retrieved_docs or (isinstance(retrieved_docs, RetrievalResult) and retrieved_docs.status == RetrievalStatus.NO_RESULTS):
             trace.success = False
             trace.add_step(
                 AgentOutput(

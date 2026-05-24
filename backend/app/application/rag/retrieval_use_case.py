@@ -1,7 +1,7 @@
 from loguru import logger
 
 from app.application.rag.token_budget import TokenBudgetManager
-from app.domain.rag.entities import DocumentChunk
+from app.domain.rag.entities import DocumentChunk, RetrievalResult, RetrievalStatus, RetrievedDocument
 from app.domain.rag.ports import EmbeddingProvider, RerankerPort, VectorStore
 from app.shared.ids import parse_uuid
 
@@ -27,10 +27,10 @@ class RetrievalUseCase:
 
     async def retrieve(
         self, query: str, top_k: int = 5, session_id: str | None = None
-    ) -> list[DocumentChunk]:
+    ) -> RetrievalResult:
         """Retrieves relevant chunks via hybrid search and optional reranking."""
         if not query.strip():
-            return []
+            return RetrievalResult(status=RetrievalStatus.NO_RESULTS)
 
         try:
             logger.info(f"Retrieving chunks for query: {query[:50]}")
@@ -41,27 +41,52 @@ class RetrievalUseCase:
             results = await self.vector_store.hybrid_search(
                 query_text=query,
                 query_vector=query_vector,
-                limit=top_k * 2,  # fetch more for reranking
+                limit=top_k * 3,  # fetch more for diversity and reranking
                 scope_id=scope_uuid,
             )
 
             if not results:
-                return []
+                return RetrievalResult(status=RetrievalStatus.NO_RESULTS)
 
             chunks = [chunk for chunk, _ in results]
 
             # 2. Reranking
             if self.reranker:
-                ranked_results = await self.reranker.rerank(query=query, chunks=chunks, top_k=top_k)
-                chunks = [chunk for chunk, _ in ranked_results]
-            else:
-                chunks = chunks[:top_k]
-
-            return chunks
+                try:
+                    ranked_results = await self.reranker.rerank(query=query, chunks=chunks, top_k=top_k * 2)
+                    results = ranked_results
+                except Exception as e:
+                    logger.error(f"Reranker failed: {e}. Falling back to un-reranked results.")
+            
+            # 3. Apply max chunks per source diversity
+            final_chunks = []
+            source_counts = {}
+            max_per_source = 3
+            
+            for chunk, score in results:
+                source = chunk.metadata.get("filename", "Unknown") if chunk.metadata else "Unknown"
+                if source_counts.get(source, 0) < max_per_source:
+                    source_counts[source] = source_counts.get(source, 0) + 1
+                    final_chunks.append(RetrievedDocument(
+                        text=chunk.chunk_text,
+                        score=score,
+                        metadata=chunk.metadata,
+                        id=str(chunk.id)
+                    ))
+                if len(final_chunks) >= top_k:
+                    break
+                    
+            status = RetrievalStatus.SUCCESS
+            if len(final_chunks) == 0:
+                status = RetrievalStatus.NO_RESULTS
+            elif final_chunks[0].score < 0.2:
+                status = RetrievalStatus.LOW_CONFIDENCE
+                
+            return RetrievalResult(status=status, documents=final_chunks)
 
         except Exception as e:
             logger.error(f"Retrieval failed: {e}")
-            raise RetrievalError(str(e))
+            return RetrievalResult(status=RetrievalStatus.FAILED)
 
     async def inject_context(
         self,
@@ -73,13 +98,15 @@ class RetrievalUseCase:
     ) -> str:
         """Retrieves relevant chunks and injects them into the system prompt."""
         try:
-            chunks = await self.retrieve(query, top_k=top_k, session_id=session_id)
+            retrieval_result = await self.retrieve(query, top_k=top_k, session_id=session_id)
         except RetrievalError as e:
             logger.warning(f"Retrieval error: {e}", extra={"query": query})
             return system_prompt
 
-        if not chunks:
+        if retrieval_result.status in (RetrievalStatus.NO_RESULTS, RetrievalStatus.FAILED):
             return system_prompt
+
+        chunks = retrieval_result.documents
 
         if self.budget_manager:
             chunks = self.budget_manager.fit_chunks_to_budget(
@@ -92,7 +119,7 @@ class RetrievalUseCase:
         context_parts = []
         for chunk in chunks:
             source = chunk.metadata.get("filename", "Unknown") if chunk.metadata else "Unknown"
-            context_parts.append(f"--- Document: {source} ---\n{chunk.chunk_text}")
+            context_parts.append(f"--- Document: {source} ---\n{chunk.text}")
 
         context_block = "\n\n".join(context_parts)
 
@@ -113,10 +140,12 @@ class RetrievalUseCase:
 
         try:
             logger.info(f"Retrieving context for query: {query[:50]}")
-            chunks = await self.retrieve(query, top_k=limit, session_id=session_id)
+            retrieval_result = await self.retrieve(query, top_k=limit, session_id=session_id)
 
-            if not chunks:
+            if retrieval_result.status in (RetrievalStatus.NO_RESULTS, RetrievalStatus.FAILED):
                 return ""
+                
+            chunks = retrieval_result.documents
         except RetrievalError as e:
             logger.warning(f"Retrieval error: {e}", extra={"query": query})
             return ""
@@ -133,6 +162,6 @@ class RetrievalUseCase:
         context_parts = []
         for chunk in chunks:
             source = chunk.metadata.get("filename", "Unknown") if chunk.metadata else "Unknown"
-            context_parts.append(f"--- Document: {source} ---\n{chunk.chunk_text}\n")
+            context_parts.append(f"--- Document: {source} ---\n{chunk.text}\n")
 
         return "\n".join(context_parts)

@@ -6,6 +6,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -175,6 +176,7 @@ class DocumentChunk(Base):
         ),
         Index("ix_chunks_active", "document_id", "is_active"),
         Index("ix_chunks_version", "document_id", "chunk_version"),
+        Index("ix_chunks_text_gin", func.to_tsvector("english", chunk_text), postgresql_using="gin"),
     )
 
 
@@ -306,3 +308,33 @@ class Conversation(Base):
         Index("ix_conversation_project_id", "conversation_project_id"),
         Index("ix_conversation_role", "role"),
     )
+
+
+class EpisodicMemory(Base):
+    __tablename__ = "episodic_memories"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[Any | None] = mapped_column(
+        Vector(settings.EMBEDDING_DIMENSION), nullable=True
+    )
+    memory_type: Mapped[str] = mapped_column(String(50), default="episodic")  # episodic or preference
+    salience: Mapped[float] = mapped_column(Float, default=1.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    last_accessed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    __table_args__ = (
+        Index("ix_episodic_memories_session_id", "session_id"),
+        Index("ix_episodic_memories_type", "memory_type"),
+        Index(
+            "ix_episodic_memories_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
+

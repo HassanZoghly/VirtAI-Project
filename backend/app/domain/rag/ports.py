@@ -185,6 +185,7 @@ class VectorStore(ABC):
         document_id: UUID | None = None,
         scope: str | None = None,
         scope_id: UUID | None = None,
+        min_dense_score: float = 0.5,
     ) -> list[tuple[DocumentChunk, float]]:
         pass
 
@@ -197,6 +198,8 @@ class VectorStore(ABC):
         document_id: UUID | None = None,
         scope: str | None = None,
         scope_id: UUID | None = None,
+        min_hybrid_score: float = 0.015,
+        min_dense_score: float = 0.5,
     ) -> list[tuple[DocumentChunk, float]]:
         pass
 

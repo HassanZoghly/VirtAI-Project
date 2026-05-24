@@ -4,7 +4,14 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from app.domain.rag.entities import AgentAction, AgentInput, AgentOutput
+from app.domain.rag.entities import (
+    AgentAction,
+    AgentInput,
+    AgentOutput,
+    RetrievalResult,
+    RetrievalStatus,
+    RetrievedDocument,
+)
 from app.domain.rag.ports import (
     EmbeddingProvider,
     GuardrailPort,
@@ -14,7 +21,6 @@ from app.domain.rag.ports import (
 )
 
 logger = logging.getLogger("uvicorn.error")
-
 
 def _detect_language(text: str) -> str:
     """Detect if query is Arabic or English."""
@@ -26,7 +32,6 @@ def _detect_language(text: str) -> str:
         return "ar"
     return "en"
 
-
 def _build_language_prompt(query: str) -> str:
     """Build an explicit language instruction block."""
     lang_code = _detect_language(query)
@@ -36,6 +41,8 @@ def _build_language_prompt(query: str) -> str:
         f"You MUST write your ENTIRE final response strictly in {target_lang}. "
         f"If the retrieved documents are in a different language, you MUST translate your summary and answers into {target_lang}."
     )
+
+
 
 
 class BaseAgent(ABC):
@@ -70,7 +77,7 @@ class BaseAgent(ABC):
 
     @abstractmethod
     async def run(
-        self, input_data: AgentInput, retrieved_documents: list[dict] | None = None
+        self, input_data: AgentInput, retrieved_documents: Any | None = None
     ) -> AgentOutput:
         """
         Core execution logic. Must return AgentOutput.
@@ -203,7 +210,7 @@ class RetrieverAgent(BaseAgent):
         )
 
     async def run(
-        self, input_data: AgentInput, retrieved_documents: list[dict] | None = None
+        self, input_data: AgentInput, retrieved_documents: Any | None = None
     ) -> AgentOutput:
         try:
             if not self.vector_store or not self.embedding_provider:
@@ -235,20 +242,38 @@ class RetrieverAgent(BaseAgent):
             if not results:
                 return self._make_output(
                     input_data,
-                    result=[],
+                    result=RetrievalResult(status=RetrievalStatus.NO_RESULTS),
                     success=True,
                     metadata={"warning": "No documents found in collection"},
                 )
 
+            docs = [
+                RetrievedDocument(
+                    text=r.get("text", ""),
+                    score=r.get("score", 0.0),
+                    metadata=r.get("metadata", {}),
+                    id=r.get("id")
+                ) for r in results
+            ]
+            
+            status = RetrievalStatus.SUCCESS
+            if docs and docs[0].score < 0.2:
+                status = RetrievalStatus.LOW_CONFIDENCE
+
             return self._make_output(
                 input_data,
-                result=results,
+                result=RetrievalResult(status=status, documents=docs),
                 metadata={"doc_count": len(results)},
             )
 
         except Exception as e:
             logger.error(f"[RetrieverAgent] error: {e}")
-            return self._make_output(input_data, success=False, error=str(e))
+            return self._make_output(
+                input_data, 
+                success=False, 
+                error=str(e),
+                result=RetrievalResult(status=RetrievalStatus.FAILED)
+            )
 
 
 class AnswerAgent(BaseAgent):
@@ -258,13 +283,21 @@ class AnswerAgent(BaseAgent):
         return input_data.action == AgentAction.ANSWER
 
     async def run(
-        self, input_data: AgentInput, retrieved_documents: list[dict] | None = None
+        self, input_data: AgentInput, retrieved_documents: Any | None = None
     ) -> AgentOutput:
         try:
             if not self.llm_provider or not self.template_parser:
                 raise ValueError("LLM provider and Template Parser required for AnswerAgent")
 
-            docs = retrieved_documents or []
+            if isinstance(retrieved_documents, RetrievalResult):
+                docs = retrieved_documents.documents
+                if retrieved_documents.status in (RetrievalStatus.NO_RESULTS, RetrievalStatus.FAILED):
+                    return self._make_output(
+                        input_data, success=False, error="No relevant documents found or low confidence."
+                    )
+            else:
+                docs = retrieved_documents or []
+                
             if not docs:
                 return self._make_output(
                     input_data, success=False, error="No relevant documents found."
@@ -292,7 +325,6 @@ class AnswerAgent(BaseAgent):
                     )
                 )
 
-            # build document prompts
             documents_prompts = "\n".join(
                 [
                     self.template_parser.get(
@@ -300,7 +332,9 @@ class AnswerAgent(BaseAgent):
                         key="document_prompt",
                         variables={
                             "doc_num": idx + 1,
-                            "chunk_text": self.llm_provider.process_text(doc.get("text", "")),
+                            "chunk_text": self.llm_provider.process_text(
+                                doc.text if hasattr(doc, "text") else doc.get("text", "")
+                            ),
                         },
                     ) or ""
                     for idx, doc in enumerate(docs)
@@ -361,16 +395,24 @@ class SummarizerAgent(BaseAgent):
         return input_data.action == AgentAction.SUMMARIZE
 
     async def run(
-        self, input_data: AgentInput, retrieved_documents: list[dict] | None = None
+        self, input_data: AgentInput, retrieved_documents: Any | None = None
     ) -> AgentOutput:
         try:
             if not self.llm_provider or not self.template_parser:
                 raise ValueError("LLM provider and Template Parser required for SummarizerAgent")
 
-            docs = retrieved_documents or []
+            if isinstance(retrieved_documents, RetrievalResult):
+                docs = retrieved_documents.documents
+                if retrieved_documents.status in (RetrievalStatus.NO_RESULTS, RetrievalStatus.FAILED):
+                    return self._make_output(
+                        input_data, success=False, error="No relevant documents found to summarize."
+                    )
+            else:
+                docs = retrieved_documents or []
+
             if not docs:
                 return self._make_output(
-                    input_data, success=False, error="No documents to summarize"
+                    input_data, success=False, error="No relevant documents found."
                 )
 
             system_prompt = self.template_parser.get(category="rag", key="summarize_system_prompt")
@@ -392,7 +434,7 @@ class SummarizerAgent(BaseAgent):
                         key="document_prompt",
                         variables={
                             "doc_num": idx + 1,
-                            "chunk_text": doc.get("text", ""),
+                            "chunk_text": doc.text if hasattr(doc, "text") else doc.get("text", ""),
                         },
                     ) or ""
                     for idx, doc in enumerate(docs)
@@ -448,16 +490,24 @@ class QuizAgent(BaseAgent):
         return input_data.action == AgentAction.QUIZ
 
     async def run(
-        self, input_data: AgentInput, retrieved_documents: list[dict] | None = None
+        self, input_data: AgentInput, retrieved_documents: Any | None = None
     ) -> AgentOutput:
         try:
             if not self.llm_provider or not self.template_parser:
                 raise ValueError("LLM provider and Template Parser required for QuizAgent")
 
-            docs = retrieved_documents or []
+            if isinstance(retrieved_documents, RetrievalResult):
+                docs = retrieved_documents.documents
+                if retrieved_documents.status in (RetrievalStatus.NO_RESULTS, RetrievalStatus.FAILED):
+                    return self._make_output(
+                        input_data, success=False, error="No relevant documents found to generate quiz."
+                    )
+            else:
+                docs = retrieved_documents or []
+
             if not docs:
                 return self._make_output(
-                    input_data, success=False, error="No documents to generate quiz from"
+                    input_data, success=False, error="No relevant documents found."
                 )
 
             system_prompt = self.template_parser.get(
@@ -483,7 +533,7 @@ class QuizAgent(BaseAgent):
                         key="document_prompt",
                         variables={
                             "doc_num": idx + 1,
-                            "chunk_text": doc.get("text", ""),
+                            "chunk_text": doc.text if hasattr(doc, "text") else doc.get("text", ""),
                         },
                     ) or ""
                     for idx, doc in enumerate(docs)

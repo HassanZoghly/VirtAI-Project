@@ -2,6 +2,7 @@ import apiClient from '@/shared/services/apiClient';
 
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useAudioDrivenLipSync } from '../hooks/useAudioDrivenLipSync';
+import { WebAudioQueue } from '../utils/WebAudioQueue';
 
 const AvatarScene = React.lazy(() => import('./AvatarScene'));
 
@@ -356,207 +357,55 @@ export default function AvatarController({
     onModelLoaded?.();
   };
 
-  // --- AUDIO PRELOADING BUFFER ---
+  // --- AUDIO PRELOADING BUFFER via WebAudioQueue ---
+  const webAudioQueueRef = useRef(null);
   const audioQueueRef = useRef([]);
   const queuedAudioIdsRef = useRef(new Set());
   const currentAudioItemRef = useRef(null);
-  const audioElementRef = useRef(null);
   const isProcessingQueueRef = useRef(false);
-  const playNextReadyAudioRef = useRef(() => false);
-  const handlePlaybackEndedRef = useRef(() => {});
-  const handlePlaybackErrorRef = useRef(() => {});
+
+  useEffect(() => {
+    const queue = new WebAudioQueue();
+    webAudioQueueRef.current = queue;
+    audioRef.current = queue;
+
+    queue.onPlay = () => setIsPlayingAudio(true);
+    queue.onEnded = () => {
+      setIsPlayingAudio(false);
+      currentAudioItemRef.current = null;
+      
+      const hasPendingChunks = audioQueueRef.current.some(
+        (item) => item.status === 'pending' || item.status === 'loading'
+      );
+      if (!hasPendingChunks) {
+        hasActiveTimelineRef.current = false;
+        pendingTimelineRef.current = [];
+        flush('idle');
+      }
+    };
+
+    return () => {
+      queue.dispose();
+      webAudioQueueRef.current = null;
+    };
+  }, [flush]);
 
   const releaseAudioItem = useCallback((item) => {
-    if (!item) {
-      return;
-    }
-
+    if (!item) return;
     if (item.playTimeoutId) {
       clearTimeout(item.playTimeoutId);
       item.playTimeoutId = null;
     }
-
-    if (item.audio) {
-      item.audio.onended = null;
-      item.audio.onerror = null;
-      item.audio.onplaying = null;
-      item.audio.pause();
-      item.audio.removeAttribute('src');
-      item.audio.load();
-      if (audioElementRef.current === item.audio) {
-        audioElementRef.current = null;
-      }
-      if (audioRef.current === item.audio) {
-        audioRef.current = null;
-      }
-      item.audio = null;
-    }
-
-    if (item.blobUrl) {
-      try {
-        URL.revokeObjectURL(item.blobUrl);
-      } catch {
-        // Ignore revoke failures.
-      }
-      item.blobUrl = null;
-    }
   }, []);
-
-  const destroyAudioElement = useCallback(() => {
-    const audio = audioElementRef.current;
-    if (!audio) {
-      audioRef.current = null;
-      return;
-    }
-
-    audio.pause();
-    audio.removeAttribute('src');
-    audio.load();
-    audioElementRef.current = null;
-    audioRef.current = null;
-  }, []);
-
-  const handlePlaybackEnded = useCallback(() => {
-    const endedItem = currentAudioItemRef.current;
-    currentAudioItemRef.current = null;
-
-    const startedNext = playNextReadyAudioRef.current();
-    releaseAudioItem(endedItem);
-
-    if (startedNext) {
-      return;
-    }
-
-    destroyAudioElement();
-    setIsPlayingAudio(false);
-
-    const hasPendingChunks = audioQueueRef.current.some(
-      (item) => item.status === 'pending' || item.status === 'loading'
-    );
-    if (!hasPendingChunks) {
-      hasActiveTimelineRef.current = false;
-      pendingTimelineRef.current = [];
-      flush('idle');
-    }
-  }, [destroyAudioElement, flush, releaseAudioItem]);
-
-  const handlePlaybackError = useCallback(
-    (err) => {
-      console.error('[AvatarController] Audio play failed:', err);
-      const failedItem = currentAudioItemRef.current;
-      currentAudioItemRef.current = null;
-      releaseAudioItem(failedItem);
-
-      if (!playNextReadyAudioRef.current()) {
-        destroyAudioElement();
-        setIsPlayingAudio(false);
-      }
-
-      onError?.(err instanceof Error ? err : new Error('Audio playback failed'));
-    },
-    [destroyAudioElement, onError, releaseAudioItem]
-  );
-
-  handlePlaybackEndedRef.current = handlePlaybackEnded;
-  handlePlaybackErrorRef.current = handlePlaybackError;
-
-  const createPreloadingAudio = useCallback(() => {
-    const audio = new Audio();
-    audio.preload = 'auto';
-    return audio;
-  }, []);
-
-  const loadBufferedAudio = useCallback((audio, blobUrl) => {
-    return new Promise((resolve, reject) => {
-      let settled = false;
-      let timeoutId = null;
-
-      const cleanup = () => {
-        audio.removeEventListener('canplaythrough', handleReady);
-        audio.removeEventListener('canplay', handleReady);
-        audio.removeEventListener('loadeddata', handleReady);
-        audio.removeEventListener('error', handleError);
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-          timeoutId = null;
-        }
-      };
-
-      function handleReady() {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        cleanup();
-        resolve(audio);
-      }
-
-      function handleError() {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        cleanup();
-        reject(audio.error || new Error('Audio buffering failed'));
-      }
-
-      audio.src = blobUrl;
-      audio.addEventListener('canplaythrough', handleReady, { once: true });
-      audio.addEventListener('canplay', handleReady, { once: true });
-      audio.addEventListener('loadeddata', handleReady, { once: true });
-      audio.addEventListener('error', handleError, { once: true });
-      timeoutId = setTimeout(handleReady, AUDIO_BUFFER_READY_TIMEOUT_MS);
-      audio.load();
-
-      if (audio.readyState >= HTML_MEDIA_HAVE_FUTURE_DATA) {
-        handleReady();
-      }
-    });
-  }, []);
-
-  const startAudioItem = useCallback(
-    (item, delayMs = 0) => {
-      const audio = item?.audio;
-      if (!audio) {
-        return false;
-      }
-
-      currentAudioItemRef.current = item;
-      audioElementRef.current = audio;
-      audioRef.current = audio;
-      audio.onended = () => handlePlaybackEndedRef.current();
-      audio.onerror = () =>
-        handlePlaybackErrorRef.current(audio.error || new Error('Audio playback failed'));
-      audio.onplaying = () => setIsPlayingAudio(true);
-
-      const doPlay = () => {
-        if (item.cancelled) return;
-        const playPromise = audio.play();
-        if (playPromise?.catch) {
-          playPromise.catch((err) => handlePlaybackErrorRef.current(err));
-        }
-        setAudioGeneration((generation) => generation + 1);
-      };
-
-      if (delayMs > 0) {
-        item.playTimeoutId = setTimeout(doPlay, delayMs);
-      } else {
-        doPlay();
-      }
-
-      return true;
-    },
-    []
-  );
 
   const playNextReadyAudio = useCallback(() => {
-    if (currentAudioItemRef.current) {
-      return false;
-    }
+    const queue = webAudioQueueRef.current;
+    if (!queue) return false;
 
+    let played = false;
     while (audioQueueRef.current.length > 0) {
       const nextItem = audioQueueRef.current[0];
-      if (nextItem.status === 'ready') {
+      if (nextItem.status === 'ready' && nextItem.audioBuffer) {
         audioQueueRef.current.shift();
         
         // SMART PRE-BUFFER: Delay chunk 0 to absorb generation latency of chunk 1
@@ -565,9 +414,14 @@ export default function AvatarController({
           (typeof nextItem.messageId === 'string' && nextItem.messageId.endsWith('_0')) ||
           (typeof nextItem.sourceUrl === 'string' && nextItem.sourceUrl.includes('_0.mp3'));
           
-        const delayMs = isFirstChunk ? 600 : 0;
+        const delayMs = (isFirstChunk && !queue.isPlaying) ? 600 : 0;
         
-        return startAudioItem(nextItem, delayMs);
+        currentAudioItemRef.current = nextItem;
+        queue.playBuffer(nextItem.audioBuffer, delayMs);
+        setAudioGeneration((gen) => gen + 1);
+        played = true;
+        // Continue looping to eagerly queue all ready chunks!
+        continue;
       }
       if (nextItem.status === 'failed' || nextItem.cancelled) {
         audioQueueRef.current.shift();
@@ -577,10 +431,8 @@ export default function AvatarController({
       break;
     }
 
-    return false;
-  }, [releaseAudioItem, startAudioItem]);
-
-  playNextReadyAudioRef.current = playNextReadyAudio;
+    return played;
+  }, [releaseAudioItem]);
 
   const stopAudioQueue = useCallback(
     ({ resetAnimation = false, updateState = true } = {}) => {
@@ -596,7 +448,9 @@ export default function AvatarController({
         currentAudioItemRef.current = null;
       }
 
-      destroyAudioElement();
+      if (webAudioQueueRef.current) {
+        webAudioQueueRef.current.stop();
+      }
 
       if (updateState) {
         setIsPlayingAudio(false);
@@ -608,11 +462,11 @@ export default function AvatarController({
         flush('idle');
       }
     },
-    [destroyAudioElement, flush, releaseAudioItem]
+    [flush, releaseAudioItem]
   );
 
   const processAudioQueue = useCallback(() => {
-    if (isProcessingQueueRef.current) {
+    if (isProcessingQueueRef.current || !webAudioQueueRef.current) {
       return;
     }
     isProcessingQueueRef.current = true;
@@ -626,36 +480,17 @@ export default function AvatarController({
           item.status = 'failed';
           return;
         }
-        if (!item.audio) {
-          item.audio = createPreloadingAudio();
-        }
 
         apiClient
           .get(requestUrl, { responseType: 'blob' })
           .then(({ data: blob }) => {
-            if (!blob) {
-              throw new Error('Received empty blob');
-            }
-            const blobUrl = URL.createObjectURL(blob);
-            if (item.cancelled) {
-              URL.revokeObjectURL(blobUrl);
-              return;
-            }
-            item.blobUrl = blobUrl;
-            return loadBufferedAudio(item.audio, blobUrl);
+            if (!blob) throw new Error('Received empty blob');
+            if (item.cancelled) return;
+            return webAudioQueueRef.current.decode(blob);
           })
-          .then((audio) => {
-            if (!audio) {
-              return;
-            }
-            if (item.cancelled) {
-              audio.pause();
-              audio.removeAttribute('src');
-              audio.load();
-              releaseAudioItem(item);
-              return;
-            }
-            item.audio = audio;
+          .then((audioBuffer) => {
+            if (!audioBuffer || item.cancelled) return;
+            item.audioBuffer = audioBuffer;
             item.status = 'ready';
             processAudioQueue();
           })
@@ -668,12 +503,11 @@ export default function AvatarController({
     });
 
     // 2. Play the next ready item if nothing is currently playing.
-    if (!currentAudioItemRef.current) {
-      playNextReadyAudio();
-    }
+    // In WebAudioQueue, we can aggressively queue things ahead of time!
+    playNextReadyAudio();
 
     isProcessingQueueRef.current = false;
-  }, [createPreloadingAudio, loadBufferedAudio, playNextReadyAudio, releaseAudioItem]);
+  }, [playNextReadyAudio]);
 
   const enqueueAudioItem = useCallback(
     (item) => {
@@ -688,20 +522,18 @@ export default function AvatarController({
       }
       queuedAudioIdsRef.current.add(id);
 
-      const audio = createPreloadingAudio();
       audioQueueRef.current.push({
         id,
         messageId: item.messageId || null,
         durationMs: Number.isFinite(item.durationMs) ? item.durationMs : null,
         sourceUrl,
         status: 'pending',
-        blobUrl: null,
-        audio,
+        audioBuffer: null,
       });
 
       processAudioQueue();
     },
-    [createPreloadingAudio, processAudioQueue]
+    [processAudioQueue]
   );
 
   const usesStructuredAudioItems = Array.isArray(audioItems);

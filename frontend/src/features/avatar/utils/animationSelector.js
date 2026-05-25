@@ -9,7 +9,8 @@ import { ANIMATION_REGISTRY } from '../data/animationRegistry';
 
 export class AnimationSelector {
   constructor() {
-    this.playHistory = new Map(); // key: animationId, value: timestamp of last play
+    this.playHistory = []; // Array of last N animationIds, index 0 is most recent
+    this.maxHistorySize = 5;
   }
 
   /**
@@ -26,7 +27,10 @@ export class AnimationSelector {
 
     if (candidates.length === 0) return null;
     if (candidates.length === 1) {
-      this.playHistory.set(candidates[0].id, Date.now());
+      this.playHistory.unshift(candidates[0].id);
+      if (this.playHistory.length > this.maxHistorySize) {
+        this.playHistory.pop();
+      }
       return candidates[0].id;
     }
 
@@ -49,19 +53,26 @@ export class AnimationSelector {
         score += tagMatchCount * 5.0;
       }
 
-      // Cooldown / Anti-repetition Penalty
-      const lastPlayed = this.playHistory.get(anim.id) || 0;
-      const timeSinceLastPlay = now - lastPlayed;
-      const cooldownMs = anim.cooldownMs || 3000;
+      // Cooldown / Anti-repetition Penalty using a rolling window
+      let repetitionPenalty = 0;
+      let isRecent = false;
       
-      if (timeSinceLastPlay < cooldownMs) {
-        // Linear penalty based on how recently it was played
-        const penalty = (cooldownMs - timeSinceLastPlay) / cooldownMs;
-        score -= penalty * 10.0; // Severe penalty to prevent immediate looping
-      } else {
-        // Slight freshness bonus for animations that haven't been seen in a while (cap at 10s)
-        const freshness = Math.min(timeSinceLastPlay / 10000, 1.0);
-        score += freshness * 0.5;
+      // Look backward through the last N gestures
+      for (let i = 0; i < this.playHistory.length; i++) {
+        if (this.playHistory[i] === anim.id) {
+          isRecent = true;
+          // Exponential penalty based on recency:
+          // The most recent gesture (i=0) gets the highest penalty
+          const penaltyWeight = Math.pow(0.5, i);
+          repetitionPenalty += penaltyWeight * 10.0;
+        }
+      }
+      
+      score -= repetitionPenalty;
+
+      if (!isRecent) {
+        // Slight freshness bonus for animations that aren't in the recent history
+        score += 0.5;
       }
 
       // Fallback: If no intents match, slightly boost 'neutral' to ensure safe defaults
@@ -103,7 +114,10 @@ export class AnimationSelector {
     }
 
     // 4. Update memory
-    this.playHistory.set(selectedId, now);
+    this.playHistory.unshift(selectedId);
+    if (this.playHistory.length > this.maxHistorySize) {
+      this.playHistory.pop();
+    }
     
     if (import.meta.env.DEV) {
       console.debug(`[AnimationSelector] Picked '${selectedId}' for category '${category}' with intents:`, intents);
@@ -113,7 +127,7 @@ export class AnimationSelector {
   }
   
   clearHistory() {
-    this.playHistory.clear();
+    this.playHistory = [];
   }
 }
 

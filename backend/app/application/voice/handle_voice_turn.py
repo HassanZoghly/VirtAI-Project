@@ -142,6 +142,31 @@ class ConversationPipeline:
             # Audio task pulls from sentence_queue and runs TTS+Animation sequentially per chunk.
             llm_task = asyncio.create_task(self.llm_stage.process(context))
 
+            async def filler_task_fn():
+                await asyncio.sleep(0.4)
+                if context.aborted or context.sentence_index > 0 or not self._tts:
+                    return
+                from app.domain.voice.filler_cache import get_filler_cache
+                fc = get_filler_cache()
+                if not fc:
+                    return
+                filler_tts = await fc.get_or_generate_filler("Hmm...", voice=self.tts_voice, session_id="system")
+                if filler_tts and getattr(filler_tts, "audio_ref", None) and not context.aborted and context.sentence_index == 0:
+                    from app.schemas.ws_messages import make_tts_ready
+                    from pathlib import Path
+                    audio_file_id = Path(filler_tts.audio_ref).stem
+                    audio_url = f"/api/v1/audio/system/{audio_file_id}.mp3"
+                    await send_callback(
+                        make_tts_ready(
+                            session_id=context.session_id,
+                            message_id=f"{message_id}_filler",
+                            audio_url=audio_url,
+                            duration_ms=int(filler_tts.audio_duration_ms),
+                        )
+                    )
+
+            filler_task = asyncio.create_task(filler_task_fn())
+
             async def process_audio():
                 while not context.aborted:
                     sentence = await context.sentence_queue.get()
@@ -157,7 +182,7 @@ class ConversationPipeline:
 
             audio_task = asyncio.create_task(process_audio())
 
-            await asyncio.gather(llm_task, audio_task)
+            await asyncio.gather(llm_task, audio_task, filler_task)
 
             # Output Persistence
             if context.llm_full_response and not context.aborted:

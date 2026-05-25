@@ -138,6 +138,9 @@ async def lifespan(app: FastAPI):
     app.state.model_policy.registry.register_llm("groq_llm", groq_llm)
     app.state.model_policy.registry.register_tts("openai_tts", openai_tts)
 
+    from app.domain.voice.filler_cache import init_filler_cache
+    init_filler_cache(openai_tts)
+
     def create_asr_service() -> GroqWhisperASR:
         return GroqWhisperASR()
 

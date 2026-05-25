@@ -202,6 +202,7 @@ export default function ClassroomShell() {
       setAnimationTimeline([]);
       resetAvatarAudio();
       dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
+      dispatch({ type: 'PIPELINE_STATE', payload: { state: 'thinking' } });
       sessionRef.current.addUserMessage(
         { id: message_id, role: 'user', content: text, timestamp: Date.now() },
         text

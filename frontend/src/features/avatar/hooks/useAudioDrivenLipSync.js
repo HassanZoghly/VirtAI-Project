@@ -127,13 +127,16 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
   useEffect(() => {
     const audio = audioRef.current;
 
-    // Create audio context and analyser (only once per hook instance)
-    if (!audioContextRef.current) {
+    const isWebAudioQueue = audio && typeof audio.currentTime === 'number' && audio.analyser;
+
+    // Create audio context and analyser if we are dealing with HTMLMediaElement
+    // If it's a WebAudioQueue, we use its built-in analyser.
+    if (!audioContextRef.current && !isWebAudioQueue) {
       try {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         audioContextRef.current = new AudioContext();
         analyserRef.current = audioContextRef.current.createAnalyser();
-        analyserRef.current.fftSize = 256; // Small FFT for fast response
+        analyserRef.current.fftSize = 256;
         analyserRef.current.smoothingTimeConstant = 0.3;
 
         const bufferLength = analyserRef.current.frequencyBinCount;
@@ -143,6 +146,11 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
         console.error('[AudioDrivenLipSync] Failed to create AudioContext:', err);
         return;
       }
+    } else if (isWebAudioQueue) {
+       analyserRef.current = audio.analyser;
+       const bufferLength = analyserRef.current.frequencyBinCount;
+       dataArrayRef.current = new Uint8Array(bufferLength);
+       timeDomainDataRef.current = new Uint8Array(analyserRef.current.fftSize);
     }
 
     if (!isPlaying || !audio) {
@@ -165,27 +173,15 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
       return;
     }
 
-    // Connect audio element to analyser
-    // If we have a source but it's for a DIFFERENT element, we MUST disconnect it first
-    if (sourceRef.current) {
-      try {
-        sourceRef.current.disconnect();
-      } catch (err) {
-        // Ignore
-      }
-      sourceRef.current = null;
-    }
-
-    if (audioContextRef.current) {
+    // Connect audio element to analyser ONLY if it's an HTMLMediaElement.
+    // If audioRef.current is a WebAudioQueue, it already has its own analyser hooked up!
+    if (audio instanceof HTMLMediaElement && audioContextRef.current) {
       try {
         sourceRef.current = audioContextRef.current.createMediaElementSource(audio);
         sourceRef.current.connect(analyserRef.current);
         analyserRef.current.connect(audioContextRef.current.destination);
       } catch (err) {
-        // Source might already be connected or some other issue
-        if (import.meta.env.DEV) {
-          console.debug('[AudioDrivenLipSync] Audio source connection issue:', err);
-        }
+        // Source might already be connected
       }
     }
 

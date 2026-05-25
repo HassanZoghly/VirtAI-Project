@@ -76,13 +76,30 @@ function isRootMotionTrack(trackName) {
 function sanitizeClipRootMotion(clip, clipName) {
   const sanitized = clip.clone();
   const removedTrackNames = [];
+  const meta = getAnimationMeta(clipName);
+  const isGesture = meta && meta.category === 'gesture';
 
   sanitized.tracks = sanitized.tracks.filter((track) => {
+    if (track.name.toLowerCase().endsWith('.scale')) {
+      removedTrackNames.push(track.name);
+      return false;
+    }
+
     const shouldStrip = isRootMotionTrack(track.name);
     if (shouldStrip) {
       removedTrackNames.push(track.name);
+      return false;
     }
-    return !shouldStrip;
+
+    if (isGesture) {
+      const lowerBodyPattern = /(hips|pelvis|leg|foot|toe|spine$|spine1)/i;
+      const { nodeName } = parseTrackName(track.name);
+      if (lowerBodyPattern.test(nodeName)) {
+        removedTrackNames.push(track.name);
+        return false;
+      }
+    }
+    return true;
   });
 
   sanitized.resetDuration();
@@ -91,6 +108,14 @@ function sanitizeClipRootMotion(clip, clipName) {
     console.debug(
       `[AvatarScene] Root motion disabled for '${clipName}': ${removedTrackNames.join(', ')}`
     );
+  }
+
+  if (isGesture) {
+     try {
+       THREE.AnimationUtils.makeClipAdditive(sanitized);
+     } catch(e) {
+       console.warn(`[AvatarScene] Failed to convert additive clip ${clipName}:`, e);
+     }
   }
 
   return sanitized;
@@ -687,15 +712,39 @@ const AvatarRig = React.memo(function AvatarRig({
     };
   }, []);
 
+  const lastAudioTimeRef = useRef(0);
+  const wasPlayingAudioRef = useRef(false);
+
   // Update animation mixer and apply enhanced morph targets with realism
   useFrame((state, dt) => {
-    const safeDt = THREE.MathUtils.clamp(dt || 0, SAFE_MIN_DELTA, SAFE_MAX_DELTA);
+    let safeDt = THREE.MathUtils.clamp(dt || 0, SAFE_MIN_DELTA, SAFE_MAX_DELTA);
+
+    // Context-Aware Audio Synchronization
+    // When audio is playing, derive the delta time from the high-precision Web Audio clock
+    // to prevent animation playback from drifting over long TTS sentences.
+    if (isPlaying && audioRef?.current && typeof audioRef.current.currentTime === 'number') {
+      const audioTime = audioRef.current.currentTime;
+      if (wasPlayingAudioRef.current) {
+        const audioDt = audioTime - lastAudioTimeRef.current;
+        // Apply reasonable bounds to prevent massive jumps if audio stalls or seeks
+        if (audioDt > 0 && audioDt < 0.15) {
+          safeDt = audioDt;
+        } else if (audioDt <= 0) {
+          safeDt = 0; // Wait for audio time to advance
+        }
+      }
+      lastAudioTimeRef.current = audioTime;
+      wasPlayingAudioRef.current = true;
+    } else {
+      wasPlayingAudioRef.current = false;
+    }
+
     const enhancedMorphTargets = enhancedMorphTargetsRef.current || {};
     const currentAnimationName =
       typeof currentAnimation === 'string' ? currentAnimation : currentAnimation?.animation;
 
     // Update animation mixer
-    if (mixerRef.current) {
+    if (mixerRef.current && safeDt > 0) {
       mixerRef.current.update(safeDt);
     }
 
@@ -806,9 +855,11 @@ const AvatarRig = React.memo(function AvatarRig({
       state.camera.position.z = THREE.MathUtils.lerp(state.camera.position.z, targetZ, 0.05);
     }
 
-    // Keep avatar grounded and forward-facing even if source clips contain root drift.
+    // Anchor-Based Soft Stabilization
     if (stableSceneTransformRef.current.initialized) {
-      scene.position.y = stableSceneTransformRef.current.position.y;
+      // Prevent world-space X/Z drift while preserving local Y motion (crouch/breathing)
+      scene.position.x = THREE.MathUtils.lerp(scene.position.x, stableSceneTransformRef.current.position.x, 0.1);
+      scene.position.z = THREE.MathUtils.lerp(scene.position.z, stableSceneTransformRef.current.position.z, 0.1);
       scene.quaternion.copy(stableSceneTransformRef.current.quaternion);
     }
 

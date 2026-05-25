@@ -17,10 +17,10 @@ from __future__ import annotations
 HARD_SENTENCE_ENDINGS = frozenset({".", "!", "?", "\n"})
 
 # Characters that can end a sentence if the buffer is long enough
-SOFT_SENTENCE_ENDINGS = frozenset({","})
+SOFT_SENTENCE_ENDINGS = frozenset({",", ";", ":", "-"})
 
 # Minimum chars before a soft ending triggers a split
-SOFT_SPLIT_MIN_LENGTH = 80
+SOFT_SPLIT_MIN_LENGTH = 40
 
 # Minimum chars before we force a split (safety valve for run-on text)
 FORCE_SPLIT_LENGTH = 300

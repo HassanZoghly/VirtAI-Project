@@ -37,19 +37,23 @@ async def get_audio_file(
     user: UserEntity = Depends(_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> FileResponse:
-    if not is_safe_path_component(session_id) or parse_uuid(session_id) is None:
-        logger.warning(f"Invalid session_id attempted: {session_id}")
-        raise HTTPException(status_code=400, detail=f"Invalid session_id format: {session_id}")
-
     if not is_valid_audio_message_id(message_id):
         logger.warning(f"Invalid message_id attempted: {message_id}")
         raise HTTPException(status_code=400, detail=f"Invalid message_id format: {message_id}")
 
-    repo = ChatRepository(db)
-    db_session = await repo.get_chat_session(session_id)
-    if db_session is None or db_session.get("user_id") != str(user.id):
-        logger.warning(f"Session not found or unauthorized for session {session_id}")
-        raise HTTPException(status_code=404, detail="Audio file not found")
+    if session_id == "system":
+        # System fillers bypass DB check
+        pass
+    else:
+        if not is_safe_path_component(session_id) or parse_uuid(session_id) is None:
+            logger.warning(f"Invalid session_id attempted: {session_id}")
+            raise HTTPException(status_code=400, detail=f"Invalid session_id format: {session_id}")
+
+        repo = ChatRepository(db)
+        db_session = await repo.get_chat_session(session_id)
+        if db_session is None or db_session.get("user_id") != str(user.id):
+            logger.warning(f"Session not found or unauthorized for session {session_id}")
+            raise HTTPException(status_code=404, detail="Audio file not found")
 
     file_path = AUDIO_STORAGE_PATH / session_id / f"{message_id}.mp3"
 

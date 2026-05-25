@@ -3,24 +3,29 @@ import { getAnimationMeta } from '../data/animationRegistry';
 
 /**
  * animationStateMachine.js
- * A lightweight, deterministic state machine for avatar animation.
- * Drives playback purely through THREE.AnimationMixer and its finished events.
+ * A layered, deterministic state machine with priority scoring.
+ * Enforces Priority and Cooldowns to prevent action fighting and robotic looping.
  */
 
-export const ANIMATION_STATES = {
-  IDLE: 'IDLE',
-  TALKING: 'TALKING',
-  THINKING: 'THINKING',
-  GESTURE: 'GESTURE',
-  RETURN_TO_IDLE: 'RETURN_TO_IDLE',
+export const ANIMATION_PRIORITY = {
+  IDLE: 0,
+  THINKING: 1,
+  TALKING: 2,
+  GESTURE: 3,
+  INTERRUPT: 999
 };
 
 export class AnimationStateMachine {
   constructor(mixer) {
     this.mixer = mixer;
     this.actions = {}; // map of id -> AnimationAction
-    this.currentState = ANIMATION_STATES.IDLE;
-    this.currentActionId = null;
+    
+    // Base Layer state
+    this.currentBaseActionId = null;
+    this.currentBasePriority = ANIMATION_PRIORITY.IDLE;
+    
+    // Additive Layer state
+    this.currentAdditiveActionId = null;
     
     // Bind mixer event listener
     this.onFinished = this.onFinished.bind(this);
@@ -40,57 +45,46 @@ export class AnimationStateMachine {
 
   onFinished(e) {
     const finishedAction = e.action;
-    // Find the ID of the finished action
     const actionId = Object.keys(this.actions).find(
       (id) => this.actions[id] === finishedAction
     );
 
-    if (actionId === this.currentActionId) {
-      // The primary action finished. If it's a GESTURE, transition back to IDLE.
-      if (this.currentState === ANIMATION_STATES.GESTURE) {
-        this.transitionTo(ANIMATION_STATES.RETURN_TO_IDLE, 'idle');
-      }
+    // If an additive gesture finishes, clean it up
+    if (actionId === this.currentAdditiveActionId) {
+       this.currentAdditiveActionId = null;
     }
   }
 
   /**
-   * Request an animation playback. State is derived from the animation category.
+   * Request an animation playback. Priority is enforced.
    * @param {string} animationId - ID from the animationRegistry
+   * @param {number} forcePriority - Optional override priority (e.g., 999 for interrupt)
    */
-  play(animationId) {
+  play(animationId, forcePriority = null) {
     const meta = getAnimationMeta(animationId);
     if (!meta) return;
 
-    let targetState = ANIMATION_STATES.IDLE;
-    if (meta.category === 'talk') targetState = ANIMATION_STATES.TALKING;
-    if (meta.category === 'thinking') targetState = ANIMATION_STATES.THINKING;
-    if (meta.category === 'gesture') targetState = ANIMATION_STATES.GESTURE;
+    const reqPriority = forcePriority !== null ? forcePriority : (meta.priority ?? 0);
+    const isAdditive = meta.category === 'gesture';
+    
+    // Priority check for base layer
+    if (!isAdditive && reqPriority < this.currentBasePriority && reqPriority !== ANIMATION_PRIORITY.INTERRUPT) {
+       // Refuse transition to lower priority state
+       return;
+    }
 
-    this.transitionTo(targetState, animationId, meta);
+    this.transitionTo(animationId, meta, isAdditive, reqPriority);
   }
 
-  transitionTo(newState, targetActionId, targetMeta = null) {
-    const meta = targetMeta || getAnimationMeta(targetActionId);
-    if (!meta) return;
-
+  transitionTo(targetActionId, meta, isAdditive, reqPriority) {
     const nextAction = this.actions[targetActionId];
     if (!nextAction) return;
 
-    // Don't re-trigger if already playing the exact same repeating clip
-    if (this.currentActionId === targetActionId && meta.loop === 'repeat') {
-      return;
-    }
-
-    const prevActionId = this.currentActionId;
-    const prevAction = prevActionId ? this.actions[prevActionId] : null;
-
-    // Determine fade duration safely
     const fadeDuration = meta.fadeIn || 0.25;
 
     // Configure the incoming action
     nextAction.enabled = true;
     nextAction.setEffectiveTimeScale(1);
-    nextAction.setEffectiveWeight(1);
     
     if (meta.loop === 'once') {
       nextAction.setLoop(THREE.LoopOnce, 1);
@@ -99,34 +93,74 @@ export class AnimationStateMachine {
       nextAction.setLoop(THREE.LoopRepeat, Infinity);
     }
 
-    nextAction.reset();
-    nextAction.fadeIn(fadeDuration).play();
-
-    // Fade out previous action
-    if (prevAction && prevAction !== nextAction) {
-      prevAction.fadeOut(fadeDuration);
-    }
-
-    // Immediately halt any other background actions to prevent overlap bugs
-    for (const id in this.actions) {
-      const action = this.actions[id];
-      if (action !== nextAction && action !== prevAction) {
-        action.stop();
-        action.enabled = false;
-        action.setEffectiveWeight(0);
+    if (isAdditive) {
+      // Additive layer transition
+      const prevAdditiveAction = this.currentAdditiveActionId ? this.actions[this.currentAdditiveActionId] : null;
+      if (prevAdditiveAction && prevAdditiveAction !== nextAction) {
+        prevAdditiveAction.fadeOut(fadeDuration);
       }
+      
+      // Ensure it's additive
+      nextAction.setEffectiveWeight(meta.baseWeight || 1);
+      nextAction.reset();
+      nextAction.fadeIn(fadeDuration).play();
+      this.currentAdditiveActionId = targetActionId;
+      
+    } else {
+      // Base layer transition
+      if (this.currentBaseActionId === targetActionId && meta.loop === 'repeat') {
+        // If we are overriding priority of the currently playing base loop, just update priority.
+        if (reqPriority === ANIMATION_PRIORITY.INTERRUPT) {
+          this.currentBasePriority = ANIMATION_PRIORITY.IDLE;
+        } else {
+          this.currentBasePriority = reqPriority;
+        }
+        return; // Already playing
+      }
+      
+      const prevBaseAction = this.currentBaseActionId ? this.actions[this.currentBaseActionId] : null;
+      
+      nextAction.setEffectiveWeight(1);
+      nextAction.reset();
+      nextAction.fadeIn(fadeDuration).play();
+
+      if (prevBaseAction && prevBaseAction !== nextAction) {
+        prevBaseAction.fadeOut(fadeDuration);
+      }
+      
+      // Immediately halt any other background BASE actions to prevent overlap bugs
+      for (const id in this.actions) {
+        const action = this.actions[id];
+        const m = getAnimationMeta(id);
+        if (action !== nextAction && action !== prevBaseAction && m && m.category !== 'gesture') {
+          action.stop();
+          action.enabled = false;
+          action.setEffectiveWeight(0);
+        }
+      }
+
+      // Update state
+      this.currentBaseActionId = targetActionId;
+      this.currentBasePriority = reqPriority === ANIMATION_PRIORITY.INTERRUPT ? ANIMATION_PRIORITY.IDLE : reqPriority;
     }
-
-    // Update state
-    this.currentState = newState === ANIMATION_STATES.RETURN_TO_IDLE ? ANIMATION_STATES.IDLE : newState;
-    this.currentActionId = targetActionId;
+  }
+  
+  stopAdditive() {
+      if (this.currentAdditiveActionId) {
+          const action = this.actions[this.currentAdditiveActionId];
+          if (action) {
+              action.fadeOut(0.2);
+          }
+          this.currentAdditiveActionId = null;
+      }
   }
 
-  getCurrentState() {
-    return this.currentState;
+  interruptToIdle() {
+     this.stopAdditive();
+     this.play('idle', ANIMATION_PRIORITY.INTERRUPT);
   }
 
-  getCurrentActionId() {
-    return this.currentActionId;
+  getCurrentBaseActionId() {
+    return this.currentBaseActionId;
   }
 }

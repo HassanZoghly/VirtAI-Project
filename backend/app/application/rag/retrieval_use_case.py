@@ -1,13 +1,23 @@
 from loguru import logger
 
 from app.application.rag.token_budget import TokenBudgetManager
-from app.domain.rag.entities import DocumentChunk, RetrievalResult, RetrievalStatus, RetrievedDocument
+from app.domain.rag.entities import (
+    RetrievalResult,
+    RetrievalStatus,
+    RetrievedDocument,
+)
 from app.domain.rag.ports import EmbeddingProvider, RerankerPort, VectorStore
 from app.shared.ids import parse_uuid
 
 
 class RetrievalError(Exception):
     pass
+
+
+def _source_name(metadata: dict | None) -> str:
+    if not metadata:
+        return "Unknown"
+    return metadata.get("filename") or metadata.get("source") or "Unknown"
 
 
 class RetrievalUseCase:
@@ -36,12 +46,14 @@ class RetrievalUseCase:
             logger.info(f"Retrieving chunks for query: {query[:50]}")
             query_vector = await self.embedder.embed(query)
             scope_uuid = parse_uuid(session_id) if session_id else None
+            scope = "SESSION" if scope_uuid else "GLOBAL"
 
             # 1. Hybrid Search
             results = await self.vector_store.hybrid_search(
                 query_text=query,
                 query_vector=query_vector,
                 limit=top_k * 3,  # fetch more for diversity and reranking
+                scope=scope,
                 scope_id=scope_uuid,
             )
 
@@ -57,14 +69,14 @@ class RetrievalUseCase:
                     results = ranked_results
                 except Exception as e:
                     logger.error(f"Reranker failed: {e}. Falling back to un-reranked results.")
-            
+
             # 3. Apply max chunks per source diversity
             final_chunks = []
             source_counts = {}
             max_per_source = 3
-            
+
             for chunk, score in results:
-                source = chunk.metadata.get("filename", "Unknown") if chunk.metadata else "Unknown"
+                source = _source_name(chunk.metadata)
                 if source_counts.get(source, 0) < max_per_source:
                     source_counts[source] = source_counts.get(source, 0) + 1
                     final_chunks.append(RetrievedDocument(
@@ -75,13 +87,13 @@ class RetrievalUseCase:
                     ))
                 if len(final_chunks) >= top_k:
                     break
-                    
+
             status = RetrievalStatus.SUCCESS
             if len(final_chunks) == 0:
                 status = RetrievalStatus.NO_RESULTS
             elif final_chunks[0].score < 0.2:
                 status = RetrievalStatus.LOW_CONFIDENCE
-                
+
             return RetrievalResult(status=status, documents=final_chunks)
 
         except Exception as e:
@@ -118,7 +130,7 @@ class RetrievalUseCase:
 
         context_parts = []
         for chunk in chunks:
-            source = chunk.metadata.get("filename", "Unknown") if chunk.metadata else "Unknown"
+            source = _source_name(chunk.metadata)
             context_parts.append(f"--- Document: {source} ---\n{chunk.text}")
 
         context_block = "\n\n".join(context_parts)
@@ -144,7 +156,7 @@ class RetrievalUseCase:
 
             if retrieval_result.status in (RetrievalStatus.NO_RESULTS, RetrievalStatus.FAILED):
                 return ""
-                
+
             chunks = retrieval_result.documents
         except RetrievalError as e:
             logger.warning(f"Retrieval error: {e}", extra={"query": query})
@@ -161,7 +173,7 @@ class RetrievalUseCase:
         # Format chunks into a single context string
         context_parts = []
         for chunk in chunks:
-            source = chunk.metadata.get("filename", "Unknown") if chunk.metadata else "Unknown"
+            source = _source_name(chunk.metadata)
             context_parts.append(f"--- Document: {source} ---\n{chunk.text}\n")
 
         return "\n".join(context_parts)

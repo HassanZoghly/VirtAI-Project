@@ -1,7 +1,18 @@
+from typing import Any
+
 import tiktoken
 from loguru import logger
 
-from app.domain.rag.entities import DocumentChunk
+from app.domain.rag.entities import DocumentChunk, RetrievedDocument
+
+
+def _chunk_text(chunk: Any) -> str:
+    return getattr(chunk, "chunk_text", getattr(chunk, "text", ""))
+
+
+def _chunk_source(chunk: Any) -> str:
+    metadata = getattr(chunk, "metadata", None) or {}
+    return metadata.get("filename") or metadata.get("source") or "Unknown"
 
 
 class TokenBudgetManager:
@@ -23,11 +34,11 @@ class TokenBudgetManager:
 
     def fit_chunks_to_budget(
         self,
-        chunks: list[DocumentChunk],
+        chunks: list[DocumentChunk | RetrievedDocument],
         system_prompt: str,
         user_query: str,
         max_context_tokens: int,
-    ) -> list[DocumentChunk]:
+    ) -> list[DocumentChunk | RetrievedDocument]:
         """
         Calculates the available token budget and returns only the chunks that fit.
         """
@@ -51,10 +62,10 @@ class TokenBudgetManager:
         current_used = 0
 
         for chunk in chunks:
-            chunk_tokens = self.count_tokens(chunk.chunk_text)
+            chunk_tokens = self.count_tokens(_chunk_text(chunk))
 
             # Additional tokens for formatting like "--- Source: X ---\n"
-            source = chunk.metadata.get("filename", "Unknown") if chunk.metadata else "Unknown"
+            source = _chunk_source(chunk)
             formatting_tokens = self.count_tokens(f"--- Document: {source} ---\n\n")
             total_chunk_cost = chunk_tokens + formatting_tokens
 

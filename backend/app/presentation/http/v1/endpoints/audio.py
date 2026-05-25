@@ -1,6 +1,5 @@
 """Audio file serving endpoint."""
 
-import re
 from pathlib import Path
 from typing import Annotated
 
@@ -14,22 +13,13 @@ from app.domain.user.entities import UserEntity
 from app.infrastructure.db.database import get_db
 from app.infrastructure.db.repositories.chat_repository import ChatRepository
 from app.presentation.http.v1.dependencies import _current_user
+from app.shared.audio_ids import is_safe_path_component, is_valid_audio_message_id
 from app.shared.config import get_settings
 from app.shared.ids import parse_uuid
 
 router = APIRouter()
 
 AUDIO_STORAGE_PATH = Path(get_settings().AUDIO_STORAGE_PATH)
-
-
-def is_safe_path_component(component: str) -> bool:
-    if not component:
-        return False
-    if ".." in component or "/" in component or "\\" in component:
-        return False
-    if not re.match(r"^[a-zA-Z0-9_-]+$", component):
-        return False
-    return True
 
 
 @router.get(
@@ -51,7 +41,7 @@ async def get_audio_file(
         logger.warning(f"Invalid session_id attempted: {session_id}")
         raise HTTPException(status_code=400, detail=f"Invalid session_id format: {session_id}")
 
-    if not is_safe_path_component(message_id) or parse_uuid(message_id) is None:
+    if not is_valid_audio_message_id(message_id):
         logger.warning(f"Invalid message_id attempted: {message_id}")
         raise HTTPException(status_code=400, detail=f"Invalid message_id format: {message_id}")
 

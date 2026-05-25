@@ -111,6 +111,11 @@ class RetrievedDocument:
     metadata: dict[str, Any] = field(default_factory=dict)
     id: str | None = None
 
+    @property
+    def chunk_text(self) -> str:
+        """Compatibility alias for components that operate on DocumentChunk-like objects."""
+        return self.text
+
 
 class RetrievalStatus(str, Enum):
     SUCCESS = "success"
@@ -126,4 +131,3 @@ class RetrievalResult:
     documents: list[RetrievedDocument] = field(default_factory=list)
     error: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
-

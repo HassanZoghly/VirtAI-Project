@@ -118,7 +118,7 @@ async def lifespan(app: FastAPI):
     logger.info("ARQ pool initialized")
 
     from app.application.rag.retrieval_use_case import RetrievalUseCase
-    from app.application.services.model_policy import ModelPolicyService
+    from app.application.services.model_policy import FallbackTTSChain, ModelPolicyService
     from app.domain.chat.ports import BaseLLMProvider
     from app.domain.voice.ports import BaseTTSProvider
     from app.infrastructure.asr.groq_whisper import GroqWhisperASR
@@ -146,7 +146,7 @@ async def lifespan(app: FastAPI):
         return app.state.model_policy.router.get_llm_chain()
 
     def create_tts_service() -> BaseTTSProvider:
-        return app.state.model_policy.router.get_tts_chain()
+        return FallbackTTSChain(OpenAITTSProvider(voice="aria", speed=0.8), fallbacks=[])
 
     async def create_retrieval_service() -> RetrievalUseCase:
         from app.application.rag.token_budget import TokenBudgetManager

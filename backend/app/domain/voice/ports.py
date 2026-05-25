@@ -86,6 +86,7 @@ class BaseTTSProvider(ABC):
         session_id: str,
         message_id: str,
         trace_id: str | None = None,
+        voice: str | None = None,
     ) -> TTSResult:
         """Generate audio, store to disk, and return result with file path."""
         ...
@@ -96,7 +97,7 @@ class BaseTTSProvider(ABC):
         ...
 
     @abstractmethod
-    def generate_cache_key(self, text: str) -> str:
+    def generate_cache_key(self, text: str, voice: str | None = None) -> str:
         """Generates a cache key for the given text."""
         ...
 

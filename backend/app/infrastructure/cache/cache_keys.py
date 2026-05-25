@@ -18,6 +18,7 @@ Namespaces:
 from __future__ import annotations
 
 import hashlib
+import re
 
 
 def chat_context_key(session_id: str) -> str:
@@ -27,9 +28,9 @@ def chat_context_key(session_id: str) -> str:
 
 def tts_cache_key(text: str, voice: str) -> str:
     """Redis string key for cached TTS audio bytes."""
-    payload = f"{voice}|{text}"
-    digest = hashlib.sha256(payload.encode()).hexdigest()[:32]
-    return f"virtai:tts:cache:{digest}"
+    safe_voice = re.sub(r"[^a-z0-9-]+", "-", (voice or "default").strip().lower()).strip("-")
+    digest = hashlib.sha256(text.encode()).hexdigest()[:32]
+    return f"virtai:tts:cache:{safe_voice}:{digest}"
 
 
 def llm_cache_key(prompt_hash: str) -> str:

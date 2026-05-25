@@ -1,5 +1,6 @@
 import re
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 from loguru import logger
 
@@ -189,12 +190,9 @@ class TTSStage(BaseStage):
                 session_id=context.session_id,
                 message_id=f"{context.message_id}_{context.sentence_index}",
                 trace_id=context.trace_id,
+                voice=context.tts_voice,
             )
             context.tts_result = tts_result
-
-            # Send raw binary audio frame directly if callback is available
-            if context.send_binary_callback and tts_result.audio_bytes:
-                await context.send_binary_callback(tts_result.audio_bytes)
 
         except TTSException as e:
             logger.error(f"TTS error: {e} | trace_id={context.trace_id}")
@@ -263,11 +261,12 @@ class AnimationStage(BaseStage):
         )
         context.timeline = timeline_payload["timeline"]
 
-        audio_url = (
-            f"/api/v1/audio/{context.session_id}/{chunk_message_id}.mp3"
-            if context.tts_result
-            else ""
+        audio_file_id = (
+            Path(context.tts_result.audio_ref).stem
+            if context.tts_result and context.tts_result.audio_ref
+            else chunk_message_id
         )
+        audio_url = f"/api/v1/audio/{context.session_id}/{audio_file_id}.mp3" if context.tts_result else ""
         duration = int(context.tts_result.audio_duration_ms) if context.tts_result else 0
 
         if context.send_callback:

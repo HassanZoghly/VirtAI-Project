@@ -1,14 +1,13 @@
 import apiClient from '@/shared/services/apiClient';
-import { GREETING_DURATION_MS } from '@/widgets/Classroom/constants';
+
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useAudioDrivenLipSync } from '../hooks/useAudioDrivenLipSync';
 
 const AvatarScene = React.lazy(() => import('./AvatarScene'));
 
-/** Mandatory silence between consecutive spoken responses (ms). */
-const INTER_RESPONSE_PAUSE_MS = 2500;
-const START_WITH_IDLE_STANCE = true;
 const TIMELINE_FPS = 30;
+const AUDIO_BUFFER_READY_TIMEOUT_MS = 2500;
+const HTML_MEDIA_HAVE_FUTURE_DATA = 3;
 
 function firstFinite(...values) {
   for (const value of values) {
@@ -192,6 +191,8 @@ function useAnimationQueue(setAnimation, onDrain) {
  * @param {object} props
  * @param {'idle'|'thinking'|'speaking'|'error'} [props.pipelineState='idle'] - Current pipeline state
  * @param {string|null} [props.audioUrl] - URL to audio file (when TTS is ready)
+ * @param {Array<{ id?: string, messageId?: string, url: string, durationMs?: number|null }>|null} [props.audioItems] - Ordered TTS audio items
+ * @param {number} [props.audioQueueResetToken] - Incremented to interrupt and clear queued audio
  * @param {Array<{ start: number, end: number, value: string }>} [props.mouthCues] - Lip-sync timeline
  * @param {Array<object>} [props.animationTimeline] - Backend animation timeline items
  * @param {string} props.modelPath - Path to GLB model file
@@ -203,6 +204,8 @@ function useAnimationQueue(setAnimation, onDrain) {
 export default function AvatarController({
   pipelineState = 'idle',
   audioUrl = null,
+  audioItems = null,
+  audioQueueResetToken = 0,
   mouthCues = [],
   animationTimeline = [],
   modelPath,
@@ -210,6 +213,7 @@ export default function AvatarController({
   onError,
   onAnimationComplete,
   emotionData,
+  intents = [],
   isMovementEnabled = true,
 }) {
   const [currentAnimation, setCurrentAnimation] = useState('idle');
@@ -221,18 +225,10 @@ export default function AvatarController({
   const pendingTimelineRef = useRef([]);
   const hasActiveTimelineRef = useRef(false);
   const audioRequestIdRef = useRef(0);
-  // Tracks whether we've started playback for the current audio URL.
-  // Cleared when currentPlayUrl changes so the scene picks a fresh talk variant.
-  const audioGenerationRef = useRef(0);
+  // Bumped for each queued audio item so AvatarScene can pick a fresh talk variant.
+  const [audioGeneration, setAudioGeneration] = useState(0);
 
-  // --- Inter-response pause state ---
-  // Decoupled from the prop so incoming URLs can be queued during the pause.
-  const [currentPlayUrl, setCurrentPlayUrl] = useState(null);
-  const isPausingRef = useRef(false); // true while the 2.5 s gap is active
-  const pauseTimerRef = useRef(null);
-  const pendingAudioUrlRef = useRef(null); // URL queued during a pause
-
-  const { enqueue, flush, replace } = useAnimationQueue(setCurrentAnimation, () => {
+  const { flush, replace } = useAnimationQueue(setCurrentAnimation, () => {
     hasActiveTimelineRef.current = false;
     if (isPlayingAudioRef.current) {
       setCurrentAnimation('speaking');
@@ -349,175 +345,411 @@ export default function AvatarController({
     flush(animationMap[pipelineState] || 'idle');
   }, [pipelineState, isPlayingAudio, flush, startTimelinePlayback, isMovementEnabled]);
 
-  // Handle model loaded — queue greeting → idle sequence
   const handleModelLoaded = () => {
     if (!hasInitializedRef.current) {
       hasInitializedRef.current = true;
-
-      if (START_WITH_IDLE_STANCE) {
-        hasGreetedRef.current = true;
-        flush('idle');
-        onAnimationComplete?.();
-      } else {
-        enqueue([
-          {
-            animation: 'greeting',
-            durationMs: GREETING_DURATION_MS,
-            onComplete: () => {
-              hasGreetedRef.current = true;
-              onAnimationComplete?.();
-            },
-          },
-          { animation: 'idle' },
-        ]);
-      }
+      hasGreetedRef.current = true;
+      flush('idle');
+      onAnimationComplete?.();
     }
 
     onModelLoaded?.();
   };
 
-  const loadSecureAudioUrl = useCallback(
-    async (sourceUrl) => {
-      const requestUrl = normalizeAudioRequestUrl(sourceUrl);
-      if (!requestUrl) {
-        return;
-      }
+  // --- AUDIO PRELOADING BUFFER ---
+  const audioQueueRef = useRef([]);
+  const queuedAudioIdsRef = useRef(new Set());
+  const currentAudioItemRef = useRef(null);
+  const audioElementRef = useRef(null);
+  const isProcessingQueueRef = useRef(false);
+  const playNextReadyAudioRef = useRef(() => false);
+  const handlePlaybackEndedRef = useRef(() => {});
+  const handlePlaybackErrorRef = useRef(() => {});
 
-      const requestId = ++audioRequestIdRef.current;
-
-      try {
-        const { data: blob } = await apiClient.get(requestUrl, { responseType: 'blob' });
-        if (requestId !== audioRequestIdRef.current) {
-          return;
-        }
-
-        const blobUrl = URL.createObjectURL(blob);
-        setCurrentPlayUrl(blobUrl);
-      } catch (err) {
-        if (requestId !== audioRequestIdRef.current) {
-          return;
-        }
-
-        console.error('[AvatarController] Secure audio fetch failed:', err);
-        setIsPlayingAudio(false);
-        setCurrentPlayUrl(null);
-        onError?.(err);
-      }
-    },
-    [onError]
-  );
-
-  // --- Stage 1: sync the incoming audioUrl prop into internal play state ---
-  // When a new URL arrives during the post-speech pause, it is queued instead
-  // of played immediately. Interruptions (new URL while audio is playing) are
-  // forwarded directly so the avatar reacts without delay.
-  useEffect(() => {
-    if (!audioUrl) {
-      // Stop everything and clear any pending state
-      audioRequestIdRef.current += 1;
-      setCurrentPlayUrl(null);
-      clearTimeout(pauseTimerRef.current);
-      pauseTimerRef.current = null;
-      isPausingRef.current = false;
-      pendingAudioUrlRef.current = null;
-      pendingTimelineRef.current = [];
-      hasActiveTimelineRef.current = false;
+  const releaseAudioItem = useCallback((item) => {
+    if (!item) {
       return;
     }
 
-    if (isPausingRef.current) {
-      // Avatar just finished speaking — hold the URL until the pause expires
-      pendingAudioUrlRef.current = audioUrl;
-      return () => {
-        pendingAudioUrlRef.current = null;
-      };
+    if (item.playTimeoutId) {
+      clearTimeout(item.playTimeoutId);
+      item.playTimeoutId = null;
     }
 
-    setCurrentPlayUrl(null);
-    void loadSecureAudioUrl(audioUrl);
-  }, [audioUrl, loadSecureAudioUrl]);
-
-  // --- Stage 2: begin the mandatory 2.5 s silence after speech ends ---
-  const beginPostSpeechPause = useCallback(() => {
-    isPausingRef.current = true;
-    hasActiveTimelineRef.current = false;
-    pendingTimelineRef.current = [];
-    flush('idle'); // return to natural idle while waiting
-
-    clearTimeout(pauseTimerRef.current);
-    pauseTimerRef.current = setTimeout(() => {
-      isPausingRef.current = false;
-      pauseTimerRef.current = null;
-
-      const pending = pendingAudioUrlRef.current;
-      if (pending) {
-        pendingAudioUrlRef.current = null;
-        void loadSecureAudioUrl(pending); // triggers Stage 3 to play the queued response
+    if (item.audio) {
+      item.audio.onended = null;
+      item.audio.onerror = null;
+      item.audio.onplaying = null;
+      item.audio.pause();
+      item.audio.removeAttribute('src');
+      item.audio.load();
+      if (audioElementRef.current === item.audio) {
+        audioElementRef.current = null;
       }
-    }, INTER_RESPONSE_PAUSE_MS);
-  }, [flush, loadSecureAudioUrl]);
-
-  // Cleanup pause timer on unmount
-  useEffect(() => {
-    return () => clearTimeout(pauseTimerRef.current);
-  }, []);
-
-  // --- Stage 3: actual audio playback (driven by currentPlayUrl, not the prop) ---
-  useEffect(() => {
-    if (!currentPlayUrl) {
-      audioRef.current = null;
-      setIsPlayingAudio(false);
-      return;
+      if (audioRef.current === item.audio) {
+        audioRef.current = null;
+      }
+      item.audio = null;
     }
 
-    // Increment generation so AvatarScene knows this is a fresh response
-    // and should pick a new talk variant instead of keeping the old one.
-    audioGenerationRef.current += 1;
-
-    const audio = new Audio(currentPlayUrl);
-    audioRef.current = audio;
-    audio.preload = 'auto';
-
-    const handlePlay = () => {
-      setIsPlayingAudio(true);
-    };
-
-    const handlePause = () => {
-      setIsPlayingAudio(false);
-    };
-
-    const handleEnded = () => {
-      setIsPlayingAudio(false);
-      setCurrentPlayUrl(null);
-      beginPostSpeechPause();
-    };
-
-    audio.addEventListener('play', handlePlay);
-    audio.addEventListener('pause', handlePause);
-    audio.addEventListener('ended', handleEnded);
-
-    audio.play().catch((err) => {
-      console.error('[AvatarController] Audio play failed:', err);
-      setIsPlayingAudio(false);
-      setCurrentPlayUrl(null);
-      onError?.(err);
-    });
-
-    return () => {
-      audio.removeEventListener('play', handlePlay);
-      audio.removeEventListener('pause', handlePause);
-      audio.removeEventListener('ended', handleEnded);
-      audio.pause();
-      audio.src = '';
+    if (item.blobUrl) {
       try {
-        URL.revokeObjectURL(currentPlayUrl);
+        URL.revokeObjectURL(item.blobUrl);
       } catch {
         // Ignore revoke failures.
       }
+      item.blobUrl = null;
+    }
+  }, []);
+
+  const destroyAudioElement = useCallback(() => {
+    const audio = audioElementRef.current;
+    if (!audio) {
       audioRef.current = null;
-      setIsPlayingAudio(false);
+      return;
+    }
+
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
+    audioElementRef.current = null;
+    audioRef.current = null;
+  }, []);
+
+  const handlePlaybackEnded = useCallback(() => {
+    const endedItem = currentAudioItemRef.current;
+    currentAudioItemRef.current = null;
+
+    const startedNext = playNextReadyAudioRef.current();
+    releaseAudioItem(endedItem);
+
+    if (startedNext) {
+      return;
+    }
+
+    destroyAudioElement();
+    setIsPlayingAudio(false);
+
+    const hasPendingChunks = audioQueueRef.current.some(
+      (item) => item.status === 'pending' || item.status === 'loading'
+    );
+    if (!hasPendingChunks) {
+      hasActiveTimelineRef.current = false;
+      pendingTimelineRef.current = [];
+      flush('idle');
+    }
+  }, [destroyAudioElement, flush, releaseAudioItem]);
+
+  const handlePlaybackError = useCallback(
+    (err) => {
+      console.error('[AvatarController] Audio play failed:', err);
+      const failedItem = currentAudioItemRef.current;
+      currentAudioItemRef.current = null;
+      releaseAudioItem(failedItem);
+
+      if (!playNextReadyAudioRef.current()) {
+        destroyAudioElement();
+        setIsPlayingAudio(false);
+      }
+
+      onError?.(err instanceof Error ? err : new Error('Audio playback failed'));
+    },
+    [destroyAudioElement, onError, releaseAudioItem]
+  );
+
+  handlePlaybackEndedRef.current = handlePlaybackEnded;
+  handlePlaybackErrorRef.current = handlePlaybackError;
+
+  const createPreloadingAudio = useCallback(() => {
+    const audio = new Audio();
+    audio.preload = 'auto';
+    return audio;
+  }, []);
+
+  const loadBufferedAudio = useCallback((audio, blobUrl) => {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let timeoutId = null;
+
+      const cleanup = () => {
+        audio.removeEventListener('canplaythrough', handleReady);
+        audio.removeEventListener('canplay', handleReady);
+        audio.removeEventListener('loadeddata', handleReady);
+        audio.removeEventListener('error', handleError);
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+      };
+
+      function handleReady() {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        resolve(audio);
+      }
+
+      function handleError() {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        reject(audio.error || new Error('Audio buffering failed'));
+      }
+
+      audio.src = blobUrl;
+      audio.addEventListener('canplaythrough', handleReady, { once: true });
+      audio.addEventListener('canplay', handleReady, { once: true });
+      audio.addEventListener('loadeddata', handleReady, { once: true });
+      audio.addEventListener('error', handleError, { once: true });
+      timeoutId = setTimeout(handleReady, AUDIO_BUFFER_READY_TIMEOUT_MS);
+      audio.load();
+
+      if (audio.readyState >= HTML_MEDIA_HAVE_FUTURE_DATA) {
+        handleReady();
+      }
+    });
+  }, []);
+
+  const startAudioItem = useCallback(
+    (item, delayMs = 0) => {
+      const audio = item?.audio;
+      if (!audio) {
+        return false;
+      }
+
+      currentAudioItemRef.current = item;
+      audioElementRef.current = audio;
+      audioRef.current = audio;
+      audio.onended = () => handlePlaybackEndedRef.current();
+      audio.onerror = () =>
+        handlePlaybackErrorRef.current(audio.error || new Error('Audio playback failed'));
+      audio.onplaying = () => setIsPlayingAudio(true);
+
+      const doPlay = () => {
+        if (item.cancelled) return;
+        const playPromise = audio.play();
+        if (playPromise?.catch) {
+          playPromise.catch((err) => handlePlaybackErrorRef.current(err));
+        }
+        setAudioGeneration((generation) => generation + 1);
+      };
+
+      if (delayMs > 0) {
+        item.playTimeoutId = setTimeout(doPlay, delayMs);
+      } else {
+        doPlay();
+      }
+
+      return true;
+    },
+    []
+  );
+
+  const playNextReadyAudio = useCallback(() => {
+    if (currentAudioItemRef.current) {
+      return false;
+    }
+
+    while (audioQueueRef.current.length > 0) {
+      const nextItem = audioQueueRef.current[0];
+      if (nextItem.status === 'ready') {
+        audioQueueRef.current.shift();
+        
+        // SMART PRE-BUFFER: Delay chunk 0 to absorb generation latency of chunk 1
+        const isFirstChunk = 
+          (typeof nextItem.id === 'string' && nextItem.id.endsWith('_0')) || 
+          (typeof nextItem.messageId === 'string' && nextItem.messageId.endsWith('_0')) ||
+          (typeof nextItem.sourceUrl === 'string' && nextItem.sourceUrl.includes('_0.mp3'));
+          
+        const delayMs = isFirstChunk ? 600 : 0;
+        
+        return startAudioItem(nextItem, delayMs);
+      }
+      if (nextItem.status === 'failed' || nextItem.cancelled) {
+        audioQueueRef.current.shift();
+        releaseAudioItem(nextItem);
+        continue;
+      }
+      break;
+    }
+
+    return false;
+  }, [releaseAudioItem, startAudioItem]);
+
+  playNextReadyAudioRef.current = playNextReadyAudio;
+
+  const stopAudioQueue = useCallback(
+    ({ resetAnimation = false, updateState = true } = {}) => {
+      audioQueueRef.current.forEach((item) => {
+        item.cancelled = true;
+        releaseAudioItem(item);
+      });
+      audioQueueRef.current = [];
+
+      if (currentAudioItemRef.current) {
+        currentAudioItemRef.current.cancelled = true;
+        releaseAudioItem(currentAudioItemRef.current);
+        currentAudioItemRef.current = null;
+      }
+
+      destroyAudioElement();
+
+      if (updateState) {
+        setIsPlayingAudio(false);
+      }
+
+      if (resetAnimation) {
+        pendingTimelineRef.current = [];
+        hasActiveTimelineRef.current = false;
+        flush('idle');
+      }
+    },
+    [destroyAudioElement, flush, releaseAudioItem]
+  );
+
+  const processAudioQueue = useCallback(() => {
+    if (isProcessingQueueRef.current) {
+      return;
+    }
+    isProcessingQueueRef.current = true;
+
+    // 1. Start fetching pending items in the background
+    audioQueueRef.current.forEach((item) => {
+      if (item.status === 'pending') {
+        item.status = 'loading';
+        const requestUrl = normalizeAudioRequestUrl(item.sourceUrl);
+        if (!requestUrl) {
+          item.status = 'failed';
+          return;
+        }
+        if (!item.audio) {
+          item.audio = createPreloadingAudio();
+        }
+
+        apiClient
+          .get(requestUrl, { responseType: 'blob' })
+          .then(({ data: blob }) => {
+            if (!blob) {
+              throw new Error('Received empty blob');
+            }
+            const blobUrl = URL.createObjectURL(blob);
+            if (item.cancelled) {
+              URL.revokeObjectURL(blobUrl);
+              return;
+            }
+            item.blobUrl = blobUrl;
+            return loadBufferedAudio(item.audio, blobUrl);
+          })
+          .then((audio) => {
+            if (!audio) {
+              return;
+            }
+            if (item.cancelled) {
+              audio.pause();
+              audio.removeAttribute('src');
+              audio.load();
+              releaseAudioItem(item);
+              return;
+            }
+            item.audio = audio;
+            item.status = 'ready';
+            processAudioQueue();
+          })
+          .catch((err) => {
+            console.error('[AvatarController] Audio preload failed:', err);
+            item.status = 'failed';
+            processAudioQueue();
+          });
+      }
+    });
+
+    // 2. Play the next ready item if nothing is currently playing.
+    if (!currentAudioItemRef.current) {
+      playNextReadyAudio();
+    }
+
+    isProcessingQueueRef.current = false;
+  }, [createPreloadingAudio, loadBufferedAudio, playNextReadyAudio, releaseAudioItem]);
+
+  const enqueueAudioItem = useCallback(
+    (item) => {
+      const sourceUrl = item?.url || item?.sourceUrl;
+      if (!sourceUrl) {
+        return;
+      }
+
+      const id = String(item.id || item.messageId || sourceUrl);
+      if (queuedAudioIdsRef.current.has(id)) {
+        return;
+      }
+      queuedAudioIdsRef.current.add(id);
+
+      const audio = createPreloadingAudio();
+      audioQueueRef.current.push({
+        id,
+        messageId: item.messageId || null,
+        durationMs: Number.isFinite(item.durationMs) ? item.durationMs : null,
+        sourceUrl,
+        status: 'pending',
+        blobUrl: null,
+        audio,
+      });
+
+      processAudioQueue();
+    },
+    [createPreloadingAudio, processAudioQueue]
+  );
+
+  const usesStructuredAudioItems = Array.isArray(audioItems);
+
+  useEffect(() => {
+    queuedAudioIdsRef.current.clear();
+    stopAudioQueue({ resetAnimation: true });
+  }, [audioQueueResetToken, stopAudioQueue]);
+
+  // --- Stage 1: Sync incoming ordered audio items into the Queue ---
+  useEffect(() => {
+    if (!usesStructuredAudioItems) {
+      return;
+    }
+
+    audioItems.forEach((item) => {
+      enqueueAudioItem({
+        id: item.id || item.messageId || item.url,
+        messageId: item.messageId || null,
+        durationMs: item.durationMs,
+        url: item.url,
+      });
+    });
+  }, [audioItems, enqueueAudioItem, usesStructuredAudioItems]);
+
+  // Legacy single-URL path for callers that have not moved to audioItems.
+  useEffect(() => {
+    if (usesStructuredAudioItems) {
+      return;
+    }
+
+    if (!audioUrl) {
+      queuedAudioIdsRef.current.clear();
+      stopAudioQueue({ resetAnimation: true });
+      return;
+    }
+
+    enqueueAudioItem({
+      id: ++audioRequestIdRef.current,
+      url: audioUrl,
+    });
+  }, [audioUrl, enqueueAudioItem, stopAudioQueue, usesStructuredAudioItems]);
+
+  useEffect(() => {
+    return () => {
+      stopAudioQueue({ updateState: false });
     };
-  }, [currentPlayUrl, beginPostSpeechPause, onError]);
+  }, [stopAudioQueue]);
 
   return (
     <Suspense
@@ -537,8 +769,9 @@ export default function AvatarController({
         mouthCues={mouthCues}
         isPlaying={isPlayingAudio}
         emotionData={emotionData}
-        audioGeneration={audioGenerationRef.current}
+        currentIntents={intents}
         isMovementEnabled={isMovementEnabled}
+        audioGeneration={audioGeneration}
       />
     </Suspense>
   );

@@ -341,6 +341,10 @@ function useWSClient(url) {
 
         socket.onmessage = (event) => {
           try {
+            if (typeof Blob !== 'undefined' && event.data instanceof Blob) {
+              return;
+            }
+
             const message = JSON.parse(event.data);
 
             if (Number.isFinite(message.seq_id)) {

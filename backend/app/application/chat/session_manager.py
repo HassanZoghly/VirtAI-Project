@@ -44,6 +44,7 @@ class ConversationSession:
         retrieval_service: RetrievalUseCase | None = None,
         animation_stage: Any | None = None,
         context_cache: ChatContextCachePort | None = None,
+        tts_voice: str | None = None,
     ):
         self.session_id: str = session_id
         self.user_id: str = user_id
@@ -56,6 +57,7 @@ class ConversationSession:
             animation_stage=animation_stage,
             context_cache=context_cache,
             avatar_id=avatar_id,
+            tts_voice=tts_voice,
         )
         self.created_at: datetime = datetime.now(timezone.utc)
         self.last_activity: datetime = datetime.now(timezone.utc)
@@ -135,6 +137,29 @@ class SessionManager:
             f"cleanup_interval={session_cleanup_interval}s"
         )
 
+    def _set_session_tts_voice(
+        self, session: ConversationSession, voice_id: str | None, context: str
+    ) -> None:
+        if not voice_id:
+            return
+
+        tts = session.pipeline._tts
+        if tts is None:
+            logger.warning(
+                f"Session TTS voice not applied | id={session.session_id} | "
+                f"voice={voice_id} | provider=none"
+            )
+            return
+
+        try:
+            session.pipeline.set_tts_voice(voice_id)
+            logger.info(
+                f"Session TTS voice {context} | id={session.session_id} | "
+                f"voice={voice_id} | api_voice={getattr(tts, 'api_voice', 'unknown')}"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to {context} TTS voice: {e}")
+
     async def persist_turn(
         self,
         session_id: str,
@@ -183,14 +208,7 @@ class SessionManager:
                 if existing.user_id != user_id:
                     raise PermissionError("Cannot attach to another user's session.")
                 existing.mark_connected()
-                if voice_id and existing.pipeline._tts is not None and hasattr(existing.pipeline._tts, "voice"):
-                    try:
-                        existing.pipeline._tts.voice = voice_id
-                        logger.info(
-                            f"Session TTS voice updated | id={session_id} | voice={voice_id}"
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to update TTS voice on reconnect: {e}")
+                self._set_session_tts_voice(existing, voice_id, "updated")
                 return existing
 
         sid = session_id or str(uuid.uuid4())
@@ -227,18 +245,14 @@ class SessionManager:
             retrieval_service=retrieval,
             animation_stage=animation,
             context_cache=context_cache,
+            tts_voice=voice_id,
         )
         session.pipeline._persist_turn = self.persist_turn
         session.on_cleanup = on_cleanup
         async with self._lock:
             self._sessions[sid] = session
 
-        if voice_id and session.pipeline._tts is not None and hasattr(session.pipeline._tts, "voice"):
-            try:
-                session.pipeline._tts.voice = voice_id
-                logger.info(f"Session TTS voice set | id={sid} | voice={voice_id}")
-            except Exception as e:
-                logger.warning(f"Failed to set TTS voice: {e}")
+        self._set_session_tts_voice(session, voice_id, "set")
 
         async with self._lock:
             connected_count = sum(1 for s in self._sessions.values() if s.connected)
@@ -278,6 +292,7 @@ class SessionManager:
                 if user_id and session.user_id != user_id:
                     raise PermissionError("Cannot attach to another user's session.")
                 session.mark_connected()
+                self._set_session_tts_voice(session, voice_id, "updated")
                 return session
 
         if not user_id:

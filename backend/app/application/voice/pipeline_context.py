@@ -26,6 +26,7 @@ class TurnContext:
     asr_transcript: str | None = None
     llm_full_response: str | None = None
     llm_emotion: str | None = None
+    tts_voice: str | None = None
     tts_result: TTSResult | None = None
     mouth_cues: list = field(default_factory=list)
     timeline: list = field(default_factory=list)

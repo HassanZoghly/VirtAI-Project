@@ -14,7 +14,9 @@ import React, {
 import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { AvatarFaceController } from '../AvatarFaceController';
-import { ANIMATION_METADATA, getTransitionFade } from '../constants';
+import { AnimationStateMachine } from '../utils/animationStateMachine';
+import { getAnimationMeta } from '../data/animationRegistry';
+import { animationSelector } from '../utils/animationSelector';
 import { useRealismEnhancements } from '../hooks/useRealismEnhancements';
 
 THREE.Cache.enabled = true;
@@ -27,7 +29,7 @@ const AVATAR_BASE_SCALE = 1.25;
 const SAFE_MIN_DELTA = 1 / 120;
 const SAFE_MAX_DELTA = 1 / 15; // tolerate up to ~66 ms spikes without huge motion jumps
 
-const TALK_VARIANT_PATTERN = /^talk\d\.\d$/i;
+const TALK_VARIANT_PATTERN = /^talk(?:_|-)?\d+$/i;
 const ROOT_TRANSLATION_NODE_PATTERN = /(hips|pelvis|root|armature)/i;
 const ROOT_TRANSLATION_PROPERTY_PATTERN = /\.position$/i;
 const ROOT_ROTATION_PROPERTY_PATTERN = /\.quaternion$/i;
@@ -137,7 +139,6 @@ class AvatarErrorBoundary extends Component {
 const CACHE_BUST = import.meta.env.DEV ? `?v=${Date.now()}` : '';
 
 const ANIM = {
-  greeting: [{ fbx: `/models/animations/Greeting/Greeting.fbx${CACHE_BUST}` }],
   idle: [{ fbx: `/models/animations/Idle/Idle.fbx${CACHE_BUST}` }],
   talk0: [{ fbx: `/models/animations/Talk/Talk_0.fbx${CACHE_BUST}` }],
   talk1: [{ fbx: `/models/animations/Talk/Talk_1.fbx${CACHE_BUST}` }],
@@ -161,8 +162,6 @@ const TALK_ANIMATIONS = [
 // Animation fallback map for missing animations
 const ANIMATION_FALLBACK = {
   thinking: 'idle',
-  speaking: 'talk1',
-  talk: 'talk1',
 };
 
 // Fuzzy animation name matching
@@ -191,43 +190,9 @@ export const ANIMATION_ALIASES = {
   talk5: ['talk5', 'talk_5'],
   talk6: ['talk6', 'talk_6'],
   idle: ['idle', 'standing', 'neutral'],
-  greeting: ['greeting', 'wave', 'hello'],
 };
 
-/**
- * Resolve animation name using fuzzy matching
- * @param {string} requestedName - Requested animation name
- * @param {string[]} availableClips - Available clip names
- * @returns {string|null} - Resolved clip name or null
- */
-export function resolveAnimationName(requestedName, availableClips) {
-  const requested = requestedName.toLowerCase();
 
-  // 1. Exact match (case-insensitive)
-  const exactMatch = availableClips.find((clip) => clip.toLowerCase() === requested);
-  if (exactMatch) {
-    return exactMatch;
-  }
-
-  // 2. Check aliases
-  const aliases = ANIMATION_ALIASES[requested] || [requested];
-  for (const alias of aliases) {
-    const match = availableClips.find((clip) => clip.toLowerCase().includes(alias.toLowerCase()));
-    if (match) {
-      return match;
-    }
-  }
-
-  // 3. If only one clip exists, use it (auto-select)
-  if (availableClips.length === 1) {
-    if (import.meta.env.DEV) {
-      console.debug(`[AvatarScene] Auto-selecting only available clip: ${availableClips[0]}`);
-    }
-    return availableClips[0];
-  }
-
-  return null;
-}
 
 /**
  * AvatarRig - Pure 3D rendering component.
@@ -242,6 +207,7 @@ export function resolveAnimationName(requestedName, availableClips) {
  * @param {Array<{ start: number, end: number, value: string }>} [props.mouthCues] - Lip-sync timeline
  * @param {boolean} [props.isPlaying] - Whether audio is currently playing
  * @param {boolean} [props.isMovementEnabled] - Whether full body motion is enabled
+ * @param {string|string[]} [props.currentIntents] - Current response intent labels
  */
 const AvatarRig = React.memo(function AvatarRig({
   modelPath,
@@ -254,6 +220,7 @@ const AvatarRig = React.memo(function AvatarRig({
   isMovementEnabled = true,
   emotionData,
   audioGeneration,
+  currentIntents = [],
 }) {
   const group = useRef();
   const isFirstFrame = useRef(true);
@@ -265,20 +232,17 @@ const AvatarRig = React.memo(function AvatarRig({
   const { scene } = useGLTF(modelPath);
 
   // Load only the critical animations during the initial render pass.
-  const greetingFBX = useFBX(ANIM.greeting[0].fbx);
   const idleFBX = useFBX(ANIM.idle[0].fbx);
   const loadedTalkAnimationsRef = useRef(new Map());
   const talkPreloadStartedRef = useRef(false);
   const [talkAnimationRevision, setTalkAnimationRevision] = useState(0);
 
   const mixerRef = useRef(null);
+  const stateMachineRef = useRef(null);
   const actionsRef = useRef({});
-  const stopInactiveTimerRef = useRef(null);
-  const currentActionRef = useRef(null);
   const currentActionNameRef = useRef(null); // Track current action name to prevent re-triggers
-  const currentRangeRef = useRef(null);
+  const lastPlayedTalkRef = useRef(null);
   const clipNameCacheRef = useRef({}); // Cache resolved names
-  const lastPlayedTalkRef = useRef(null); // Track last played talk variant for no-repeat
   const stableSceneTransformRef = useRef({
     initialized: false,
     position: new THREE.Vector3(),
@@ -439,12 +403,8 @@ const AvatarRig = React.memo(function AvatarRig({
       return sanitizeClipRootMotion(c, name);
     };
 
-    const greetingClip = greetingFBX?.animations?.[0];
     const idleClip = idleFBX?.animations?.[0];
 
-    if (greetingClip) {
-      result.push(normalizeClip(greetingClip, 'greeting'));
-    }
     if (idleClip) {
       result.push(normalizeClip(idleClip, 'idle'));
     }
@@ -454,41 +414,16 @@ const AvatarRig = React.memo(function AvatarRig({
     }
 
     return result;
-  }, [greetingFBX, idleFBX]);
+  }, [idleFBX]);
 
   const forceIdleLoop = useCallback(() => {
-    const actions = actionsRef.current;
-    if (!actions || !actions.idle) {
-      return;
-    }
-
-    const idleAction = actions.idle;
-    const isAlreadyIdle = currentActionRef.current === idleAction;
-
-    idleAction.enabled = true;
-    idleAction.setLoop(THREE.LoopRepeat, Infinity);
-    idleAction.setEffectiveWeight(1);
-    idleAction.setEffectiveTimeScale(1);
-    idleAction.paused = false;
-
-    if (!isAlreadyIdle || !idleAction.isRunning()) {
-      idleAction.reset();
-      idleAction.fadeIn(0.2).play();
-    }
-
-    if (currentActionRef.current && currentActionRef.current !== idleAction) {
-      currentActionRef.current.fadeOut(0.2);
-    }
-
-    currentActionRef.current = idleAction;
+    stateMachineRef.current?.play('idle');
     currentActionNameRef.current = 'idle';
-    currentRangeRef.current = null;
   }, []);
 
   useEffect(() => {
     if (import.meta.env.DEV) {
       console.debug('[AvatarScene] FBX Load Status:');
-      console.debug('  - Greeting:', greetingFBX?.animations?.length || 0, 'clips');
       console.debug('  - Idle:', idleFBX?.animations?.length || 0, 'clips');
       console.debug(
         '  - Talk:',
@@ -496,7 +431,7 @@ const AvatarRig = React.memo(function AvatarRig({
         'clips loaded in background'
       );
     }
-  }, [greetingFBX, idleFBX, talkAnimationRevision]);
+  }, [idleFBX, talkAnimationRevision]);
 
   useEffect(() => {
     if (!scene || stableSceneTransformRef.current.initialized) {
@@ -517,14 +452,15 @@ const AvatarRig = React.memo(function AvatarRig({
     mixerRef.current = new THREE.AnimationMixer(scene);
     const mixer = mixerRef.current;
 
+    stateMachineRef.current = new AnimationStateMachine(mixer);
+
     const actions = {};
     for (const clip of criticalClips) {
       const action = mixer.clipAction(clip);
-      action.enabled = true;
-      action.clampWhenFinished = true;
       actions[clip.name] = action;
     }
     actionsRef.current = actions;
+    stateMachineRef.current.registerActions(actions);
 
     // Log available clips for debugging
     if (import.meta.env.DEV) {
@@ -535,17 +471,13 @@ const AvatarRig = React.memo(function AvatarRig({
     }
 
     return () => {
-      if (stopInactiveTimerRef.current) {
-        clearTimeout(stopInactiveTimerRef.current);
-        stopInactiveTimerRef.current = null;
-      }
+      stateMachineRef.current?.dispose();
+      stateMachineRef.current = null;
       mixer.stopAllAction();
       mixer.uncacheRoot(scene);
       mixerRef.current = null;
       actionsRef.current = {};
-      currentActionRef.current = null;
       currentActionNameRef.current = null; // Reset name tracking
-      currentRangeRef.current = null;
     };
   }, [scene, criticalClips]);
 
@@ -625,285 +557,72 @@ const AvatarRig = React.memo(function AvatarRig({
       normalizedClip.name = name;
 
       const action = mixerRef.current.clipAction(normalizedClip);
-      action.enabled = true;
-      action.clampWhenFinished = true;
       actionsRef.current[name] = action;
+      stateMachineRef.current?.registerActions(actionsRef.current);
     }
   }, [scene, criticalClips, talkAnimationRevision]);
 
-  // Play animation with smooth transitions and backend timeline directive support.
   const playAction = useCallback(
-    (request, { loop = THREE.LoopRepeat, fade } = {}) => {
-      if (!isMovementEnabled) {
+    (request) => {
+      if (!isMovementEnabled || !stateMachineRef.current) {
         forceIdleLoop();
         return;
       }
 
       const directive = isAnimationDirective(request) ? request : { animation: request };
       const requestedNameRaw = `${directive.animation || 'idle'}`;
-      const requestedName = requestedNameRaw.toLowerCase();
-      const requestedAsset =
-        typeof directive.animationAsset === 'string' ? directive.animationAsset : null;
-
-      const actions = actionsRef.current;
-      const availableClips = Object.keys(actions);
-      let resolvedName = null;
-
-      if (requestedAsset) {
-        resolvedName = resolveAnimationName(requestedAsset, availableClips);
+      let requestedName = requestedNameRaw.toLowerCase();
+      let intents = directive.intent || currentIntents || [];
+      if (typeof intents === 'string') {
+        intents = [intents];
       }
 
-      const isTalkRequest =
-        requestedName === 'speaking' || requestedName === 'talk' || /^talk\d$/.test(requestedName);
+      const availableClips = Object.keys(actionsRef.current);
+      const isTalkRequest = requestedName === 'speaking' || requestedName === 'talk' || /^talk\d$/.test(requestedName);
 
-      if (!resolvedName && isTalkRequest) {
-        let variantPool = availableClips.filter((clip) => TALK_VARIANT_PATTERN.test(clip));
+      if (isTalkRequest) {
         if (/^talk\d$/.test(requestedName)) {
-          variantPool = variantPool.filter((clip) =>
-            clip.toLowerCase().startsWith(`${requestedName}.`)
-          );
+           // Explicit talk variant requested (e.g. talk1)
+           const expectedName = requestedName.replace('talk', 'talk_');
+           const match = availableClips.find(c => c.toLowerCase() === expectedName);
+           if (match) {
+             requestedName = match;
+           }
+        } else {
+           // Semantic selection!
+           const selected = animationSelector.selectAnimation('talk', intents);
+           if (selected) {
+             const expectedName = selected.replace('talk', 'talk_');
+             const match = availableClips.find(c => c.toLowerCase() === expectedName);
+             if (match) {
+               requestedName = match;
+             }
+           } else {
+             requestedName = 'talk0';
+           }
         }
-
-        if (variantPool.length > 0) {
-          const noRepeatPool =
-            variantPool.length > 1
-              ? variantPool.filter((clip) => clip !== lastPlayedTalkRef.current)
-              : variantPool;
-          const pickFrom = noRepeatPool.length > 0 ? noRepeatPool : variantPool;
-          resolvedName = pickFrom[Math.floor(Math.random() * pickFrom.length)];
-        }
-      }
-
-      if (!resolvedName) {
-        resolvedName = clipNameCacheRef.current[requestedName];
-
-        if (!resolvedName) {
-          resolvedName = resolveAnimationName(requestedName, availableClips);
-
-          if (!resolvedName && ANIMATION_FALLBACK[requestedName]) {
-            resolvedName = resolveAnimationName(ANIMATION_FALLBACK[requestedName], availableClips);
-          }
-
-          if (resolvedName) {
-            clipNameCacheRef.current[requestedName] = resolvedName;
-            if (import.meta.env.DEV) {
-              console.debug(`[AvatarScene] Resolved '${requestedName}' → '${resolvedName}'`);
-            }
-          }
-        }
-      }
-
-      if (!resolvedName) {
-        if (import.meta.env.DEV) {
-          console.warn(`[AvatarScene] Animation '${requestedNameRaw}' not found`);
-        }
-        return;
-      }
-
-      const hasTimeRange =
-        Number.isFinite(directive.startTime) &&
-        Number.isFinite(directive.endTime) &&
-        directive.endTime > directive.startTime;
-      const hasFrameRange =
-        !hasTimeRange &&
-        Number.isFinite(directive.startFrame) &&
-        Number.isFinite(directive.endFrame) &&
-        directive.endFrame > directive.startFrame;
-
-      // Don't re-trigger if same animation is already playing
-      if (
-        currentActionNameRef.current === resolvedName &&
-        !hasTimeRange &&
-        !hasFrameRange &&
-        !requestedAsset &&
-        !isTalkRequest
-      ) {
-        return;
-      }
-
-      // CRITICAL: If a talk variant is already playing, don't switch to a new one
-      // mid-response — this prevents the jarring flip/angle-change during speaking.
-      const currentIsTalkVariant =
-        currentActionNameRef.current && TALK_VARIANT_PATTERN.test(currentActionNameRef.current);
-      if (
-        isTalkRequest &&
-        currentIsTalkVariant &&
-        !hasTimeRange &&
-        !hasFrameRange &&
-        !requestedAsset
-      ) {
-        return;
-      }
-
-      const next = actions[resolvedName];
-      if (!next) {
-        return;
-      }
-
-      const clip = next.getClip();
-      const startTime = hasTimeRange
-        ? THREE.MathUtils.clamp(directive.startTime, 0, Math.max(0, clip.duration - 0.001))
-        : hasFrameRange
-          ? THREE.MathUtils.clamp(
-              frameToSeconds(directive.startFrame),
-              0,
-              Math.max(0, clip.duration - 0.001)
-            )
-          : 0;
-      const endTime = hasTimeRange
-        ? THREE.MathUtils.clamp(
-            directive.endTime,
-            startTime + 1 / TIMELINE_FPS,
-            Math.max(startTime + 1 / TIMELINE_FPS, clip.duration)
-          )
-        : hasFrameRange
-          ? THREE.MathUtils.clamp(
-              frameToSeconds(directive.endFrame),
-              startTime + 1 / TIMELINE_FPS,
-              clip.duration
-            )
-          : clip.duration;
-
-      const loopStartTime = hasTimeRange
-        ? THREE.MathUtils.clamp(
-            Number.isFinite(directive.loopStartTime) ? directive.loopStartTime : startTime,
-            startTime,
-            endTime
-          )
-        : hasFrameRange
-          ? THREE.MathUtils.clamp(
-              Number.isFinite(directive.loopStartFrame)
-                ? frameToSeconds(directive.loopStartFrame)
-                : startTime,
-              startTime,
-              endTime
-            )
-          : 0;
-      const loopEndTime = hasTimeRange
-        ? THREE.MathUtils.clamp(
-            Number.isFinite(directive.loopEndTime) ? directive.loopEndTime : endTime,
-            loopStartTime + 1 / TIMELINE_FPS,
-            endTime
-          )
-        : hasFrameRange
-          ? THREE.MathUtils.clamp(
-              Number.isFinite(directive.loopEndFrame)
-                ? frameToSeconds(directive.loopEndFrame)
-                : endTime,
-              loopStartTime + 1 / TIMELINE_FPS,
-              endTime
-            )
-          : clip.duration;
-      const transitionOutTime = hasTimeRange
-        ? THREE.MathUtils.clamp(
-            Number.isFinite(directive.transitionOutTime) ? directive.transitionOutTime : endTime,
-            startTime + 1 / TIMELINE_FPS,
-            endTime
-          )
-        : hasFrameRange
-          ? THREE.MathUtils.clamp(
-              Number.isFinite(directive.transitionOutFrame)
-                ? frameToSeconds(directive.transitionOutFrame)
-                : endTime,
-              startTime + 1 / TIMELINE_FPS,
-              endTime
-            )
-          : clip.duration;
-
-      const blendFade = Number.isFinite(directive.blend)
-        ? THREE.MathUtils.clamp(0.12 + directive.blend * 0.38, 0.08, 0.5)
-        : null;
-
-      const playbackSpeed = Number.isFinite(directive.speed)
-        ? THREE.MathUtils.clamp(directive.speed, 0.65, 1.45)
-        : 1;
-
-      const transitionFadeBoost =
-        directive.transitionType === 'pause'
-          ? -0.05
-          : directive.transitionType === 'emphasis'
-            ? 0.06
-            : 0;
-
-      const categoryFromName = (name) => {
-        const lower = `${name || 'idle'}`.toLowerCase();
-        if (lower.startsWith('talk')) {
-          return 'talk';
-        }
-        return ANIMATION_METADATA[lower]?.category ?? lower;
-      };
-
-      const fromCategory = categoryFromName(currentActionNameRef.current);
-      const toCategory = categoryFromName(resolvedName);
-      const baseFadeDuration = THREE.MathUtils.clamp(
-        (fade ?? blendFade ?? getTransitionFade(fromCategory, toCategory)) + transitionFadeBoost,
-        0.08,
-        0.6
-      );
-      const idleTalkTransition =
-        (fromCategory === 'idle' && toCategory === 'talk') ||
-        (fromCategory === 'talk' && toCategory === 'idle');
-      const fadeDuration = idleTalkTransition ? 0.5 : baseFadeDuration;
-
-      next.setLoop(loop, Infinity);
-      next.reset();
-      next.enabled = true;
-      next.setEffectiveWeight(1);
-      next.setEffectiveTimeScale(playbackSpeed);
-      next.time = startTime;
-      next.fadeIn(fadeDuration).play();
-
-      const cur = currentActionRef.current;
-      if (cur && cur !== next) {
-        cur.enabled = true;
-        cur.fadeOut(fadeDuration);
-      }
-
-      for (const action of Object.values(actions)) {
-        if (action !== next && action !== cur && action.isRunning()) {
-          action.fadeOut(fadeDuration);
+      } else {
+        // Fallback checks for explicit animations
+        if (!availableClips.includes(requestedName)) {
+           if (ANIMATION_FALLBACK[requestedName]) {
+             requestedName = ANIMATION_FALLBACK[requestedName];
+           } else {
+             const match = availableClips.find(c => c.toLowerCase() === requestedName);
+             if (match) {
+               requestedName = match;
+             }
+           }
         }
       }
-
-      if (stopInactiveTimerRef.current) {
-        clearTimeout(stopInactiveTimerRef.current);
-      }
-      stopInactiveTimerRef.current = window.setTimeout(
-        () => {
-          for (const action of Object.values(actionsRef.current)) {
-            if (action !== currentActionRef.current) {
-              action.stop();
-              action.enabled = false;
-            }
-          }
-        },
-        Math.max(100, fadeDuration * 1000 + 30)
-      );
 
       if (import.meta.env.DEV) {
-        console.debug(
-          `[AvatarScene] Transition '${currentActionNameRef.current || 'none'}' → '${resolvedName}' (fade ${fadeDuration.toFixed(2)}s)`
-        );
+        console.debug(`[AvatarScene] Playing via StateMachine: '${requestedName}'`);
       }
 
-      currentActionRef.current = next;
-      currentActionNameRef.current = resolvedName;
-      currentRangeRef.current = {
-        action: next,
-        hasFrameRange,
-        hasTimeRange,
-        startTime,
-        endTime,
-        loopStartTime,
-        loopEndTime,
-        transitionOutTime,
-      };
-
-      if (isTalkRequest || TALK_VARIANT_PATTERN.test(resolvedName)) {
-        lastPlayedTalkRef.current = resolvedName;
-      }
+      stateMachineRef.current.play(requestedName);
+      currentActionNameRef.current = requestedName;
     },
-    [forceIdleLoop, isMovementEnabled]
+    [forceIdleLoop, isMovementEnabled, currentIntents]
   );
 
   // When a new audio response starts, unlock the talk variant so a fresh one is selected.
@@ -912,7 +631,7 @@ const AvatarRig = React.memo(function AvatarRig({
     if (!audioGeneration) {
       return;
     }
-    // Only clear if a talk variant is currently locked — idle/greeting don't need resetting
+    // Only clear if a talk variant is currently locked — idle doesn't need resetting
     if (currentActionNameRef.current && TALK_VARIANT_PATTERN.test(currentActionNameRef.current)) {
       currentActionNameRef.current = null;
     }
@@ -940,7 +659,6 @@ const AvatarRig = React.memo(function AvatarRig({
     currentAnimation,
     scene,
     criticalClips,
-    talkAnimationRevision,
     isMovementEnabled,
     playAction,
     forceIdleLoop,
@@ -981,26 +699,6 @@ const AvatarRig = React.memo(function AvatarRig({
       mixerRef.current.update(safeDt);
     }
 
-    const currentRange = currentRangeRef.current;
-    if (
-      currentRange &&
-      currentActionRef.current === currentRange.action &&
-      (currentRange.hasFrameRange || currentRange.hasTimeRange)
-    ) {
-      const action = currentRange.action;
-      const now = action.time;
-
-      if (now < currentRange.startTime) {
-        action.time = currentRange.startTime;
-      } else if (now >= currentRange.transitionOutTime) {
-        const loopSpan = Math.max(
-          1 / TIMELINE_FPS,
-          currentRange.loopEndTime - currentRange.loopStartTime
-        );
-        action.time = currentRange.loopStartTime + ((now - currentRange.loopStartTime) % loopSpan);
-      }
-    }
-
     // Compute face animation targets (blink, idle, emotion, speaking)
     let faceMorphs = {};
     if (faceControllerRef.current) {
@@ -1018,20 +716,16 @@ const AvatarRig = React.memo(function AvatarRig({
         if (name in dict) {
           const idx = dict[name];
           const clamped = Math.max(0, Math.min(1, value));
-          // Blink morphs: write directly — AvatarFaceController already handles easing
           const isBlink = name === 'eyeBlinkLeft' || name === 'eyeBlinkRight';
+          const isVisemeRelated = name.toLowerCase().startsWith('viseme_') || name.toLowerCase().includes('jaw') || name.toLowerCase().includes('mouth');
+          
           if (isBlink) {
             infl[idx] = clamped;
+          } else if (isVisemeRelated) {
+            // Visemes are exclusively owned by the lip-sync engine now. Emotion controller must not write to them.
+            continue;
           } else {
-            // For mouth/jaw/viseme targets, take max of lip-sync and emotion to avoid fighting
-            const isVisemeRelated = name.startsWith('viseme_') || name === 'jawOpen';
-            if (isVisemeRelated) {
-              infl[idx] = Math.max(infl[idx], clamped);
-            } else {
-              // Muscle feel lerp: slower transition for deeper human feel
-              // roughly 0.1 at 60fps -> factor of 6
-              infl[idx] = THREE.MathUtils.lerp(infl[idx], clamped, Math.min(safeDt * 6, 1));
-            }
+            infl[idx] = THREE.MathUtils.lerp(infl[idx], clamped, Math.min(safeDt * 6, 1));
           }
         }
       }
@@ -1053,12 +747,18 @@ const AvatarRig = React.memo(function AvatarRig({
       );
     }
 
+    // Check if the current animation allows procedural head motion
+    const isTalkOrIdle = !currentAnimationName || 
+      currentAnimationName === 'idle' || 
+      currentAnimationName === 'thinking' || 
+      currentAnimationName === 'speaking' || 
+      (currentAnimationName && currentAnimationName.toLowerCase().startsWith('talk'));
+      
     // Apply subtle head motion ONLY (NO spine to prevent body deformation)
     const prefersReducedMotion = prefersReducedMotionRef.current;
 
-    if (!prefersReducedMotion && headBoneRef.current) {
-      // Natural behavior: Head ALWAYS tracks camera and has subtle motion
-      // even if body-heavy movement is disabled.
+    // Only allow procedural head motion during idle or talk clips, NOT gestures
+    if (!prefersReducedMotion && headBoneRef.current && isTalkOrIdle) {
       if (isPlaying) {
         applySubtleHeadMotion(
           headBoneRef.current,
@@ -1070,7 +770,6 @@ const AvatarRig = React.memo(function AvatarRig({
       } else if (isMovementEnabled && currentAnimationName === 'thinking') {
         applyThinkingMotion(headBoneRef.current, safeDt, headMotionStateRef.current, state.camera);
       } else {
-        // Return head to neutral (which now includes camera tracking)
         applyReturnToNeutral(headBoneRef.current, safeDt, headMotionStateRef.current, state.camera);
       }
     }
@@ -1079,7 +778,7 @@ const AvatarRig = React.memo(function AvatarRig({
     const aspect = state.camera.aspect;
     const isMobile = aspect < 1;
     const isTalkingOrIdle =
-      ['idle', 'thinking', 'greeting'].includes(currentAnimationName) ||
+      ['idle', 'thinking'].includes(currentAnimationName) ||
       (currentAnimationName && currentAnimationName.startsWith('talk'));
     const isPlayingAction = isMovementEnabled && !isTalkingOrIdle;
 
@@ -1419,6 +1118,7 @@ function applyThinkingMotion(headBone, deltaTime, state, camera) {
  * @param {boolean} [props.isPlaying] - Whether audio is currently playing
  * @param {boolean} [props.isMovementEnabled] - Whether full body motion is enabled
  * @param {number} [props.audioGeneration] - Increments on each new audio response
+ * @param {string|string[]} [props.currentIntents] - Current response intent labels
  */
 const AvatarScene = React.memo(function AvatarScene({
   modelPath,
@@ -1432,6 +1132,7 @@ const AvatarScene = React.memo(function AvatarScene({
   emotionData,
   isMovementEnabled = true,
   audioGeneration = 0,
+  currentIntents = [],
 }) {
   const loadStartRef = useRef(0);
 
@@ -1490,6 +1191,7 @@ const AvatarScene = React.memo(function AvatarScene({
                 isMovementEnabled={isMovementEnabled}
                 emotionData={emotionData}
                 audioGeneration={audioGeneration}
+                currentIntents={currentIntents}
               />
             </AvatarErrorBoundary>
           </Suspense>
@@ -1521,7 +1223,7 @@ useGLTF.preload('/models/avatar1.glb');
 // THREE.Cache.enabled = true (set above) ensures FBXLoader
 // will reuse these cached responses instead of re-downloading
 if (typeof window !== 'undefined') {
-  ['/models/animations/Idle/Idle.fbx', '/models/animations/Greeting/Greeting.fbx'].forEach((url) =>
-    fetch(url, { priority: 'low' }).catch(() => {})
-  );
+  ['/models/animations/Idle/Idle.fbx'].forEach((url) => {
+    fetch(url, { priority: 'low' }).catch(() => {});
+  });
 }

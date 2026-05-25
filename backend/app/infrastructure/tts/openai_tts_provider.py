@@ -21,16 +21,37 @@ class OpenAITTSProvider(BaseTTSProvider):
     Uses a local Kokoro TTS container (openedai-speech) for high-fidelity audio.
     """
 
+    DEFAULT_API_VOICE: ClassVar[str] = "nova"
     VOICE_MAPPING: ClassVar[dict[str, str]] = {
         "aria": "nova",
+        "en-us-arianeural": "nova",
         "jenny": "shimmer",
+        "en-us-jennyneural": "shimmer",
         "sonia": "alloy",
+        "en-gb-sonianeural": "alloy",
         "guy": "onyx",
+        "en-us-guyneural": "onyx",
         "christopher": "echo",
+        "en-us-christopherneural": "echo",
         "ryan": "fable",
+        "en-gb-ryanneural": "fable",
     }
 
-    SUPPORTED_VOICES: ClassVar[set[str]] = {"alloy", "echo", "fable", "onyx", "nova", "shimmer"}
+    SUPPORTED_VOICES: ClassVar[set[str]] = {
+        "alloy",
+        "ash",
+        "ballad",
+        "cedar",
+        "coral",
+        "echo",
+        "fable",
+        "marin",
+        "nova",
+        "onyx",
+        "sage",
+        "shimmer",
+        "verse",
+    }
 
     def __init__(self, voice: str = "aria", speed: float = 0.8, model: str = "tts-1", **kwargs):
         self.voice = voice
@@ -46,16 +67,24 @@ class OpenAITTSProvider(BaseTTSProvider):
 
     @property
     def api_voice(self) -> str:
-        v = getattr(self, "voice", None)
-        if not v or not isinstance(v, str):
-            return "nova"
-        v = v.lower()
-        if v in self.SUPPORTED_VOICES:
-            return v
-        return self.VOICE_MAPPING.get(v, "nova")
+        return self.resolve_voice(self.voice)
+
+    @classmethod
+    def resolve_voice(cls, voice: str | None = None) -> str:
+        if not voice or not isinstance(voice, str):
+            return cls.DEFAULT_API_VOICE
+
+        normalized = voice.strip().lower()
+        if normalized in cls.SUPPORTED_VOICES:
+            return normalized
+        return cls.VOICE_MAPPING.get(normalized, cls.DEFAULT_API_VOICE)
 
     async def get_voice_settings(self, voice_name: str) -> dict:
-        return {"voice": self.voice, "speed": getattr(self, "speed", 1.0)}
+        return {
+            "voice": voice_name,
+            "api_voice": self.resolve_voice(voice_name),
+            "speed": getattr(self, "speed", 1.0),
+        }
 
     def _is_safe_path_component(self, component: str) -> bool:
         if not component:
@@ -66,11 +95,15 @@ class OpenAITTSProvider(BaseTTSProvider):
             return False
         return True
 
-    def generate_cache_key(self, text: str) -> str:
+    def generate_cache_key(self, text: str, voice: str | None = None) -> str:
         from app.infrastructure.cache.cache_keys import tts_cache_key
         from app.infrastructure.tts.tts_utils import clean_text_for_tts
         sanitized = clean_text_for_tts(text)
-        return tts_cache_key(sanitized, self.api_voice)
+        return tts_cache_key(sanitized, self.resolve_voice(voice or self.voice))
+
+    @classmethod
+    def audio_file_id(cls, message_id: str, api_voice: str) -> str:
+        return f"{message_id}_{cls.resolve_voice(api_voice)}"
 
     async def generate(
         self,
@@ -78,6 +111,7 @@ class OpenAITTSProvider(BaseTTSProvider):
         session_id: str,
         message_id: str,
         trace_id: str | None = None,
+        voice: str | None = None,
     ) -> TTSResult:
         if not self._is_safe_path_component(session_id):
             raise TTSException(f"Invalid session_id: {session_id}")
@@ -89,11 +123,25 @@ class OpenAITTSProvider(BaseTTSProvider):
         if not sanitized_text.strip():
             raise TTSException("Empty text after sanitization")
 
+        if not voice:
+            logger.warning(
+                f"TTSProvider fell back to initialization default (self.voice={self.voice}) "
+                f"because voice parameter was missing or falsy! session={session_id} message={message_id}"
+            )
+        requested_voice = voice or self.voice
+        api_voice = self.resolve_voice(requested_voice)
+        
+        # STRICT ENFORCEMENT: We will explicitly override the api_voice using the voice kwarg if it is present and valid.
+        # This guarantees the pipeline passed voice is used.
+        if voice:
+            api_voice = self.resolve_voice(voice)
+
         logger.info(
-            f"TTS generate | session={session_id} | message={message_id} | api_voice={self.api_voice} | trace_id={trace_id}"
+            f"TTS generate | session={session_id} | message={message_id} | "
+            f"voice={requested_voice} | api_voice={api_voice} | trace_id={trace_id}"
         )
 
-        cached_audio = await get_cached_audio(text=sanitized_text, voice=self.api_voice)
+        cached_audio = await get_cached_audio(text=sanitized_text, voice=api_voice)
         if cached_audio is not None:
             logger.info("TTS cache hit")
             result = TTSResult(
@@ -104,16 +152,20 @@ class OpenAITTSProvider(BaseTTSProvider):
             )
         else:
             try:
-                result = await asyncio.wait_for(self.synthesize(sanitized_text, trace_id=trace_id), timeout=70.0)
+                result = await asyncio.wait_for(
+                    self.synthesize(sanitized_text, trace_id=trace_id, voice=api_voice),
+                    timeout=70.0,
+                )
             except asyncio.TimeoutError:
                 raise TTSException("TTS synthesis timed out (wait_for trigger)")
-            await cache_audio(text=sanitized_text, voice=self.api_voice, audio_bytes=result.audio_bytes)
+            await cache_audio(text=sanitized_text, voice=api_voice, audio_bytes=result.audio_bytes)
 
         storage_base = Path(get_settings().AUDIO_STORAGE_PATH)
         session_dir = storage_base / session_id
         session_dir.mkdir(parents=True, exist_ok=True)
 
-        audio_file_path = session_dir / f"{message_id}.mp3"
+        audio_file_id = self.audio_file_id(message_id, api_voice)
+        audio_file_path = session_dir / f"{audio_file_id}.mp3"
         try:
             audio_file_path.write_bytes(result.audio_bytes)
             logger.success(f"Audio saved | path={audio_file_path}")
@@ -124,18 +176,24 @@ class OpenAITTSProvider(BaseTTSProvider):
         result.audio_ref = str(audio_file_path)
         return result
 
-    async def synthesize(self, text: str, trace_id: str | None = None) -> TTSResult:
+    async def synthesize(
+        self,
+        text: str,
+        trace_id: str | None = None,
+        voice: str | None = None,
+    ) -> TTSResult:
         text = clean_text_for_tts(text)
         if not text.strip():
             raise TTSException("Empty text provided")
 
+        api_voice = self.resolve_voice(voice or self.voice)
         try:
             response = await self._client.post(
                 self.api_url,
                 json={
                     "model": self.model,
                     "input": text,
-                    "voice": self.api_voice,
+                    "voice": api_voice,
                     "response_format": "mp3",
                     "speed": self.speed,
                 },
@@ -198,4 +256,11 @@ class OpenAITTSProvider(BaseTTSProvider):
                     raise TTSException(f"TTS streaming failed: {e!s}")
 
     async def get_available_voices(self) -> list[dict]:
-        return [{"id": "nova", "name": "Nova", "language": "en-US", "gender": "Female"}]
+        return [
+            {"id": "aria", "name": "Aria", "api_voice": "nova", "language": "en-US", "gender": "Female"},
+            {"id": "jenny", "name": "Jenny", "api_voice": "shimmer", "language": "en-US", "gender": "Female"},
+            {"id": "sonia", "name": "Sonia", "api_voice": "alloy", "language": "en-GB", "gender": "Female"},
+            {"id": "guy", "name": "Guy", "api_voice": "onyx", "language": "en-US", "gender": "Male"},
+            {"id": "christopher", "name": "Christopher", "api_voice": "echo", "language": "en-US", "gender": "Male"},
+            {"id": "ryan", "name": "Ryan", "api_voice": "fable", "language": "en-GB", "gender": "Male"},
+        ]

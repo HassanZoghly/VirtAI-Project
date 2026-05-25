@@ -45,6 +45,7 @@ function App() {
   useVisualViewport();
   const isInitialized = useAuthStore((s) => s.isInitialized);
   const isInitializing = useAuthStore((s) => s.isInitializing);
+  const isLoading = useAuthStore((s) => s.isLoading);
   const bootstrapStartedRef = useRef(false);
 
   // ALWAYS attempt a silent refresh on app boot — regardless of pathname.
@@ -77,7 +78,7 @@ function App() {
 
   // Block ALL route rendering until the auth check completes.
   // This prevents the flash: "unauthenticated → redirect to /auth → actually authenticated"
-  if (isInitializing || !isInitialized) {
+  if (isInitializing || !isInitialized || isLoading) {
     return <PageLoader />;
   }
 

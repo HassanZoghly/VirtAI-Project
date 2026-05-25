@@ -10,6 +10,8 @@ const AvatarController = lazy(() => import('./AvatarController.jsx'));
  * @param {boolean} props.avatarError - Whether the avatar failed to load
  * @param {string} props.pipelineState - Current pipeline state
  * @param {string|null} props.audioUrl - TTS audio URL when speaking
+ * @param {Array<object>} [props.audioItems] - Ordered TTS audio items queued by the shell
+ * @param {number} [props.audioQueueResetToken] - Incremented to interrupt and clear queued audio
  * @param {{ start: number, end: number, value: number }[]} props.mouthCues - Lip sync timeline
  * @param {Array<object>} [props.animationTimeline] - Backend-provided animation timeline items
  * @param {() => void} props.onModelLoaded - Model loaded callback
@@ -23,6 +25,8 @@ export default function AvatarPanel({
   avatarError,
   pipelineState,
   audioUrl,
+  audioItems,
+  audioQueueResetToken,
   mouthCues,
   animationTimeline,
   onModelLoaded,
@@ -56,6 +60,8 @@ export default function AvatarPanel({
             modelPath={modelPath}
             pipelineState={pipelineState}
             audioUrl={audioUrl}
+            audioItems={audioItems}
+            audioQueueResetToken={audioQueueResetToken}
             mouthCues={mouthCues}
             animationTimeline={animationTimeline}
             onModelLoaded={onModelLoaded}

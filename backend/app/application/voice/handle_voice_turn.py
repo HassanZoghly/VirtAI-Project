@@ -40,6 +40,7 @@ class ConversationPipeline:
         animation_stage: AnimationStage | None = None,
         context_cache: ChatContextCachePort | None = None,
         avatar_id: str = "avatar1",
+        tts_voice: str | None = None,
         persist_turn: Callable[[str, str, str, str, str | None], Awaitable[None]] | None = None,
     ):
         self._asr = asr
@@ -50,6 +51,7 @@ class ConversationPipeline:
         self._persist_turn = persist_turn
         self._context_cache = context_cache
         self._history = build_conversation(avatar_id)
+        self.tts_voice = tts_voice or getattr(tts, "voice", None)
 
         # Stages setup
         self.llm_stage = LLMStage(llm=self._llm, retrieval=self._retrieval)
@@ -88,6 +90,7 @@ class ConversationPipeline:
             history=self._history,
             send_callback=send_callback,
             send_binary_callback=send_binary_callback,
+            tts_voice=self.tts_voice,
         )
         self._current_context = context
 
@@ -161,7 +164,10 @@ class ConversationPipeline:
                 tts_key: str | None = None
                 try:
                     if self._tts:
-                        tts_key = self._tts.generate_cache_key(context.llm_full_response)
+                        tts_key = self._tts.generate_cache_key(
+                            context.llm_full_response,
+                            voice=self.tts_voice,
+                        )
 
                     if self._persist_turn:
                         await self._persist_turn(
@@ -208,6 +214,15 @@ class ConversationPipeline:
         if self._current_context:
             self._current_context.abort()
         logger.info("Pipeline abort requested")
+
+    def set_tts_voice(self, voice_id: str | None) -> None:
+        if not voice_id:
+            return
+        self.tts_voice = voice_id
+        if self._current_context is not None:
+            self._current_context.tts_voice = voice_id
+        if self._tts is not None and hasattr(self._tts, "voice"):
+            self._tts.voice = voice_id
 
     def reset_history(self) -> None:
         self._history.clear()

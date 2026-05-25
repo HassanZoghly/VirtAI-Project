@@ -78,6 +78,20 @@ class FallbackTTSChain(BaseTTSProvider):
         self.primary = primary
         self.fallbacks = fallbacks
 
+    @property
+    def voice(self) -> str | None:
+        return getattr(self.primary, "voice", None)
+
+    @voice.setter
+    def voice(self, value: str) -> None:
+        for provider in [self.primary, *self.fallbacks]:
+            if hasattr(provider, "voice"):
+                provider.voice = value
+
+    @property
+    def api_voice(self) -> str | None:
+        return getattr(self.primary, "api_voice", None)
+
     async def synthesize(self, text: str) -> TTSResult:
         providers = [self.primary, *self.fallbacks]
         for idx, provider in enumerate(providers):
@@ -107,11 +121,18 @@ class FallbackTTSChain(BaseTTSProvider):
                     logger.error(f"All TTS providers failed streaming. Last error: {e}")
                     raise e
 
-    async def generate(self, text: str, session_id: str, message_id: str, trace_id: str | None = None) -> TTSResult:
+    async def generate(
+        self,
+        text: str,
+        session_id: str,
+        message_id: str,
+        trace_id: str | None = None,
+        voice: str | None = None,
+    ) -> TTSResult:
         providers = [self.primary, *self.fallbacks]
         for idx, provider in enumerate(providers):
             try:
-                return await provider.generate(text, session_id, message_id, trace_id)
+                return await provider.generate(text, session_id, message_id, trace_id, voice=voice)
             except Exception as e:
                 provider_name = provider.__class__.__name__
                 if idx < len(providers) - 1:
@@ -127,8 +148,8 @@ class FallbackTTSChain(BaseTTSProvider):
     async def get_voice_settings(self, voice_name: str) -> dict[str, Any]:
         return await self.primary.get_voice_settings(voice_name)
 
-    def generate_cache_key(self, text: str) -> str:
-        return self.primary.generate_cache_key(text)
+    def generate_cache_key(self, text: str, voice: str | None = None) -> str:
+        return self.primary.generate_cache_key(text, voice=voice)
 
 
 @dataclass

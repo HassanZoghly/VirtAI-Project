@@ -15,6 +15,99 @@ import { SCROLL_STICK_THRESHOLD_PX } from './constants';
 
 
 const toast = new Toast('tr');
+const SETUP_STORAGE_KEYS = ['virtai-setup', 'virtai:setup', 'setupConfig', 'setup'];
+
+function firstString(...values) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function normalizeSetupConfig(rawConfig) {
+  if (!rawConfig || typeof rawConfig !== 'object') {
+    return {};
+  }
+
+  const sources = [
+    rawConfig,
+    rawConfig.setup,
+    rawConfig.setupConfig,
+    rawConfig.classroomSetup,
+    rawConfig.preferences,
+  ].filter((source) => source && typeof source === 'object');
+
+  const avatarId = firstString(
+    ...sources.flatMap((source) => [
+      source.avatarId,
+      source.avatar_id,
+      source.avatar?.id,
+      source.selectedAvatar?.id,
+    ])
+  );
+  const voiceId = firstString(
+    ...sources.flatMap((source) => [
+      source.voiceId,
+      source.voice_id,
+      source.ttsVoiceId,
+      source.tts_voice_id,
+      source.voice?.id,
+      source.selectedVoice?.id,
+    ])
+  );
+  const movementSource = sources.find(
+    (source) =>
+      typeof source.movementEnabled === 'boolean' || typeof source.movement_enabled === 'boolean'
+  );
+
+  return {
+    ...rawConfig,
+    ...(avatarId ? { avatarId } : {}),
+    ...(voiceId ? { voiceId } : {}),
+    ...(movementSource
+      ? { movementEnabled: movementSource.movementEnabled ?? movementSource.movement_enabled }
+      : {}),
+  };
+}
+
+function hasSetupSelection(config) {
+  return !!config.avatarId || !!config.voiceId || typeof config.movementEnabled === 'boolean';
+}
+
+function readSetupStorageKey(key) {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function loadClassroomSetup() {
+  const primary = normalizeSetupConfig(loadSetup());
+  if (hasSetupSelection(primary)) {
+    return primary;
+  }
+
+  for (const key of SETUP_STORAGE_KEYS) {
+    const fallback = normalizeSetupConfig(readSetupStorageKey(key));
+    if (hasSetupSelection(fallback)) {
+      return fallback;
+    }
+  }
+
+  return primary;
+}
+
+function getDefaultVoiceId(avatarId) {
+  return getAvatarById(avatarId)?.gender === 'female' ? 'aria' : 'guy';
+}
 
 function buildWsUrl(avatarId, voiceId, sessionId) {
   const configuredBase = import.meta.env.VITE_WS_BASE_URL;
@@ -31,10 +124,10 @@ export default function ClassroomShell() {
   const { sessionId: urlSessionId } = useParams();
   const navigate = useNavigate();
 
-  const setupConfig = useMemo(() => loadSetup(), []);
-  const activeAvatarId = setupConfig?.avatarId || 'omar';
-  const activeVoiceId = setupConfig?.voiceId || 'aria';
-  const movementEnabled = setupConfig?.movementEnabled ?? false;
+  const [setupConfig] = useState(loadClassroomSetup);
+  const activeAvatarId = setupConfig.avatarId || 'omar';
+  const activeVoiceId = setupConfig.voiceId || getDefaultVoiceId(activeAvatarId);
+  const movementEnabled = setupConfig.movementEnabled ?? false;
   const avatarModelPath = getAvatarModelPath(activeAvatarId);
   const wsAvatarId = avatarModelPath.split('/').pop().replace('.glb', '');
 
@@ -50,7 +143,7 @@ export default function ClassroomShell() {
   const deleteSession = session.deleteSession;
   const clearAllSessions = session.clearAllSessions;
   const renameSession = session.renameSession;
-
+  
   const WS_URL =
     status === 'success' && currentSessionId
       ? buildWsUrl(wsAvatarId, activeVoiceId, currentSessionId)
@@ -60,6 +153,8 @@ export default function ClassroomShell() {
     useWSClient(WS_URL);
 
   const [audioUrl, setAudioUrl] = useState(null);
+  const [audioItems, setAudioItems] = useState([]);
+  const [audioQueueResetToken, setAudioQueueResetToken] = useState(0);
   const [mouthCues, setMouthCues] = useState([]);
   const [animationTimeline, setAnimationTimeline] = useState([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -84,6 +179,12 @@ export default function ClassroomShell() {
     sessionRef.current = session;
   }, [session]);
 
+  const resetAvatarAudio = useCallback(() => {
+    setAudioUrl(null);
+    setAudioItems([]);
+    setAudioQueueResetToken((token) => token + 1);
+  }, []);
+
   const commitAndSend = useCallback(
     async (text) => {
       let activeId = currentSessionId;
@@ -99,6 +200,7 @@ export default function ClassroomShell() {
       const message_id = crypto.randomUUID();
       timelineProtocolRef.current = null;
       setAnimationTimeline([]);
+      resetAvatarAudio();
       dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
       sessionRef.current.addUserMessage(
         { id: message_id, role: 'user', content: text, timestamp: Date.now() },
@@ -106,7 +208,7 @@ export default function ClassroomShell() {
       );
       send({ type: 'chat.user_message', data: { message_id, text } });
     },
-    [dispatch, send, currentSessionId, createNewSession]
+    [dispatch, send, currentSessionId, createNewSession, resetAvatarAudio]
   );
 
   const safeSend = useCallback(
@@ -131,7 +233,7 @@ export default function ClassroomShell() {
     const nextId = currentSessionId;
     if (prevId !== nextId) {
       // EXPLICIT MEDIA HALT: clear media state to force AvatarController to pause and unmount audio
-      setAudioUrl(null);
+      resetAvatarAudio();
       setMouthCues([]);
       setAnimationTimeline([]);
 
@@ -149,7 +251,7 @@ export default function ClassroomShell() {
       });
       prevSessionIdRef.current = nextId;
     }
-  }, [currentSessionId]);
+  }, [currentSessionId, resetAvatarAudio]);
 
   // WebSocket message subscriptions
   useEffect(() => {
@@ -178,7 +280,23 @@ export default function ClassroomShell() {
         }
       }),
       onMessage('pipeline.state', (d) => dispatch({ type: 'PIPELINE_STATE', payload: d })),
-      onMessage('tts.ready', (d) => setAudioUrl(d.audio.url)),
+      onMessage('tts.ready', (d) => {
+        const url = d?.audio?.url;
+        if (!url) {
+          return;
+        }
+
+        setAudioUrl(url);
+        setAudioItems((prev) => [
+          ...prev,
+          {
+            id: d.message_id ? `${d.message_id}:${url}` : `${Date.now()}-${prev.length}`,
+            messageId: d.message_id || null,
+            url,
+            durationMs: Number.isFinite(d.audio?.duration_ms) ? d.audio.duration_ms : null,
+          },
+        ]);
+      }),
       onMessage('visemes.ready', (d) => setMouthCues(d.mouthCues)),
       onMessage('animation.timeline.v2', (d) => {
         timelineProtocolRef.current = 'v2';
@@ -377,6 +495,8 @@ export default function ClassroomShell() {
             avatarError={avatarError}
             pipelineState={conversationState.pipelineState}
             audioUrl={audioUrl}
+            audioItems={audioItems}
+            audioQueueResetToken={audioQueueResetToken}
             mouthCues={mouthCues}
             animationTimeline={animationTimeline}
             onModelLoaded={handleAvatarLoaded}

@@ -1,14 +1,12 @@
 import apiClient from '@/shared/services/apiClient';
-
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useAudioDrivenLipSync } from '../hooks/useAudioDrivenLipSync';
 import { WebAudioQueue } from '../utils/WebAudioQueue';
+import { ConversationalStateMachine, CONVERSATION_STATES } from '../utils/ConversationalStateMachine';
 
 const AvatarScene = React.lazy(() => import('./AvatarScene'));
 
 const TIMELINE_FPS = 30;
-const AUDIO_BUFFER_READY_TIMEOUT_MS = 2500;
-const HTML_MEDIA_HAVE_FUTURE_DATA = 3;
 
 function firstFinite(...values) {
   for (const value of values) {
@@ -85,7 +83,6 @@ function normalizeAudioRequestUrl(sourceUrl) {
   if (typeof sourceUrl !== 'string' || !sourceUrl) {
     return null;
   }
-
   try {
     const parsed = new URL(sourceUrl, window.location.origin);
     const path = `${parsed.pathname}${parsed.search}`;
@@ -103,15 +100,6 @@ function normalizeAudioRequestUrl(sourceUrl) {
 
 /**
  * useAnimationQueue — sequential animation queue with interrupt support.
- *
- * Each queued item is `{ animation: string, durationMs?: number }`.
- * - If `durationMs` is set the item plays for that duration then advances.
- * - If `durationMs` is omitted (or 0) the item stays until interrupted or
- *   the queue is flushed externally.
- *
- * `flush(animation)` clears the queue and immediately plays `animation`.
- * `enqueue(items)` appends one or more items and starts processing if idle.
- * `replace(items)` replaces the queue and starts processing immediately.
  */
 function useAnimationQueue(setAnimation, onDrain) {
   const queueRef = useRef([]);
@@ -136,7 +124,6 @@ function useAnimationQueue(setAnimation, onDrain) {
         processNext();
       }, durationMs);
     }
-    // If no duration, the item stays active until flush() or next enqueue with advance
   }, [setAnimation, onDrain]);
 
   const enqueue = useCallback(
@@ -175,7 +162,6 @@ function useAnimationQueue(setAnimation, onDrain) {
     [processNext]
   );
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => clearTimeout(timerRef.current);
   }, []);
@@ -185,22 +171,6 @@ function useAnimationQueue(setAnimation, onDrain) {
 
 /**
  * AvatarController - Orchestrates avatar animations, audio playback, and lip sync.
- *
- * Maps pipeline state to animation state, handles audio playback,
- * and drives lip sync from mouthCues timeline by updating morph targets.
- *
- * @param {object} props
- * @param {'idle'|'thinking'|'speaking'|'error'} [props.pipelineState='idle'] - Current pipeline state
- * @param {string|null} [props.audioUrl] - URL to audio file (when TTS is ready)
- * @param {Array<{ id?: string, messageId?: string, url: string, durationMs?: number|null }>|null} [props.audioItems] - Ordered TTS audio items
- * @param {number} [props.audioQueueResetToken] - Incremented to interrupt and clear queued audio
- * @param {Array<{ start: number, end: number, value: string }>} [props.mouthCues] - Lip-sync timeline
- * @param {Array<object>} [props.animationTimeline] - Backend animation timeline items
- * @param {string} props.modelPath - Path to GLB model file
- * @param {() => void} [props.onModelLoaded] - Callback when model is loaded
- * @param {(err: Error) => void} [props.onError] - Callback for errors
- * @param {() => void} [props.onAnimationComplete] - Callback when animation completes
- * @param {boolean} [props.isMovementEnabled] - Whether full body motion is enabled
  */
 export default function AvatarController({
   pipelineState = 'idle',
@@ -218,7 +188,11 @@ export default function AvatarController({
   isMovementEnabled = true,
 }) {
   const [currentAnimation, setCurrentAnimation] = useState('idle');
+  const [conversationState, setConversationState] = useState(CONVERSATION_STATES.IDLE);
+
   const audioRef = useRef(null);
+  const stateMachineRef = useRef(new ConversationalStateMachine());
+  
   const hasGreetedRef = useRef(false);
   const hasInitializedRef = useRef(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -226,18 +200,37 @@ export default function AvatarController({
   const pendingTimelineRef = useRef([]);
   const hasActiveTimelineRef = useRef(false);
   const audioRequestIdRef = useRef(0);
-  // Bumped for each queued audio item so AvatarScene can pick a fresh talk variant.
   const [audioGeneration, setAudioGeneration] = useState(0);
+
+  // Sync state machine changes to React state for UI/props
+  useEffect(() => {
+    stateMachineRef.current.onStateChange((newState) => {
+      setConversationState(newState);
+      if (isMovementEnabled) {
+        // Only drive animation changes via state machine if we have no active explicit timeline
+        if (!hasActiveTimelineRef.current) {
+          const anim = stateMachineRef.current.getAnimationForState();
+          setCurrentAnimation(anim);
+        }
+      }
+    });
+  }, [isMovementEnabled]);
 
   const { flush, replace } = useAnimationQueue(setCurrentAnimation, () => {
     hasActiveTimelineRef.current = false;
     if (isPlayingAudioRef.current) {
       setCurrentAnimation('speaking');
+    } else {
+      setCurrentAnimation(stateMachineRef.current.getAnimationForState());
     }
   });
 
-  // Use enhanced audio-driven lip sync hook to get morph targets and body motion
-  const { morphTargetsRef } = useAudioDrivenLipSync(audioRef, mouthCues, isPlayingAudio);
+  // Use enhanced audio-driven lip sync hook
+  const { morphTargetsRef, speechFeaturesRef, updateLipSync } = useAudioDrivenLipSync(
+    audioRef,
+    mouthCues,
+    isPlayingAudio
+  );
 
   useEffect(() => {
     isPlayingAudioRef.current = isPlayingAudio;
@@ -292,6 +285,7 @@ export default function AvatarController({
         index === pending.length - 1
           ? () => {
               hasActiveTimelineRef.current = false;
+              setCurrentAnimation(stateMachineRef.current.getAnimationForState());
             }
           : undefined,
     }));
@@ -311,40 +305,21 @@ export default function AvatarController({
     }
   }, [animationTimeline, isPlayingAudio, startTimelinePlayback, isMovementEnabled]);
 
-  // Map pipeline state to animation state — flushes queue on each state change
+  // Map pipeline state to Conversational State Machine
   useEffect(() => {
-    // Skip if still in greeting sequence
-    if (!hasGreetedRef.current) {
-      return;
-    }
+    if (!hasGreetedRef.current) return;
 
-    if (!isMovementEnabled) {
-      pendingTimelineRef.current = [];
-      hasActiveTimelineRef.current = false;
-      flush('idle');
-      return;
-    }
-
-    // If audio is playing, keep speaking animation regardless of pipeline state
-    if (isPlayingAudio) {
-      if (!hasActiveTimelineRef.current) {
-        const started = startTimelinePlayback();
-        if (!started) {
-          flush('speaking');
-        }
+    if (pipelineState === 'thinking') {
+      stateMachineRef.current.onThinkingStart();
+    } else if (pipelineState === 'idle') {
+      if (!isPlayingAudioRef.current) {
+         // Don't force idle if we just finished speaking (let it ReturnToIdle naturally)
+         if (!stateMachineRef.current.isTransitioning) {
+            stateMachineRef.current.forceIdle();
+         }
       }
-      return;
     }
-
-    const animationMap = {
-      idle: 'idle',
-      thinking: 'thinking',
-      speaking: 'idle',
-      error: 'idle',
-    };
-
-    flush(animationMap[pipelineState] || 'idle');
-  }, [pipelineState, isPlayingAudio, flush, startTimelinePlayback, isMovementEnabled]);
+  }, [pipelineState]);
 
   const handleModelLoaded = () => {
     if (!hasInitializedRef.current) {
@@ -353,7 +328,6 @@ export default function AvatarController({
       flush('idle');
       onAnimationComplete?.();
     }
-
     onModelLoaded?.();
   };
 
@@ -362,25 +336,33 @@ export default function AvatarController({
   const audioQueueRef = useRef([]);
   const queuedAudioIdsRef = useRef(new Set());
   const currentAudioItemRef = useRef(null);
-  const isProcessingQueueRef = useRef(false);
 
   useEffect(() => {
     const queue = new WebAudioQueue();
     webAudioQueueRef.current = queue;
     audioRef.current = queue;
 
-    queue.onPlay = () => setIsPlayingAudio(true);
+    queue.onPlay = () => {
+      setIsPlayingAudio(true);
+      stateMachineRef.current.onAudioStart();
+    };
+    
     queue.onEnded = () => {
       setIsPlayingAudio(false);
       currentAudioItemRef.current = null;
-      
+
       const hasPendingChunks = audioQueueRef.current.some(
         (item) => item.status === 'pending' || item.status === 'loading'
       );
+      
       if (!hasPendingChunks) {
+        stateMachineRef.current?.onAudioEnd?.();
         hasActiveTimelineRef.current = false;
         pendingTimelineRef.current = [];
-        flush('idle');
+      } else {
+        // Technically onEnded shouldn't fire if pending chunks > 0 with our new WebAudioQueue, 
+        // but just in case it does due to a long timeout:
+        stateMachineRef.current?.onAudioChunkEnd?.();
       }
     };
 
@@ -388,73 +370,73 @@ export default function AvatarController({
       queue.dispose();
       webAudioQueueRef.current = null;
     };
-  }, [flush]);
-
-  const releaseAudioItem = useCallback((item) => {
-    if (!item) return;
-    if (item.playTimeoutId) {
-      clearTimeout(item.playTimeoutId);
-      item.playTimeoutId = null;
-    }
   }, []);
 
-  const playNextReadyAudio = useCallback(() => {
+  // Tell state machine & queue about pending chunks to prevent premature starvation
+  const updatePendingChunksCount = useCallback(() => {
+    const pendingCount = audioQueueRef.current.filter(
+      (item) => item.status === 'pending' || item.status === 'loading'
+    ).length;
+    
+    if (webAudioQueueRef.current) {
+      webAudioQueueRef.current.setPendingChunkCount(pendingCount);
+    }
+    stateMachineRef.current.setPendingAudioChunks(pendingCount);
+  }, []);
+
+  const flushReadyBuffersToQueue = useCallback(() => {
     const queue = webAudioQueueRef.current;
     if (!queue) return false;
 
-    let played = false;
+    let flushed = false;
     while (audioQueueRef.current.length > 0) {
       const nextItem = audioQueueRef.current[0];
+
       if (nextItem.status === 'ready' && nextItem.audioBuffer) {
         audioQueueRef.current.shift();
-        
-        // SMART PRE-BUFFER: Delay chunk 0 to absorb generation latency of chunk 1
-        const isFirstChunk = 
-          (typeof nextItem.id === 'string' && nextItem.id.endsWith('_0')) || 
-          (typeof nextItem.messageId === 'string' && nextItem.messageId.endsWith('_0')) ||
-          (typeof nextItem.sourceUrl === 'string' && nextItem.sourceUrl.includes('_0.mp3'));
-          
-        const delayMs = (isFirstChunk && !queue.isPlaying) ? 600 : 0;
-        
         currentAudioItemRef.current = nextItem;
-        queue.playBuffer(nextItem.audioBuffer, delayMs);
+        queue.queueBuffer(nextItem.audioBuffer);
         setAudioGeneration((gen) => gen + 1);
-        played = true;
-        // Continue looping to eagerly queue all ready chunks!
+        flushed = true;
+        updatePendingChunksCount();
         continue;
       }
+
       if (nextItem.status === 'failed' || nextItem.cancelled) {
         audioQueueRef.current.shift();
-        releaseAudioItem(nextItem);
+        updatePendingChunksCount();
         continue;
       }
+
       break;
     }
 
-    return played;
-  }, [releaseAudioItem]);
+    return flushed;
+  }, [updatePendingChunksCount]);
 
   const stopAudioQueue = useCallback(
     ({ resetAnimation = false, updateState = true } = {}) => {
       audioQueueRef.current.forEach((item) => {
         item.cancelled = true;
-        releaseAudioItem(item);
       });
       audioQueueRef.current = [];
 
       if (currentAudioItemRef.current) {
         currentAudioItemRef.current.cancelled = true;
-        releaseAudioItem(currentAudioItemRef.current);
         currentAudioItemRef.current = null;
       }
 
       if (webAudioQueueRef.current) {
         webAudioQueueRef.current.stop();
+        webAudioQueueRef.current.setPendingChunkCount(0);
       }
 
       if (updateState) {
         setIsPlayingAudio(false);
       }
+
+      updatePendingChunksCount();
+      stateMachineRef.current.forceIdle();
 
       if (resetAnimation) {
         pendingTimelineRef.current = [];
@@ -462,22 +444,25 @@ export default function AvatarController({
         flush('idle');
       }
     },
-    [flush, releaseAudioItem]
+    [flush, updatePendingChunksCount]
   );
 
   const processAudioQueue = useCallback(() => {
-    if (isProcessingQueueRef.current || !webAudioQueueRef.current) {
+    if (!webAudioQueueRef.current) {
       return;
     }
-    isProcessingQueueRef.current = true;
 
-    // 1. Start fetching pending items in the background
+    // Process all pending -> loading concurrently
+    let startedLoading = false;
     audioQueueRef.current.forEach((item) => {
       if (item.status === 'pending') {
         item.status = 'loading';
+        startedLoading = true;
+        
         const requestUrl = normalizeAudioRequestUrl(item.sourceUrl);
         if (!requestUrl) {
           item.status = 'failed';
+          flushReadyBuffersToQueue();
           return;
         }
 
@@ -486,28 +471,31 @@ export default function AvatarController({
           .then(({ data: blob }) => {
             if (!blob) throw new Error('Received empty blob');
             if (item.cancelled) return;
-            return webAudioQueueRef.current.decode(blob);
+            return webAudioQueueRef.current?.decode(blob);
           })
           .then((audioBuffer) => {
             if (!audioBuffer || item.cancelled) return;
             item.audioBuffer = audioBuffer;
             item.status = 'ready';
-            processAudioQueue();
+            // Recursively flush when a buffer finishes decoding
+            flushReadyBuffersToQueue();
           })
           .catch((err) => {
             console.error('[AvatarController] Audio preload failed:', err);
             item.status = 'failed';
-            processAudioQueue();
+            flushReadyBuffersToQueue();
           });
       }
     });
 
-    // 2. Play the next ready item if nothing is currently playing.
-    // In WebAudioQueue, we can aggressively queue things ahead of time!
-    playNextReadyAudio();
+    if (startedLoading) {
+      updatePendingChunksCount();
+    }
 
-    isProcessingQueueRef.current = false;
-  }, [playNextReadyAudio]);
+    // Flush any already-ready buffers (e.g. from cache)
+    flushReadyBuffersToQueue();
+    
+  }, [flushReadyBuffersToQueue, updatePendingChunksCount]);
 
   const enqueueAudioItem = useCallback(
     (item) => {
@@ -531,9 +519,10 @@ export default function AvatarController({
         audioBuffer: null,
       });
 
+      updatePendingChunksCount();
       processAudioQueue();
     },
-    [processAudioQueue]
+    [processAudioQueue, updatePendingChunksCount]
   );
 
   const usesStructuredAudioItems = Array.isArray(audioItems);
@@ -543,12 +532,10 @@ export default function AvatarController({
     stopAudioQueue({ resetAnimation: true });
   }, [audioQueueResetToken, stopAudioQueue]);
 
-  // --- Stage 1: Sync incoming ordered audio items into the Queue ---
   useEffect(() => {
     if (!usesStructuredAudioItems) {
       return;
     }
-
     audioItems.forEach((item) => {
       enqueueAudioItem({
         id: item.id || item.messageId || item.url,
@@ -559,7 +546,6 @@ export default function AvatarController({
     });
   }, [audioItems, enqueueAudioItem, usesStructuredAudioItems]);
 
-  // Legacy single-URL path for callers that have not moved to audioItems.
   useEffect(() => {
     if (usesStructuredAudioItems) {
       return;
@@ -583,6 +569,8 @@ export default function AvatarController({
     };
   }, [stopAudioQueue]);
 
+  // Removed legacy onAudioPlaying effect; ConversationalStateMachine now updates deterministically in AvatarScene's useFrame.
+
   return (
     <Suspense
       fallback={
@@ -594,7 +582,11 @@ export default function AvatarController({
       <AvatarScene
         modelPath={modelPath}
         currentAnimation={currentAnimation}
+        conversationState={conversationState}
+        stateMachineRef={stateMachineRef}
         morphTargetsRef={morphTargetsRef}
+        speechFeaturesRef={speechFeaturesRef}
+        updateLipSync={updateLipSync}
         onModelLoaded={handleModelLoaded}
         onError={onError}
         audioRef={audioRef}

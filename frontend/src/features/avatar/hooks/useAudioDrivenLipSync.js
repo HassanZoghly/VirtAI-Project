@@ -1,10 +1,11 @@
 /* eslint-disable no-console */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 
-const TARGET_UPDATE_INTERVAL_MS = 1000 / 60; // Increased to 60fps for smoother muscle movement
 const NOISE_FLOOR = 0.03;
 const VISEME_SMOOTHING = 0.25; // Muscle elasticity factor
+const COARTICULATION_WINDOW_S = 0.08; // 80ms lookahead for viseme blending
+const JAW_COUPLING_FACTOR = 0.12; // How much open vowels drive jawOpen
 
 const VISEME_ID_TO_MORPH = {
   0: 'viseme_sil',
@@ -84,31 +85,28 @@ const VISEME_ALIASES = {
 };
 
 /**
- * useAudioDrivenLipSync - Enhanced lip sync with audio amplitude fallback
+ * useAudioDrivenLipSync — Synchronized lip-sync driven from the R3F useFrame loop.
  *
- * This hook provides robust lip sync that works in two modes:
- * 1. When mouthCues exist: Use precise viseme timeline
- * 2. When mouthCues are missing/empty: Drive mouth with audio amplitude analysis
+ * ARCHITECTURAL CHANGE: This hook no longer runs its own requestAnimationFrame loop.
+ * Instead, it provides an `updateLipSync(deltaTimeMs)` function that the R3F useFrame
+ * callback calls synchronously. This eliminates the dual-loop desync where lip-sync
+ * morphs were written on a different cadence than the render loop that reads them.
  *
- * Features:
- * - WebAudio AnalyserNode for real-time amplitude detection
- * - Smooth attack/release envelope to avoid jitter
- * - Drives viseme_aa (jaw open) + optional viseme_O/viseme_U blend
- * - Subtle body motion (head bob) synchronized with speech
- * - Clamps all values to [0, 1] for safety
+ * ADDITIONAL OUTPUT: Exposes `speechFeatures` — { energy, isSilentGap } — for driving
+ * procedural body motion layers (breathing intensity, gesture energy, etc.)
  *
- * @param {React.RefObject} audioRef - Reference to HTMLAudioElement
+ * @param {React.RefObject} audioRef - Reference to WebAudioQueue or HTMLAudioElement
  * @param {Array} mouthCues - Array of {start, end, value} for lip sync timeline
  * @param {boolean} isPlaying - Whether audio is currently playing
- * @returns {Object} Live refs and snapshots for morph targets/body motion
+ * @returns {Object} { morphTargetsRef, speechFeaturesRef, updateLipSync }
  */
 export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = false) {
   const morphTargetsRef = useRef({});
   const smoothedMorphsRef = useRef({}); // Internal state for muscle smoothing
-  const bodyMotionRef = useRef({ headBob: 0, chestBob: 0 });
 
-  const rafRef = useRef(null);
-  const lastUpdateTimeRef = useRef(0);
+  // Speech features for body motion
+  const speechFeaturesRef = useRef({ energy: 0, isSilentGap: false });
+
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const sourceRef = useRef(null);
@@ -117,20 +115,22 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
 
   // Smoothing state for amplitude envelope
   const smoothedAmplitudeRef = useRef(0);
-  const ATTACK_SPEED = 0.3; // How fast mouth opens
-  const RELEASE_SPEED = 0.15; // How fast mouth closes (slower for natural look)
+  const ATTACK_SPEED = 0.3;
+  const RELEASE_SPEED = 0.15;
 
-  // Body motion phase for subtle animation
-  const bodyPhaseRef = useRef(0);
+  // Prosody tracking refs
+  const lastAmpRef = useRef(0);
+  const derivRef = useRef(0);
+  const pacingRef = useRef(0);
+
+  // Binary search index hint for sorted cues
+  const lastCueIndexRef = useRef(0);
 
   // Setup WebAudio analyser when audio starts playing
   useEffect(() => {
     const audio = audioRef.current;
-
     const isWebAudioQueue = audio && typeof audio.currentTime === 'number' && audio.analyser;
 
-    // Create audio context and analyser if we are dealing with HTMLMediaElement
-    // If it's a WebAudioQueue, we use its built-in analyser.
     if (!audioContextRef.current && !isWebAudioQueue) {
       try {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -147,21 +147,19 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
         return;
       }
     } else if (isWebAudioQueue) {
-       analyserRef.current = audio.analyser;
-       const bufferLength = analyserRef.current.frequencyBinCount;
-       dataArrayRef.current = new Uint8Array(bufferLength);
-       timeDomainDataRef.current = new Uint8Array(analyserRef.current.fftSize);
+      analyserRef.current = audio.analyser;
+      const bufferLength = analyserRef.current.frequencyBinCount;
+      dataArrayRef.current = new Uint8Array(bufferLength);
+      timeDomainDataRef.current = new Uint8Array(analyserRef.current.fftSize);
     }
 
     if (!isPlaying || !audio) {
-      // Reset when not playing
       smoothedAmplitudeRef.current = 0;
-      bodyPhaseRef.current = 0;
       morphTargetsRef.current = {};
       smoothedMorphsRef.current = {};
-      bodyMotionRef.current = { headBob: 0, chestBob: 0 };
+      speechFeaturesRef.current = { energy: 0, isSilentGap: false };
+      lastCueIndexRef.current = 0;
 
-      // Cleanup: disconnect source if we stopped playing
       if (sourceRef.current) {
         try {
           sourceRef.current.disconnect();
@@ -173,8 +171,6 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
       return;
     }
 
-    // Connect audio element to analyser ONLY if it's an HTMLMediaElement.
-    // If audioRef.current is a WebAudioQueue, it already has its own analyser hooked up!
     if (audio instanceof HTMLMediaElement && audioContextRef.current) {
       try {
         sourceRef.current = audioContextRef.current.createMediaElementSource(audio);
@@ -186,7 +182,6 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
     }
 
     return () => {
-      // Cleanup: disconnect source when effect re-runs or unmounts
       if (sourceRef.current) {
         try {
           sourceRef.current.disconnect();
@@ -208,216 +203,291 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
     };
   }, []);
 
-  // Main lip sync update loop
-  useEffect(() => {
+  /**
+   * SYNCHRONOUS lip-sync update — call this from useFrame().
+   * No requestAnimationFrame, no competing loops.
+   *
+   * @param {number} deltaTimeMs — milliseconds since last frame
+   */
+  const updateLipSync = useCallback((deltaTimeMs = 16.6) => {
     if (!isPlaying || !audioRef.current) {
-      // Reset morph targets when not playing
-      morphTargetsRef.current = {};
-      smoothedMorphsRef.current = {};
-      bodyMotionRef.current = { headBob: 0, chestBob: 0 };
+      // Smoothly fade out morphs when not playing
+      const smoothed = smoothedMorphsRef.current;
+      let anyActive = false;
+      for (const key of Object.keys(smoothed)) {
+        smoothed[key] = THREE.MathUtils.lerp(smoothed[key], 0, 0.1);
+        if (smoothed[key] < 0.001) {
+          delete smoothed[key];
+        } else {
+          anyActive = true;
+        }
+      }
+      if (anyActive) {
+        morphTargetsRef.current = { ...smoothed };
+      } else {
+        morphTargetsRef.current = {};
+      }
+      speechFeaturesRef.current = { energy: 0, isSilentGap: false };
       return;
     }
 
+    const currentTime = audioRef.current.currentTime;
+    let amplitude = 0;
+
+    // Get audio amplitude if analyser is available
+    if (analyserRef.current && dataArrayRef.current && timeDomainDataRef.current) {
+      analyserRef.current.getByteTimeDomainData(timeDomainDataRef.current);
+
+      let sumSquares = 0;
+      for (let i = 0; i < timeDomainDataRef.current.length; i++) {
+        const centered = (timeDomainDataRef.current[i] - 128) / 128;
+        sumSquares += centered * centered;
+      }
+      const rms = Math.sqrt(sumSquares / timeDomainDataRef.current.length);
+      const timeAmplitude = Math.min(Math.max(rms, 0), 1);
+
+      // Frequency-based reinforcement
+      analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+      let sum = 0;
+      const startBin = 3;
+      const endBin = Math.min(30, dataArrayRef.current.length);
+      for (let i = startBin; i < endBin; i++) {
+        sum += dataArrayRef.current[i] * dataArrayRef.current[i];
+      }
+      const freqRms = Math.sqrt(sum / (endBin - startBin));
+      const freqAmplitude = Math.min(freqRms / 255, 1.0);
+
+      const blended = Math.max(timeAmplitude, freqAmplitude * 0.85);
+      amplitude = blended < NOISE_FLOOR ? 0 : (blended - NOISE_FLOOR) / (1 - NOISE_FLOOR);
+    }
+
+    // Attack/release smoothing
+    const targetAmplitude = amplitude;
+    const speed = targetAmplitude > smoothedAmplitudeRef.current ? ATTACK_SPEED : RELEASE_SPEED;
+    smoothedAmplitudeRef.current += (targetAmplitude - smoothedAmplitudeRef.current) * speed;
+    const smoothAmplitude = Math.max(0, Math.min(1, smoothedAmplitudeRef.current));
+
+    // --- PROSODY EXTRACTION ---
+    const lastAmp = lastAmpRef.current;
+    const deltaAmp = smoothAmplitude - lastAmp;
+    lastAmpRef.current = smoothAmplitude;
+
+    // Track smoothed derivative for emphasis (rapid increases in volume)
+    let deriv = derivRef.current;
+    deriv = THREE.MathUtils.lerp(deriv, deltaAmp, 0.3);
+    // Protect against NaN
+    if (Number.isNaN(deriv)) deriv = 0;
+    derivRef.current = deriv;
+
+    // Pacing (moving average of speech activity)
+    let pacing = pacingRef.current;
+    const isActive = smoothAmplitude > 0.1 ? 1.0 : 0.0;
+    pacing = THREE.MathUtils.lerp(pacing, isActive, 0.02); // Slow window (~1s)
+    if (Number.isNaN(pacing)) pacing = 0;
+    pacingRef.current = pacing;
+
+    const emphasis = Math.max(0, deriv) * 8.0; // Scale up
+
+    // Update speech features for body motion
+    speechFeaturesRef.current = {
+      energy: smoothAmplitude,
+      isSilentGap: smoothAmplitude < 0.05 && isPlaying,
+      emphasis: Math.min(1.0, emphasis),
+      pacing: pacing,
+    };
+
     const hasMouthCues = mouthCues && mouthCues.length > 0;
+    let targetMorphs = {};
 
-    const updateLipSync = (deltaTime = 16.6) => {
-      if (!audioRef.current) {
-        return;
-      }
+    if (hasMouthCues) {
+      // MODE 1: Use mouthCues with amplitude layer
+      const activeCue = findActiveCueBinary(mouthCues, currentTime, lastCueIndexRef);
 
-      const currentTime = audioRef.current.currentTime;
-      let amplitude = 0;
-
-      // Get audio amplitude if analyser is available
-      if (analyserRef.current && dataArrayRef.current && timeDomainDataRef.current) {
-        analyserRef.current.getByteTimeDomainData(timeDomainDataRef.current);
-
-        let sumSquares = 0;
-        for (let i = 0; i < timeDomainDataRef.current.length; i++) {
-          const centered = (timeDomainDataRef.current[i] - 128) / 128;
-          sumSquares += centered * centered;
-        }
-        const rms = Math.sqrt(sumSquares / timeDomainDataRef.current.length);
-        const timeAmplitude = Math.min(Math.max(rms, 0), 1);
-
-        // Optional frequency-based reinforcement to reduce sensitivity to noise
-        analyserRef.current.getByteFrequencyData(dataArrayRef.current);
-        let sum = 0;
-        const startBin = 3;
-        const endBin = Math.min(30, dataArrayRef.current.length);
-        for (let i = startBin; i < endBin; i++) {
-          sum += dataArrayRef.current[i] * dataArrayRef.current[i];
-        }
-        const freqRms = Math.sqrt(sum / (endBin - startBin));
-        const freqAmplitude = Math.min(freqRms / 255, 1.0);
-
-        const blended = Math.max(timeAmplitude, freqAmplitude * 0.85);
-        amplitude = blended < NOISE_FLOOR ? 0 : (blended - NOISE_FLOOR) / (1 - NOISE_FLOOR);
-      }
-
-      // Apply attack/release smoothing
-      const targetAmplitude = amplitude;
-      const speed = targetAmplitude > smoothedAmplitudeRef.current ? ATTACK_SPEED : RELEASE_SPEED;
-      smoothedAmplitudeRef.current += (targetAmplitude - smoothedAmplitudeRef.current) * speed;
-      const smoothAmplitude = Math.max(0, Math.min(1, smoothedAmplitudeRef.current));
-
-      // Update body motion phase (subtle oscillation)
-      bodyPhaseRef.current += 0.05;
-      const bodyOscillation = Math.sin(bodyPhaseRef.current) * 0.5 + 0.5; // [0, 1]
-
-      let targetMorphs = {};
-
-      if (hasMouthCues) {
-        // MODE 1: Use mouthCues with amplitude layer for liveliness
-        const activeCue = findActiveCue(mouthCues, currentTime);
-
-        if (activeCue) {
-          const { name: visemeName, intensity: visemeIntensity } = resolveViseme(activeCue.value);
-          const amplitudeScale = Math.min(Math.max(smoothAmplitude, 0), 1);
-          const strength = Math.min(amplitudeScale * Math.max(0.15, visemeIntensity), 1.0);
-          const jawOpen = Math.min(amplitudeScale * Math.max(0.25, visemeIntensity), 1.0);
-
-          targetMorphs = {
-            jawOpen,
-            mouthOpen: jawOpen,
-          };
-
-          if (visemeName) {
-            targetMorphs[visemeName] = strength;
-            const aliases = VISEME_ALIASES[visemeName];
-            if (aliases) {
-              for (const alias of aliases) {
-                targetMorphs[alias] = strength;
-              }
-            }
-          }
-        } else {
-          // Between cues: use amplitude-driven mouth (quieter)
-          targetMorphs = {
-            jawOpen: smoothAmplitude * 0.35,
-            mouthOpen: smoothAmplitude * 0.35,
-            viseme_aa: smoothAmplitude * 0.45,
-            viseme_oh: smoothAmplitude * 0.25,
-            viseme_ou: smoothAmplitude * 0.2,
-            viseme_O: smoothAmplitude * 0.2,
-            viseme_U: smoothAmplitude * 0.2,
-          };
-        }
-      } else {
-        // MODE 2: Pure amplitude-driven lip sync (fallback when no mouthCues)
-        const jawOpen = smoothAmplitude * 0.7; // Primary jaw movement
-        const lipRound = smoothAmplitude * 0.3; // Secondary lip rounding
-        const lipWide = smoothAmplitude * 0.18; // Tertiary lip widening
+      if (activeCue) {
+        const { name: visemeName, intensity: visemeIntensity } = resolveViseme(activeCue.value);
+        const amplitudeScale = Math.min(Math.max(smoothAmplitude, 0), 1);
+        const strength = Math.min(amplitudeScale * Math.max(0.15, visemeIntensity), 1.0);
+        const jawOpen = Math.min(amplitudeScale * Math.max(0.25, visemeIntensity), 1.0);
 
         targetMorphs = {
-          jawOpen: Math.min(jawOpen, 1.0),
-          mouthOpen: Math.min(jawOpen, 1.0),
-          viseme_aa: Math.min(jawOpen, 1.0),
-          viseme_oh: Math.min(lipRound, 1.0),
-          viseme_ou: Math.min(lipRound * 0.8, 1.0),
-          viseme_O: Math.min(lipRound * 0.8, 1.0),
-          viseme_U: Math.min(lipWide * 0.6, 1.0),
+          jawOpen,
+          mouthOpen: jawOpen,
+        };
+
+        if (visemeName) {
+          targetMorphs[visemeName] = strength;
+          const aliases = VISEME_ALIASES[visemeName];
+          if (aliases) {
+            for (const alias of aliases) {
+              targetMorphs[alias] = strength;
+            }
+          }
+        }
+      } else {
+        // Between cues: amplitude-driven mouth
+        targetMorphs = {
+          jawOpen: smoothAmplitude * 0.35,
+          mouthOpen: smoothAmplitude * 0.35,
+          viseme_aa: smoothAmplitude * 0.45,
+          viseme_oh: smoothAmplitude * 0.25,
+          viseme_ou: smoothAmplitude * 0.2,
+          viseme_O: smoothAmplitude * 0.2,
+          viseme_U: smoothAmplitude * 0.2,
         };
       }
 
-      // Apply muscle smoothing (lerp)
-      // We calculate lerp alpha based on deltaTime to be frame-rate independent
-      const lerpAlpha = Math.min(VISEME_SMOOTHING * (deltaTime / 16.67), 1.0);
-
-      const newSmoothedMorphs = { ...smoothedMorphsRef.current };
-
-      // Update existing smoothed morphs towards targets
-      Object.keys(targetMorphs).forEach((key) => {
-        const current = newSmoothedMorphs[key] || 0;
-        const target = targetMorphs[key];
-        newSmoothedMorphs[key] = THREE.MathUtils.lerp(current, target, lerpAlpha);
-      });
-
-      // Lerp morphs back to 0 if they are not in the current targetMorphs
-      Object.keys(newSmoothedMorphs).forEach((key) => {
-        if (!(key in targetMorphs)) {
-          newSmoothedMorphs[key] = THREE.MathUtils.lerp(newSmoothedMorphs[key], 0, lerpAlpha);
-          // Cleanup very small values to keep state clean
-          if (newSmoothedMorphs[key] < 0.001) {
-            delete newSmoothedMorphs[key];
+      // COARTICULATION
+      if (activeCue) {
+        const timeUntilEnd = activeCue.end - currentTime;
+        if (timeUntilEnd < COARTICULATION_WINDOW_S && timeUntilEnd > 0) {
+          const nextCue = findNextCueBinary(mouthCues, currentTime, lastCueIndexRef);
+          if (nextCue) {
+            const blendFactor = 1 - (timeUntilEnd / COARTICULATION_WINDOW_S);
+            const { name: nextViseme } = resolveViseme(nextCue.value);
+            if (nextViseme && activeCue.value !== nextCue.value) {
+              const currentVisemeName = resolveViseme(activeCue.value).name;
+              if (currentVisemeName && targetMorphs[currentVisemeName]) {
+                targetMorphs[currentVisemeName] *= (1 - blendFactor * 0.3);
+              }
+              targetMorphs[nextViseme] = (targetMorphs[nextViseme] || 0) + 0.3 * blendFactor * 0.5;
+            }
           }
         }
-      });
+      }
+    } else {
+      // MODE 2: Pure amplitude-driven lip sync
+      const jawOpen = smoothAmplitude * 0.7;
+      const lipRound = smoothAmplitude * 0.3;
+      const lipWide = smoothAmplitude * 0.18;
 
-      smoothedMorphsRef.current = newSmoothedMorphs;
-      morphTargetsRef.current = { ...newSmoothedMorphs };
-
-      // Update body motion (subtle head and chest bob)
-      const headBobAmount = smoothAmplitude * 0.015 * bodyOscillation; // Very subtle
-      const chestBobAmount = smoothAmplitude * 0.01 * bodyOscillation; // Even more subtle
-
-      bodyMotionRef.current = {
-        headBob: Math.min(headBobAmount, 0.02), // Clamp to max 2cm
-        chestBob: Math.min(chestBobAmount, 0.015), // Clamp to max 1.5cm
+      targetMorphs = {
+        jawOpen: Math.min(jawOpen, 1.0),
+        mouthOpen: Math.min(jawOpen, 1.0),
+        viseme_aa: Math.min(jawOpen, 1.0),
+        viseme_oh: Math.min(lipRound, 1.0),
+        viseme_ou: Math.min(lipRound * 0.8, 1.0),
+        viseme_O: Math.min(lipRound * 0.8, 1.0),
+        viseme_U: Math.min(lipWide * 0.6, 1.0),
       };
-    };
+    }
 
-    const runLoop = (timestamp) => {
-      if (!audioRef.current || !isPlaying) {
-        rafRef.current = null;
-        return;
+    // JAW COUPLING
+    const openVowelKeys = ['viseme_aa', 'viseme_E', 'viseme_I', 'viseme_O', 'viseme_U'];
+    let maxVowelInfluence = 0;
+    for (const vowel of openVowelKeys) {
+      if (targetMorphs[vowel]) {
+        maxVowelInfluence = Math.max(maxVowelInfluence, targetMorphs[vowel]);
       }
+    }
+    if (maxVowelInfluence > 0) {
+      targetMorphs.jawOpen = Math.min(
+        (targetMorphs.jawOpen || 0) + maxVowelInfluence * JAW_COUPLING_FACTOR,
+        1.0
+      );
+    }
 
-      const deltaTime = lastUpdateTimeRef.current ? timestamp - lastUpdateTimeRef.current : 16.6;
+    // Muscle smoothing (frame-rate independent)
+    const lerpAlpha = Math.min(VISEME_SMOOTHING * (deltaTimeMs / 16.67), 1.0);
 
-      if (
-        !lastUpdateTimeRef.current ||
-        timestamp - lastUpdateTimeRef.current >= TARGET_UPDATE_INTERVAL_MS
-      ) {
-        updateLipSync(deltaTime);
-        lastUpdateTimeRef.current = timestamp;
+    const newSmoothedMorphs = { ...smoothedMorphsRef.current };
+
+    Object.keys(targetMorphs).forEach((key) => {
+      const current = newSmoothedMorphs[key] || 0;
+      const target = targetMorphs[key];
+      newSmoothedMorphs[key] = THREE.MathUtils.lerp(current, target, lerpAlpha);
+    });
+
+    Object.keys(newSmoothedMorphs).forEach((key) => {
+      if (!(key in targetMorphs)) {
+        newSmoothedMorphs[key] = THREE.MathUtils.lerp(newSmoothedMorphs[key], 0, lerpAlpha);
+        if (newSmoothedMorphs[key] < 0.001) {
+          delete newSmoothedMorphs[key];
+        }
       }
+    });
 
-      rafRef.current = window.requestAnimationFrame(runLoop);
-    };
-
-    updateLipSync(0);
-    lastUpdateTimeRef.current = performance.now();
-    rafRef.current = window.requestAnimationFrame(runLoop);
-
-    // Cleanup
-    return () => {
-      if (rafRef.current) {
-        window.cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-      lastUpdateTimeRef.current = 0;
-    };
+    smoothedMorphsRef.current = newSmoothedMorphs;
+    morphTargetsRef.current = { ...newSmoothedMorphs };
   }, [audioRef, mouthCues, isPlaying]);
 
   return {
     morphTargetsRef,
-    bodyMotionRef,
-    // Backward-compatible snapshots for any legacy usage.
+    speechFeaturesRef,
+    updateLipSync,
+    // Backward-compatible snapshot for any legacy usage.
     morphTargets: morphTargetsRef.current,
-    bodyMotion: bodyMotionRef.current,
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// CUE LOOKUP — Binary search for O(log n) instead of O(n)
+// ═══════════════════════════════════════════════════════════════════════════════
+
 /**
- * Find the active mouth cue at current time
+ * Find the active mouth cue at current time using binary search with a hint.
+ * Cues are assumed sorted by start time.
  *
  * @param {Array} mouthCues - Array of {start, end, value} sorted by start time
  * @param {number} currentTime - Current audio time in seconds
- * @returns {Object|null} Active cue or null if no cue is active
+ * @param {React.MutableRefObject<number>} hintRef - Last known index (speeds up sequential access)
+ * @returns {Object|null} Active cue or null
  */
-function findActiveCue(mouthCues, currentTime) {
-  if (!mouthCues || mouthCues.length === 0) {
-    return null;
+function findActiveCueBinary(mouthCues, currentTime, hintRef) {
+  if (!mouthCues || mouthCues.length === 0) return null;
+
+  // Check hint first (temporal locality — usually correct or ±1)
+  const hint = hintRef.current;
+  if (hint >= 0 && hint < mouthCues.length) {
+    const cue = mouthCues[hint];
+    if (currentTime >= cue.start && currentTime < cue.end) {
+      return cue;
+    }
+    // Check next cue (common case: advancing forward)
+    if (hint + 1 < mouthCues.length) {
+      const next = mouthCues[hint + 1];
+      if (currentTime >= next.start && currentTime < next.end) {
+        hintRef.current = hint + 1;
+        return next;
+      }
+    }
   }
 
-  // Find cue where start <= currentTime < end
-  for (const cue of mouthCues) {
-    if (currentTime >= cue.start && currentTime < cue.end) {
+  // Binary search fallback
+  let lo = 0;
+  let hi = mouthCues.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >>> 1;
+    const cue = mouthCues[mid];
+    if (currentTime < cue.start) {
+      hi = mid - 1;
+    } else if (currentTime >= cue.end) {
+      lo = mid + 1;
+    } else {
+      hintRef.current = mid;
       return cue;
     }
   }
 
+  return null;
+}
+
+/**
+ * Find the next cue after current time.
+ * @param {Array} mouthCues
+ * @param {number} currentTime
+ * @param {React.MutableRefObject<number>} hintRef
+ * @returns {Object|null}
+ */
+function findNextCueBinary(mouthCues, currentTime, hintRef) {
+  if (!mouthCues || mouthCues.length === 0) return null;
+
+  // Start search from hint
+  const start = Math.max(0, hintRef.current);
+  for (let i = start; i < mouthCues.length; i++) {
+    if (mouthCues[i].start > currentTime) {
+      return mouthCues[i];
+    }
+  }
   return null;
 }
 

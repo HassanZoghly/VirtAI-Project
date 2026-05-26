@@ -80,7 +80,7 @@ export class AnimationStateMachine {
     const nextAction = this.actions[targetActionId];
     if (!nextAction) return;
 
-    const fadeDuration = meta.fadeIn || 0.25;
+    const fadeDuration = 0.5; // HARDCODED crossfade duration (Step 4: Fix Crossfading)
 
     // Configure the incoming action
     nextAction.enabled = true;

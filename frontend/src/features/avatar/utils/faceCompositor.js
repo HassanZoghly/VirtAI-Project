@@ -1,3 +1,2 @@
-// DELETED — This file is deprecated and will be removed.
-// FaceCompositor was never imported or used by any component.
-// Dead code confirmed via grep of the entire src/ tree.
+// REMOVED — Dead code. Never imported.
+// See avatar_legacy_backup/OLD_faceCompositor.js for the original.

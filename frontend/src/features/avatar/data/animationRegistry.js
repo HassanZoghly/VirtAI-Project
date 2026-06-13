@@ -1,189 +1,69 @@
+/**
+ * animationRegistry.js — Simple animation metadata.
+ *
+ * No scoring weights, no priority levels, no cooldowns.
+ * Just names, types, and paths for loading.
+ */
+
 const CACHE_BUST = import.meta.env.DEV ? `?v=${Date.now()}` : '';
 
-export const ANIMATION_REGISTRY = {
+export const ANIMATIONS = {
   idle: {
-    id: 'idle',
+    name: 'idle',
+    type: 'idle',
     path: `/models/animations/Idle/Idle.fbx${CACHE_BUST}`,
-    category: 'idle',
-    loop: 'repeat',
-    fadeIn: 0.25,
-    fadeOut: 0.25,
-    priority: 0,
-    baseWeight: 1,
-    tags: ['neutral'],
-    compatibleSets: ['standard_v1'],
-    canOverlayHeadLook: true,
-    energy: 0.1,
-    calmness: 0.9,
-    explain: 0.1,
-    confidence: 0.5,
-    gestureWidth: 0.1,
-    interruptPriority: 0,
   },
-  talk0: {
-    id: 'talk0',
+  Talk_0: {
+    name: 'Talk_0',
+    type: 'talk',
     path: `/models/animations/Talk/Talk_0.fbx${CACHE_BUST}`,
-    category: 'talk',
-    loop: 'repeat',
-    fadeIn: 0.18,
-    fadeOut: 0.18,
-    priority: 2,
-    baseWeight: 1,
-    tags: ['neutral', 'explain'],
-    compatibleSets: ['standard_v1'],
-    canOverlayHeadLook: true,
-    cooldownMs: 3000,
-    energy: 0.5,
-    calmness: 0.5,
-    explain: 0.8,
-    confidence: 0.6,
-    gestureWidth: 0.4,
-    interruptPriority: 2,
   },
-  talk1: {
-    id: 'talk1',
+  Talk_1: {
+    name: 'Talk_1',
+    type: 'talk',
     path: `/models/animations/Talk/Talk_1.fbx${CACHE_BUST}`,
-    category: 'talk',
-    loop: 'repeat',
-    fadeIn: 0.18,
-    fadeOut: 0.18,
-    priority: 2,
-    baseWeight: 1,
-    tags: ['positive', 'energetic'],
-    compatibleSets: ['standard_v1'],
-    canOverlayHeadLook: true,
-    cooldownMs: 3000,
-    energy: 0.8,
-    calmness: 0.2,
-    explain: 0.6,
-    confidence: 0.8,
-    gestureWidth: 0.7,
-    interruptPriority: 2,
   },
-  talk2: {
-    id: 'talk2',
+  Talk_2: {
+    name: 'Talk_2',
+    type: 'talk',
     path: `/models/animations/Talk/Talk_2.fbx${CACHE_BUST}`,
-    category: 'talk',
-    loop: 'repeat',
-    fadeIn: 0.18,
-    fadeOut: 0.18,
-    priority: 2,
-    baseWeight: 1,
-    tags: ['neutral', 'thoughtful'],
-    compatibleSets: ['standard_v1'],
-    canOverlayHeadLook: true,
-    cooldownMs: 3000,
-    energy: 0.4,
-    calmness: 0.7,
-    explain: 0.5,
-    confidence: 0.6,
-    gestureWidth: 0.3,
-    interruptPriority: 2,
   },
-  talk3: {
-    id: 'talk3',
+  Talk_3: {
+    name: 'Talk_3',
+    type: 'talk',
     path: `/models/animations/Talk/Talk_3.fbx${CACHE_BUST}`,
-    category: 'talk',
-    loop: 'repeat',
-    fadeIn: 0.18,
-    fadeOut: 0.18,
-    priority: 2,
-    baseWeight: 1,
-    tags: ['neutral'],
-    compatibleSets: ['standard_v1'],
-    canOverlayHeadLook: true,
-    cooldownMs: 3000,
-    energy: 0.5,
-    calmness: 0.6,
-    explain: 0.5,
-    confidence: 0.6,
-    gestureWidth: 0.5,
-    interruptPriority: 2,
   },
-  talk4: {
-    id: 'talk4',
+  Talk_4: {
+    name: 'Talk_4',
+    type: 'talk',
     path: `/models/animations/Talk/Talk_4.fbx${CACHE_BUST}`,
-    category: 'talk',
-    loop: 'repeat',
-    fadeIn: 0.18,
-    fadeOut: 0.18,
-    priority: 2,
-    baseWeight: 1,
-    tags: ['neutral'],
-    compatibleSets: ['standard_v1'],
-    canOverlayHeadLook: true,
-    cooldownMs: 3000,
-    energy: 0.6,
-    calmness: 0.5,
-    explain: 0.6,
-    confidence: 0.7,
-    gestureWidth: 0.6,
-    interruptPriority: 2,
   },
-  talk5: {
-    id: 'talk5',
+  Talk_5: {
+    name: 'Talk_5',
+    type: 'talk',
     path: `/models/animations/Talk/Talk_5.fbx${CACHE_BUST}`,
-    category: 'talk',
-    loop: 'repeat',
-    fadeIn: 0.18,
-    fadeOut: 0.18,
-    priority: 2,
-    baseWeight: 1,
-    tags: ['neutral', 'explain'],
-    compatibleSets: ['standard_v1'],
-    canOverlayHeadLook: true,
-    cooldownMs: 3000,
-    energy: 0.7,
-    calmness: 0.4,
-    explain: 0.9,
-    confidence: 0.8,
-    gestureWidth: 0.7,
-    interruptPriority: 2,
   },
-  talk6: {
-    id: 'talk6',
+  Talk_6: {
+    name: 'Talk_6',
+    type: 'talk',
     path: `/models/animations/Talk/Talk_6.fbx${CACHE_BUST}`,
-    category: 'talk',
-    loop: 'repeat',
-    fadeIn: 0.18,
-    fadeOut: 0.18,
-    priority: 2,
-    baseWeight: 1,
-    tags: ['neutral', 'explain'],
-    compatibleSets: ['standard_v1'],
-    canOverlayHeadLook: true,
-    cooldownMs: 3000,
-    energy: 0.6,
-    calmness: 0.5,
-    explain: 0.8,
-    confidence: 0.7,
-    gestureWidth: 0.6,
-    interruptPriority: 2,
   },
-  thinking: {
-    id: 'thinking',
-    path: `/models/animations/Idle/Thinking.fbx${CACHE_BUST}`,
-    category: 'thinking',
-    loop: 'repeat',
-    fadeIn: 0.25,
-    fadeOut: 0.25,
-    priority: 1,
-    baseWeight: 1,
-    tags: ['neutral', 'thinking'],
-    compatibleSets: ['standard_v1'],
-    canOverlayHeadLook: true,
-    energy: 0.2,
-    calmness: 0.8,
-    explain: 0.1,
-    confidence: 0.4,
-    gestureWidth: 0.1,
-    interruptPriority: 1,
-  }
 };
 
-export function getAnimationMeta(id) {
-  if (!id) return null;
-  // Normalize string to match registry keys (e.g. Talk_1 -> talk1)
-  const normalizedId = id.toLowerCase().replace(/_/g, '');
-  return ANIMATION_REGISTRY[normalizedId] || null;
+/**
+ * Get all animation entries of a given type.
+ * @param {'idle' | 'talk'} type
+ * @returns {Array<{ name: string, type: string, path: string }>}
+ */
+export function getAnimationsByType(type) {
+  return Object.values(ANIMATIONS).filter((a) => a.type === type);
+}
+
+/**
+ * Get a single animation entry by name.
+ * @param {string} name
+ * @returns {{ name: string, type: string, path: string } | null}
+ */
+export function getAnimation(name) {
+  return ANIMATIONS[name] || null;
 }

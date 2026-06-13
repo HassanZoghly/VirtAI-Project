@@ -13,11 +13,10 @@ const AvatarController = lazy(() => import('./AvatarController.jsx'));
  * @param {Array<object>} [props.audioItems] - Ordered TTS audio items queued by the shell
  * @param {number} [props.audioQueueResetToken] - Incremented to interrupt and clear queued audio
  * @param {{ start: number, end: number, value: number }[]} props.mouthCues - Lip sync timeline
- * @param {Array<object>} [props.animationTimeline] - Backend-provided animation timeline items
  * @param {() => void} props.onModelLoaded - Model loaded callback
- * @param {(error: Error) => void} props.onError
+ * @param {(error: Error) => void} props.onError - Error callback
  * @param {boolean} props.isMovementEnabled - Whether full body motion is enabled
- * @param {object|null} props.emotionData - Emotion data from AI response - Error callback
+ * @param {object|null} props.emotionData - Emotion data from AI response
  */
 export default function AvatarPanel({
   modelPath,
@@ -28,7 +27,6 @@ export default function AvatarPanel({
   audioItems,
   audioQueueResetToken,
   mouthCues,
-  animationTimeline,
   onModelLoaded,
   onError,
   isMovementEnabled,
@@ -63,7 +61,6 @@ export default function AvatarPanel({
             audioItems={audioItems}
             audioQueueResetToken={audioQueueResetToken}
             mouthCues={mouthCues}
-            animationTimeline={animationTimeline}
             onModelLoaded={onModelLoaded}
             onError={onError}
             emotionData={emotionData}

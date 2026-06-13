@@ -114,12 +114,7 @@ export class WebAudioQueue {
 
     const source = this.ctx.createBufferSource();
     source.buffer = audioBuffer;
-    
-    // DSP Crossfade: Transient-Aware Overlap-Add
-    // We use a GainNode per source to control the envelope
-    const gainNode = this.ctx.createGain();
-    source.connect(gainNode);
-    gainNode.connect(this.analyser);
+    source.connect(this.analyser);
 
     const now = this.ctx.currentTime;
     
@@ -127,12 +122,6 @@ export class WebAudioQueue {
     this._isStarving = false;
 
     let startAt;
-    let fadeDuration = 0.01; // Default 10ms overlap
-    const isTransient = this._detectTransient(audioBuffer);
-    
-    if (isTransient) {
-       fadeDuration = 0.002; // 2ms quick fade for consonants
-    }
 
     if (!this._isPlaying || this._nextScheduledEnd <= now) {
       // First buffer or resuming after full starvation drain
@@ -143,29 +132,17 @@ export class WebAudioQueue {
       this._arrivalJitterSum = 0;
       this._jitterSamples = 0;
       
-      // Fast fade in for the very first chunk
-      gainNode.gain.setValueAtTime(0.001, startAt);
-      gainNode.gain.exponentialRampToValueAtTime(1.0, startAt + 0.005);
-      
       if (this.onPlay) this.onPlay();
     } else {
-      // Append with overlap-add
-      startAt = this._nextScheduledEnd - fadeDuration;
-      
-      // Fade in this new buffer
-      gainNode.gain.setValueAtTime(0.001, startAt);
-      gainNode.gain.exponentialRampToValueAtTime(1.0, startAt + fadeDuration);
+      // Append gapless
+      startAt = this._nextScheduledEnd;
     }
 
     source.start(startAt);
     this._totalBuffersQueued++;
     
-    // Advance timeline (accounting for overlap)
+    // Advance timeline exactly
     this._nextScheduledEnd = startAt + audioBuffer.duration;
-    
-    // Set fade out at the end of THIS buffer so it crossfades with the next one
-    gainNode.gain.setValueAtTime(1.0, this._nextScheduledEnd - fadeDuration);
-    gainNode.gain.exponentialRampToValueAtTime(0.001, this._nextScheduledEnd);
 
     this._sourceNodes.add(source);
 
@@ -173,7 +150,6 @@ export class WebAudioQueue {
       this._sourceNodes.delete(source);
       try { 
         source.disconnect(); 
-        gainNode.disconnect();
       } catch (_) { /* ignore */ }
       
       this._checkEnd();

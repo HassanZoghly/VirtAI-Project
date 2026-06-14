@@ -102,6 +102,79 @@
   pointer-events: none;
 }
 
+/* =============== Avatar Error State =============== */
+.avatar-error-container {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  background: var(--card-bg, #1e1e1e);
+  z-index: 10;
+  padding: 2rem;
+  text-align: center;
+}
+
+.avatar-error-icon {
+  font-size: 2.5rem;
+  opacity: 0.7;
+}
+
+.avatar-error-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary, #e0e0e0);
+}
+
+.avatar-error-detail {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-tertiary, #6b6b6b);
+  max-width: 280px;
+  line-height: 1.4;
+}
+
+.avatar-retry-btn {
+  margin-top: 0.5rem;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #fff;
+  background: var(--accent-primary, #c9a040);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.avatar-retry-btn:hover {
+  background: var(--accent-hover, #d4ad4e);
+  transform: translateY(-1px);
+}
+
+.avatar-retry-btn:active {
+  transform: translateY(0);
+}
+
+.avatar-error-dev {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.7rem;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.08);
+  border: 1px solid rgba(255, 107, 107, 0.15);
+  border-radius: 6px;
+  max-width: 320px;
+  max-height: 80px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 /* =============== Top controls =============== */
 .classroom-top-controls {
   position: fixed;

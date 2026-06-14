@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { AvatarPanel } from '@/features/avatar';
 import { getAvatarById, getAvatarModelPath } from '@/features/avatar/data/avatars';
 import { ChatInput, MessageList } from '@/features/chat';
@@ -120,6 +121,17 @@ function buildWsUrl(avatarId, voiceId, sessionId) {
   return url.toString();
 }
 
+// ── Avatar lifecycle valid-transition map ────────────────────────────────────
+// Enforces: loading → scene-mounted → scene-ready (and any → failed, failed → loading)
+// 'visible' entry is forward-compatible but not currently used (scene-ready is terminal).
+const VALID_TRANSITIONS = {
+  loading:         ['scene-mounted', 'failed'],
+  'scene-mounted': ['scene-ready', 'failed'],
+  'scene-ready':   ['visible', 'failed', 'loading'],
+  visible:         ['failed', 'loading'],
+  failed:          ['loading'],
+};
+
 export default function ClassroomShell() {
   const { sessionId: urlSessionId } = useParams();
   const navigate = useNavigate();
@@ -134,6 +146,21 @@ export default function ClassroomShell() {
   const [conversationState, dispatch] = useConversationReducer();
   const session = useSessionManager(urlSessionId, navigate);
 
+  const [avatarRenderEpoch, setAvatarRenderEpoch] = useState(0);
+
+  const renderCountRef = useRef(0);
+  renderCountRef.current++;
+  if (import.meta.env.DEV) {
+    console.info(`[DIAG][ClassroomShell] 🔄 Render #${renderCountRef.current}`);
+  }
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.info('[DIAG][ClassroomShell] 🟢 MOUNTED');
+      return () => console.info('[DIAG][ClassroomShell] 🔴 UNMOUNTED');
+    }
+  }, []);
+
   const sessionList = session.sessions;
   const currentSessionId = session.currentSessionId;
   const currentSession = session.currentSession;
@@ -143,7 +170,7 @@ export default function ClassroomShell() {
   const deleteSession = session.deleteSession;
   const clearAllSessions = session.clearAllSessions;
   const renameSession = session.renameSession;
-  
+
   const WS_URL =
     status === 'success' && currentSessionId
       ? buildWsUrl(wsAvatarId, activeVoiceId, currentSessionId)
@@ -159,9 +186,36 @@ export default function ClassroomShell() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDocumentsOpen, setIsDocumentsOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
-  const [avatarLoaded, setAvatarLoaded] = useState(false);
+  // Avatar lifecycle: 'loading' | 'scene-mounted' | 'scene-ready' | 'failed'
+  const [avatarStatus, _setAvatarStatus] = useState('loading');
+  const lastSceneReadyRef = useRef(null);
+  const pendingFirstFrameRef = useRef(false);
 
-  const [avatarError, setAvatarError] = useState(false);
+  const trackedSetAvatarStatus = useCallback((nextValue, source) => {
+    _setAvatarStatus((prev) => {
+      if (prev === nextValue) return prev;
+
+      // Enforce valid lifecycle transitions
+      if (!VALID_TRANSITIONS[prev]?.includes(nextValue)) {
+        if (import.meta.env.DEV) {
+          console.warn(`[AvatarState] ⚠️ Rejected invalid transition: ${prev} → ${nextValue} (source: ${source})`);
+        }
+        return prev;
+      }
+
+      if (import.meta.env.DEV) {
+        console.info(`[DIAG][AvatarState] ${prev} → ${nextValue} (source: ${source}) @ ${new Date().toISOString()}`);
+      }
+
+      if (nextValue === 'scene-ready') {
+        lastSceneReadyRef.current = Date.now();
+      }
+
+      return nextValue;
+    });
+  }, []);
+
+  const [lastAvatarError, setLastAvatarError] = useState(null);
   const [interimTranscript, setInterimTranscript] = useState('');
   const [emotionData, setEmotionData] = useState(null);
 
@@ -316,8 +370,40 @@ export default function ClassroomShell() {
 
   const avatarData = useMemo(() => getAvatarById(activeAvatarId), [activeAvatarId]);
 
-  const handleAvatarError = useCallback(() => setAvatarError(true), []);
-  const handleAvatarLoaded = useCallback(() => setAvatarLoaded(true), []);
+  const handleAvatarError = useCallback((err) => {
+    console.error('[DIAG][ClassroomShell] ❌ handleAvatarError called:', err?.message || err);
+    trackedSetAvatarStatus('failed', 'handleAvatarError');
+    setLastAvatarError(err instanceof Error ? err : new Error(String(err || 'Unknown avatar error')));
+  }, [trackedSetAvatarStatus]);
+
+  const handleAvatarSceneMounted = useCallback(() => {
+    trackedSetAvatarStatus('scene-mounted', 'handleAvatarSceneMounted');
+    if (pendingFirstFrameRef.current) {
+      // Validation already passed — fast-track after scene-mounted commits
+      queueMicrotask(() => {
+        trackedSetAvatarStatus('scene-ready', 'fast-track-pending-validation');
+      });
+    }
+  }, [trackedSetAvatarStatus]);
+
+  const handleAvatarFirstFrameValidated = useCallback(() => {
+    pendingFirstFrameRef.current = true;
+    trackedSetAvatarStatus('scene-ready', 'handleAvatarFirstFrameValidated');
+  }, [trackedSetAvatarStatus]);
+
+  const handleAvatarRenderFailure = useCallback((err) => {
+    console.error('[DIAG][ClassroomShell] ❌ handleAvatarRenderFailure called:', err?.message || err);
+    trackedSetAvatarStatus('failed', 'handleAvatarRenderFailure');
+    setLastAvatarError(err instanceof Error ? err : new Error(String(err || 'Unknown render failure')));
+  }, [trackedSetAvatarStatus]);
+
+  const handleAvatarRetry = useCallback(() => {
+    console.info('[DIAG][ClassroomShell] 🔄 handleAvatarRetry — forcing full remount');
+    setAvatarRenderEpoch((e) => e + 1); // forces full remount
+    trackedSetAvatarStatus('loading', 'handleAvatarRetry');
+    setLastAvatarError(null);
+  }, [trackedSetAvatarStatus]);
+
   const openSettings = useCallback(() => setIsSettingsOpen(true), []);
   const closeSettings = useCallback(() => setIsSettingsOpen(false), []);
   const toggleDocuments = useCallback(() => setIsDocumentsOpen((prev) => !prev), []);
@@ -458,13 +544,12 @@ export default function ClassroomShell() {
               <PiWifiSlashFill className="status-icon-offline" />
             ) : (
               <span
-                className={`status-dot${
-                  connectionState === ConnectionState.RECONNECTING
-                    ? ' status-dot-reconnecting'
-                    : connectionState === ConnectionState.INITIALIZING
-                      ? ' status-dot-initializing'
-                      : ''
-                }`}
+                className={`status-dot${connectionState === ConnectionState.RECONNECTING
+                  ? ' status-dot-reconnecting'
+                  : connectionState === ConnectionState.INITIALIZING
+                    ? ' status-dot-initializing'
+                    : ''
+                  }`}
               />
             )}
             <span key={statusLabel} className="status-text">
@@ -480,18 +565,23 @@ export default function ClassroomShell() {
 
         <div className="split-container" id="main-content">
           <AvatarPanel
+            key={`${wsAvatarId}:${avatarRenderEpoch}`}
             modelPath={avatarModelPath}
-            avatarLoaded={avatarLoaded}
-            avatarError={avatarError}
+            avatarId={wsAvatarId}
+            avatarStatus={avatarStatus}
             pipelineState={conversationState.pipelineState}
             audioUrl={audioUrl}
             audioItems={audioItems}
             audioQueueResetToken={audioQueueResetToken}
             mouthCues={mouthCues}
-            onModelLoaded={handleAvatarLoaded}
+            onSceneMounted={handleAvatarSceneMounted}
+            onFirstFrameValidated={handleAvatarFirstFrameValidated}
+            onRenderFailure={handleAvatarRenderFailure}
             onError={handleAvatarError}
+            onRetry={handleAvatarRetry}
             emotionData={emotionData}
             isMovementEnabled={movementEnabled}
+            lastError={lastAvatarError}
           />
 
           <div className="chat-panel" key={currentSessionId || 'empty'}>

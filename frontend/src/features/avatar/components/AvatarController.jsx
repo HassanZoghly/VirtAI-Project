@@ -44,7 +44,10 @@ export default function AvatarController({
   audioQueueResetToken = 0,
   mouthCues = [],
   modelPath,
-  onModelLoaded,
+  avatarId,
+  onSceneMounted,
+  onFirstFrameValidated,
+  onRenderFailure,
   onError,
   onAnimationComplete,
   emotionData,
@@ -72,6 +75,8 @@ export default function AvatarController({
   const pipelineStateRef = useRef(pipelineState);
   const responseSpeakingRef = useRef(false);
   const endGraceTimerRef = useRef(null);
+  const chunkIntervalsRef = useRef([]);
+  const lastChunkTimeRef = useRef(0);
   
   useEffect(() => {
     pipelineStateRef.current = pipelineState;
@@ -80,7 +85,15 @@ export default function AvatarController({
         (item) => item.status === 'pending' || item.status === 'loading'
       );
       if (!hasPendingChunks && animationControllerRef.current) {
+        // Fallback for cases where audio ended before pipeline state turned idle
         animationControllerRef.current.stopTalking();
+        responseSpeakingRef.current = false;
+      }
+    } else if (pipelineState !== 'idle') {
+      // Reset chunk tracking on new session
+      if (!responseSpeakingRef.current) {
+        chunkIntervalsRef.current = [];
+        lastChunkTimeRef.current = 0;
       }
     }
   }, [pipelineState]);
@@ -118,6 +131,11 @@ export default function AvatarController({
       );
 
       if (!hasPendingChunks && pipelineStateRef.current === 'idle') {
+        const avg = chunkIntervalsRef.current.length
+          ? chunkIntervalsRef.current.reduce((a, b) => a + b, 0) / chunkIntervalsRef.current.length
+          : 1000;
+        const graceMs = Math.max(1000, avg * 1.5);
+        
         // Start grace window — if no new audio arrives, end speaking
         endGraceTimerRef.current = setTimeout(() => {
           responseSpeakingRef.current = false;
@@ -125,7 +143,7 @@ export default function AvatarController({
           if (animationControllerRef.current) {
             animationControllerRef.current.stopTalking();
           }
-        }, 1000);
+        }, graceMs);
       }
     };
 
@@ -277,6 +295,14 @@ export default function AvatarController({
       if (queuedAudioIdsRef.current.has(id)) return;
       queuedAudioIdsRef.current.add(id);
 
+      const now = performance.now();
+      if (lastChunkTimeRef.current > 0 && pipelineStateRef.current !== 'idle') {
+        const interval = now - lastChunkTimeRef.current;
+        chunkIntervalsRef.current.push(interval);
+        if (chunkIntervalsRef.current.length > 5) chunkIntervalsRef.current.shift();
+      }
+      lastChunkTimeRef.current = now;
+
       audioQueueRef.current.push({
         id,
         messageId: item.messageId || null,
@@ -336,14 +362,28 @@ export default function AvatarController({
     };
   }, [stopAudioQueue]);
 
-  // ── Model loaded handler ───────────────────────────────────────────────
-  const handleModelLoaded = () => {
+  // ── Diagnostics ────────────────────────────────────────────────────────────
+  const renderCountRef = useRef(0);
+  if (import.meta.env.DEV) {
+    renderCountRef.current++;
+    console.info(`[DIAG][AvatarController] 🔄 Render #${renderCountRef.current}. pipelineState: ${pipelineState}`);
+  }
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.info('[DIAG][AvatarController] 🟢 MOUNTED');
+      return () => console.info('[DIAG][AvatarController] 🔴 UNMOUNTED');
+    }
+  }, []);
+
+  // ── Model loaded handler ───────────────────────────────────────────────────
+  const handleModelLoaded = useCallback(() => {
     if (!hasInitializedRef.current) {
       hasInitializedRef.current = true;
       onAnimationComplete?.();
     }
-    onModelLoaded?.();
-  };
+    onSceneMounted?.();
+  }, [onAnimationComplete, onSceneMounted]);
 
   // ── Render ─────────────────────────────────────────────────────────────
   return (
@@ -356,10 +396,13 @@ export default function AvatarController({
     >
       <AvatarScene
         modelPath={modelPath}
+        avatarId={avatarId}
         animationControllerRef={animationControllerRef}
         morphTargetsRef={morphTargetsRef}
         updateLipSync={updateLipSync}
         onModelLoaded={handleModelLoaded}
+        onFirstFrameValidated={onFirstFrameValidated}
+        onRenderFailure={onRenderFailure}
         onError={onError}
         audioRef={audioRef}
         isPlaying={isPlayingAudio}

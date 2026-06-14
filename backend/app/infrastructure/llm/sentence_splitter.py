@@ -132,14 +132,7 @@ class SentenceSplitter:
                 if sentence:
                     return sentence
 
-        # ── Soft endings (only if buffer is long enough) ──────────────────────
-        if len(buf) >= SOFT_SPLIT_MIN_LENGTH:
-            for i, char in enumerate(buf):
-                if char in SOFT_SENTENCE_ENDINGS:
-                    sentence = buf[: i + 1].strip()
-                    self._buffer = buf[i + 1 :].lstrip()
-                    if sentence:
-                        return sentence
+        # Removed Soft endings to ensure we wait for full sentence boundaries
 
         # ── Force split (safety valve) ────────────────────────────────────────
         if len(buf) >= FORCE_SPLIT_LENGTH:

@@ -99,7 +99,9 @@ class LLMStage(BaseStage):
                                 context.llm_emotion = detected
                             sentence = _EMOTION_RE.sub("", sentence).strip()
                     if sentence:
-                        await context.sentence_queue.put(sentence)
+                        # Bug 1 Fix: strip all bracketed metadata before TTS
+                        clean_sentence = re.sub(r"\[.*?\]", "", sentence).strip()
+                        await context.sentence_queue.put(clean_sentence)
                 if chunk.is_done:
                     break
         except LLMException as e:

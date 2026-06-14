@@ -57,12 +57,6 @@ export class AvatarLipSyncController {
     this.faceController.setSpeaking(isSpeaking);
   }
 
-  /**
-   * Trigger an immediate blink (e.g., from saccade coupling).
-   */
-  triggerBlink() {
-    this.faceController.triggerBlink();
-  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PER-FRAME UPDATE
@@ -87,36 +81,42 @@ export class AvatarLipSyncController {
       const dict = mesh.morphTargetDictionary;
       const infl = mesh.morphTargetInfluences;
 
-      // ── Pass 1: Apply face morphs (blink, emotion, idle) ──────────────
-      for (const [name, value] of Object.entries(faceMorphs)) {
-        if (!(name in dict)) continue;
-        const idx = dict[name];
-        const clamped = Math.max(0, Math.min(1, value));
-
-        const isBlink = name === 'eyeBlinkLeft' || name === 'eyeBlinkRight';
-        const isVisemeRelated =
-          name.startsWith('viseme_') ||
-          name.includes('jaw') ||
-          name.includes('mouth');
-
-        if (isBlink) {
-          // Blinks are applied directly (no smoothing)
-          infl[idx] = clamped;
-        } else if (isVisemeRelated) {
-          // Skip — viseme/mouth morphs are handled by lip sync below
-          continue;
-        } else {
-          // Smooth transition for expression morphs
-          infl[idx] = THREE.MathUtils.lerp(
-            infl[idx],
-            clamped,
-            Math.min(dt * 6, 1)
-          );
+      // Get or build cached viseme index list for this mesh
+      let visemeIndices = this._visemeIndexCache.get(mesh);
+      if (!visemeIndices) {
+        visemeIndices = [];
+        for (const [name, index] of Object.entries(dict)) {
+          const lower = name.toLowerCase();
+          if (
+            lower.startsWith('viseme_') ||
+            lower.includes('jaw') ||
+            lower.includes('mouth')
+          ) {
+            visemeIndices.push(index);
+          }
         }
+        this._visemeIndexCache.set(mesh, visemeIndices);
       }
 
-      // ── Pass 2: Apply lip sync morphs ─────────────────────────────────
-      this._applyLipSyncToMesh(mesh, lipSyncMorphs);
+      // SINGLE pass logic: Blend face expressions and audio visemes
+      for (const [name, index] of Object.entries(dict)) {
+        const faceVal = faceMorphs[name] || 0;
+
+        if (visemeIndices.includes(index)) {
+          // Viseme/mouth target: blend expression AND lipsync additively
+          const lipVal = lipSyncMorphs[name] || 0;
+          const combined = Math.min(faceVal + lipVal, 1.0);
+          infl[index] = THREE.MathUtils.lerp(infl[index], combined, Math.min(dt * 15, 1));
+        } else {
+          // Pure expression target, preserve blinks if present directly
+          const isBlink = name === 'eyeBlinkLeft' || name === 'eyeBlinkRight';
+          if (isBlink) {
+            infl[index] = Math.max(0, Math.min(1, faceVal));
+          } else {
+            infl[index] = THREE.MathUtils.lerp(infl[index], faceVal, Math.min(dt * 6, 1));
+          }
+        }
+      }
     }
   }
 
@@ -131,57 +131,5 @@ export class AvatarLipSyncController {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // PRIVATE
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  /**
-   * Apply lip sync morph targets to a single mesh.
-   * Resets all viseme-related morphs toward zero first, then applies active values.
-   */
-  _applyLipSyncToMesh(mesh, morphTargets) {
-    if (!mesh.morphTargetDictionary || !mesh.morphTargetInfluences) {
-      return;
-    }
-
-    const dict = mesh.morphTargetDictionary;
-    const infl = mesh.morphTargetInfluences;
-    const resetSpeed = 0.15;
-
-    // Get or build cached viseme index list for this mesh
-    let visemeIndices = this._visemeIndexCache.get(mesh);
-    if (!visemeIndices) {
-      visemeIndices = [];
-      for (const [name, index] of Object.entries(dict)) {
-        const lower = name.toLowerCase();
-        if (
-          lower.startsWith('viseme_') ||
-          lower.includes('jaw') ||
-          lower.includes('mouth')
-        ) {
-          visemeIndices.push(index);
-        }
-      }
-      this._visemeIndexCache.set(mesh, visemeIndices);
-    }
-
-    // Reset all viseme morphs toward zero
-    for (const index of visemeIndices) {
-      if (index < 0 || index >= infl.length) continue;
-      const current = infl[index];
-      infl[index] = Math.max(0, Math.min(1, THREE.MathUtils.lerp(current, 0, resetSpeed)));
-    }
-
-    // Apply active lip sync values
-    for (const [visemeName, targetValue] of Object.entries(morphTargets)) {
-      const index = dict[visemeName];
-      if (index === undefined || index < 0 || index >= infl.length) continue;
-
-      const clampedTarget = Math.max(0, Math.min(1, targetValue)) * 0.75;
-      const current = infl[index];
-      infl[index] = Math.max(
-        0,
-        Math.min(1, THREE.MathUtils.lerp(current, clampedTarget, 0.15))
-      );
-    }
-  }
 }
+

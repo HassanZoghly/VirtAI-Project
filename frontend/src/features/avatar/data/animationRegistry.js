@@ -13,11 +13,6 @@ export const ANIMATIONS = {
     type: 'idle',
     path: `/models/animations/Idle/Idle.fbx${CACHE_BUST}`,
   },
-  Talk_0: {
-    name: 'Talk_0',
-    type: 'talk',
-    path: `/models/animations/Talk/Talk_0.fbx${CACHE_BUST}`,
-  },
   Talk_1: {
     name: 'Talk_1',
     type: 'talk',
@@ -27,27 +22,7 @@ export const ANIMATIONS = {
     name: 'Talk_2',
     type: 'talk',
     path: `/models/animations/Talk/Talk_2.fbx${CACHE_BUST}`,
-  },
-  Talk_3: {
-    name: 'Talk_3',
-    type: 'talk',
-    path: `/models/animations/Talk/Talk_3.fbx${CACHE_BUST}`,
-  },
-  Talk_4: {
-    name: 'Talk_4',
-    type: 'talk',
-    path: `/models/animations/Talk/Talk_4.fbx${CACHE_BUST}`,
-  },
-  Talk_5: {
-    name: 'Talk_5',
-    type: 'talk',
-    path: `/models/animations/Talk/Talk_5.fbx${CACHE_BUST}`,
-  },
-  Talk_6: {
-    name: 'Talk_6',
-    type: 'talk',
-    path: `/models/animations/Talk/Talk_6.fbx${CACHE_BUST}`,
-  },
+  }
 };
 
 /**

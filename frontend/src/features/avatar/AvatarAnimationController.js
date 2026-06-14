@@ -36,6 +36,66 @@ const CROSSFADE_DURATION = 0.5; // seconds
 const FACE_ONLY_DELAY_MIN = 4; // seconds
 const FACE_ONLY_DELAY_MAX = 9; // seconds
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Dynamically sanitize an FBX AnimationClip for safe retargeting to a GLTF model.
+ *
+ * Rules:
+ *   1. Strip ALL .scale tracks globally → prevents mesh shrinking to 0 or exploding.
+ *   2. Strip .position / .quaternion tracks ONLY for FBX wrapper/container nodes
+ *      (Armature, RootNode, Scene, __no_name__, etc.) → prevents the -90° X flip
+ *      that FBXLoader bakes into the root node.
+ *   3. PRESERVE .position / .quaternion tracks for actual skeleton bones
+ *      (Hips, Spine, LeftArm, etc.) → without these the skeleton collapses.
+ *
+ * The detection is name-based and case-insensitive. It checks the "object name"
+ * part of the track (the segment before the first dot in `objectName.property`).
+ */
+export function sanitizeClip(clip) {
+    if (!clip || !clip.tracks) return clip;
+    
+    const cleanedTracks = [];
+    
+    clip.tracks.forEach(track => {
+        const name = track.name.toLowerCase();
+        
+        // 0. Remove head/neck/eye tracks (Face is controlled by LipSyncController)
+        if (name.includes('_end') || name.includes('end_end')) return;
+        if (name.includes('neck') || name.includes('head') || name.includes('lefteye') || name.includes('righteye')) return;
+
+        // 1. Kill all global/local scale tracks (prevents zooming/shrinking)
+        if (name.includes('.scale')) return;
+        
+        // 2. Kill all tracks targeting the fake FBX wrapper nodes (prevents -90 deg flip)
+        if (name.match(/^(armature|rootnode|scene|root)\./)) return;
+        
+        // 3. Fix the Mixamo 100x Position Bug ONLY on the Hips
+        if (name.includes('.position')) {
+            // If it's the Hips (the root of the actual skeleton), scale its position to convert cm to meters
+            if (name.includes('hips')) {
+                const newTrack = track.clone();
+                for (let i = 0; i < newTrack.values.length; i++) {
+                    newTrack.values[i] *= 0.01; 
+                }
+                cleanedTracks.push(newTrack);
+                return;
+            }
+            
+            // For all other bones (Spine, Arms, etc.), we MUST STRIP their position tracks.
+            // Mixamo bakes position offsets into every bone which destroys RPM meshes.
+            // We only want their rotational data.
+            return;
+        }
+        
+        // 4. Keep all rotational data (quaternions) for the actual skeleton
+        cleanedTracks.push(track);
+    });
+    
+    clip.tracks = cleanedTracks;
+    return clip;
+}
+
 export class AvatarAnimationController {
   /**
    * @param {THREE.AnimationMixer} mixer
@@ -95,6 +155,45 @@ export class AvatarAnimationController {
     this._playAction('idle', 0);
   }
 
+  /**
+   * Dynamically set the idle clip.
+   * @param {THREE.AnimationClip} clip 
+   */
+  setIdleClip(clip) {
+    if (!clip || !this.mixer) return;
+    const sanitizedClip = sanitizeClip(clip);
+    const action = this.mixer.clipAction(sanitizedClip);
+    action.setLoop(THREE.LoopRepeat, Infinity);
+    action.clampWhenFinished = false;
+    this.actions['idle'] = action;
+  }
+
+  /**
+   * Dynamically add a talk clip.
+   * @param {string} name 
+   * @param {THREE.AnimationClip} clip 
+   */
+  addTalkClip(name, clip) {
+    if (!clip || !this.mixer || !name) return;
+    const sanitizedClip = sanitizeClip(clip);
+    const action = this.mixer.clipAction(sanitizedClip);
+    action.setLoop(THREE.LoopOnce, 1);
+    action.clampWhenFinished = true;
+    this.actions[name] = action;
+    
+    // Update talk action names
+    this.talkActionNames = Object.keys(this.actions)
+      .filter((n) => /^Talk_\d+$/i.test(n))
+      .sort();
+  }
+
+  /**
+   * Play the idle animation immediately.
+   */
+  playIdle() {
+    this._playAction('idle', CROSSFADE_DURATION);
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // PUBLIC API — called by AvatarController (React layer)
   // ═══════════════════════════════════════════════════════════════════════════
@@ -144,6 +243,38 @@ export class AvatarAnimationController {
   }
 
   /**
+   * Force idle action if nothing is playing. Called in useFrame.
+   */
+  checkAndForceIdle() {
+    let anyPlaying = false;
+    for (const key in this.actions) {
+      if (this.actions[key].isRunning() && this.actions[key].getEffectiveWeight() > 0) {
+        anyPlaying = true;
+        break;
+      }
+    }
+    if (!anyPlaying) {
+      const idleName = this._resolveActionName('idle');
+      const idleAction = this.actions[idleName];
+      if (idleAction && !idleAction.isRunning()) {
+        idleAction.reset().play();
+        idleAction.setEffectiveWeight(1);
+        
+        const prevAction = this._currentActionName ? this.actions[this._currentActionName] : null;
+        if (prevAction && prevAction !== idleAction) {
+           console.log('[AvatarAnimationController] Fading to valid idleAction:', !!idleAction);
+           if (idleAction) {
+             prevAction.crossFadeTo(idleAction, 0.5, true);
+           }
+        }
+        
+        this._currentActionName = idleName;
+        this._state = BODY_STATES.IDLE;
+      }
+    }
+  }
+
+  /**
    * @returns {string} Current FSM state
    */
   getState() {
@@ -173,7 +304,9 @@ export class AvatarAnimationController {
   _enterTalkingMovement() {
     const talkName = this._pickNextTalkAnimation();
     if (!talkName) {
-      // No talk animations loaded — stay idle
+      // No talk animations loaded — fallback to playing idle
+      this._state = BODY_STATES.IDLE;
+      this._playAction('idle', CROSSFADE_DURATION);
       return;
     }
 
@@ -281,17 +414,23 @@ export class AvatarAnimationController {
       return;
     }
 
-    // Configure and play the next action
+    // Configure and play the next action.
+    // Canonical Three.js pattern: reset() clears any cached transforms from
+    // previous playback, then fadeIn()/play() starts cleanly.
     nextAction.reset();
     nextAction.enabled = true;
     nextAction.setEffectiveTimeScale(1);
     nextAction.setEffectiveWeight(1);
 
     if (fadeDuration > 0 && prevAction && prevAction !== nextAction) {
+      // Use crossFadeFrom for smooth blending; reset() above ensures
+      // the action starts from time=0 with no residual transforms.
       nextAction.crossFadeFrom(prevAction, fadeDuration, true);
+      nextAction.play();
+    } else {
+      // No crossfade — hard cut with fadeIn(0) to immediately apply full weight.
+      nextAction.fadeIn(0).play();
     }
-
-    nextAction.play();
 
     // Stop all other actions that aren't part of the crossfade
     for (const [actionName, action] of Object.entries(this.actions)) {

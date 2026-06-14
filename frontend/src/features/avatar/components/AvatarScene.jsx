@@ -17,58 +17,23 @@
  *   - Handle emotion data directly
  */
 import { ContactShadows, Environment, OrbitControls, useFBX, useGLTF } from '@react-three/drei';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import React, { Component, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { AvatarAnimationController } from '../AvatarAnimationController';
 import { AvatarLipSyncController } from '../AvatarLipSyncController';
-import { ANIMATIONS, getAnimationsByType } from '../data/animationRegistry';
+import { getAnimationsByType } from '../data/animationRegistry';
 
 THREE.Cache.enabled = true;
 
 // ── Scene Config ─────────────────────────────────────────────────────────────
-const CAMERA_CONFIG = { position: [0, -0.5, 4], fov: 35, near: 0.1, far: 100 };
+const CAMERA_CONFIG = { position: [0, 1.5, 2.5], fov: 30, near: 0.01, far: 100 };
 const GL_CONFIG = { antialias: true, alpha: true, preserveDrawingBuffer: false };
-const AVATAR_BASE_POSITION = [0, 0, 0];
+const AVATAR_BASE_POSITION = [0, -1.5, 0];
 const AVATAR_BASE_SCALE = 1.25;
 const SAFE_MIN_DELTA = 1 / 120;
 const SAFE_MAX_DELTA = 1 / 15;
-
-// ── FBX Clip Sanitization ────────────────────────────────────────────────────
-// Strip root motion and head/eye tracks from FBX clips so body animations
-// don't fight the procedural face system or move the avatar from origin.
-
-function sanitizeClip(clip) {
-  const clean = clip.clone();
-
-  clean.tracks = clean.tracks.filter((track) => {
-    const name = track.name;
-
-    // Remove leaf bone tracks (crash prevention)
-    if (name.includes('_end') || name.includes('End_end')) return false;
-
-    // Remove head/neck/eye tracks — face is controlled by AvatarLipSyncController
-    if (
-      name.includes('Neck') ||
-      name.includes('Head') ||
-      name.includes('LeftEye') ||
-      name.includes('RightEye')
-    ) {
-      return false;
-    }
-
-    // Remove root motion translation (only for hips/root, to avoid skeleton collapse)
-    const lowerName = name.toLowerCase();
-    if (lowerName.includes('hips.position') || lowerName.includes('root.position') || lowerName.includes('armature.position')) {
-      return false;
-    }
-
-    return true;
-  });
-
-  return clean;
-}
 
 // ── Error Boundary ───────────────────────────────────────────────────────────
 
@@ -113,10 +78,35 @@ const AvatarRig = React.memo(function AvatarRig({
   const group = useRef();
   const mixerRef = useRef(null);
   const animControllerRef = useRef(null);
+  const { camera, controls } = useThree();
+
+  // ── Auto Camera Framing ────────────────────────────────────────────────
+  // REMOVED: Auto Camera Framing is deleted so OrbitControls has 100% control.
   const lipSyncControllerRef = useRef(null);
 
   // Loading state
-  const idleFBX = useFBX(ANIMATIONS.idle.path);
+  const [idleFBX, setIdleFBX] = useState(null);
+  
+  useEffect(() => {
+    const idleEntry = getAnimationsByType('idle')[0];
+    if (!idleEntry) return;
+
+    const loader = new FBXLoader();
+    loader.loadAsync(idleEntry.path)
+      .then(fbx => {
+        setIdleFBX(fbx);
+        const rawClip = fbx.animations?.[0];
+        if (rawClip && animControllerRef.current) {
+          const clip = rawClip.clone();
+          clip.name = 'idle';
+          animControllerRef.current.setIdleClip(clip);
+          animControllerRef.current.playIdle();
+        }
+      })
+      .catch(err => {
+        console.warn('[AvatarScene] Idle animation load failed, rendering without idle clip:', err);
+      });
+  }, []);
   const loadedTalkAnimationsRef = useRef(new Map());
   const [talkAnimationRevision, setTalkAnimationRevision] = useState(0);
   const talkPreloadStartedRef = useRef(false);
@@ -132,6 +122,17 @@ const AvatarRig = React.memo(function AvatarRig({
   // Audio time tracking for lip sync
   const lastAudioTimeRef = useRef(0);
   const wasPlayingAudioRef = useRef(false);
+
+  // ── Enforce Frustum Culling ────────────────────────────────────────────
+  useEffect(() => {
+      if (scene) {
+          scene.traverse((child) => {
+              if (child.isMesh) {
+                  child.frustumCulled = false;
+              }
+          });
+      }
+  }, [scene]);
 
   // ── Model setup: collect morph meshes ──────────────────────────────────
   useEffect(() => {
@@ -156,15 +157,6 @@ const AvatarRig = React.memo(function AvatarRig({
     onModelLoaded?.();
   }, [scene, onModelLoaded]);
 
-  // ── Prepare idle clip ──────────────────────────────────────────────────
-  const idleClip = useMemo(() => {
-    const raw = idleFBX?.animations?.[0];
-    if (!raw) return null;
-    const clip = sanitizeClip(raw.clone());
-    clip.name = 'idle';
-    return clip;
-  }, [idleFBX]);
-
   // ── Capture stable scene transform ─────────────────────────────────────
   useEffect(() => {
     if (!scene || stableSceneTransformRef.current.initialized) return;
@@ -175,7 +167,7 @@ const AvatarRig = React.memo(function AvatarRig({
 
   // ── Create mixer + animation controller ────────────────────────────────
   useEffect(() => {
-    if (!scene || !idleClip) return;
+    if (!scene) return;
 
     const mixer = new THREE.AnimationMixer(scene);
     mixerRef.current = mixer;
@@ -183,9 +175,16 @@ const AvatarRig = React.memo(function AvatarRig({
     const controller = new AvatarAnimationController(mixer);
     animControllerRef.current = controller;
 
-    // Register idle action
-    const idleAction = mixer.clipAction(idleClip);
-    controller.registerActions({ idle: idleAction });
+    // Check if idleFBX is already loaded (in case scene re-mounts)
+    if (idleFBX) {
+      const rawClip = idleFBX.animations?.[0];
+      if (rawClip) {
+        const clip = rawClip.clone();
+        clip.name = 'idle';
+        controller.setIdleClip(clip);
+        controller.playIdle();
+      }
+    }
 
     // Expose to parent (AvatarController)
     if (animationControllerRef) {
@@ -202,19 +201,19 @@ const AvatarRig = React.memo(function AvatarRig({
       mixerRef.current = null;
       animControllerRef.current = null;
     };
-  }, [scene, idleClip, animationControllerRef]);
+  }, [scene, idleFBX, animationControllerRef]);
 
   // ── Lazy-load talk animations ──────────────────────────────────────────
   useEffect(() => {
-    if (talkPreloadStartedRef.current || !idleClip) return;
+    if (talkPreloadStartedRef.current) return;
     talkPreloadStartedRef.current = true;
 
     let cancelled = false;
     const loader = new FBXLoader();
-    const talkAnims = getAnimationsByType('talk');
+    const talkAnimations = getAnimationsByType('talk');
 
     const loadAll = async () => {
-      for (const anim of talkAnims) {
+      for (const anim of talkAnimations) {
         if (cancelled || loadedTalkAnimationsRef.current.has(anim.name)) continue;
 
         try {
@@ -223,9 +222,8 @@ const AvatarRig = React.memo(function AvatarRig({
           loadedTalkAnimationsRef.current.set(anim.name, loaded);
           setTalkAnimationRevision((r) => r + 1);
         } catch (err) {
-          if (import.meta.env.DEV) {
-            console.warn(`[AvatarScene] Failed to load '${anim.name}':`, err);
-          }
+          console.warn(`[AvatarScene] Animation load failed for '${anim.name}' at path '${anim.path}':`, err);
+          // DO NOT crash the setup, just ignore the missing animation
         }
       }
     };
@@ -243,15 +241,13 @@ const AvatarRig = React.memo(function AvatarRig({
         clearTimeout(scheduleId);
       }
     };
-  }, [idleClip]);
+  }, [idleFBX]);
 
   // ── Register loaded talk actions with the animation controller ─────────
   useEffect(() => {
     const controller = animControllerRef.current;
-    const mixer = mixerRef.current;
-    if (!controller || !mixer || loadedTalkAnimationsRef.current.size === 0) return;
+    if (!controller || loadedTalkAnimationsRef.current.size === 0) return;
 
-    const newActions = {};
     for (const [name, fbx] of loadedTalkAnimationsRef.current.entries()) {
       // Skip if already registered
       if (controller.actions[name]) continue;
@@ -259,15 +255,10 @@ const AvatarRig = React.memo(function AvatarRig({
       const clip = fbx?.animations?.[0];
       if (!clip) continue;
 
-      const sanitized = sanitizeClip(clip.clone());
-      sanitized.name = name;
+      const clone = clip.clone();
+      clone.name = name;
 
-      const action = mixer.clipAction(sanitized);
-      newActions[name] = action;
-    }
-
-    if (Object.keys(newActions).length > 0) {
-      controller.registerActions(newActions);
+      controller.addTalkClip(name, clone);
     }
   }, [talkAnimationRevision]);
 
@@ -328,6 +319,7 @@ const AvatarRig = React.memo(function AvatarRig({
     // 3. Body animation update (mixer tick)
     if (animControllerRef.current) {
       animControllerRef.current.update(safeDt);
+      animControllerRef.current.checkAndForceIdle();
     }
 
     // 4. Face + lip sync morph application
@@ -339,8 +331,13 @@ const AvatarRig = React.memo(function AvatarRig({
     // 5. Camera stabilization
     // REMOVED: Camera zoom/pan is now fully controlled by OrbitControls. No lerping here.
 
-    // Scene position stabilization (prevent root motion drift)
-    // REMOVED: scene position lerping removed since we strip all .position tracks in sanitizeClip
+    // Lock the scene root in place to prevent the model from drifting/walking forward out of the group
+    if (stableSceneTransformRef.current.initialized) {
+      scene.position.x = THREE.MathUtils.lerp(scene.position.x, stableSceneTransformRef.current.position.x, 0.1);
+      scene.position.z = THREE.MathUtils.lerp(scene.position.z, stableSceneTransformRef.current.position.z, 0.1);
+      scene.quaternion.copy(stableSceneTransformRef.current.quaternion);
+    }
+
 
     if (group.current) {
       group.current.position.y = AVATAR_BASE_POSITION[1];
@@ -349,7 +346,7 @@ const AvatarRig = React.memo(function AvatarRig({
 
   return (
     <group ref={group} position={AVATAR_BASE_POSITION} scale={AVATAR_BASE_SCALE}>
-      <primitive object={scene} />
+      <primitive object={scene} scale={1} position={[0, -1.6, 0]} />
     </group>
   );
 });
@@ -386,15 +383,11 @@ const AvatarSceneWrapper = React.memo(function AvatarSceneWrapper(props) {
             far={4}
           />
           <OrbitControls
+            makeDefault
             enablePan={false}
-            enableZoom
-            target={[0, -0.2, 0]}
-            minDistance={1.5}
-            maxDistance={6.5}
-            minPolarAngle={Math.PI / 5}
-            maxPolarAngle={Math.PI / 2}
-            minAzimuthAngle={-Math.PI / 2.5}
-            maxAzimuthAngle={Math.PI / 2.5}
+            enableZoom={false}
+            enableRotate={false}
+            target={[0, 1.3, 0]}
           />
         </Canvas>
       </div>

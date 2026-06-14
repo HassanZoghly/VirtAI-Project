@@ -156,7 +156,6 @@ export default function ClassroomShell() {
   const [audioItems, setAudioItems] = useState([]);
   const [audioQueueResetToken, setAudioQueueResetToken] = useState(0);
   const [mouthCues, setMouthCues] = useState([]);
-  const [animationTimeline, setAnimationTimeline] = useState([]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDocumentsOpen, setIsDocumentsOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
@@ -172,7 +171,6 @@ export default function ClassroomShell() {
   const textareaRef = useRef(null);
   const scrollPositionsRef = useRef(new Map());
   const prevSessionIdRef = useRef(currentSessionId);
-  const timelineProtocolRef = useRef(null);
 
   const sessionRef = useRef(session);
   useEffect(() => {
@@ -198,8 +196,6 @@ export default function ClassroomShell() {
       }
 
       const message_id = crypto.randomUUID();
-      timelineProtocolRef.current = null;
-      setAnimationTimeline([]);
       resetAvatarAudio();
       dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
       dispatch({ type: 'PIPELINE_STATE', payload: { state: 'thinking' } });
@@ -236,7 +232,6 @@ export default function ClassroomShell() {
       // EXPLICIT MEDIA HALT: clear media state to force AvatarController to pause and unmount audio
       resetAvatarAudio();
       setMouthCues([]);
-      setAnimationTimeline([]);
 
       if (chatScrollRef.current) {
         scrollPositionsRef.current.set(prevId, chatScrollRef.current.scrollTop);
@@ -267,8 +262,12 @@ export default function ClassroomShell() {
           d.text
         );
       }),
-      onMessage('chat.delta', (d) => dispatch({ type: 'CHAT_DELTA', payload: d })),
+      onMessage('chat.delta', (d) => {
+        if (d.delta) d.delta = d.delta.replace(/\[.*?\]/g, '');
+        dispatch({ type: 'CHAT_DELTA', payload: d });
+      }),
       onMessage('chat.final', (d) => {
+        if (d.text) d.text = d.text.replace(/\[.*?\]/g, '');
         dispatch({ type: 'CHAT_FINAL', payload: d });
         sessionRef.current.addAssistantMessage(`${d.message_id}-assistant`, d.text);
         if (d.emotion) {
@@ -281,6 +280,7 @@ export default function ClassroomShell() {
         }
       }),
       onMessage('pipeline.state', (d) => dispatch({ type: 'PIPELINE_STATE', payload: d })),
+      onMessage('animation.timeline.v2', () => { /* Handled internally by audio sync */ }),
       onMessage('tts.ready', (d) => {
         const url = d?.audio?.url;
         if (!url) {
@@ -299,17 +299,6 @@ export default function ClassroomShell() {
         ]);
       }),
       onMessage('visemes.ready', (d) => setMouthCues(d.mouthCues)),
-      onMessage('animation.timeline.v2', (d) => {
-        timelineProtocolRef.current = 'v2';
-        setAnimationTimeline(Array.isArray(d.timeline) ? d.timeline : []);
-      }),
-      onMessage('animation.timeline', (d) => {
-        if (timelineProtocolRef.current === 'v2') {
-          return;
-        }
-        timelineProtocolRef.current = 'v1';
-        setAnimationTimeline(Array.isArray(d.timeline) ? d.timeline : []);
-      }),
       onMessage('error', (d) => {
         dispatch({ type: 'ERROR', payload: d });
         toast.show('error', 'Error', d.message || 'An error occurred', 5000);
@@ -499,7 +488,6 @@ export default function ClassroomShell() {
             audioItems={audioItems}
             audioQueueResetToken={audioQueueResetToken}
             mouthCues={mouthCues}
-            animationTimeline={animationTimeline}
             onModelLoaded={handleAvatarLoaded}
             onError={handleAvatarError}
             emotionData={emotionData}

@@ -70,6 +70,9 @@ export default function AvatarController({
   }, [isPlayingAudio]);
 
   const pipelineStateRef = useRef(pipelineState);
+  const responseSpeakingRef = useRef(false);
+  const endGraceTimerRef = useRef(null);
+  
   useEffect(() => {
     pipelineStateRef.current = pipelineState;
     if (pipelineState === 'idle' && !isPlayingAudioRef.current) {
@@ -95,10 +98,14 @@ export default function AvatarController({
 
     queue.onPlay = () => {
       setIsPlayingAudio(true);
+      clearTimeout(endGraceTimerRef.current);
 
-      // Signal animation controller: audio is playing → start body movement
-      if (animationControllerRef.current) {
-        animationControllerRef.current.startTalking(isMovementEnabled);
+      if (!responseSpeakingRef.current) {
+        responseSpeakingRef.current = true;
+        // Signal animation controller: audio is playing → start body movement
+        if (animationControllerRef.current) {
+          animationControllerRef.current.startTalking(isMovementEnabled);
+        }
       }
     };
 
@@ -111,10 +118,14 @@ export default function AvatarController({
       );
 
       if (!hasPendingChunks && pipelineStateRef.current === 'idle') {
-        // All audio finished AND backend is idle → stop body movement
-        if (animationControllerRef.current) {
-          animationControllerRef.current.stopTalking();
-        }
+        // Start grace window — if no new audio arrives, end speaking
+        endGraceTimerRef.current = setTimeout(() => {
+          responseSpeakingRef.current = false;
+          // All audio finished AND backend is idle → stop body movement
+          if (animationControllerRef.current) {
+            animationControllerRef.current.stopTalking();
+          }
+        }, 1000);
       }
     };
 
@@ -192,6 +203,9 @@ export default function AvatarController({
 
       updatePendingChunksCount();
 
+      clearTimeout(endGraceTimerRef.current);
+      responseSpeakingRef.current = false;
+
       // Stop body animation → return to idle
       if (animationControllerRef.current) {
         animationControllerRef.current.stopTalking();
@@ -231,6 +245,14 @@ export default function AvatarController({
             flushReadyBuffersToQueue();
           })
           .catch((err) => {
+            if (err?.response?.status === 400 || requestUrl.includes('filler')) {
+               console.warn('[Audio] Skipping filler audio due to 400 error or missing asset:', err);
+               // Gracefully ignore and let the queue proceed
+               item.status = 'failed';
+               item.cancelled = true; // prevent it from blocking
+               flushReadyBuffersToQueue();
+               return;
+            }
             console.error('[AvatarController] Audio preload failed:', err);
             item.status = 'failed';
             flushReadyBuffersToQueue();

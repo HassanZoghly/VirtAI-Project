@@ -414,8 +414,6 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
     morphTargetsRef,
     speechFeaturesRef,
     updateLipSync,
-    // Backward-compatible snapshot for any legacy usage.
-    morphTargets: morphTargetsRef.current,
   };
 }
 

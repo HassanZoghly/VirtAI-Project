@@ -32,7 +32,11 @@ def is_valid_audio_message_id(message_id: str) -> bool:
         return False
 
     parts = message_id.split("_")
-    if not parts or parse_uuid(parts[0]) is None:
+    if not parts:
+        return False
+    if parts[0] == "filler":
+        return len(parts) >= 2 and parts[1].isdigit()
+    if parse_uuid(parts[0]) is None:
         return False
     if len(parts) == 1:
         return True

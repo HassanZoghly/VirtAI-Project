@@ -64,6 +64,18 @@ export class WebAudioQueue {
     return this._sourceNodes.size + this._pendingChunkCount;
   }
 
+  get hasPendingBuffers() {
+    return this._pendingChunkCount > 0;
+  }
+
+  get hasScheduledAudio() {
+    return this._sourceNodes.size > 0;
+  }
+
+  get utteranceActive() {
+    return this._isPlaying || this._pendingChunkCount > 0 || this._sourceNodes.size > 0;
+  }
+
   /**
    * Calculates dynamic safety buffering threshold based on network jitter.
    */
@@ -150,7 +162,7 @@ export class WebAudioQueue {
       this._sourceNodes.delete(source);
       try { 
         source.disconnect(); 
-      } catch (_) { /* ignore */ }
+      } catch { /* ignore */ }
       
       this._checkEnd();
     };
@@ -184,7 +196,8 @@ export class WebAudioQueue {
          isPlaying: this.isPlaying,
          isStarving: this._isStarving,
          leadTime: this.bufferLeadTimeSeconds,
-         queueDepth: this.queueDepth
+         queueDepth: this.queueDepth,
+         utteranceActive: this.utteranceActive
      };
   }
 
@@ -213,7 +226,7 @@ export class WebAudioQueue {
         source.onended = null;
         source.stop();
         source.disconnect();
-      } catch (_) {}
+      } catch {}
     }
     this._sourceNodes.clear();
     this._isPlaying = false;
@@ -226,7 +239,7 @@ export class WebAudioQueue {
 
   dispose() {
     this.stop();
-    try { this.analyser.disconnect(); } catch (_) {}
+    try { this.analyser.disconnect(); } catch {}
     this.ctx.close().catch(() => {});
   }
 }

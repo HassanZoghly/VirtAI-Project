@@ -1,6 +1,6 @@
-/* eslint-disable no-console */
 import { AvatarPanel } from '@/features/avatar';
 import { getAvatarById, getAvatarModelPath } from '@/features/avatar/data/avatars';
+import { isAvatarDebugEnabled } from '@/features/avatar/utils/avatarFirstFrameValidation';
 import { ChatInput, MessageList } from '@/features/chat';
 import { SettingsDrawer, useSessionManager } from '@/features/session';
 import { DocumentsDrawer } from '@/features/documents/components/DocumentsDrawer';
@@ -12,6 +12,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { PiGearFill, PiWifiSlashFill } from 'react-icons/pi';
 import { useNavigate, useParams } from 'react-router-dom';
+import {
+  AVATAR_LIFECYCLE_EVENTS,
+  AVATAR_STATUS,
+  emitAvatarLifecycleTelemetry,
+  installAvatarLifecycleDebugControls,
+  resolveAvatarLifecycleTransition,
+} from './avatarLifecycle';
 import { SCROLL_STICK_THRESHOLD_PX } from './constants';
 
 
@@ -121,17 +128,6 @@ function buildWsUrl(avatarId, voiceId, sessionId) {
   return url.toString();
 }
 
-// ── Avatar lifecycle valid-transition map ────────────────────────────────────
-// Enforces: loading → scene-mounted → scene-ready (and any → failed, failed → loading)
-// 'visible' entry is forward-compatible but not currently used (scene-ready is terminal).
-const VALID_TRANSITIONS = {
-  loading:         ['scene-mounted', 'failed'],
-  'scene-mounted': ['scene-ready', 'failed'],
-  'scene-ready':   ['visible', 'failed', 'loading'],
-  visible:         ['failed', 'loading'],
-  failed:          ['loading'],
-};
-
 export default function ClassroomShell() {
   const { sessionId: urlSessionId } = useParams();
   const navigate = useNavigate();
@@ -146,20 +142,30 @@ export default function ClassroomShell() {
   const [conversationState, dispatch] = useConversationReducer();
   const session = useSessionManager(urlSessionId, navigate);
 
+  const avatarDebugEnabled = isAvatarDebugEnabled();
   const [avatarRenderEpoch, setAvatarRenderEpoch] = useState(0);
 
+  useEffect(() => {
+    if (avatarDebugEnabled) {
+      console.info(`[DIAG][ClassroomShell] 🔄 avatarRenderEpoch changed to: ${avatarRenderEpoch}`);
+    }
+  }, [avatarRenderEpoch, avatarDebugEnabled]);
+
   const renderCountRef = useRef(0);
-  renderCountRef.current++;
-  if (import.meta.env.DEV) {
-    console.info(`[DIAG][ClassroomShell] 🔄 Render #${renderCountRef.current}`);
-  }
+  useEffect(() => {
+    renderCountRef.current++;
+    if (avatarDebugEnabled) {
+      console.info(`[DIAG][ClassroomShell] 🔄 Render #${renderCountRef.current}`);
+    }
+  });
 
   useEffect(() => {
-    if (import.meta.env.DEV) {
+    if (avatarDebugEnabled) {
       console.info('[DIAG][ClassroomShell] 🟢 MOUNTED');
       return () => console.info('[DIAG][ClassroomShell] 🔴 UNMOUNTED');
     }
-  }, []);
+    return undefined;
+  }, [avatarDebugEnabled]);
 
   const sessionList = session.sessions;
   const currentSessionId = session.currentSessionId;
@@ -187,33 +193,48 @@ export default function ClassroomShell() {
   const [isDocumentsOpen, setIsDocumentsOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
   // Avatar lifecycle: 'loading' | 'scene-mounted' | 'scene-ready' | 'failed'
-  const [avatarStatus, _setAvatarStatus] = useState('loading');
+  const [avatarStatus, _setAvatarStatus] = useState(AVATAR_STATUS.LOADING);
   const lastSceneReadyRef = useRef(null);
-  const pendingFirstFrameRef = useRef(false);
 
-  const trackedSetAvatarStatus = useCallback((nextValue, source) => {
+  const trackedApplyAvatarLifecycleEvent = useCallback((event, source) => {
     _setAvatarStatus((prev) => {
-      if (prev === nextValue) return prev;
+      const transition = resolveAvatarLifecycleTransition(prev, event);
+      emitAvatarLifecycleTelemetry({
+        avatarId: wsAvatarId,
+        lifecycleState: transition.status,
+        event,
+        source,
+        previousStatus: prev,
+        nextStatus: transition.status,
+        changed: transition.changed,
+        rejected: !!transition.rejected,
+        stale: !!transition.stale,
+        failureReason:
+          event === AVATAR_LIFECYCLE_EVENTS.FAILED ? 'UNKNOWN' : null,
+      });
 
-      // Enforce valid lifecycle transitions
-      if (!VALID_TRANSITIONS[prev]?.includes(nextValue)) {
-        if (import.meta.env.DEV) {
-          console.warn(`[AvatarState] ⚠️ Rejected invalid transition: ${prev} → ${nextValue} (source: ${source})`);
+      if (!transition.changed) {
+        if (avatarDebugEnabled) {
+          if (transition.rejected) {
+            console.warn(`[AvatarState] ⚠️ Rejected invalid event: ${prev} + ${event} (source: ${source})`);
+          } else if (transition.stale) {
+            console.info(`[DIAG][AvatarState] Ignored stale event: ${prev} + ${event} (source: ${source})`);
+          }
         }
         return prev;
       }
 
-      if (import.meta.env.DEV) {
-        console.info(`[DIAG][AvatarState] ${prev} → ${nextValue} (source: ${source}) @ ${new Date().toISOString()}`);
+      if (avatarDebugEnabled) {
+        console.info(`[DIAG][AvatarState] ${prev} → ${transition.status} (event: ${event}, source: ${source}) @ ${new Date().toISOString()}`);
       }
 
-      if (nextValue === 'scene-ready') {
+      if (transition.status === AVATAR_STATUS.SCENE_READY) {
         lastSceneReadyRef.current = Date.now();
       }
 
-      return nextValue;
+      return transition.status;
     });
-  }, []);
+  }, [avatarDebugEnabled, wsAvatarId]);
 
   const [lastAvatarError, setLastAvatarError] = useState(null);
   const [interimTranscript, setInterimTranscript] = useState('');
@@ -237,8 +258,8 @@ export default function ClassroomShell() {
     setAudioQueueResetToken((token) => token + 1);
   }, []);
 
-  const commitAndSend = useCallback(
-    async (text) => {
+  const ensureSessionAndSend = useCallback(
+    async (sendAction) => {
       let activeId = currentSessionId;
       if (!activeId) {
         toast.show('info', 'Starting chat', 'Initializing conversation...', 2000);
@@ -248,34 +269,33 @@ export default function ClassroomShell() {
           return;
         }
       }
-
-      const message_id = crypto.randomUUID();
-      resetAvatarAudio();
-      dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
-      dispatch({ type: 'PIPELINE_STATE', payload: { state: 'thinking' } });
-      sessionRef.current.addUserMessage(
-        { id: message_id, role: 'user', content: text, timestamp: Date.now() },
-        text
-      );
-      send({ type: 'chat.user_message', data: { message_id, text } });
+      sendAction(activeId);
     },
-    [dispatch, send, currentSessionId, createNewSession, resetAvatarAudio]
+    [currentSessionId, createNewSession]
+  );
+
+  const commitAndSend = useCallback(
+    (text) => {
+      ensureSessionAndSend(() => {
+        const message_id = crypto.randomUUID();
+        resetAvatarAudio();
+        dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
+        dispatch({ type: 'PIPELINE_STATE', payload: { state: 'thinking' } });
+        sessionRef.current.addUserMessage(
+          { id: message_id, role: 'user', content: text, timestamp: Date.now() },
+          text
+        );
+        send({ type: 'chat.user_message', data: { message_id, text } });
+      });
+    },
+    [dispatch, send, ensureSessionAndSend, resetAvatarAudio]
   );
 
   const safeSend = useCallback(
-    async (message) => {
-      let activeId = currentSessionId;
-      if (!activeId) {
-        toast.show('info', 'Starting chat', 'Initializing conversation...', 2000);
-        activeId = await createNewSession();
-        if (!activeId) {
-          toast.show('error', 'Error', 'Failed to initialize session');
-          return;
-        }
-      }
-      send(message);
+    (message) => {
+      ensureSessionAndSend(() => send(message));
     },
-    [currentSessionId, createNewSession, send]
+    [ensureSessionAndSend, send]
   );
 
   // Save / restore scroll position on session switch
@@ -371,38 +391,77 @@ export default function ClassroomShell() {
   const avatarData = useMemo(() => getAvatarById(activeAvatarId), [activeAvatarId]);
 
   const handleAvatarError = useCallback((err) => {
-    console.error('[DIAG][ClassroomShell] ❌ handleAvatarError called:', err?.message || err);
-    trackedSetAvatarStatus('failed', 'handleAvatarError');
+    if (avatarDebugEnabled) {
+      console.error('[DIAG][ClassroomShell] ❌ handleAvatarError called:', err?.message || err);
+    }
+    trackedApplyAvatarLifecycleEvent(AVATAR_LIFECYCLE_EVENTS.FAILED, 'handleAvatarError');
     setLastAvatarError(err instanceof Error ? err : new Error(String(err || 'Unknown avatar error')));
-  }, [trackedSetAvatarStatus]);
+  }, [avatarDebugEnabled, trackedApplyAvatarLifecycleEvent]);
 
   const handleAvatarSceneMounted = useCallback(() => {
-    trackedSetAvatarStatus('scene-mounted', 'handleAvatarSceneMounted');
-    if (pendingFirstFrameRef.current) {
-      // Validation already passed — fast-track after scene-mounted commits
-      queueMicrotask(() => {
-        trackedSetAvatarStatus('scene-ready', 'fast-track-pending-validation');
-      });
-    }
-  }, [trackedSetAvatarStatus]);
+    trackedApplyAvatarLifecycleEvent(
+      AVATAR_LIFECYCLE_EVENTS.SCENE_MOUNTED,
+      'handleAvatarSceneMounted'
+    );
+  }, [trackedApplyAvatarLifecycleEvent]);
 
   const handleAvatarFirstFrameValidated = useCallback(() => {
-    pendingFirstFrameRef.current = true;
-    trackedSetAvatarStatus('scene-ready', 'handleAvatarFirstFrameValidated');
-  }, [trackedSetAvatarStatus]);
+    trackedApplyAvatarLifecycleEvent(
+      AVATAR_LIFECYCLE_EVENTS.FIRST_FRAME_VALIDATED,
+      'handleAvatarFirstFrameValidated'
+    );
+  }, [trackedApplyAvatarLifecycleEvent]);
 
   const handleAvatarRenderFailure = useCallback((err) => {
-    console.error('[DIAG][ClassroomShell] ❌ handleAvatarRenderFailure called:', err?.message || err);
-    trackedSetAvatarStatus('failed', 'handleAvatarRenderFailure');
+    if (avatarDebugEnabled) {
+      console.error('[DIAG][ClassroomShell] ❌ handleAvatarRenderFailure called:', err?.message || err);
+    }
+    trackedApplyAvatarLifecycleEvent(AVATAR_LIFECYCLE_EVENTS.FAILED, 'handleAvatarRenderFailure');
     setLastAvatarError(err instanceof Error ? err : new Error(String(err || 'Unknown render failure')));
-  }, [trackedSetAvatarStatus]);
+  }, [avatarDebugEnabled, trackedApplyAvatarLifecycleEvent]);
 
   const handleAvatarRetry = useCallback(() => {
-    console.info('[DIAG][ClassroomShell] 🔄 handleAvatarRetry — forcing full remount');
+    if (avatarDebugEnabled) {
+      console.info('[DIAG][ClassroomShell] 🔄 handleAvatarRetry — forcing full remount');
+    }
+    lastSceneReadyRef.current = null;
     setAvatarRenderEpoch((e) => e + 1); // forces full remount
-    trackedSetAvatarStatus('loading', 'handleAvatarRetry');
+    trackedApplyAvatarLifecycleEvent(AVATAR_LIFECYCLE_EVENTS.RETRY, 'handleAvatarRetry');
     setLastAvatarError(null);
-  }, [trackedSetAvatarStatus]);
+  }, [avatarDebugEnabled, trackedApplyAvatarLifecycleEvent, setAvatarRenderEpoch, setLastAvatarError]);
+
+  useEffect(() => {
+    return installAvatarLifecycleDebugControls({
+      onRetry: handleAvatarRetry,
+    }) || undefined;
+  }, [handleAvatarRetry]);
+
+  useEffect(() => {
+    if (avatarStatus !== AVATAR_STATUS.SCENE_READY) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const promoteToVisible = () => {
+      if (!cancelled) {
+        trackedApplyAvatarLifecycleEvent(AVATAR_LIFECYCLE_EVENTS.VISIBLE, 'sceneReadyPaint');
+      }
+    };
+
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      const frameId = window.requestAnimationFrame(promoteToVisible);
+      return () => {
+        cancelled = true;
+        window.cancelAnimationFrame(frameId);
+      };
+    }
+
+    const timerId = setTimeout(promoteToVisible, 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timerId);
+    };
+  }, [avatarStatus, trackedApplyAvatarLifecycleEvent]);
 
   const openSettings = useCallback(() => setIsSettingsOpen(true), []);
   const closeSettings = useCallback(() => setIsSettingsOpen(false), []);

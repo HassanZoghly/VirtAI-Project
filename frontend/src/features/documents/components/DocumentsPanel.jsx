@@ -1,5 +1,5 @@
 import { useDocumentList } from '../useDocumentList';
-import { FiFileText, FiTrash2, FiClock, FiCheckCircle, FiXCircle, FiLoader, FiX } from 'react-icons/fi';
+import { FiFileText, FiTrash2, FiClock, FiCheckCircle, FiXCircle, FiLoader } from 'react-icons/fi';
 import { UploadTab } from './UploadTab';
 import './DocumentsPanel.css';
 

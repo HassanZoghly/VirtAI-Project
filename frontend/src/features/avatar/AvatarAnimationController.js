@@ -256,6 +256,11 @@ export class AvatarAnimationController {
     if (!anyPlaying) {
       const idleName = this._resolveActionName('idle');
       const idleAction = this.actions[idleName];
+      if (!idleAction) {
+        // It's normal for the idle action to be missing during initial async loading.
+        // We just return silently.
+        return;
+      }
       if (idleAction && !idleAction.isRunning()) {
         idleAction.reset().play();
         idleAction.setEffectiveWeight(1);
@@ -398,6 +403,11 @@ export class AvatarAnimationController {
     const normalizedName = this._resolveActionName(name);
     const nextAction = this.actions[normalizedName];
     if (!nextAction) {
+      if (normalizedName !== 'idle') {
+        console.warn(`[AvatarAnimationController] Action ${name} not found. Safely falling back to idle.`);
+        this._state = BODY_STATES.IDLE;
+        this._playAction('idle', fadeDuration);
+      }
       return;
     }
 
@@ -433,7 +443,7 @@ export class AvatarAnimationController {
     }
 
     // Stop all other actions that aren't part of the crossfade
-    for (const [actionName, action] of Object.entries(this.actions)) {
+    for (const action of Object.values(this.actions)) {
       if (action !== nextAction && action !== prevAction) {
         action.stop();
         action.enabled = false;

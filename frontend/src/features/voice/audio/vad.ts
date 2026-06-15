@@ -54,6 +54,8 @@ export interface VADProcessor {
   getState(): 'silence' | 'speech' | 'pending';
 }
 
+import { calculateRMSEnergy } from './vadMath';
+
 /**
  * Voice Activity Detector implementation using RMS energy analysis
  *
@@ -104,7 +106,7 @@ export class VoiceActivityDetector implements VADProcessor {
    */
   processAudioChunk(audioData: Float32Array): VADResult {
     // Calculate RMS energy (Requirement 2.1)
-    const energy = this.calculateRMSEnergy(audioData);
+    const energy = calculateRMSEnergy(audioData);
 
     // Determine if speech or silence (Requirements 2.2, 2.3)
     const isSpeech = energy > this.config.silenceThreshold;
@@ -150,38 +152,7 @@ export class VoiceActivityDetector implements VADProcessor {
     };
   }
 
-  /**
-   * Calculate RMS (Root Mean Square) energy from audio samples
-   *
-   * RMS energy is calculated as: sqrt(sum(sample^2) / sample_count)
-   * This provides a measure of the audio signal's power/loudness.
-   *
-   * @param audioData - Float32Array of audio samples
-   * @returns RMS energy value between 0.0 and 1.0
-   *
-   * Requirements:
-   * - 2.1: Calculate RMS energy of audio samples
-   * - 14.3: Return value between 0.0 and 1.0
-   */
-  private calculateRMSEnergy(audioData: Float32Array): number {
-    if (audioData.length === 0) {
-      return 0.0;
-    }
-
-    let sumOfSquares = 0.0;
-
-    // Calculate sum of squared samples
-    for (let i = 0; i < audioData.length; i++) {
-      const sample = audioData[i];
-      sumOfSquares += sample * sample;
-    }
-
-    // Calculate RMS: sqrt(mean of squares)
-    const rms = Math.sqrt(sumOfSquares / audioData.length);
-
-    // Ensure value is between 0.0 and 1.0 (Requirement 14.3)
-    return Math.min(1.0, Math.max(0.0, rms));
-  }
+    // Use calculateRMSEnergy from vadMath.ts directly since we removed the private method
 
   /**
    * Reset the VAD state to initial conditions

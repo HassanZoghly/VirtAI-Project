@@ -21,17 +21,23 @@ function validateSelectedFile(file) {
 /* ── Per-file mini progress bar shown inline in the file list ── */
 function FileProgressBar({ progress, stage, error }) {
   const [displayProgress, setDisplayProgress] = useState(0);
+  const [prevProgress, setPrevProgress] = useState(progress);
+
+  if (progress !== prevProgress) {
+    setPrevProgress(progress);
+    if (progress > 0 && displayProgress > progress) {
+      setDisplayProgress(progress);
+    }
+  }
 
   useEffect(() => {
     if (error) return;
     if (stage === 'COMPLETE') {
-      setDisplayProgress(100);
-      return;
+      const timer = setTimeout(() => setDisplayProgress(100), 0);
+      return () => clearTimeout(timer);
     }
     if (progress > 0) {
-      if (displayProgress > progress) {
-        setDisplayProgress(progress);
-      } else if (progress > displayProgress) {
+      if (progress > displayProgress) {
         const step = (progress - displayProgress) * 0.18;
         const timer = requestAnimationFrame(() => {
           setDisplayProgress(prev => Math.min(prev + Math.max(step, 0.5), progress));
@@ -176,17 +182,19 @@ export function UploadTab({ onUploaded, onSkip, sessionId }) {
     setFiles(e.dataTransfer.files);
   };
 
-  const removeFile = (fileName) => {
+  const removeFile = useCallback((fileName) => {
     setSelectedFiles(prev => prev.filter(f => f.name !== fileName));
-    const newErrors = { ...localErrors };
-    delete newErrors[fileName];
-    setLocalErrors(newErrors);
+    setLocalErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors[fileName];
+      return newErrors;
+    });
     setFileStates(prev => {
       const next = { ...prev };
       delete next[fileName];
       return next;
     });
-  };
+  }, []);
 
   const handleUpload = useCallback(async () => {
     if (selectedFiles.length === 0) return;
@@ -219,7 +227,7 @@ export function UploadTab({ onUploaded, onSkip, sessionId }) {
 
         // Trigger Knowledge Base refresh after EACH successful file
         if (onUploaded) onUploaded();
-      } catch (err) {
+      } catch {
         // Error state is already set via onProgress callback
         // Stop the queue on error
         break;
@@ -227,7 +235,7 @@ export function UploadTab({ onUploaded, onSkip, sessionId }) {
     }
 
     setIsProcessing(false);
-  }, [selectedFiles, fileStates, sessionId, onUploaded]);
+  }, [selectedFiles, fileStates, sessionId, onUploaded, removeFile]);
 
   const handleCancel = () => {
     cancelRef.current = true;

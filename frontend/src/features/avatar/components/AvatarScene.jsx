@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * AvatarScene.jsx — Dumb Three.js renderer.
  *
@@ -16,21 +15,36 @@
  *   - Process audio
  *   - Handle emotion data directly
  */
-import { ContactShadows, Environment, OrbitControls, useFBX, useGLTF } from '@react-three/drei';
+import { ContactShadows, Environment, OrbitControls, useGLTF } from '@react-three/drei';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import React, { Component, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { AvatarAnimationController } from '../AvatarAnimationController';
 import { AvatarLipSyncController } from '../AvatarLipSyncController';
-import { getAnimationsByType } from '../data/animationRegistry';
+import {
+  formatMissingTalkAnimationsWarning,
+  getAnimationsByType,
+  getMissingTalkAnimationNames,
+} from '../data/animationRegistry';
 import { getAvatarRigProfile } from '../data/avatarRigProfiles';
 import { getCameraPreset } from '../data/cameraPresets';
+import {
+  FIRST_FRAME_VALIDATION_ACTIONS,
+  captureAvatarFailureScreenshot,
+  computeAvatarCameraFit,
+  emitAvatarFailureScreenshot,
+  emitAvatarVisibilityTelemetry,
+  evaluateAvatarFirstFrameValidation,
+  hasVisibleFramebufferPixels,
+  isAvatarDebugEnabled,
+} from '../utils/avatarFirstFrameValidation';
+import { logger } from '@/shared/utils/logger';
 
 THREE.Cache.enabled = true;
 
 // ── Scene Config ─────────────────────────────────────────────────────────────
-const GL_CONFIG = { antialias: true, alpha: true, preserveDrawingBuffer: false };
+const GL_CONFIG = { antialias: true, alpha: true, preserveDrawingBuffer: isAvatarDebugEnabled() };
 // NOTE: Avatar positioning is now controlled SOLELY by avatarRigProfiles.js.
 // Do NOT add additional hardcoded offsets here.
 const SAFE_MIN_DELTA = 1 / 120;
@@ -47,15 +61,19 @@ class AvatarErrorBoundary extends Component {
     return { hasError: true, error: err };
   }
   componentDidCatch(err, errorInfo) {
-    console.error('[DIAG][AvatarErrorBoundary] ❌ Caught render error:', err.message);
-    console.error('[DIAG][AvatarErrorBoundary] Component stack:', errorInfo?.componentStack);
+    if (isAvatarDebugEnabled()) {
+      console.error('[DIAG][AvatarErrorBoundary] ❌ Caught render error:', err.message);
+      console.error('[DIAG][AvatarErrorBoundary] Component stack:', errorInfo?.componentStack);
+    }
     if (this.props.onError) {
       this.props.onError(err);
     }
   }
   render() {
     if (this.state.hasError) {
-      console.warn('[DIAG][AvatarErrorBoundary] Rendering fallback. Error was:', this.state.error?.message);
+      if (isAvatarDebugEnabled()) {
+        console.warn('[DIAG][AvatarErrorBoundary] Rendering fallback. Error was:', this.state.error?.message);
+      }
       return this.props.fallback || null;
     }
     return this.props.children;
@@ -73,16 +91,21 @@ const AvatarRig = React.memo(function AvatarRig({
   onModelLoaded,
   audioRef,
   isPlaying,
-  isMovementEnabled = true,
   emotionData,
+  avatarLifecycleState,
   onFirstFrameValidated,
   onRenderFailure,
 }) {
   const renderCountRef = useRef(0);
-  renderCountRef.current++;
+  useEffect(() => {
+    if (isAvatarDebugEnabled()) {
+      renderCountRef.current++;
+      console.info(`[DIAG][AvatarRig] 🔄 Render #${renderCountRef.current} with modelPath:`, modelPath, 'avatarId:', avatarId);
+    }
+  });
 
   useEffect(() => {
-    if (import.meta.env.DEV) {
+    if (isAvatarDebugEnabled()) {
       console.info('[DIAG][AvatarRig] 🟢 MOUNTED. avatarId:', avatarId);
       return () => console.info('[DIAG][AvatarRig] 🔴 UNMOUNTED');
     }
@@ -93,18 +116,15 @@ const AvatarRig = React.memo(function AvatarRig({
     // Default fallback - moved Y up from -1.25 to -0.9 so the head is closer to the camera target (1.3)
     return getAvatarRigProfile(avatarId) || { position: [0, -0.9, 0], scale: 1.25 };
   }, [avatarId]);
-  if (import.meta.env.DEV) {
-    console.info(`[DIAG][AvatarRig] 🔄 Render #${renderCountRef.current} with modelPath:`, modelPath, 'avatarId:', avatarId);
-  }
 
   const { scene } = useGLTF(modelPath);
-  if (import.meta.env.DEV) {
+  if (isAvatarDebugEnabled()) {
     console.info('[DIAG][AvatarRig]', scene ? '✅ useGLTF returned scene' : '❌ useGLTF returned null', 'children:', scene?.children?.length);
   }
   
   // DIAG: Initial scene position
   useEffect(() => {
-    if (import.meta.env.DEV && scene) {
+    if (isAvatarDebugEnabled() && scene) {
       console.info('[DIAG][AvatarRig] 📍 scene.position IMMEDIATELY after useGLTF:', `[${scene.position.x.toFixed(3)}, ${scene.position.y.toFixed(3)}, ${scene.position.z.toFixed(3)}]`);
     }
   }, [scene]);
@@ -121,6 +141,7 @@ const AvatarRig = React.memo(function AvatarRig({
 
   // Loading state
   const [idleFBX, setIdleFBX] = useState(null);
+  const [isIdleReady, setIsIdleReady] = useState(false);
   
   useEffect(() => {
     const idleEntry = getAnimationsByType('idle')[0];
@@ -129,20 +150,12 @@ const AvatarRig = React.memo(function AvatarRig({
     const loader = new FBXLoader();
     loader.loadAsync(idleEntry.path)
       .then(fbx => {
+        // Only store the FBX — Effect 2 (dep: [idleFBX]) will register + play it
+        // once the animation controller is confirmed ready via animControllerRef.
         setIdleFBX(fbx);
-        const rawClip = fbx.animations?.[0];
-        if (rawClip && animControllerRef.current) {
-          const clip = rawClip.clone();
-          clip.name = 'idle';
-          animControllerRef.current.setIdleClip(clip);
-          animControllerRef.current.playIdle();
-          if (scene) {
-            console.info('[DIAG][AvatarRig] 🎬 Idle animation started. scene.position is now:', `[${scene.position.x.toFixed(3)}, ${scene.position.y.toFixed(3)}, ${scene.position.z.toFixed(3)}]`);
-          }
-        }
       })
       .catch(err => {
-        console.warn('[AvatarScene] Idle animation load failed, rendering without idle clip:', err);
+        logger.warn('[AvatarScene] Idle animation load failed, rendering without idle clip:', err);
       });
   }, []);
   const loadedTalkAnimationsRef = useRef(new Map());
@@ -151,13 +164,17 @@ const AvatarRig = React.memo(function AvatarRig({
 
   // Scene transform stabilization
   const frameDiagRef = useRef(null);
-  const isFirstFrame = useRef(true);
   const diagDoneRef = useRef(false); // Phase 0 diagnostic — one-time bbox/frustum check
   const rescueAttemptedRef = useRef(false); // Track if we've tried to rescue the camera
   const rescueWaitFramesRef = useRef(0); // Frame countdown after rescue fit (approved 2-frame pattern)
+  const cameraFitAppliedRef = useRef(false);
+  const cameraFitWaitFramesRef = useRef(0);
+  const visibilityFrameCountRef = useRef(0);
   // Single-fire guards — reset by epoch-key remount (new component instance), not re-render
   const firstFrameValidatedRef = useRef(false);
   const renderFailureReportedRef = useRef(false);
+  const consecutiveValidFramesRef = useRef(0);
+  const consecutiveInvalidFramesRef = useRef(0);
   const stableSceneTransformRef = useRef({
     position: new THREE.Vector3(),
     quaternion: new THREE.Quaternion(),
@@ -172,7 +189,7 @@ const AvatarRig = React.memo(function AvatarRig({
   // ── Model setup: collect morph meshes ──────────────────────────────────
   useEffect(() => {
     if (!scene) {
-      if (import.meta.env.DEV) console.warn('[DIAG][AvatarRig] Model setup skipped — scene is falsy');
+      if (isAvatarDebugEnabled()) console.warn('[DIAG][AvatarRig] Model setup skipped — scene is falsy');
       return;
     }
 
@@ -190,30 +207,31 @@ const AvatarRig = React.memo(function AvatarRig({
       }
     });
 
-    console.info('[DIAG][AvatarRig] 📊 Model census:', {
-      modelPath,
-      totalMeshes,
-      totalSkinnedMeshes,
-      morphMeshes: allMorphMeshes.length,
-      morphTargetNames: allMorphMeshes[0] ? Object.keys(allMorphMeshes[0].morphTargetDictionary).slice(0, 10) : '(none)',
-      scenePosition: `[${scene.position.x.toFixed(2)}, ${scene.position.y.toFixed(2)}, ${scene.position.z.toFixed(2)}]`,
-      sceneScale: `[${scene.scale.x.toFixed(2)}, ${scene.scale.y.toFixed(2)}, ${scene.scale.z.toFixed(2)}]`,
-    });
+    if (isAvatarDebugEnabled()) {
+      console.info('[DIAG][AvatarRig] 📊 Model census:', {
+        modelPath,
+        totalMeshes,
+        totalSkinnedMeshes,
+        morphMeshes: allMorphMeshes.length,
+        morphTargetNames: allMorphMeshes[0] ? Object.keys(allMorphMeshes[0].morphTargetDictionary).slice(0, 10) : '(none)',
+        scenePosition: `[${scene.position.x.toFixed(2)}, ${scene.position.y.toFixed(2)}, ${scene.position.z.toFixed(2)}]`,
+        sceneScale: `[${scene.scale.x.toFixed(2)}, ${scene.scale.y.toFixed(2)}, ${scene.scale.z.toFixed(2)}]`,
+      });
 
-    // Bounding box diagnostic
-    const bbox = new THREE.Box3().setFromObject(scene);
-    const center = bbox.getCenter(new THREE.Vector3());
-    const size = bbox.getSize(new THREE.Vector3());
-    console.info('[DIAG][AvatarRig] 📦 Raw scene bbox:', {
-      center: `[${center.x.toFixed(3)}, ${center.y.toFixed(3)}, ${center.z.toFixed(3)}]`,
-      size: `[${size.x.toFixed(3)}, ${size.y.toFixed(3)}, ${size.z.toFixed(3)}]`,
-      min: `[${bbox.min.x.toFixed(3)}, ${bbox.min.y.toFixed(3)}, ${bbox.min.z.toFixed(3)}]`,
-      max: `[${bbox.max.x.toFixed(3)}, ${bbox.max.y.toFixed(3)}, ${bbox.max.z.toFixed(3)}]`,
-      isEmpty: bbox.isEmpty(),
-    });
+      const bbox = new THREE.Box3().setFromObject(scene);
+      const center = bbox.getCenter(new THREE.Vector3());
+      const size = bbox.getSize(new THREE.Vector3());
+      console.info('[DIAG][AvatarRig] 📦 Raw scene bbox:', {
+        center: `[${center.x.toFixed(3)}, ${center.y.toFixed(3)}, ${center.z.toFixed(3)}]`,
+        size: `[${size.x.toFixed(3)}, ${size.y.toFixed(3)}, ${size.z.toFixed(3)}]`,
+        min: `[${bbox.min.x.toFixed(3)}, ${bbox.min.y.toFixed(3)}, ${bbox.min.z.toFixed(3)}]`,
+        max: `[${bbox.max.x.toFixed(3)}, ${bbox.max.y.toFixed(3)}, ${bbox.max.z.toFixed(3)}]`,
+        isEmpty: bbox.isEmpty(),
+      });
 
-    if (totalMeshes === 0) {
-      console.error('[DIAG][AvatarRig] ❌ ZERO meshes found in loaded scene — model may be empty or corrupt');
+      if (totalMeshes === 0) {
+        console.error('[DIAG][AvatarRig] ❌ ZERO meshes found in loaded scene — model may be empty or corrupt');
+      }
     }
 
     // Create lip sync controller
@@ -222,9 +240,11 @@ const AvatarRig = React.memo(function AvatarRig({
     }
     lipSyncControllerRef.current.initializeMeshes(allMorphMeshes);
 
-    console.info('[DIAG][AvatarRig] ✅ Calling onModelLoaded()');
+    if (isAvatarDebugEnabled()) {
+      console.info('[DIAG][AvatarRig] ✅ Calling onModelLoaded()');
+    }
     onModelLoaded?.();
-  }, [scene, onModelLoaded]);
+  }, [scene, onModelLoaded, modelPath]);
 
   // ── Capture stable scene transform ─────────────────────────────────────
   useEffect(() => {
@@ -235,7 +255,7 @@ const AvatarRig = React.memo(function AvatarRig({
       stableSceneTransformRef.current.initialized = true;
     }
 
-    if (import.meta.env.DEV) {
+    if (isAvatarDebugEnabled()) {
       const driftInterval = setInterval(() => {
         if (!scene || !group.current) return;
         
@@ -273,7 +293,8 @@ const AvatarRig = React.memo(function AvatarRig({
     }
   }, [scene, camera]);
 
-  // ── Create mixer + animation controller ────────────────────────────────
+  // ── Effect 1: Create mixer + animation controller ONCE when scene is ready ──
+  // Dependency: [scene] ONLY — never re-runs when FBX loads or controller ref changes.
   useEffect(() => {
     if (!scene) return;
 
@@ -282,17 +303,6 @@ const AvatarRig = React.memo(function AvatarRig({
 
     const controller = new AvatarAnimationController(mixer);
     animControllerRef.current = controller;
-
-    // Check if idleFBX is already loaded (in case scene re-mounts)
-    if (idleFBX) {
-      const rawClip = idleFBX.animations?.[0];
-      if (rawClip) {
-        const clip = rawClip.clone();
-        clip.name = 'idle';
-        controller.setIdleClip(clip);
-        controller.playIdle();
-      }
-    }
 
     // Expose to parent (AvatarController)
     if (animationControllerRef) {
@@ -309,7 +319,32 @@ const AvatarRig = React.memo(function AvatarRig({
       mixerRef.current = null;
       animControllerRef.current = null;
     };
-  }, [scene, idleFBX, animationControllerRef]);
+  }, [scene, animationControllerRef]); // idleFBX intentionally omitted.
+
+  // ── Effect 2: Register idle animation when FBX finishes loading ─────────────
+  // Dependency: [idleFBX] — runs only when the FBX load completes.
+  // Reads animControllerRef.current (a ref — intentionally not a dep).
+  useEffect(() => {
+    if (!idleFBX || !animControllerRef.current) return;
+
+    const rawClip = idleFBX.animations?.[0];
+    if (!rawClip) {
+      logger.warn('[AvatarScene] Idle FBX loaded but contained no animation clips.');
+      return;
+    }
+
+    const clip = rawClip.clone();
+    clip.name = 'idle';
+    animControllerRef.current.setIdleClip(clip);
+    animControllerRef.current.playIdle();
+
+    if (isAvatarDebugEnabled() && scene) {
+      console.info('[DIAG][AvatarRig] 🎬 Idle animation registered & started. scene.position:', `[${scene.position.x.toFixed(3)}, ${scene.position.y.toFixed(3)}, ${scene.position.z.toFixed(3)}]`);
+    }
+    
+    // Give it a tiny delay to ensure the pose is applied to the meshes before validation
+    setTimeout(() => setIsIdleReady(true), 50);
+  }, [idleFBX, scene]); // Added `scene` to dependencies to handle race condition where idleFBX loads before scene
 
   // ── Lazy-load talk animations ──────────────────────────────────────────
   useEffect(() => {
@@ -319,6 +354,11 @@ const AvatarRig = React.memo(function AvatarRig({
     let cancelled = false;
     const loader = new FBXLoader();
     const talkAnimations = getAnimationsByType('talk');
+    const missingTalkAnimations = getMissingTalkAnimationNames();
+
+    if (isAvatarDebugEnabled() && missingTalkAnimations.length > 0) {
+      logger.warn(`[AvatarScene] ${formatMissingTalkAnimationsWarning(missingTalkAnimations)}`);
+    }
 
     const loadAll = async () => {
       for (const anim of talkAnimations) {
@@ -330,7 +370,7 @@ const AvatarRig = React.memo(function AvatarRig({
           loadedTalkAnimationsRef.current.set(anim.name, loaded);
           setTalkAnimationRevision((r) => r + 1);
         } catch (err) {
-          console.warn(`[AvatarScene] Animation load failed for '${anim.name}' at path '${anim.path}':`, err);
+          logger.warn(`[AvatarScene] ${anim.name} missing or failed to load at '${anim.path}':`, err);
           // DO NOT crash the setup, just ignore the missing animation
         }
       }
@@ -368,7 +408,7 @@ const AvatarRig = React.memo(function AvatarRig({
 
       controller.addTalkClip(name, clone);
     }
-  }, [talkAnimationRevision]);
+  }, [talkAnimationRevision, scene]);
 
   // ── Forward emotion data ───────────────────────────────────────────────
   useEffect(() => {
@@ -394,11 +434,20 @@ const AvatarRig = React.memo(function AvatarRig({
   }, []);
 
   // ── Frame loop ─────────────────────────────────────────────────────────
+  // eslint-disable-next-line react-hooks/immutability
   useFrame((state, dt) => {
+    const currentScene = state.scene;
+    const currentControls = state.controls || controls;
     let safeDt = THREE.MathUtils.clamp(dt || 0, SAFE_MIN_DELTA, SAFE_MAX_DELTA);
+    visibilityFrameCountRef.current += 1;
 
     // ── PHASE 0: one-time bbox + frustum check after first frame ──
-    if (!diagDoneRef.current && group.current && scene) {
+    if (!diagDoneRef.current && group.current && currentScene && isIdleReady) {
+      if (cameraFitAppliedRef.current && cameraFitWaitFramesRef.current > 0) {
+        cameraFitWaitFramesRef.current--;
+        return; // let the camera fit render before validating visibility
+      }
+
       // If rescue was applied, count down frames before re-validating
       if (rescueAttemptedRef.current && rescueWaitFramesRef.current > 0) {
         rescueWaitFramesRef.current--;
@@ -411,6 +460,43 @@ const AvatarRig = React.memo(function AvatarRig({
       const worldBox = new THREE.Box3().setFromObject(group.current);
       const worldCenter = worldBox.getCenter(new THREE.Vector3());
       const worldSize = worldBox.getSize(new THREE.Vector3());
+
+      if (!cameraFitAppliedRef.current && !worldBox.isEmpty()) {
+        const cameraFit = computeAvatarCameraFit({
+          worldCenter: worldCenter.toArray(),
+          worldSize: worldSize.toArray(),
+          fovDeg: camera.fov,
+          aspect: camera.aspect,
+        });
+        const target = new THREE.Vector3(...cameraFit.target);
+        const position = new THREE.Vector3(...cameraFit.position);
+
+        camera.position.copy(position);
+        camera.lookAt(target);
+        camera.updateProjectionMatrix();
+        camera.updateMatrixWorld(true);
+
+        if (currentControls) {
+          currentControls.target.copy(target);
+          // eslint-disable-next-line react-hooks/immutability
+          currentControls.enableDamping = false;
+          currentControls.update();
+        }
+
+        cameraFitAppliedRef.current = true;
+        cameraFitWaitFramesRef.current = 5;
+        diagDoneRef.current = false;
+
+        if (isAvatarDebugEnabled()) {
+          console.info('[DIAG][AvatarRig] 📷 Applied one-time camera fit before validation:', {
+            target: cameraFit.target.map((v) => v.toFixed(3)),
+            position: cameraFit.position.map((v) => v.toFixed(3)),
+            distance: cameraFit.distance.toFixed(3),
+          });
+        }
+
+        return;
+      }
 
       // Camera frustum check
       const frustum = new THREE.Frustum();
@@ -432,7 +518,7 @@ const AvatarRig = React.memo(function AvatarRig({
         }
       });
 
-      if (import.meta.env.DEV) {
+      if (isAvatarDebugEnabled()) {
         console.info('[DIAG][AvatarRig] 🎯 FIRST FRAME — World-space diagnostics:', {
           groupPosition: group.current.position.toArray().map(v => v.toFixed(3)),
           groupScale: group.current.scale.toArray().map(v => v.toFixed(3)),
@@ -450,67 +536,111 @@ const AvatarRig = React.memo(function AvatarRig({
         });
       }
 
-      let validationFailed = false;
-      let failureReason = '';
+      const pixelVisible = isAvatarDebugEnabled() ? hasVisibleFramebufferPixels(state.gl) : true;
+      const validationResult = evaluateAvatarFirstFrameValidation({
+        isWorldBoxEmpty: worldBox.isEmpty(),
+        visibleMeshes,
+        hasNaN,
+        isInFrustum,
+        rescueAttempted: rescueAttemptedRef.current,
+        hasRenderedPixels: pixelVisible,
+      });
 
-      if (worldBox.isEmpty()) {
-        validationFailed = true;
-        failureReason = 'World bounding box is empty';
-        if (import.meta.env.DEV) console.error('[DIAG][AvatarRig] ❌ WORLD BBOX IS EMPTY — Model may be zero-sized or not rendered');
-      } else if (visibleMeshes === 0) {
-        validationFailed = true;
-        failureReason = 'No visible meshes found';
-        if (import.meta.env.DEV) console.error('[DIAG][AvatarRig] ❌ NO VISIBLE MESHES FOUND');
-      } else if (hasNaN) {
-        validationFailed = true;
-        failureReason = 'NaN values detected in bone transforms';
-        if (import.meta.env.DEV) console.error('[DIAG][AvatarRig] ❌ NAN BONE TRANSFORMS DETECTED');
-      } else if (!isInFrustum) {
-        if (!rescueAttemptedRef.current) {
-          // First attempt — apply rescue fit, then wait 2 frames for propagation
-          rescueAttemptedRef.current = true;
-          rescueWaitFramesRef.current = 2;
-          diagDoneRef.current = false; // re-enter this block after countdown
+      const createVisibilityTelemetryPayload = (overrides = {}) => ({
+        avatarId: avatarId || null,
+        lifecycleState: avatarLifecycleState || null,
+        bboxValid: !worldBox.isEmpty(),
+        bboxSize: worldSize.toArray(),
+        inFrustum: isInFrustum,
+        pixelVisible,
+        rescueAttempted: rescueAttemptedRef.current,
+        rescueSucceeded:
+          rescueAttemptedRef.current &&
+          validationResult.action === FIRST_FRAME_VALIDATION_ACTIONS.SUCCESS,
+        avatarScale: group.current.scale.toArray(),
+        avatarPosition: group.current.position.toArray(),
+        cameraPosition: camera.position.toArray(),
+        cameraTarget: controls?.target?.toArray?.() ?? null,
+        cameraNear: camera.near,
+        cameraFar: camera.far,
+        fov: camera.fov,
+        frameCountAtDecision: visibilityFrameCountRef.current,
+        failureReason: validationResult.failureReason ?? null,
+        timestamp: new Date().toISOString(),
+        ...overrides,
+      });
 
-          if (import.meta.env.DEV) {
-            console.warn('[DIAG][AvatarRig] ⚠️ AVATAR IS OUTSIDE CAMERA FRUSTUM — Attempting one-time rescue fit (2-frame wait)');
-          }
-          if (controls) {
-            const center = worldBox.getCenter(new THREE.Vector3());
-            center.y += worldSize.y * 0.3; // ~80% of model height (center is at 50%, add 30%)
-            const fovRad = camera.fov * THREE.MathUtils.DEG2RAD;
-            const distance = worldSize.y / (2 * Math.tan(fovRad / 2));
-            camera.position.set(center.x, center.y, center.z + distance);
-            controls.target.copy(center);
-            controls.enableDamping = false;
-            controls.update();
-          }
-          return; // Defer callbacks until 2 frames later
-        } else {
-          // Rescue already attempted AND 2 frames passed → treat as failure
-          validationFailed = true;
-          failureReason = 'Avatar is outside camera frustum (rescue fit failed)';
-          if (import.meta.env.DEV) console.error('[DIAG][AvatarRig] ❌ AVATAR IS STILL OUTSIDE CAMERA FRUSTUM AFTER RESCUE FIT');
+      if (validationResult.action === FIRST_FRAME_VALIDATION_ACTIONS.REQUEST_RESCUE) {
+        // First attempt — apply rescue fit, then wait 5 frames for propagation
+        rescueAttemptedRef.current = true;
+        rescueWaitFramesRef.current = 5;
+        diagDoneRef.current = false; // re-enter this block after countdown
+        emitAvatarVisibilityTelemetry(
+          createVisibilityTelemetryPayload({
+            rescueAttempted: true,
+            rescueSucceeded: false,
+          })
+        );
+
+        if (isAvatarDebugEnabled()) {
+          console.warn('[DIAG][AvatarRig] ⚠️ AVATAR IS OUTSIDE CAMERA FRUSTUM — Attempting one-time rescue fit (2-frame wait)');
         }
+        if (controls) {
+          const center = worldBox.getCenter(new THREE.Vector3());
+          center.y += worldSize.y * 0.3; // ~80% of model height (center is at 50%, add 30%)
+          const fovRad = camera.fov * THREE.MathUtils.DEG2RAD;
+          const distance = worldSize.y / (2 * Math.tan(fovRad / 2));
+          camera.position.set(center.x, center.y, center.z + distance);
+          controls.target.copy(center);
+          controls.update();
+        }
+        return; // Defer callbacks until 2 frames later
       }
 
       // Single-fire callbacks — each fires at most once per mount
-      if (validationFailed) {
+      if (validationResult.action === FIRST_FRAME_VALIDATION_ACTIONS.FAILURE) {
+        consecutiveInvalidFramesRef.current++;
+        if (consecutiveInvalidFramesRef.current < 5) return; // Wait 5 consecutive invalid frames
+        
         if (!renderFailureReportedRef.current) {
           renderFailureReportedRef.current = true;
-          if (import.meta.env.DEV) console.error(`[DIAG][AvatarRig] ❌ First frame validation failed: ${failureReason}`);
-          onRenderFailure?.(new Error(`First frame validation failed: ${failureReason}`));
+          const timestamp = new Date().toISOString();
+          emitAvatarVisibilityTelemetry(
+            createVisibilityTelemetryPayload({
+              rescueSucceeded: false,
+              timestamp,
+            })
+          );
+          const screenshotDataUrl = captureAvatarFailureScreenshot(state.gl);
+          emitAvatarFailureScreenshot({
+            avatarId: avatarId || null,
+            failureReason: validationResult.failureReason,
+            screenshotDataUrl,
+            timestamp,
+          });
+          if (isAvatarDebugEnabled()) {
+            console.error(`[DIAG][AvatarRig] ❌ First frame validation failed: ${validationResult.reason}`);
+          }
+          onRenderFailure?.(new Error(`First frame validation failed: ${validationResult.reason}`));
         }
       } else {
+        consecutiveValidFramesRef.current++;
+        if (consecutiveValidFramesRef.current < 2) return; // Wait 2 consecutive valid frames
+        
         if (!firstFrameValidatedRef.current) {
           firstFrameValidatedRef.current = true;
-          if (import.meta.env.DEV) console.info('[DIAG][AvatarRig] ✅ Avatar IS inside camera frustum and validated — should be visible');
+          emitAvatarVisibilityTelemetry(
+            createVisibilityTelemetryPayload({
+              failureReason: null,
+            })
+          );
+          if (isAvatarDebugEnabled()) console.info('[DIAG][AvatarRig] ✅ Avatar IS inside camera frustum and validated — should be visible');
           onFirstFrameValidated?.();
         }
       }
 
       // Renderer state (dev only)
-      if (import.meta.env.DEV) {
+      if (isAvatarDebugEnabled()) {
         const gl = state.gl;
         console.info('[DIAG][AvatarRig] 🖥️ Renderer state:', {
           rendererType: gl?.constructor?.name,
@@ -570,7 +700,7 @@ const AvatarRig = React.memo(function AvatarRig({
     frameDiagRef.current.time += safeDt;
     
     // Deep trace at frame 60 and frame 120
-    if (import.meta.env.DEV) {
+    if (isAvatarDebugEnabled()) {
       if (frameDiagRef.current.count === 60 || frameDiagRef.current.count === 120 || frameDiagRef.current.count === 180) {
         console.warn(`[DIAG][DEEP_TRACE] 🔍 Frame ${frameDiagRef.current.count} (${frameDiagRef.current.time.toFixed(1)}s) Deep Visibility Audit`);
         
@@ -648,10 +778,10 @@ const AvatarRig = React.memo(function AvatarRig({
     }
 
     // Lock the scene root in place to prevent the model from drifting/walking forward out of the group
-    if (stableSceneTransformRef.current.initialized) {
-      scene.position.x = THREE.MathUtils.lerp(scene.position.x, stableSceneTransformRef.current.position.x, 0.1);
-      scene.position.z = THREE.MathUtils.lerp(scene.position.z, stableSceneTransformRef.current.position.z, 0.1);
-      scene.quaternion.copy(stableSceneTransformRef.current.quaternion);
+    if (stableSceneTransformRef.current.initialized && currentScene) {
+      currentScene.position.x = THREE.MathUtils.lerp(currentScene.position.x, stableSceneTransformRef.current.position.x, 0.1);
+      currentScene.position.z = THREE.MathUtils.lerp(currentScene.position.z, stableSceneTransformRef.current.position.z, 0.1);
+      currentScene.quaternion.copy(stableSceneTransformRef.current.quaternion);
     }
 
 
@@ -669,22 +799,106 @@ const AvatarRig = React.memo(function AvatarRig({
 
 // ── Scene Wrapper ────────────────────────────────────────────────────────────
 
+let globalRendererCreatedCount = 0;
+let globalRendererDisposedCount = 0;
+let globalActiveRendererCount = 0;
+let globalContextLossCount = 0;
+
+const RendererTelemetry = () => {
+  const { gl } = useThree();
+  useEffect(() => {
+    if (isAvatarDebugEnabled()) {
+      globalRendererCreatedCount++;
+      globalActiveRendererCount++;
+      console.info(`[DIAG][AvatarScene] 🎨 rendererCreated (Total Created: ${globalRendererCreatedCount}, Active: ${globalActiveRendererCount})`);
+      
+      const onContextLost = (e) => {
+        e.preventDefault();
+        globalContextLossCount++;
+        console.warn(`[DIAG][AvatarScene] 💥 contextLost (Total Lost: ${globalContextLossCount})`);
+      };
+      
+      const onContextRestored = () => {
+        console.info('[DIAG][AvatarScene] ♻️ contextRestored');
+      };
+      
+      gl.domElement.addEventListener('webglcontextlost', onContextLost);
+      gl.domElement.addEventListener('webglcontextrestored', onContextRestored);
+      
+      return () => {
+        globalRendererDisposedCount++;
+        globalActiveRendererCount--;
+        console.info(`[DIAG][AvatarScene] 🗑️ rendererDisposed (Total Disposed: ${globalRendererDisposedCount}, Active: ${globalActiveRendererCount})`);
+        gl.domElement.removeEventListener('webglcontextlost', onContextLost);
+        gl.domElement.removeEventListener('webglcontextrestored', onContextRestored);
+        
+        // --- MINIMAL FIX FOR CONTEXT LOSS ---
+        // Attempt to gracefully release the WebGL context before the DOM element is garbage collected.
+        // This prevents the browser from hitting the active WebGL contexts limit (typically ~8-16)
+        // during rapid remounts / retries.
+        try {
+          const extension = gl.getExtension('WEBGL_lose_context');
+          if (extension && typeof extension.loseContext === 'function') {
+             extension.loseContext();
+             console.info('[DIAG][AvatarScene] 🧨 Explicitly called WEBGL_lose_context.loseContext()');
+          }
+        } catch (e) {
+          console.warn('[DIAG][AvatarScene] Failed to explicitly lose context:', e);
+        }
+        
+        // Ensure Three.js internal resources are released
+        gl.dispose();
+      };
+    }
+  }, [gl]);
+  return null;
+};
+
 const AvatarSceneWrapper = React.memo(function AvatarSceneWrapper(props) {
   const renderCountRef = useRef(0);
-  renderCountRef.current++;
+  useEffect(() => {
+    if (isAvatarDebugEnabled()) {
+      renderCountRef.current++;
+      console.info(`[DIAG][AvatarSceneWrapper] 🔄 Render #${renderCountRef.current}. modelPath:`, props.modelPath);
+    }
+  });
 
   useEffect(() => {
-    console.info('[DIAG][AvatarSceneWrapper] 🟢 MOUNTED');
-    return () => console.info('[DIAG][AvatarSceneWrapper] 🔴 UNMOUNTED');
+    if (isAvatarDebugEnabled()) {
+      console.info('[DIAG][AvatarSceneWrapper] 🟢 MOUNTED');
+      return () => console.info('[DIAG][AvatarSceneWrapper] 🔴 UNMOUNTED');
+    }
+    return undefined;
   }, []);
 
-  const cameraConfig = useMemo(() => getCameraPreset(props.avatarId), [props.avatarId]);
-  console.info(`[DIAG][AvatarSceneWrapper] 🔄 Render #${renderCountRef.current}. modelPath:`, props.modelPath);
+  const rigProfile = useMemo(() => getAvatarRigProfile(props.avatarId), [props.avatarId]);
+  
+  const cameraConfig = useMemo(() => {
+    const baseConfig = getCameraPreset('classroom');
+    if (rigProfile.classroomOffset) {
+      return {
+        ...baseConfig,
+        position: [
+          baseConfig.position[0] + rigProfile.classroomOffset.position[0],
+          baseConfig.position[1] + rigProfile.classroomOffset.position[1],
+          baseConfig.position[2] + rigProfile.classroomOffset.position[2]
+        ],
+        target: [
+          baseConfig.target[0] + rigProfile.classroomOffset.target[0],
+          baseConfig.target[1] + rigProfile.classroomOffset.target[1],
+          baseConfig.target[2] + rigProfile.classroomOffset.target[2]
+        ]
+      };
+    }
+    return baseConfig;
+  }, [rigProfile]);
 
   // Preload active avatar model only (not all avatars)
   useEffect(() => {
     if (props.modelPath) {
-      console.info('[DIAG][AvatarSceneWrapper] 📥 Preloading active avatar:', props.modelPath);
+      if (isAvatarDebugEnabled()) {
+        console.info('[DIAG][AvatarSceneWrapper] 📥 Preloading active avatar:', props.modelPath);
+      }
       useGLTF.preload(props.modelPath);
     }
   }, [props.modelPath]);
@@ -693,7 +907,7 @@ const AvatarSceneWrapper = React.memo(function AvatarSceneWrapper(props) {
     <AvatarErrorBoundary
       fallback={
         <div style={{ width: '100%', height: '100%', background: 'rgb(22 22 22)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ff6b6b', fontSize: '0.9rem', padding: '1rem', textAlign: 'center' }}>
-          ⚠️ Avatar render error — check console for [DIAG] logs
+          Avatar render error
         </div>
       }
       onError={(err) => { props.onRenderFailure?.(err); props.onError?.(err); }}
@@ -705,9 +919,10 @@ const AvatarSceneWrapper = React.memo(function AvatarSceneWrapper(props) {
           <directionalLight position={[-4, 5, -3]} intensity={0.35} />
           <pointLight position={[0, 2, 2]} intensity={0.35} />
           <Environment preset="studio" />
+          <RendererTelemetry />
 
           <Suspense fallback={null}>
-            <AvatarErrorBoundary onError={(err) => { console.error('[DIAG][InnerErrorBoundary] ❌ Caught inside Canvas:', err.message); props.onRenderFailure?.(err); props.onError?.(err); }}>
+            <AvatarErrorBoundary onError={(err) => { if (isAvatarDebugEnabled()) console.error('[DIAG][InnerErrorBoundary] ❌ Caught inside Canvas:', err.message); props.onRenderFailure?.(err); props.onError?.(err); }}>
               <AvatarRig {...props} />
             </AvatarErrorBoundary>
           </Suspense>

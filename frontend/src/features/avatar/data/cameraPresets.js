@@ -11,6 +11,13 @@ export const CAMERA_PRESETS = {
     near: 0.01,
     far: 100,
   },
+  classroom: {
+    position: [0, 1.4, 1.2],
+    target: [0, 1.35, 0],
+    fov: 35,
+    near: 0.1,
+    far: 100,
+  },
   avatar1: {
     position: [0, 1.5, 2.5],
     target: [0, 1.1, 0],

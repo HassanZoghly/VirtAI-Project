@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { FiCheck, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { HiOutlineSparkles, HiOutlineSpeakerWave, HiOutlineUser } from 'react-icons/hi2';
@@ -24,32 +24,32 @@ const TABS = [
 export default function SetupPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(0);
-  const [selectedAvatar, setSelectedAvatar] = useState(null);
-  const [selectedVoice, setSelectedVoice] = useState(null);
-  const [isMovementEnabled, setIsMovementEnabled] = useState(false);
-
-  useEffect(() => {
+  const [selectedAvatar, setSelectedAvatar] = useState(() => {
     const saved = loadSetup();
-    if (saved) {
-      const AVATARS = Object.values(avatarImages);
-      const nextAvatar = saved.avatarId
-        ? (AVATARS.find((av) => av.id === saved.avatarId) ?? null)
-        : null;
-      let nextVoice = saved.voiceId ? (VOICES.find((vo) => vo.id === saved.voiceId) ?? null) : null;
-
-      if (nextAvatar && nextVoice && nextAvatar.gender !== nextVoice.gender) {
-        nextVoice = null;
-      }
-
-      setSelectedAvatar(nextAvatar);
-      setSelectedVoice(nextVoice);
-      if (typeof saved.movementEnabled === 'boolean') {
-        setIsMovementEnabled(saved.movementEnabled);
-      } else {
-        setIsMovementEnabled(false);
-      }
+    if (!saved || !saved.avatarId) return null;
+    return Object.values(avatarImages).find((av) => av.id === saved.avatarId) ?? null;
+  });
+  const [selectedVoice, setSelectedVoice] = useState(() => {
+    const saved = loadSetup();
+    if (!saved || !saved.voiceId) return null;
+    const voice = VOICES.find((vo) => vo.id === saved.voiceId) ?? null;
+    const avatar = saved.avatarId ? Object.values(avatarImages).find((av) => av.id === saved.avatarId) : null;
+    if (avatar && voice && avatar.gender !== voice.gender) return null;
+    return voice;
+  });
+  const [isMovementEnabled, setIsMovementEnabled] = useState(() => {
+    const saved = loadSetup();
+    if (saved && typeof saved.movementEnabled === 'boolean') {
+      return saved.movementEnabled;
     }
-  }, []);
+    return false;
+  });
+
+
+
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [direction, setDirection] = useState(1);
+  const audioRef = useRef(null);
 
   // Clear voice selection when avatar gender changes
   const handleAvatarSelect = useCallback(
@@ -66,10 +66,7 @@ export default function SetupPage() {
     },
     [selectedAvatar]
   );
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [direction, setDirection] = useState(1);
-  const audioRef = useRef(null);
-  const tabRefs = useRef([]);
+
 
   const isTabComplete = useCallback(
     (idx) => {
@@ -108,31 +105,28 @@ export default function SetupPage() {
     }
   };
 
-  const stopAudio = useCallback(() => {
+  const stopAudio = () => {
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
     setIsPlaying(false);
-  }, []);
+  };
 
-  const playPreview = useCallback(
-    (url) => {
-      stopAudio();
-      if (!url) {
-        return;
-      }
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      audio.addEventListener('ended', () => setIsPlaying(false));
-      audio.addEventListener('error', () => setIsPlaying(false));
-      audio
-        .play()
-        .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false));
-    },
-    [stopAudio]
-  );
+  const playPreview = (url) => {
+    stopAudio();
+    if (!url) {
+      return;
+    }
+    const audio = new Audio(url);
+    audioRef.current = audio;
+    audio.addEventListener('ended', () => setIsPlaying(false));
+    audio.addEventListener('error', () => setIsPlaying(false));
+    audio
+      .play()
+      .then(() => setIsPlaying(true))
+      .catch(() => setIsPlaying(false));
+  };
 
   const slideVariants = {
     enter: (d) => ({ x: d > 0 ? 80 : -80, opacity: 0 }),
@@ -185,12 +179,12 @@ export default function SetupPage() {
                 return (
                   <button
                     key={tab.key}
-                    ref={(el) => (tabRefs.current[idx] = el)}
                     role="tab"
                     aria-selected={activeTab === idx}
                     aria-controls={`panel-${tab.key}`}
                     className={`setup-tab${activeTab === idx ? ' active' : ''}`}
                     onClick={() => goTo(idx)}
+                    style={{ position: 'relative' }}
                   >
                     {complete ? (
                       <span className="tab-check">
@@ -200,22 +194,17 @@ export default function SetupPage() {
                       <Icon size={16} />
                     )}
                     {tab.label}
+                    {activeTab === idx && (
+                      <motion.div
+                        className="setup-tab-underline"
+                        layoutId="tab-underline"
+                        style={{ position: 'absolute', bottom: -2, left: 0, right: 0 }}
+                        transition={{ duration: 0.25, ease: 'easeOut' }}
+                      />
+                    )}
                   </button>
                 );
               })}
-
-              {/* Sliding underline */}
-              {tabRefs.current[activeTab] && (
-                <motion.div
-                  className="setup-tab-underline"
-                  layoutId="tab-underline"
-                  style={{
-                    left: tabRefs.current[activeTab]?.offsetLeft ?? 0,
-                    width: tabRefs.current[activeTab]?.offsetWidth ?? 0,
-                  }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 35 }}
-                />
-              )}
             </div>
 
             {/* Tab content with AnimatePresence */}

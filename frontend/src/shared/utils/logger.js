@@ -1,5 +1,3 @@
-/* eslint-disable no-console */
-
 /**
  * Dev-only logger — all methods are no-ops in production builds.
  * console.error is securely wrapped to prevent leaks in production.

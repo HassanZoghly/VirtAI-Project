@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import { useAuthStore } from '@/features/auth/store/authStore';
 import { clearBrowserAuthState } from '@/features/auth/services/authStateCleanup';
 import { refreshAccessTokenSingleFlight } from '@/features/auth/services/refreshService';
@@ -21,7 +20,9 @@ export const ConnectionState = Object.freeze({
 });
 
 /**
- * Exponential backoff with jitter: 1 s → 2 s → 4 s → 8 s → 16 s + random(0-1000)ms
+ * Generates an exponential backoff with jitter
+ * @param {number} attempt
+ * @returns {number} Delay in milliseconds
  */
 const backoffDelay = (attempt) => Math.min(1000 * 2 ** attempt, 16_000) + Math.random() * 1000;
 
@@ -54,7 +55,7 @@ function useWSClient(url) {
   const isIntentionalCloseRef = useRef(false);
   const isConnectingRef = useRef(false);
   const lastErrorTimeRef = useRef(0);
-  const mountIdRef = useRef(Math.random());
+  const mountIdRef = useRef(0);
   const initTimerRef = useRef(null); // timer for initializing→online transition
   const reconnectPausedRef = useRef(false);
   const connectRef = useRef(() => {});
@@ -95,6 +96,31 @@ function useWSClient(url) {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
+    }
+  }, []);
+
+  const cleanupTimers = useCallback(() => {
+    clearReconnectTimer();
+    if (ackTimerRef.current) {
+      clearTimeout(ackTimerRef.current);
+      ackTimerRef.current = null;
+    }
+    if (initTimerRef.current) {
+      clearTimeout(initTimerRef.current);
+      initTimerRef.current = null;
+    }
+  }, [clearReconnectTimer]);
+
+  const logBackendOffline = useCallback(() => {
+    const now = Date.now();
+    if (now - lastErrorTimeRef.current > 10000) {
+      if (import.meta.env.DEV) {
+        console.warn('[WS] ⚠️ Backend offline — will retry with exponential backoff');
+        console.info(
+          '[WS] 💡 Start backend: cd backend && python -m uvicorn app.main:app --reload'
+        );
+      }
+      lastErrorTimeRef.current = now;
     }
   }, []);
 
@@ -403,10 +429,12 @@ function useWSClient(url) {
 
             // Dispatch to registered handlers
             const typeHandlers = handlers.current[message.type];
+            const ignoredTypes = ['chat.abort'];
+            
             if (typeHandlers && typeHandlers.size > 0) {
               const data = message.data || message;
               typeHandlers.forEach((handler) => handler(data));
-            } else if (import.meta.env.DEV) {
+            } else if (import.meta.env.DEV && !ignoredTypes.includes(message.type)) {
               console.warn('[WS] Unknown message type:', message.type);
             }
           } catch (err) {
@@ -434,16 +462,7 @@ function useWSClient(url) {
             );
           }
 
-          const now = Date.now();
-          if (now - lastErrorTimeRef.current > 10000) {
-            if (import.meta.env.DEV) {
-              console.warn('[WS] ⚠️ Backend offline — will retry with exponential backoff');
-              console.info(
-                '[WS] 💡 Start backend: cd backend && python -m uvicorn app.main:app --reload'
-              );
-            }
-            lastErrorTimeRef.current = now;
-          }
+          logBackendOffline();
         };
 
         socket.onclose = (event) => {
@@ -560,21 +579,12 @@ function useWSClient(url) {
       } catch (err) {
         isConnectingRef.current = false;
 
-        const now = Date.now();
-        if (now - lastErrorTimeRef.current > 10000) {
-          if (import.meta.env.DEV) {
-            console.warn('[WS] ⚠️ Backend offline — will retry with exponential backoff');
-            console.info(
-              '[WS] 💡 Start backend: cd backend && python -m uvicorn app.main:app --reload'
-            );
-          }
-          lastErrorTimeRef.current = now;
-        }
+        logBackendOffline();
 
         scheduleReconnect(err?.message || 'Failed to create WebSocket connection', currentUrl);
       }
     },
-    [scheduleAck, clearReconnectState, clearReconnectTimer, scheduleReconnect, pauseReconnect]
+    [scheduleAck, clearReconnectState, clearReconnectTimer, scheduleReconnect, pauseReconnect, logBackendOffline]
   );
 
   useEffect(() => {
@@ -586,6 +596,7 @@ function useWSClient(url) {
     mountIdRef.current = Math.random();
     if (!url) {
       clearReconnectTimer();
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setConnectionState(ConnectionState.OFFLINE);
       return () => {
         isIntentionalCloseRef.current = true;
@@ -611,15 +622,7 @@ function useWSClient(url) {
       connectedAtRef.current = 0;
       authRefreshAttemptsRef.current = 0;
 
-      clearReconnectTimer();
-      if (ackTimerRef.current) {
-        clearTimeout(ackTimerRef.current);
-        ackTimerRef.current = null;
-      }
-      if (initTimerRef.current) {
-        clearTimeout(initTimerRef.current);
-        initTimerRef.current = null;
-      }
+      cleanupTimers();
 
       if (wsRef.current) {
         const socket = wsRef.current;
@@ -635,7 +638,7 @@ function useWSClient(url) {
       reconnectAttempts.current = 0;
       setReconnectError(null);
     };
-  }, [url, connect, clearReconnectTimer]);
+  }, [url, connect, clearReconnectTimer, cleanupTimers]);
 
   /**
    * Send a message through WebSocket.
@@ -689,15 +692,7 @@ function useWSClient(url) {
     isIntentionalCloseRef.current = true;
     reconnectPausedRef.current = false;
 
-    clearReconnectTimer();
-    if (ackTimerRef.current) {
-      clearTimeout(ackTimerRef.current);
-      ackTimerRef.current = null;
-    }
-    if (initTimerRef.current) {
-      clearTimeout(initTimerRef.current);
-      initTimerRef.current = null;
-    }
+    cleanupTimers();
 
     if (wsRef.current) {
       wsRef.current.onclose = null;
@@ -712,7 +707,7 @@ function useWSClient(url) {
     reconnectAttempts.current = 0;
     authRefreshAttemptsRef.current = 0;
     setReconnectError(null);
-  }, [clearReconnectTimer]);
+  }, [cleanupTimers]);
 
   const reconnect = useCallback(() => {
     reconnectPausedRef.current = false;

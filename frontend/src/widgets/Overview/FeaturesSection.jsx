@@ -1,27 +1,16 @@
 import features from '@/features/overview/data/features';
 import { motion } from 'motion/react';
+import SectionHeader from './components/SectionHeader';
 
 export default function FeaturesSection() {
   return (
     <section id="features" className="relative mx-auto max-w-6xl px-6 py-28">
-      <motion.div
+      <SectionHeader
         className="mb-20 max-w-2xl"
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.3 }}
-        transition={{ duration: 0.6 }}
-      >
-        <h2
-          className="text-4xl font-bold text-offwhite sm:text-5xl"
-          style={{ fontFamily: 'var(--font-display)' }}
-        >
-          Core <span className="text-gold">Features</span>
-        </h2>
-        <p className="mt-5 text-lg leading-relaxed text-offwhite/70">
-          Everything you need for an immersive AI-powered learning experience, engineered for
-          reliability.
-        </p>
-      </motion.div>
+        titlePrefix="Core"
+        titleHighlight="Features"
+        description="Everything you need for an immersive AI-powered learning experience, engineered for reliability."
+      />
 
       <div className="flex flex-col divide-y divide-white/10 border-t border-b border-white/10">
         {features.map((f, i) => {

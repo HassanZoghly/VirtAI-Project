@@ -1,6 +1,6 @@
 import { avatarImages } from '@/features/avatar/data/avatars';
-import { AnimatePresence, motion } from 'motion/react';
-import { FiCheck } from 'react-icons/fi';
+import { motion } from 'motion/react';
+import SelectionCheckmark from '@/shared/components/SelectionCheckmark';
 
 const avatarList = Object.values(avatarImages);
 
@@ -40,19 +40,11 @@ export default function AvatarTab({ selected, onSelect }) {
               <span className="avatar-card-name">{avatar.name}</span>
               <span className="avatar-card-desc">{avatar.description}</span>
 
-              <AnimatePresence>
-                {isSelected && (
-                  <motion.span
-                    className="avatar-card-check"
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    exit={{ scale: 0 }}
-                    transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-                  >
-                    <FiCheck size={13} />
-                  </motion.span>
-                )}
-              </AnimatePresence>
+              <SelectionCheckmark
+                isSelected={isSelected}
+                className="avatar-card-check"
+                size={13}
+              />
             </motion.button>
           );
         })}

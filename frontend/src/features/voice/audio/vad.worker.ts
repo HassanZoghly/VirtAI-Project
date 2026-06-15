@@ -8,6 +8,7 @@
  */
 
 import { VADConfig, VADResult } from './vad';
+import { calculateRMSEnergy } from './vadMath';
 
 /**
  * Message types for worker communication
@@ -39,31 +40,7 @@ let firstSpeechTime: number | null = null;
 let currentState: 'silence' | 'speech' | 'pending' = 'silence';
 let silenceDurationMs: number = 0;
 
-/**
- * Calculate RMS (Root Mean Square) energy from audio samples
- *
- * @param audioData - Float32Array of audio samples
- * @returns RMS energy value between 0.0 and 1.0
- */
-function calculateRMSEnergy(audioData: Float32Array): number {
-  if (audioData.length === 0) {
-    return 0.0;
-  }
-
-  let sumOfSquares = 0.0;
-
-  // Calculate sum of squared samples
-  for (let i = 0; i < audioData.length; i++) {
-    const sample = audioData[i];
-    sumOfSquares += sample * sample;
-  }
-
-  // Calculate RMS: sqrt(mean of squares)
-  const rms = Math.sqrt(sumOfSquares / audioData.length);
-
-  // Ensure value is between 0.0 and 1.0
-  return Math.min(1.0, Math.max(0.0, rms));
-}
+// Removed duplicate calculateRMSEnergy
 
 /**
  * Process audio chunk and detect voice activity

@@ -29,7 +29,7 @@ class PCMWorkletProcessor extends AudioWorkletProcessor {
    * @param {Object} _parameters - Audio parameters (unused)
    * @returns {boolean} - true to keep processor alive
    */
-  process(inputs, _outputs, _parameters) {
+  process(inputs) {
     // Get first input (microphone)
     const input = inputs[0];
 

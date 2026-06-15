@@ -14,6 +14,7 @@ export const AVATAR_RIG_PROFILES = {
     mouthMeshes: ['Wolf3D_Head', 'Wolf3D_Teeth'],
     scale: 1.25,
     position: [0, -0.9, 0],
+    classroomOffset: { position: [0, 0, 0], target: [0, 0, 0] },
     compatibleTags: ['rpm_v1', 'standard'],
   },
   avatar1: {
@@ -22,6 +23,7 @@ export const AVATAR_RIG_PROFILES = {
     mouthMeshes: ['Wolf3D_Head', 'Wolf3D_Teeth'],
     scale: 1.25,
     position: [0, -0.9, 0],
+    classroomOffset: { position: [0, 0, 0], target: [0, 0, 0] },
     compatibleTags: ['rpm_v1', 'standard'],
   },
   avatar2: {
@@ -30,6 +32,7 @@ export const AVATAR_RIG_PROFILES = {
     mouthMeshes: ['Wolf3D_Head', 'Wolf3D_Teeth'],
     scale: 1.25,
     position: [0, -0.9, 0],
+    classroomOffset: { position: [0, 0, 0], target: [0, 0, 0] },
     compatibleTags: ['rpm_v1', 'standard'],
   },
   avatar3: {
@@ -38,6 +41,7 @@ export const AVATAR_RIG_PROFILES = {
     mouthMeshes: ['Wolf3D_Head', 'Wolf3D_Teeth'],
     scale: 1.25,
     position: [0, -0.9, 0],
+    classroomOffset: { position: [0, 0, 0], target: [0, 0, 0] },
     compatibleTags: ['rpm_v1', 'standard'],
   },
 };

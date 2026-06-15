@@ -35,7 +35,7 @@ export default function AuthPage() {
         <title>{mode === 'login' ? 'Sign In' : 'Create Account'} — VirtAI</title>
       </Helmet>
 
-      <div className="flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-dark p-4 sm:p-6">
+      <div className="flex min-h-screen w-full flex-col items-center justify-center bg-dark p-4 sm:p-6">
         {/* VirtAI Logo */}
         <div className="absolute left-6 top-6 sm:left-10 sm:top-10">
           <Link
@@ -50,8 +50,8 @@ export default function AuthPage() {
         <motion.main
           initial={{ opacity: 0, y: 20, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-          className="relative z-20 w-full max-w-[420px] rounded-2xl border border-white/10 bg-card-bg p-8 shadow-2xl sm:p-10"
+          transition={{ duration: 0.4, ease: 'easeOut' }}
+          className="relative z-20 w-full max-w-[420px] rounded-2xl border border-white/10 bg-card-bg p-8 shadow-lg sm:p-10"
         >
           <div className="mb-8 text-center">
             <h1 className="text-2xl font-bold text-offwhite font-display">

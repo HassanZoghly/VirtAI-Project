@@ -1,5 +1,6 @@
 import steps from '@/features/overview/data/howItWorks';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import SectionHeader from './components/SectionHeader';
 import { useEffect, useRef, useState } from 'react';
 import { FiCheck } from 'react-icons/fi';
 import {
@@ -83,7 +84,7 @@ function TimelineStep({ step, index, isActive, isDone, isLast, stepRef, reduced 
       {/* vertical connector */}
       {!isLast && (
         <div
-          className="absolute w-px overflow-hidden"
+          className="absolute w-px"
           style={{
             left: CIRCLE_SIZE / 2 - 0.5,
             top: CIRCLE_SIZE + 4,
@@ -227,27 +228,16 @@ export default function HowItWorks() {
 
   return (
     <section id="how-it-works" className="relative mx-auto max-w-6xl px-6 py-28">
-      <motion.div
+      <SectionHeader
         className="mb-14 text-center"
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, amount: 0.3 }}
-        transition={{ duration: 0.6 }}
-      >
-        <h2
-          className="text-4xl font-bold text-offwhite sm:text-5xl"
-          style={{ fontFamily: 'var(--font-display)' }}
-        >
-          How It <span className="text-gold">Works</span>
-        </h2>
-        <p className="mx-auto mt-4 max-w-lg text-offwhite/70">
-          Your voice travels through a six-stage AI pipeline, from speech recognition to a
-          lip-synced 3D avatar delivering the answer.
-        </p>
-      </motion.div>
+        titlePrefix="How It"
+        titleHighlight="Works"
+        description="Your voice travels through a six-stage AI pipeline, from speech recognition to a lip-synced 3D avatar delivering the answer."
+        descriptionClassName="mx-auto mt-4 max-w-lg text-offwhite/70"
+      />
 
       {/* ── Isolated scroll container ── */}
-      <div className="relative mx-auto flex max-w-5xl flex-col overflow-hidden lg:h-[600px] lg:flex-row">
+      <div className="relative mx-auto flex max-w-5xl flex-col lg:h-[600px] lg:flex-row">
         {/* radial glow */}
         <div
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_0%_50%,rgba(109,0,26,0.08)_0%,transparent_70%)]"

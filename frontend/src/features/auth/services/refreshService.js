@@ -4,38 +4,11 @@ import {
   isInvalidRefreshResponse,
   markBrowserAuthSession,
 } from './authStateCleanup';
+import { ensureCsrfToken, CSRF_HEADER_NAME } from '@/shared/services/csrfService';
 
 let refreshPromise = null;
 
-const CSRF_COOKIE_NAME = 'csrf_token';
-const CSRF_HEADER_NAME = 'X-CSRF-Token';
-
-function readCookie(name) {
-  if (typeof document === 'undefined') {
-    return null;
-  }
-
-  const cookiePrefix = `${name}=`;
-  const cookies = document.cookie ? document.cookie.split('; ') : [];
-
-  for (const cookie of cookies) {
-    if (cookie.startsWith(cookiePrefix)) {
-      return decodeURIComponent(cookie.slice(cookiePrefix.length));
-    }
-  }
-
-  return null;
-}
-
-async function ensureCsrfToken() {
-  const existingToken = readCookie(CSRF_COOKIE_NAME);
-  if (existingToken) {
-    return existingToken;
-  }
-
-  await axios.get('/api/v1/auth/csrf', { withCredentials: true });
-  return readCookie(CSRF_COOKIE_NAME);
-}
+// Removed duplicated CSRF token logic
 
 /**
  * Single-flight refresh token queue.

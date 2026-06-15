@@ -99,7 +99,7 @@ export default function AllSetTab({
         disabled={!isReady || isSaving || isInitializing || !isAuthenticated}
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 1.3, type: 'spring', stiffness: 300, damping: 20 }}
+        transition={{ delay: 1.3, type: 'tween', ease: [0.2, 0.8, 0.2, 1], duration: 0.4 }}
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
         style={

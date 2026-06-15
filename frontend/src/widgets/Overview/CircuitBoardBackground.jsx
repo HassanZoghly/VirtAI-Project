@@ -385,14 +385,14 @@ export default function CircuitBoardBackground({ pulseCount = 8, opacity = 0.5, 
   );
 
   /* ── main loop ─────────────────────────────────────────── */
-  const draw = useCallback((timestamp) => {
+  const draw = useCallback(function drawLoop(timestamp) {
     const s = stateRef.current;
     const canvas = canvasRef.current;
     if (!canvas) {
       return;
     }
     if (document.hidden) {
-      s.raf = requestAnimationFrame(draw);
+      s.raf = requestAnimationFrame(drawLoop);
       return;
     }
 
@@ -542,7 +542,7 @@ export default function CircuitBoardBackground({ pulseCount = 8, opacity = 0.5, 
       }
     }
 
-    s.raf = requestAnimationFrame(draw);
+    s.raf = requestAnimationFrame(drawLoop);
   }, []);
 
   /* ── lifecycle ─────────────────────────────────────────── */

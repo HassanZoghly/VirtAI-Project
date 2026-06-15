@@ -159,7 +159,7 @@ export default function Navbar({ ctaLabel, ctaTo }) {
                         <motion.span
                           layoutId="nav-underline"
                           className="absolute bottom-0 left-0 h-0.5 w-full rounded-full bg-gold"
-                          transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                          transition={{ type: 'tween', ease: [0.2, 0.8, 0.2, 1], duration: 0.3 }}
                         />
                       )}
                     </a>

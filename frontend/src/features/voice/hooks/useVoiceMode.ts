@@ -258,7 +258,9 @@ export function useVoiceMode(
   } = useMicrophoneStream(handleAudioChunk, { sampleRate: 16000 });
 
   // Keep ref in sync so handleAudioChunk can call stopListening without stale closure
-  stopListeningRef.current = stopListening;
+  useEffect(() => {
+    stopListeningRef.current = stopListening;
+  }, [stopListening]);
 
   /**
    * Handle error messages from backend
@@ -408,6 +410,7 @@ export function useVoiceMode(
     // Detect transition to 'speaking' (Requirement 7.1)
     if (currentState === 'speaking' && previousState !== 'speaking') {
       if (micIsListening) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setState((prev) => ({ ...prev, isPaused: true })); // Requirement 7.2
         if (import.meta.env.DEV) {
           logger.info('[VoiceMode] Audio capture paused - assistant speaking');
@@ -481,6 +484,7 @@ export function useVoiceMode(
         canRetry = true;
       }
 
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setState((prev) => ({
         ...prev,
         error: userFriendlyMessage,
@@ -494,6 +498,7 @@ export function useVoiceMode(
    * Sync microphone listening state to voice mode state
    */
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setState((prev) => ({ ...prev, isListening: micIsListening }));
   }, [micIsListening]);
 
@@ -518,6 +523,7 @@ export function useVoiceMode(
       const errorMsg =
         connState === 'reconnecting' ? 'Reconnecting to server\u2026' : 'Connection lost';
 
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setState((prev) => ({
         ...prev,
         isListening: false,

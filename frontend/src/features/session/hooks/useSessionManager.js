@@ -21,7 +21,9 @@ export default function useSessionManager(urlSessionId, navigate) {
   const isAuthInitialized = useAuthStore((s) => s.isInitialized);
 
   const currentSessionIdRef = useRef(currentSessionId);
-  currentSessionIdRef.current = currentSessionId;
+  useEffect(() => {
+    currentSessionIdRef.current = currentSessionId;
+  }, [currentSessionId]);
   const isInitializingRef = useRef(false);
   const hasInitialized = useRef(false);
 
@@ -29,6 +31,24 @@ export default function useSessionManager(urlSessionId, navigate) {
     currentSessionIdRef.current = id;
     setCurrentSessionId(id);
   }, []);
+
+  const autoCreateReplacementSession = useCallback(async () => {
+    try {
+      const newSession = await sessionService.createSession();
+      const sessionWithDefaults = normalizeSession({
+        ...newSession,
+        messages: [],
+        messages_loaded: true,
+      });
+      setSessions([sessionWithDefaults]);
+      setActiveSessionId(sessionWithDefaults.id);
+      if (navigate) {
+        navigate(`/classroom/${sessionWithDefaults.id}`, { replace: true });
+      }
+    } catch (e) {
+      console.error('Failed to auto-create replacement session', e);
+    }
+  }, [navigate, setActiveSessionId]);
 
   /**
    * Single Async Initialization
@@ -159,6 +179,7 @@ export default function useSessionManager(urlSessionId, navigate) {
         abortController.abort();
       };
     } else if (!session.messages_loaded) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSessions((prev) =>
         prev.map((s) =>
           s.id === currentSessionId || s._id === currentSessionId
@@ -238,21 +259,7 @@ export default function useSessionManager(urlSessionId, navigate) {
           if (remaining.length === 0) {
             // Auto-create a new session to prevent empty state
             setTimeout(async () => {
-              try {
-                const newSession = await sessionService.createSession();
-                const sessionWithDefaults = normalizeSession({
-                  ...newSession,
-                  messages: [],
-                  messages_loaded: true,
-                });
-                setSessions([sessionWithDefaults]);
-                setActiveSessionId(sessionWithDefaults.id);
-                if (navigate) {
-                  navigate(`/classroom/${sessionWithDefaults.id}`, { replace: true });
-                }
-              } catch (e) {
-                console.error('Failed to auto-create session', e);
-              }
+              await autoCreateReplacementSession();
             }, 0);
 
             // Temporarily clear active session ID while creating
@@ -278,7 +285,7 @@ export default function useSessionManager(urlSessionId, navigate) {
         console.error('Failed to delete session:', error);
       }
     },
-    [setActiveSessionId, navigate]
+    [setActiveSessionId, navigate, autoCreateReplacementSession]
   );
 
   const clearAllSessions = useCallback(async () => {
@@ -291,25 +298,11 @@ export default function useSessionManager(urlSessionId, navigate) {
         navigate('/classroom', { replace: true });
       }
       // Auto-create a fresh blank session
-      try {
-        const newSession = await sessionService.createSession();
-        const sessionWithDefaults = normalizeSession({
-          ...newSession,
-          messages: [],
-          messages_loaded: true,
-        });
-        setSessions([sessionWithDefaults]);
-        setActiveSessionId(sessionWithDefaults.id);
-        if (navigate) {
-          navigate(`/classroom/${sessionWithDefaults.id}`, { replace: true });
-        }
-      } catch (createError) {
-        console.error('Failed to auto-create session after clear:', createError);
-      }
+      await autoCreateReplacementSession();
     } catch (error) {
       console.error('Failed to clear all sessions:', error);
     }
-  }, [setActiveSessionId, navigate]);
+  }, [setActiveSessionId, navigate, autoCreateReplacementSession]);
 
   const renameSession = useCallback((sessionId, newTitle) => {
     setSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, title: newTitle } : s)));

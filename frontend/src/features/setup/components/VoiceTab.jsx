@@ -1,7 +1,7 @@
-import { AnimatePresence, motion } from 'motion/react';
+import { motion } from 'motion/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FiCheck } from 'react-icons/fi';
 import { HiPlay, HiStop } from 'react-icons/hi2';
+import SelectionCheckmark from '@/shared/components/SelectionCheckmark';
 import { voices } from '../data/voices';
 
 export default function VoiceTab({ selected, onSelect, avatarGender, onPlay, onStop, isPlaying }) {
@@ -10,14 +10,14 @@ export default function VoiceTab({ selected, onSelect, avatarGender, onPlay, onS
   const playingIdRef = useRef(null);
 
   // Keep ref in sync for event handlers
-  playingIdRef.current = playingId;
-
-  // Sync playingId with parent's isPlaying state
   useEffect(() => {
-    if (!isPlaying && playingId) {
-      setPlayingId(null);
-    }
-  }, [isPlaying, playingId]);
+    playingIdRef.current = playingId;
+  }, [playingId]);
+
+  // Sync playingId with parent's isPlaying state during render
+  if (!isPlaying && playingId) {
+    setPlayingId(null);
+  }
 
   const handlePlayToggle = useCallback(
     (voice) => {
@@ -85,19 +85,11 @@ export default function VoiceTab({ selected, onSelect, avatarGender, onPlay, onS
                 {isCurrentlyPlaying ? <HiStop size={16} /> : <HiPlay size={16} />}
               </button>
 
-              <AnimatePresence>
-                {isSelected && (
-                  <motion.span
-                    className="voice-card-check"
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    exit={{ scale: 0 }}
-                    transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-                  >
-                    <FiCheck size={12} />
-                  </motion.span>
-                )}
-              </AnimatePresence>
+              <SelectionCheckmark
+                isSelected={isSelected}
+                className="voice-card-check"
+                size={12}
+              />
             </motion.button>
           );
         })}

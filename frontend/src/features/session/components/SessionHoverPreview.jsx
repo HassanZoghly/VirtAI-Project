@@ -6,6 +6,14 @@ import './SessionHoverPreview.css';
 export default function SessionHoverPreview({ session, triggerElement, isHovered }) {
   const [show, setShow] = useState(false);
   const timerRef = useRef(null);
+  const [prevHovered, setPrevHovered] = useState(isHovered);
+
+  if (isHovered !== prevHovered) {
+    setPrevHovered(isHovered);
+    if (!isHovered && show) {
+      setShow(false);
+    }
+  }
 
   useEffect(() => {
     if (isHovered) {
@@ -14,7 +22,6 @@ export default function SessionHoverPreview({ session, triggerElement, isHovered
       }, 2000); // 2s delay
     } else {
       if (timerRef.current) clearTimeout(timerRef.current);
-      setShow(false);
     }
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);

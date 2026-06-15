@@ -93,6 +93,9 @@ PRODUCT.md
 mcp.json
 Notes/
 **/avatar_legacy_backup/
+.playwright-cli
+.npm-cache
+reports_frontend/
 
 # ═══════════════════════════════════════════
 #  Obsidian Files

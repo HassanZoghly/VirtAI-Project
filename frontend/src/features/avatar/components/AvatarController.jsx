@@ -18,6 +18,7 @@ import apiClient from '@/shared/services/apiClient';
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useAudioDrivenLipSync } from '../hooks/useAudioDrivenLipSync';
 import { WebAudioQueue } from '../utils/WebAudioQueue';
+import { isAvatarDebugEnabled } from '../utils/avatarFirstFrameValidation';
 
 const AvatarScene = React.lazy(() => import('./AvatarScene'));
 
@@ -45,6 +46,7 @@ export default function AvatarController({
   mouthCues = [],
   modelPath,
   avatarId,
+  avatarLifecycleState,
   onSceneMounted,
   onFirstFrameValidated,
   onRenderFailure,
@@ -78,25 +80,48 @@ export default function AvatarController({
   const chunkIntervalsRef = useRef([]);
   const lastChunkTimeRef = useRef(0);
   
+  const evaluateSpeechEnd = useCallback(() => {
+    const hasPendingChunks = audioQueueRef.current.some(
+      (item) => item.status === 'pending' || item.status === 'loading'
+    );
+    const audioDrained = !isPlayingAudioRef.current && !hasPendingChunks;
+    
+    if (audioDrained && pipelineStateRef.current === 'idle') {
+      if (endGraceTimerRef.current) return; // already timing out
+
+      const avg = chunkIntervalsRef.current.length
+        ? chunkIntervalsRef.current.reduce((a, b) => a + b, 0) / chunkIntervalsRef.current.length
+        : 800;
+        
+      const minGrace = 300;
+      const maxGrace = 1200;
+      const graceMs = Math.max(minGrace, Math.min(maxGrace, avg * 1.5));
+      
+      endGraceTimerRef.current = setTimeout(() => {
+        endGraceTimerRef.current = null;
+        // Double check after grace period
+        if (!isPlayingAudioRef.current && pipelineStateRef.current === 'idle') {
+           responseSpeakingRef.current = false;
+           if (animationControllerRef.current) {
+             animationControllerRef.current.stopTalking();
+           }
+        }
+      }, graceMs);
+    }
+  }, []);
+
   useEffect(() => {
     pipelineStateRef.current = pipelineState;
-    if (pipelineState === 'idle' && !isPlayingAudioRef.current) {
-      const hasPendingChunks = audioQueueRef.current.some(
-        (item) => item.status === 'pending' || item.status === 'loading'
-      );
-      if (!hasPendingChunks && animationControllerRef.current) {
-        // Fallback for cases where audio ended before pipeline state turned idle
-        animationControllerRef.current.stopTalking();
-        responseSpeakingRef.current = false;
-      }
-    } else if (pipelineState !== 'idle') {
+    if (pipelineState === 'idle') {
+      evaluateSpeechEnd();
+    } else {
       // Reset chunk tracking on new session
       if (!responseSpeakingRef.current) {
         chunkIntervalsRef.current = [];
         lastChunkTimeRef.current = 0;
       }
     }
-  }, [pipelineState]);
+  }, [pipelineState, evaluateSpeechEnd]);
 
   // ── WebAudioQueue setup ────────────────────────────────────────────────
   const webAudioQueueRef = useRef(null);
@@ -111,7 +136,10 @@ export default function AvatarController({
 
     queue.onPlay = () => {
       setIsPlayingAudio(true);
-      clearTimeout(endGraceTimerRef.current);
+      if (endGraceTimerRef.current) {
+        clearTimeout(endGraceTimerRef.current);
+        endGraceTimerRef.current = null;
+      }
 
       if (!responseSpeakingRef.current) {
         responseSpeakingRef.current = true;
@@ -125,26 +153,7 @@ export default function AvatarController({
     queue.onEnded = () => {
       setIsPlayingAudio(false);
       currentAudioItemRef.current = null;
-
-      const hasPendingChunks = audioQueueRef.current.some(
-        (item) => item.status === 'pending' || item.status === 'loading'
-      );
-
-      if (!hasPendingChunks && pipelineStateRef.current === 'idle') {
-        const avg = chunkIntervalsRef.current.length
-          ? chunkIntervalsRef.current.reduce((a, b) => a + b, 0) / chunkIntervalsRef.current.length
-          : 1000;
-        const graceMs = Math.max(1000, avg * 1.5);
-        
-        // Start grace window — if no new audio arrives, end speaking
-        endGraceTimerRef.current = setTimeout(() => {
-          responseSpeakingRef.current = false;
-          // All audio finished AND backend is idle → stop body movement
-          if (animationControllerRef.current) {
-            animationControllerRef.current.stopTalking();
-          }
-        }, graceMs);
-      }
+      evaluateSpeechEnd();
     };
 
     return () => {
@@ -203,6 +212,7 @@ export default function AvatarController({
       audioQueueRef.current.forEach((item) => {
         item.cancelled = true;
       });
+      // eslint-disable-next-line react-hooks/immutability
       audioQueueRef.current = [];
 
       if (currentAudioItemRef.current) {
@@ -322,8 +332,11 @@ export default function AvatarController({
   const usesStructuredAudioItems = Array.isArray(audioItems);
 
   useEffect(() => {
-    queuedAudioIdsRef.current.clear();
-    stopAudioQueue();
+    const timer = setTimeout(() => {
+      queuedAudioIdsRef.current.clear();
+      stopAudioQueue();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [audioQueueResetToken, stopAudioQueue]);
 
   // ── Process structured audio items ─────────────────────────────────────
@@ -344,9 +357,11 @@ export default function AvatarController({
     if (usesStructuredAudioItems) return;
 
     if (!audioUrl) {
-      queuedAudioIdsRef.current.clear();
-      stopAudioQueue();
-      return;
+      const timer = setTimeout(() => {
+        queuedAudioIdsRef.current.clear();
+        stopAudioQueue();
+      }, 0);
+      return () => clearTimeout(timer);
     }
 
     enqueueAudioItem({
@@ -363,18 +378,22 @@ export default function AvatarController({
   }, [stopAudioQueue]);
 
   // ── Diagnostics ────────────────────────────────────────────────────────────
+  const avatarDebugEnabled = isAvatarDebugEnabled();
   const renderCountRef = useRef(0);
-  if (import.meta.env.DEV) {
-    renderCountRef.current++;
-    console.info(`[DIAG][AvatarController] 🔄 Render #${renderCountRef.current}. pipelineState: ${pipelineState}`);
-  }
+  useEffect(() => {
+    if (avatarDebugEnabled) {
+      renderCountRef.current++;
+      console.info(`[DIAG][AvatarController] 🔄 Render #${renderCountRef.current}. pipelineState: ${pipelineState}`);
+    }
+  });
 
   useEffect(() => {
-    if (import.meta.env.DEV) {
+    if (avatarDebugEnabled) {
       console.info('[DIAG][AvatarController] 🟢 MOUNTED');
       return () => console.info('[DIAG][AvatarController] 🔴 UNMOUNTED');
     }
-  }, []);
+    return undefined;
+  }, [avatarDebugEnabled]);
 
   // ── Model loaded handler ───────────────────────────────────────────────────
   const handleModelLoaded = useCallback(() => {
@@ -401,6 +420,7 @@ export default function AvatarController({
         morphTargetsRef={morphTargetsRef}
         updateLipSync={updateLipSync}
         onModelLoaded={handleModelLoaded}
+        avatarLifecycleState={avatarLifecycleState}
         onFirstFrameValidated={onFirstFrameValidated}
         onRenderFailure={onRenderFailure}
         onError={onError}

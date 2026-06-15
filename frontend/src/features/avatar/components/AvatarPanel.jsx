@@ -1,7 +1,18 @@
-/* eslint-disable no-console */
 import React, { lazy, Suspense, useRef, useEffect } from 'react';
+import { isAvatarDebugEnabled } from '../utils/avatarFirstFrameValidation';
 
 const AvatarController = lazy(() => import('./AvatarController.jsx'));
+
+export function resolveAvatarPanelPresentationState(avatarStatus) {
+  return {
+    isLoaded: avatarStatus === 'visible',
+    isFailed: avatarStatus === 'failed',
+    isLoading:
+      avatarStatus === 'loading' ||
+      avatarStatus === 'scene-mounted' ||
+      avatarStatus === 'scene-ready',
+  };
+}
 
 /**
  * Avatar viewport panel with loading indicator, error UI, and lazy-loaded AvatarController.
@@ -9,7 +20,7 @@ const AvatarController = lazy(() => import('./AvatarController.jsx'));
  * @param {object} props
  * @param {string} props.modelPath - Path to the GLB model file
  * @param {string} props.avatarId - Active avatar ID (e.g., 'avatar1')
- * @param {'loading'|'scene-ready'|'failed'} props.avatarStatus - Avatar lifecycle status
+ * @param {'loading'|'scene-mounted'|'scene-ready'|'visible'|'failed'} props.avatarStatus - Avatar lifecycle status
  * @param {string} props.pipelineState - Current pipeline state
  * @param {string|null} props.audioUrl - TTS audio URL when speaking
  * @param {Array<object>} [props.audioItems] - Ordered TTS audio items queued by the shell
@@ -39,15 +50,18 @@ export default function AvatarPanel({
   emotionData,
   lastError,
 }) {
+  const avatarDebugEnabled = isAvatarDebugEnabled();
   // Phase 0 diagnostics (kept until visibility confirmed)
   const renderCountRef = useRef(0);
-  if (import.meta.env.DEV) {
-    renderCountRef.current++;
-    console.info(`[DIAG][AvatarPanel] 🔄 Render #${renderCountRef.current}. avatarStatus: ${avatarStatus}, modelPath: ${modelPath}, avatarId: ${avatarId}`);
-  }
+  useEffect(() => {
+    if (avatarDebugEnabled) {
+      renderCountRef.current++;
+      console.info(`[DIAG][AvatarPanel] 🔄 Render #${renderCountRef.current}. avatarStatus: ${avatarStatus}, modelPath: ${modelPath}, avatarId: ${avatarId}`);
+    }
+  });
 
   useEffect(() => {
-    if (import.meta.env.DEV) {
+    if (avatarDebugEnabled) {
       console.info('[DIAG][AvatarPanel] 🟢 ACTUAL MOUNT');
       const interval = setInterval(() => {
         const wrapper = document.querySelector('.avatar-canvas-wrapper');
@@ -80,17 +94,15 @@ export default function AvatarPanel({
         clearInterval(interval);
       };
     }
-  }, []); // Empty deps so it ONLY tracks true mount/unmount
+  }, [avatarDebugEnabled, avatarStatus, pipelineState]);
 
-  if (import.meta.env.DEV) {
+  if (avatarDebugEnabled) {
     if (avatarStatus === 'failed') {
       console.warn('[DIAG][AvatarPanel] ⚠️ avatarStatus is FAILED — error UI should be visible');
     }
   }
 
-  const isLoaded = avatarStatus === 'scene-ready';
-  const isFailed = avatarStatus === 'failed';
-  const isLoading = avatarStatus === 'loading' || avatarStatus === 'scene-mounted';
+  const { isLoaded, isFailed, isLoading } = resolveAvatarPanelPresentationState(avatarStatus);
 
   const panelClassName = `avatar-panel${isLoaded ? ' loaded' : ''}`;
 
@@ -130,7 +142,7 @@ export default function AvatarPanel({
               Try Again
             </button>
           )}
-          {import.meta.env.DEV && lastError && (
+          {avatarDebugEnabled && lastError && (
             <pre className="avatar-error-dev">
               {lastError.message || String(lastError)}
             </pre>
@@ -139,11 +151,12 @@ export default function AvatarPanel({
       )}
 
       {/* Avatar canvas — always mounted to allow loading, visibility controlled by CSS */}
-      <div className={`avatar-canvas-wrapper${isFailed ? '' : ' visible'}`} role="img" aria-label="AI avatar">
+      <div className={`avatar-canvas-wrapper${isLoaded ? ' visible' : ''}`} role="img" aria-label="AI avatar">
         <Suspense fallback={null}>
           <AvatarController
             modelPath={modelPath}
             avatarId={avatarId}
+            avatarLifecycleState={avatarStatus}
             pipelineState={pipelineState}
             audioUrl={audioUrl}
             audioItems={audioItems}
@@ -160,7 +173,7 @@ export default function AvatarPanel({
       </div>
 
       {/* Diagnostic Overlay */}
-      {import.meta.env.DEV && (
+      {avatarDebugEnabled && (
         <div style={{
           position: 'absolute', top: 10, left: 10, zIndex: 9999,
           background: 'rgba(0,0,0,0.8)', color: 'lime', fontSize: '10px',

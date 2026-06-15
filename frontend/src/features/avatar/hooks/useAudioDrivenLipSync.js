@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import { useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 
@@ -116,7 +115,7 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
   // Smoothing state for amplitude envelope
   const smoothedAmplitudeRef = useRef(0);
   const ATTACK_SPEED = 0.3;
-  const RELEASE_SPEED = 0.15;
+  const RELEASE_SPEED = 0.10;
 
   // Prosody tracking refs
   const lastAmpRef = useRef(0);
@@ -142,8 +141,8 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
         const bufferLength = analyserRef.current.frequencyBinCount;
         dataArrayRef.current = new Uint8Array(bufferLength);
         timeDomainDataRef.current = new Uint8Array(analyserRef.current.fftSize);
-      } catch (err) {
-        console.error('[AudioDrivenLipSync] Failed to create AudioContext:', err);
+      } catch {
+        console.error('[AudioDrivenLipSync] Failed to create AudioContext');
         return;
       }
     } else if (isWebAudioQueue) {
@@ -163,7 +162,7 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
       if (sourceRef.current) {
         try {
           sourceRef.current.disconnect();
-        } catch (err) {
+        } catch {
           // Ignore
         }
         sourceRef.current = null;
@@ -176,7 +175,7 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
         sourceRef.current = audioContextRef.current.createMediaElementSource(audio);
         sourceRef.current.connect(analyserRef.current);
         analyserRef.current.connect(audioContextRef.current.destination);
-      } catch (err) {
+      } catch {
         // Source might already be connected
       }
     }
@@ -185,7 +184,7 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
       if (sourceRef.current) {
         try {
           sourceRef.current.disconnect();
-        } catch (err) {
+        } catch {
           // Ignore disconnect errors
         }
         sourceRef.current = null;
@@ -210,7 +209,11 @@ export function useAudioDrivenLipSync(audioRef, mouthCues = [], isPlaying = fals
    * @param {number} deltaTimeMs — milliseconds since last frame
    */
   const updateLipSync = useCallback((deltaTimeMs = 16.6) => {
-    if (!isPlaying || !audioRef.current) {
+    const audio = audioRef.current;
+    const isWebAudioQueue = audio && typeof audio.currentTime === 'number' && typeof audio.utteranceActive === 'boolean';
+    const isAudioActive = isWebAudioQueue ? audio.utteranceActive : isPlaying;
+
+    if (!isAudioActive || !audioRef.current) {
       // Smoothly fade out morphs when not playing
       const smoothed = smoothedMorphsRef.current;
       let anyActive = false;

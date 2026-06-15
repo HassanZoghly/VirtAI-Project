@@ -6,30 +6,9 @@ import {
   markBrowserAuthSession,
 } from '@/features/auth/services/authStateCleanup';
 import axios from 'axios';
+import { ensureCsrfToken, CSRF_HEADER_NAME } from './csrfService';
 
-const CSRF_COOKIE_NAME = 'csrf_token';
-const CSRF_HEADER_NAME = 'X-CSRF-Token';
-const STATE_CHANGING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-const API_PREFIX = '/api/v1';
-
-let csrfTokenRequest = null;
-
-function readCookie(name) {
-  if (typeof document === 'undefined') {
-    return null;
-  }
-
-  const cookiePrefix = `${name}=`;
-  const cookies = document.cookie ? document.cookie.split('; ') : [];
-
-  for (const cookie of cookies) {
-    if (cookie.startsWith(cookiePrefix)) {
-      return decodeURIComponent(cookie.slice(cookiePrefix.length));
-    }
-  }
-
-  return null;
-}
+// CSRF logic moved to csrfService
 
 function setRequestHeader(headers, name, value) {
   if (!headers) {
@@ -44,6 +23,9 @@ function setRequestHeader(headers, name, value) {
   headers[name] = value;
   return headers;
 }
+
+const STATE_CHANGING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const API_PREFIX = '/api/v1';
 
 function normalizeApiUrl(url) {
   if (typeof url !== 'string') {
@@ -61,31 +43,7 @@ function normalizeApiUrl(url) {
   return url;
 }
 
-async function ensureCsrfToken() {
-  if (typeof document === 'undefined') {
-    return null;
-  }
-
-  const existingToken = readCookie(CSRF_COOKIE_NAME);
-  if (existingToken) {
-    return existingToken;
-  }
-
-  if (!csrfTokenRequest) {
-    csrfTokenRequest = axios
-      .get('/api/v1/auth/csrf', { withCredentials: true })
-      .catch((error) => {
-        console.error('Failed to fetch initial CSRF token:', error);
-        return null;
-      })
-      .finally(() => {
-        csrfTokenRequest = null;
-      });
-  }
-
-  await csrfTokenRequest;
-  return readCookie(CSRF_COOKIE_NAME);
-}
+// ensureCsrfToken moved to csrfService
 
 const apiClient = axios.create({
   baseURL: '/api/v1',

@@ -7,6 +7,8 @@
 
 const CACHE_BUST = import.meta.env.DEV ? `?v=${Date.now()}` : '';
 
+export const REQUIRED_TALK_ANIMATION_NAMES = ['Talk_1', 'Talk_2'];
+
 export const ANIMATIONS = {
   idle: {
     name: 'idle',
@@ -24,6 +26,17 @@ export const ANIMATIONS = {
     path: `/models/animations/Talk/Talk_2.fbx${CACHE_BUST}`,
   }
 };
+
+export function getMissingTalkAnimationNames(animations = ANIMATIONS) {
+  return REQUIRED_TALK_ANIMATION_NAMES.filter((name) => {
+    const animation = animations[name];
+    return !animation || animation.type !== 'talk' || !animation.path;
+  });
+}
+
+export function formatMissingTalkAnimationsWarning(missingNames) {
+  return missingNames.map((name) => `${name} missing`).join('; ');
+}
 
 /**
  * Get all animation entries of a given type.

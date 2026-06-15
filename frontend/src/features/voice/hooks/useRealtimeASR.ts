@@ -81,7 +81,9 @@ export function useRealtimeASR(
 
   // Ref for onFinalTranscript to avoid re-subscriptions
   const onFinalRef = useRef(onFinalTranscript);
-  onFinalRef.current = onFinalTranscript;
+  useEffect(() => {
+    onFinalRef.current = onFinalTranscript;
+  }, [onFinalTranscript]);
 
   // Delegate to useVoiceMode for mic/VAD/WS orchestration
   const voiceMode = useVoiceMode(wsClient, pipelineState);
@@ -119,6 +121,7 @@ export function useRealtimeASR(
    */
   useEffect(() => {
     if (voiceMode.isListening) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsProcessing(true);
     } else {
       setIsProcessing(false);

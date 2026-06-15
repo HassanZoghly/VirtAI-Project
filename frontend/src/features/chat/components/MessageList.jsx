@@ -24,7 +24,6 @@ export default function MessageList({
   messages,
   currentMessage,
   interimTranscript,
-  error,
   avatarName,
   chatScrollRef,
   messagesEndRef,

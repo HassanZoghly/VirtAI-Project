@@ -9,9 +9,10 @@
  * Requirements: 14.1, 14.2
  */
 
-import { VADConfig, VADResult, VADProcessor } from './vad';
+import { VADConfig, VADResult, VADProcessor, VoiceActivityDetector } from './vad';
 import { CircularAudioBuffer } from './circularBuffer';
 import { logger } from '@/shared/utils/logger';
+import { calculateRMSEnergy } from './vadMath';
 
 /**
  * Performance metrics for VAD processing
@@ -49,10 +50,7 @@ export class OptimizedVADProcessor implements VADProcessor {
   private maxProcessingTimeSamples: number = 10;
 
   // Fallback to synchronous VAD
-  private lastSpeechTime: number;
-  private firstSpeechTime: number | null;
-  private currentState: 'silence' | 'speech' | 'pending';
-  private silenceDurationMs: number;
+  private syncVAD: VoiceActivityDetector;
 
   // Circular buffer for audio chunks
   private audioBuffer: CircularAudioBuffer;
@@ -81,10 +79,7 @@ export class OptimizedVADProcessor implements VADProcessor {
     }
   ) {
     this.config = config;
-    this.lastSpeechTime = Date.now();
-    this.firstSpeechTime = null;
-    this.currentState = 'silence';
-    this.silenceDurationMs = 0;
+    this.syncVAD = new VoiceActivityDetector(config);
 
     // Initialize circular buffer
     this.audioBuffer = new CircularAudioBuffer(
@@ -138,15 +133,7 @@ export class OptimizedVADProcessor implements VADProcessor {
             let currentState = 'silence';
             let silenceDurationMs = 0;
 
-            function calculateRMSEnergy(audioData) {
-                if (audioData.length === 0) return 0.0;
-                let sumOfSquares = 0.0;
-                for (let i = 0; i < audioData.length; i++) {
-                    sumOfSquares += audioData[i] * audioData[i];
-                }
-                const rms = Math.sqrt(sumOfSquares / audioData.length);
-                return Math.min(1.0, Math.max(0.0, rms));
-            }
+            ${calculateRMSEnergy.toString()}
 
             function processAudioChunk(audioData) {
                 const energy = calculateRMSEnergy(audioData);
@@ -241,55 +228,7 @@ export class OptimizedVADProcessor implements VADProcessor {
    * Synchronous VAD processing (fallback)
    */
   private processSync(audioData: Float32Array): VADResult {
-    const energy = this.calculateRMSEnergy(audioData);
-    const isSpeech = energy > this.config.silenceThreshold;
-    const currentTime = Date.now();
-
-    if (isSpeech) {
-      this.lastSpeechTime = currentTime;
-      this.silenceDurationMs = 0;
-      this.currentState = 'speech';
-      if (this.firstSpeechTime === null) {
-        this.firstSpeechTime = currentTime;
-      }
-    } else {
-      this.silenceDurationMs = currentTime - this.lastSpeechTime;
-      if (this.firstSpeechTime !== null) {
-        this.currentState = 'pending';
-      } else {
-        this.currentState = 'silence';
-      }
-    }
-
-    const totalSpeechDuration =
-      this.firstSpeechTime !== null ? this.lastSpeechTime - this.firstSpeechTime : 0;
-
-    const shouldFinalize =
-      !isSpeech &&
-      this.silenceDurationMs >= this.config.silenceDuration &&
-      totalSpeechDuration >= this.config.minSpeechDuration;
-
-    return {
-      isSpeech,
-      energy,
-      silenceDurationMs: this.silenceDurationMs,
-      shouldFinalize,
-    };
-  }
-
-  /**
-   * Calculate RMS energy from audio samples
-   */
-  private calculateRMSEnergy(audioData: Float32Array): number {
-    if (audioData.length === 0) {
-      return 0.0;
-    }
-    let sumOfSquares = 0.0;
-    for (let i = 0; i < audioData.length; i++) {
-      sumOfSquares += audioData[i] * audioData[i];
-    }
-    const rms = Math.sqrt(sumOfSquares / audioData.length);
-    return Math.min(1.0, Math.max(0.0, rms));
+    return this.syncVAD.processAudioChunk(audioData);
   }
 
   /**
@@ -345,10 +284,7 @@ export class OptimizedVADProcessor implements VADProcessor {
    * Reset VAD state
    */
   reset(): void {
-    this.lastSpeechTime = Date.now();
-    this.firstSpeechTime = null;
-    this.currentState = 'silence';
-    this.silenceDurationMs = 0;
+    this.syncVAD.reset();
     this.audioBuffer.clear();
     this.pendingChunks = [];
 
@@ -366,7 +302,7 @@ export class OptimizedVADProcessor implements VADProcessor {
    * Get current VAD state
    */
   getState(): 'silence' | 'speech' | 'pending' {
-    return this.currentState;
+    return this.syncVAD.getState();
   }
 
   /**

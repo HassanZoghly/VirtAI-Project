@@ -68,7 +68,7 @@ export function useGoogleAuth() {
     try {
       const url = await getGoogleAuthUrl();
       window.location.href = url;
-    } catch (err) {
+    } catch {
       toast.show('error', 'Google Auth', 'Could not connect to Google.');
       setIsLoading(false);
     }
@@ -89,7 +89,7 @@ export function useGoogleCallback() {
       setAuth(user, access_token);
       toast.show('success', 'Welcome!', `Signed in as ${user.email}`);
       navigate(user.setupComplete ? '/classroom' : '/setup');
-    } catch (err) {
+    } catch {
       toast.show('error', 'Auth Failed', 'Google sign-in failed.');
       navigate('/auth');
     } finally {

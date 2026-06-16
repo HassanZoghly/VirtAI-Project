@@ -28,8 +28,8 @@ export default function LoginForm({ onToggleMode }) {
     defaultValues: { email: '', password: '' },
   });
 
-  const onSubmit = (data) => {
-    login(data.email, data.password);
+  const onSubmit = async (data) => {
+    await login(data.email, data.password);
   };
 
   return (

@@ -7,6 +7,7 @@ export {
   useGoogleAuth,
   useGoogleCallback,
   useLogin,
+  useLogout,
   useRestoreSession,
   useSignup,
 } from './hooks/useAuth';

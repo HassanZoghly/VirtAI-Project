@@ -28,11 +28,7 @@ export const useAuthStore = create((set) => ({
     set({ user, accessToken, isLoading: false, isInitializing: false, isInitialized: true });
   },
 
-  setUser: (user) =>
-    set((state) => ({
-      ...state,
-      user,
-    })),
+  setUser: (user) => set((state) => ({ ...state, user, isLoading: false })),
 
   logout: () => {
     clearBrowserAuthState();

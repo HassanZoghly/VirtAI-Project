@@ -10,19 +10,7 @@ import { ensureCsrfToken, CSRF_HEADER_NAME } from './csrfService';
 
 // CSRF logic moved to csrfService
 
-function setRequestHeader(headers, name, value) {
-  if (!headers) {
-    return { [name]: value };
-  }
 
-  if (typeof headers.set === 'function') {
-    headers.set(name, value);
-    return headers;
-  }
-
-  headers[name] = value;
-  return headers;
-}
 
 const STATE_CHANGING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const API_PREFIX = '/api/v1';
@@ -66,12 +54,12 @@ apiClient.interceptors.request.use(async (config) => {
     if (!csrfToken) {
       throw new Error('Unable to obtain CSRF token for state-changing request.');
     }
-    config.headers = setRequestHeader(config.headers, CSRF_HEADER_NAME, csrfToken);
+    config.headers[CSRF_HEADER_NAME] = csrfToken;
   }
 
   const token = useAuthStore.getState().accessToken;
   if (token) {
-    config.headers = setRequestHeader(config.headers, 'Authorization', `Bearer ${token}`);
+    config.headers['Authorization'] = `Bearer ${token}`;
   }
 
   return config;
@@ -91,11 +79,8 @@ apiClient.interceptors.response.use(
         // setAuth(store.user, token) would wipe user to null if initAuth
         // hasn't finished populating it yet (e.g. on hard page refresh).
         useAuthStore.setState({ accessToken: resData.access_token });
-        original.headers = setRequestHeader(
-          original.headers || {},
-          'Authorization',
-          `Bearer ${resData.access_token}`
-        );
+        original.headers = original.headers || {};
+        original.headers['Authorization'] = `Bearer ${resData.access_token}`;
         return apiClient(original);
       } catch {
         clearBrowserAuthState();

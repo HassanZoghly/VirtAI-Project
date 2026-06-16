@@ -21,7 +21,14 @@ export default function AuthCallbackHandler() {
       return;
     }
     called.current = true;
-    handleCallback(code, state);
+    
+    (async () => {
+      try {
+        await handleCallback(code, state);
+      } catch {
+        navigate('/auth', { replace: true });
+      }
+    })();
   }, [searchParams, handleCallback, navigate]);
 
   return (

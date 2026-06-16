@@ -3,3 +3,6 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+  backend:
+    volumes:
+      - ./backend/.env:/app/.env

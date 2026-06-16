@@ -42,8 +42,14 @@ export default function VoiceTab({ selected, onSelect, avatarGender, onPlay, onS
           const isSelected = selected?.id === voice.id;
           const isCurrentlyPlaying = playingId === voice.id && isPlaying;
           return (
-            <motion.button
-              type="button"
+            <motion.div
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onSelect(voice);
+                }
+              }}
               key={voice.id}
               className={`voice-card${isSelected ? ' selected' : ''}`}
               onClick={() => onSelect(voice)}
@@ -90,7 +96,7 @@ export default function VoiceTab({ selected, onSelect, avatarGender, onPlay, onS
                 className="voice-card-check"
                 size={12}
               />
-            </motion.button>
+            </motion.div>
           );
         })}
       </div>

@@ -6,12 +6,14 @@
   box-sizing: border-box;
   background: var(--primary-bg, #121212);
   color: var(--text-primary, #fff);
+  overflow: hidden;
 }
 
 .classroom-shell {
   width: 100%;
-  height: 100dvh;
+  height: 100%;
   position: relative;
+  overflow: hidden;
 }
 
 .shell-fallback {

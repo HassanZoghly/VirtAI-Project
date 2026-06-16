@@ -56,9 +56,32 @@ if [[ ! -f "docker-compose.dev.yml" ]]; then
 fi
 echo "✅ Docker compose files found."
 
-# 4. Optional --no-build flag to skip rebuilding every time
+# 4. Check for .env file (optional but recommended)
+if [[ ! -f ".env" ]]; then
+    echo "⚠️  Warning: .env file not found. Copy .env.example to .env and fill required variables."
+fi
+
+# 5. Handle flags
 REBUILD=""
-if [[ "$1" == "--no-build" ]]; then
+FORCE_RECREATE=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --no-build)
+            REBUILD=""
+            ;;
+        --force-recreate)
+            FORCE_RECREATE="--force-recreate"
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Usage: $0 [--no-build] [--force-recreate]"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+if [[ -z "$REBUILD" ]]; then
     echo "ℹ️  Skipping build (using --no-build)."
 else
     REBUILD="--build"
@@ -68,8 +91,8 @@ echo ""
 echo "🚀 Starting VirtAI in DEVELOPMENT mode..."
 echo ""
 
-# 5. Run using docker compose (modern syntax)
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up $REBUILD -d
+# 6. Run using docker compose (modern syntax)
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up $REBUILD $FORCE_RECREATE -d
 
 echo ""
 echo "✅ VirtAI development environment is up."

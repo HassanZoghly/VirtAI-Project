@@ -81,7 +81,7 @@ export default function SlideDrawer({
             onKeyDown={handleKeyDown}
             drag={isMobile && enableDrag ? 'y' : false}
             dragConstraints={{ top: 0, bottom: 0 }}
-            dragElastic={0.2}
+            dragElastic={0}
             onDragEnd={(e, info) => {
               if (isMobile && enableDrag && info.offset.y > 100) {
                 onClose();

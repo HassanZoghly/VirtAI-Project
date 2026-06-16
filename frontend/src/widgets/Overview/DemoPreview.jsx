@@ -32,7 +32,7 @@ export default function DemoPreview() {
         />
       </motion.div>
 
-      <p className="mx-auto mt-5 max-w-lg text-center text-sm leading-relaxed text-offwhite/62">
+      <p className="mx-auto mt-5 max-w-md text-center text-sm leading-relaxed text-offwhite/62">
         A single classroom surface where voice input, retrieval, and avatar delivery stay in sync.
       </p>
     </section>

@@ -78,7 +78,7 @@ if [[ -z "$REBUILD" ]] && [[ "$1" != "--no-build" ]]; then
 fi
 
 # 5. Check if production containers are already running (BEFORE starting)
-if docker compose -f docker-compose.yml -f docker-compose.prod.yml ps | grep -q "Up"; then
+if docker compose -f docker-compose.yml -f docker-compose.prod.yml ps --services --filter "status=running" | grep -q "backend"; then
     echo ""
     echo "⚠️  Production containers are already running."
     read -p "Do you want to restart them? (y/N) " -n 1 -r

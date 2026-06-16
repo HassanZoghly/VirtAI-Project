@@ -46,7 +46,7 @@ export default function Footer() {
           ))}
         </div>
 
-        <p className="mt-16 text-center text-xs text-offwhite/60">
+        <p className="mx-auto mt-16 text-center text-xs text-offwhite/60">
           &copy; {new Date().getFullYear()} VirtAI &mdash; Graduation Project
         </p>
       </div>

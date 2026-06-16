@@ -1,13 +1,15 @@
 import { motion } from 'motion/react';
 
+import { rand } from '@/shared/utils/math';
+
 const PARTICLES = Array.from({ length: 10 }, (_, i) => {
   const angle = (i / 10) * Math.PI * 2;
-  const dist = 45 + Math.random() * 25;
+  const dist = rand(45, 70);
   return {
     tx: `${Math.cos(angle) * dist}px`,
     ty: `${Math.sin(angle) * dist}px`,
-    size: 4 + Math.random() * 4,
-    delay: 0.5 + Math.random() * 0.2,
+    size: rand(4, 8),
+    delay: rand(0.5, 0.7),
   };
 });
 

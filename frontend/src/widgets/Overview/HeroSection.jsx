@@ -10,15 +10,16 @@ export default function HeroSection({ ctaLabel, ctaTo }) {
           </p>
 
           <h1
-            className="mt-6 max-w-[20ch] text-4xl font-black leading-[1.02] text-offwhite sm:text-5xl lg:text-6xl"
+            className="mt-6 max-w-[22ch] text-3xl font-bold leading-tight text-offwhite sm:text-4xl lg:text-5xl"
             style={{ fontFamily: 'var(--font-display)' }}
           >
-            Deploy an AI teaching assistant your institution can rely on.
+            Deploy an AI Teaching Assistant Designed to Enhance Learning, Engagement, and Student
+            Success.
           </h1>
 
-          <p className="mt-7 max-w-[62ch] text-lg leading-relaxed text-offwhite/78">
-            VirtAI combines real-time voice interaction, curriculum-aware reasoning, and avatar
-            delivery in one production-ready platform.
+          <p className="mt-7 max-w-[55ch] text-base leading-relaxed text-offwhite/80">
+            Deliver personalized guidance, instant answers, and continuous academic support through
+            real-time voice interaction, curriculum-aware reasoning, and lifelike AI avatars.
           </p>
 
           <div className="mt-10 flex flex-wrap justify-center md:justify-start items-center gap-4">
@@ -53,16 +54,13 @@ export default function HeroSection({ ctaLabel, ctaTo }) {
         </div>
 
         <div className="lg:col-span-5">
-          <figure className="overflow-hidden rounded-2xl border border-offwhite/12 bg-[#201f1d]">
+          <figure className="overflow-hidden rounded-2xl border border-offwhite/12 bg-[#201f1d] relative aspect-video">
             <img
               src="/assets/images/image.webp"
               alt="VirtAI platform classroom preview"
-              className="block w-full object-cover"
-              fetchpriority="high"
+              className="block w-full h-full object-cover"
               width={896}
               height={504}
-              loading="eager"
-              sizes="(min-width: 1024px) 38vw, 100vw"
             />
           </figure>
         </div>

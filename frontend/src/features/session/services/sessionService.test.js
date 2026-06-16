@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import apiClient from '@/shared/services/apiClient';
+import apiClient from '@/core/api/apiClient';
 import { fetchSessionMessages, fetchSessions } from './sessionService';
 
-vi.mock('@/shared/services/apiClient', () => ({
+vi.mock('@/core/api/apiClient', () => ({
   default: {
     get: vi.fn(),
     post: vi.fn(),

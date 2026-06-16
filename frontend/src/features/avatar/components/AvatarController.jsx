@@ -14,7 +14,7 @@
  *   - Parse animation timelines
  *   - Run state machines
  */
-import apiClient from '@/shared/services/apiClient';
+import apiClient from '@/core/api/apiClient';
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useAudioDrivenLipSync } from '../hooks/useAudioDrivenLipSync';
 import { WebAudioQueue } from '../utils/WebAudioQueue';

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 
+import { clamp, lerp, rand, randInt } from '@/shared/utils/math';
+
 /* ── colour constants ─────────────────────────────────────── */
 const TRACK_COLOR = 'rgba(109, 0, 26, 0.08)';
 const PULSE_PALETTE = [
@@ -7,12 +9,6 @@ const PULSE_PALETTE = [
   { hex: '#6D001A', r: 109, g: 0, b: 26, weight: 0.25 },
   { hex: '#F5F1EC', r: 245, g: 241, b: 236, weight: 0.15 },
 ];
-
-/* ── helpers ──────────────────────────────────────────────── */
-const rand = (lo, hi) => lo + Math.random() * (hi - lo);
-const randInt = (lo, hi) => Math.floor(rand(lo, hi + 1));
-const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-const lerp = (a, b, t) => a + (b - a) * t;
 
 function pickColor() {
   const r = Math.random();
@@ -267,8 +263,6 @@ function findJunctions(paths) {
               x: (pA[i].x + pB[j].x) / 2,
               y: (pA[i].y + pB[j].y) / 2,
               brightness: 0,
-              fading: false,
-              timer: 0,
             });
           }
         }
@@ -292,47 +286,43 @@ function findJunctions(paths) {
   return deduped;
 }
 
-/* ── pulse pool ───────────────────────────────────────────── */
-function createPulse(paths) {
-  const pathIdx = randInt(0, paths.length - 1);
-  const color = pickColor();
+function initPulseBase(paths) {
   return {
-    pathIdx,
-    progress: 0,
+    pathIdx: randInt(0, paths.length - 1),
     speed: rand(0.001, 0.004),
     tailLen: rand(60, 150),
-    color,
+    color: pickColor(),
     opacity: rand(0.4, 0.7),
     alive: true,
     fadeOut: 0,
     fadeOutDuration: 300,
-    delay: 0,
     flickerTimer: 0,
     flickerCount: 0,
     flickering: false,
   };
 }
 
+function createPulse(paths) {
+  if (!paths || paths.length === 0) return null;
+  return {
+    ...initPulseBase(paths),
+    progress: 0,
+    delay: 0,
+  };
+}
+
 function resetPulse(p, paths) {
-  const pathIdx = randInt(0, paths.length - 1);
-  const color = pickColor();
-  p.pathIdx = pathIdx;
+  if (!paths || paths.length === 0) {
+    p.alive = false;
+    return;
+  }
+  Object.assign(p, initPulseBase(paths));
   p.progress = 0;
-  p.speed = rand(0.001, 0.004);
-  p.tailLen = rand(60, 150);
-  p.color = color;
-  p.opacity = rand(0.4, 0.7);
-  p.alive = true;
-  p.fadeOut = 0;
-  p.fadeOutDuration = 300;
   p.delay = rand(500, 3000);
-  p.flickerTimer = 0;
-  p.flickerCount = 0;
-  p.flickering = false;
 }
 
 /* ════════════════════════════════════════════════════════════
-   COMPONENT
+    COMPONENT
    ════════════════════════════════════════════════════════════ */
 export default function CircuitBoardBackground({ pulseCount = 8, opacity = 0.5, className = '' }) {
   const canvasRef = useRef(null);
@@ -375,9 +365,11 @@ export default function CircuitBoardBackground({ pulseCount = 8, opacity = 0.5, 
       const pool = [];
       for (let i = 0; i < activePulses; i++) {
         const p = createPulse(s.paths);
-        p.progress = Math.random();
-        p.delay = 0;
-        pool.push(p);
+        if (p) {
+          p.progress = Math.random();
+          p.delay = 0;
+          pool.push(p);
+        }
       }
       s.pulses = pool;
     },
@@ -568,7 +560,6 @@ export default function CircuitBoardBackground({ pulseCount = 8, opacity = 0.5, 
 
     const ro = new ResizeObserver(() => resize());
     ro.observe(document.documentElement);
-    resize();
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -607,11 +598,7 @@ export default function CircuitBoardBackground({ pulseCount = 8, opacity = 0.5, 
         pointerEvents: 'none',
         opacity,
       }}
+      aria-hidden="true"
     />
   );
 }
-
-// Usage:
-// <CircuitBoardBackground pulseCount={12} opacity={0.5} />
-// Place as first child of your root layout, z-index: 0
-// All page content should have position: relative, z-index: 1

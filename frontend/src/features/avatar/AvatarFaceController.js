@@ -7,6 +7,8 @@
  * via update(dt) so the caller can merge them with the lip-sync pipeline.
  */
 
+import { rand } from '@/shared/utils/math';
+
 // ── Easing helpers ───────────────────────────────────────────────────────────
 function easeInQuad(t) {
   return t * t;
@@ -225,7 +227,7 @@ export class AvatarFaceController {
     this._blinkState = BL_IDLE;
     this._blinkTimer = 0;
     this._blinkValue = 0;
-    this._nextBlinkIn = this._randomBlinkInterval();
+    this._nextBlinkIn = rand(5, 9);
     this._doubleBlinkQueued = false;
     this._isDoubleBlink = false;
     this._slowBlink = false;
@@ -248,10 +250,10 @@ export class AvatarFaceController {
     // Speaking
     this.isSpeaking = false;
     this._speakBrowTimer = 0;
-    this._speakBrowNext = this._randomRange(2, 4);
+    this._speakBrowNext = rand(2, 4);
     this._speakBrowPhase = 0;
     this._speakGazeTimer = 0;
-    this._speakGazeNext = this._randomRange(3, 6);
+    this._speakGazeNext = rand(3, 6);
     this._speakGazePhase = 0;
 
     // Scheduled timers for transitions (setTimeout IDs)
@@ -340,7 +342,7 @@ export class AvatarFaceController {
 
   _randomBlinkInterval() {
     // Base: 5-9 s.  Emotion-aware adjustments happen in the countdown.
-    return this._randomRange(5, 9);
+    return rand(5, 9);
   }
 
   _getBlinkIntervalMultiplier() {
@@ -575,9 +577,9 @@ export class AvatarFaceController {
     this.isSpeaking = active;
     if (active) {
       this._speakBrowTimer = 0;
-      this._speakBrowNext = this._randomRange(2, 4);
+      this._speakBrowNext = rand(2, 4);
       this._speakGazeTimer = 0;
-      this._speakGazeNext = this._randomRange(3, 6);
+      this._speakGazeNext = rand(3, 6);
     }
   }
 
@@ -593,7 +595,7 @@ export class AvatarFaceController {
     if (this._speakBrowTimer >= this._speakBrowNext) {
       this._speakBrowTimer = 0;
       this._speakBrowPhase = 1; // start a raise
-      this._speakBrowNext = this._randomRange(2, 4);
+      this._speakBrowNext = rand(2, 4);
     }
     if (this._speakBrowPhase > 0) {
       this._speakBrowPhase -= dt / 0.4; // 400 ms up-down cycle
@@ -606,7 +608,7 @@ export class AvatarFaceController {
     if (this._speakGazeTimer >= this._speakGazeNext) {
       this._speakGazeTimer = 0;
       this._speakGazePhase = Math.random() * Math.PI * 2;
-      this._speakGazeNext = this._randomRange(3, 6);
+      this._speakGazeNext = rand(3, 6);
     }
     const gaze = Math.sin(this._elapsedTime * 0.4 + this._speakGazePhase) * 0.03;
     out.eyeLookInLeft = Math.max(0, gaze);
@@ -678,10 +680,6 @@ export class AvatarFaceController {
   // ═══════════════════════════════════════════════════════════════════════════
   // UTILITIES
   // ═══════════════════════════════════════════════════════════════════════════
-
-  _randomRange(min, max) {
-    return min + Math.random() * (max - min);
-  }
 
   /** Cancel all pending timers. Call on component unmount. */
   dispose() {

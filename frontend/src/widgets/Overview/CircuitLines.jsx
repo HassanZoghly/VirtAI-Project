@@ -8,20 +8,19 @@ const paths = [
   'M 0 600 Q 150 580 300 620 T 600 590 T 960 610',
 ];
 
-function GlowDot({ progress, path, color }) {
-  const x = useTransform(progress, [0, 1], [0, 960]);
+function GlowTrace({ progress, d, color }) {
+  const offset = useTransform(progress, [0, 1], [1000, 0]);
 
   return (
-    <motion.circle
-      r="4"
-      fill={color}
+    <motion.path
+      d={d}
+      stroke={color}
+      strokeWidth="4"
+      strokeDasharray="1000"
+      style={{ strokeDashoffset: offset }}
+      fill="none"
       filter={`drop-shadow(0 0 6px ${color})`}
-      style={{ cx: x, cy: 0 }}
-    >
-      <animateMotion dur="0s" fill="freeze">
-        <mpath href={`#${path}`} />
-      </animateMotion>
-    </motion.circle>
+    />
   );
 }
 
@@ -61,7 +60,7 @@ export default function CircuitLines({ className }) {
         ))}
 
         {dots.map((dot, i) => (
-          <GlowDot key={i} {...dot} />
+          <GlowTrace key={i} {...dot} d={paths[i]} />
         ))}
       </svg>
     </div>

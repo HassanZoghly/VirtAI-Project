@@ -5,9 +5,9 @@ import { ChatInput, MessageList } from '@/features/chat';
 import { SettingsDrawer, useSessionManager } from '@/features/session';
 import { DocumentsDrawer } from '@/features/documents/components/DocumentsDrawer';
 import { loadSetup } from '@/features/setup';
-import useConversationReducer from '@/shared/hooks/useConversationReducer';
-import useWSClient, { ConnectionState } from '@/shared/hooks/useWSClient';
-import Toast from '@/shared/utils/toast';
+import useConversationReducer from '@/features/chat/hooks/useConversationReducer';
+import useWSClient, { ConnectionState } from '@/core/realtime/useWSClient';
+import { toast } from '@/shared/utils/toast';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { PiGearFill, PiWifiSlashFill } from 'react-icons/pi';
@@ -20,9 +20,6 @@ import {
   resolveAvatarLifecycleTransition,
 } from './avatarLifecycle';
 import { SCROLL_STICK_THRESHOLD_PX } from './constants';
-
-
-const toast = new Toast('tr');
 const SETUP_STORAGE_KEYS = ['virtai-setup', 'virtai:setup', 'setupConfig', 'setup'];
 
 function firstString(...values) {
@@ -262,10 +259,10 @@ export default function ClassroomShell() {
     async (sendAction) => {
       let activeId = currentSessionId;
       if (!activeId) {
-        toast.show('info', 'Starting chat', 'Initializing conversation...', 2000);
+        toast.info('Starting chat', 'Initializing conversation...', 2000);
         activeId = await createNewSession();
         if (!activeId) {
-          toast.show('error', 'Error', 'Failed to initialize session');
+          toast.error('Error', 'Failed to initialize session');
           return;
         }
       }
@@ -375,7 +372,7 @@ export default function ClassroomShell() {
       onMessage('visemes.ready', (d) => setMouthCues(d.mouthCues)),
       onMessage('error', (d) => {
         dispatch({ type: 'ERROR', payload: d });
-        toast.show('error', 'Error', d.message || 'An error occurred', 5000);
+        toast.error('Error', d.message || 'An error occurred', 5000);
       }),
       onMessage('transcript', (d) => {
         if (d.is_final) {
@@ -495,7 +492,7 @@ export default function ClassroomShell() {
       textareaRef.current.style.height = 'auto';
     }
     if (!isConnected) {
-      toast.show('warning', 'Offline', 'Message queued. Will send when connected.', 3000);
+      toast.warning('Offline', 'Message queued. Will send when connected.', 3000);
     }
   }, [inputValue, isConnected, commitAndSend]);
 

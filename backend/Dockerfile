@@ -3,7 +3,7 @@
 # Optimized Development Dockerfile
 # ─────────────────────────────────────────────────────────────
 
-FROM python:3.10-slim
+FROM pytorch/pytorch:2.6.0-cuda12.6-cudnn9-runtime
 
 # ── Environment ─────────────────────────────────────────────
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -41,7 +41,7 @@ COPY pyproject.toml ./
 # without copying the full source tree yet.
 RUN mkdir -p app && touch app/__init__.py && \
     pip install --upgrade pip && \
-    pip install .
+    pip install --no-cache-dir . --no-deps --ignore-installed torch torchvision torchaudio
 
 # Pre-download FastEmbed model into an image layer so production startup does
 # not fetch model files dynamically. A named Docker volume can persist this

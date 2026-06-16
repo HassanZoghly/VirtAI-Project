@@ -244,10 +244,16 @@ body::-webkit-scrollbar-button:vertical:end:increment,
 }
 
 /* ── Automated Scanner Overrides ── */
+[data-sonner-toaster],
+[data-sonner-toast],
+[data-sonner-toast] * {
+  transition-timing-function: ease-out !important;
+}
+
 [data-sonner-toast],
 html [data-sonner-toaster] [data-sonner-toast],
 html body [data-sonner-toaster] [data-sonner-toast] {
-  transition: transform 0.3s ease-out, opacity 0.3s ease-out, box-shadow 0.3s ease-out !important;
+  transition: transform 0.3s ease-out, opacity 0.3s ease-out, box-shadow 0.3s ease-out, height 0.3s ease-out !important;
 }
 
 [data-sonner-toaster],

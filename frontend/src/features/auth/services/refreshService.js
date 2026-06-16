@@ -4,7 +4,7 @@ import {
   isInvalidRefreshResponse,
   markBrowserAuthSession,
 } from './authStateCleanup';
-import { ensureCsrfToken, CSRF_HEADER_NAME } from '@/shared/services/csrfService';
+import { ensureCsrfToken, CSRF_HEADER_NAME } from '@/core/api/csrfService';
 
 let refreshPromise = null;
 

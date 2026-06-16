@@ -7,10 +7,17 @@ import { useEffect } from 'react';
  */
 export default function useVisualViewport() {
   useEffect(() => {
+    let ticking = false;
     const updateViewportHeight = () => {
-      const vv = window.visualViewport;
-      const height = vv ? vv.height : window.innerHeight;
-      document.documentElement.style.setProperty('--vv-height', `${height}px`);
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const vv = window.visualViewport;
+          const height = vv ? vv.height : window.innerHeight;
+          document.documentElement.style.setProperty('--vv-height', `${height}px`);
+          ticking = false;
+        });
+        ticking = true;
+      }
     };
 
     updateViewportHeight();

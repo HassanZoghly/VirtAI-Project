@@ -4,72 +4,56 @@ import { refreshAccessTokenSingleFlight } from '@/features/auth/services/refresh
 import { logger } from '@/shared/utils/logger';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-/**
- * Connection states for the WebSocket lifecycle.
- *
- *   offline       – no socket, no reconnect scheduled (initial or gave-up)
- *   reconnecting  – a reconnect timer is ticking / socket is being created
- *   initializing  – TCP handshake done (onopen), waiting for first server message
- *   online        – fully connected and ready
- */
-export const ConnectionState = Object.freeze({
-  OFFLINE: 'offline',
-  RECONNECTING: 'reconnecting',
-  INITIALIZING: 'initializing',
-  ONLINE: 'online',
-});
+import {
+  ConnectionState,
+  WS_CLOSE_TOKEN_EXPIRED,
+  WS_CLOSE_UNAUTHORIZED,
+  WS_CLOSE_SESSION_INVALID,
+  WS_CLOSE_NORMAL,
+  RECONNECT_PAUSE_MESSAGE
+} from './wsConstants';
+import { createReconnectPolicy } from './wsReconnectPolicy';
+import {
+  createSessionResumeState,
+  buildResumeUrl,
+  flushAckBatch,
+  flushMessageQueue,
+  pushToMessageQueue,
+  resetSessionState
+} from './wsSessionResume';
+import { createEventRouter } from './wsEventRouter';
 
-/**
- * Generates an exponential backoff with jitter
- * @param {number} attempt
- * @returns {number} Delay in milliseconds
- */
-const backoffDelay = (attempt) => Math.min(1000 * 2 ** attempt, 16_000) + Math.random() * 1000;
+export { ConnectionState } from './wsConstants';
 
-const MAX_RECONNECT_ATTEMPTS = 5;
-const RECONNECT_PAUSE_MESSAGE = 'Connection paused after 5 retries. Click Reconnect to try again.';
-
-/**
- * WebSocket client hook with automatic reconnection and connection-state machine.
- *
- * @param {string} url - WebSocket server URL
- * @returns {{ connectionState: string, isConnected: boolean, send: Function, onMessage: Function, disconnect: Function, reconnect: Function, reconnectError: string | null }}
- */
 function useWSClient(url) {
   const [connectionState, setConnectionState] = useState(ConnectionState.OFFLINE);
   const [reconnectError, setReconnectError] = useState(null);
   const accessToken = useAuthStore((state) => state.accessToken);
 
-  // Derived boolean kept for backward compat
   const isConnected = connectionState === ConnectionState.ONLINE;
 
-  const messageQueue = useRef([]);
-  const reconnectAttempts = useRef(0);
-  const handlers = useRef({});
+  const eventRouterRef = useRef(createEventRouter());
+  const sessionStateRef = useRef(createSessionResumeState());
+  const reconnectPolicyRef = useRef(createReconnectPolicy());
+
   const reconnectTimeoutRef = useRef(null);
   const wsRef = useRef(null);
-  const sessionIdRef = useRef(null);
-  const lastSeqRef = useRef(0);
-  const lastAckedSeqRef = useRef(0);
   const ackTimerRef = useRef(null);
   const isIntentionalCloseRef = useRef(false);
   const isConnectingRef = useRef(false);
   const lastErrorTimeRef = useRef(0);
   const mountIdRef = useRef(0);
-  const initTimerRef = useRef(null); // timer for initializing→online transition
-  const reconnectPausedRef = useRef(false);
+  const initTimerRef = useRef(null);
   const connectRef = useRef(() => {});
   const accessTokenRef = useRef(accessToken);
   const urlRef = useRef(url);
-  // Tracks the timestamp when the socket last transitioned to OPEN,
-  // used to detect fast-fail closes (session stale → clear resume state).
   const connectedAtRef = useRef(0);
   const authRefreshAttemptsRef = useRef(0);
 
   useEffect(() => {
     if (accessToken !== accessTokenRef.current) {
       if (wsRef.current) {
-        wsRef.current.close(1000, 'Token refreshed');
+        wsRef.current.close(WS_CLOSE_NORMAL, 'Token refreshed');
       }
     }
     accessTokenRef.current = accessToken;
@@ -85,7 +69,7 @@ function useWSClient(url) {
       urlRef.current &&
       !wsRef.current &&
       !isConnectingRef.current &&
-      !reconnectPausedRef.current &&
+      !reconnectPolicyRef.current.isPaused &&
       !isIntentionalCloseRef.current
     ) {
       connectRef.current();
@@ -116,23 +100,20 @@ function useWSClient(url) {
     if (now - lastErrorTimeRef.current > 10000) {
       if (import.meta.env.DEV) {
         console.warn('[WS] ⚠️ Backend offline — will retry with exponential backoff');
-        console.info(
-          '[WS] 💡 Start backend: cd backend && python -m uvicorn app.main:app --reload'
-        );
+        console.info('[WS] 💡 Start backend: cd backend && python -m uvicorn app.main:app --reload');
       }
       lastErrorTimeRef.current = now;
     }
   }, []);
 
   const clearReconnectState = useCallback(() => {
-    reconnectPausedRef.current = false;
-    reconnectAttempts.current = 0;
+    reconnectPolicyRef.current.reset();
     setReconnectError(null);
   }, []);
 
   const pauseReconnect = useCallback(() => {
     clearReconnectTimer();
-    reconnectPausedRef.current = true;
+    reconnectPolicyRef.current.pause();
     setReconnectError(RECONNECT_PAUSE_MESSAGE);
     setConnectionState(ConnectionState.OFFLINE);
   }, [clearReconnectTimer]);
@@ -146,11 +127,11 @@ function useWSClient(url) {
         return;
       }
 
-      if (reconnectPausedRef.current) {
+      if (reconnectPolicyRef.current.isPaused) {
         return;
       }
 
-      if (reconnectAttempts.current >= MAX_RECONNECT_ATTEMPTS) {
+      if (reconnectPolicyRef.current.shouldPause()) {
         if (import.meta.env.DEV) {
           console.error('[WS] Maximum reconnect attempts reached (5). Pausing retries.');
           if (reason) {
@@ -161,12 +142,11 @@ function useWSClient(url) {
         return;
       }
 
-      const delay = backoffDelay(reconnectAttempts.current);
-      reconnectAttempts.current += 1;
+      const delay = reconnectPolicyRef.current.nextDelay();
 
       if (import.meta.env.DEV) {
         console.debug(
-          `[WS] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current}/${MAX_RECONNECT_ATTEMPTS})`
+          `[WS] Reconnecting in ${delay}ms (attempt ${reconnectPolicyRef.current.attempt}/5)`
         );
       }
 
@@ -190,27 +170,7 @@ function useWSClient(url) {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       return;
     }
-
-    if (lastSeqRef.current <= lastAckedSeqRef.current) {
-      return;
-    }
-
-    const ackPayload = {
-      type: 'ws.ack',
-      data: {
-        last_seq: lastSeqRef.current,
-        session_id: sessionIdRef.current,
-      },
-    };
-
-    try {
-      wsRef.current.send(JSON.stringify(ackPayload));
-      lastAckedSeqRef.current = lastSeqRef.current;
-    } catch (err) {
-      if (import.meta.env.DEV) {
-        console.debug('[WS] Failed to send ack payload:', err);
-      }
-    }
+    flushAckBatch(sessionStateRef.current, (payload) => wsRef.current.send(payload));
   }, []);
 
   const scheduleAck = useCallback(() => {
@@ -236,14 +196,14 @@ function useWSClient(url) {
         return;
       }
 
-      if (reconnectPausedRef.current) {
+      if (reconnectPolicyRef.current.isPaused) {
         if (import.meta.env.DEV) {
           console.debug('[WS] Reconnect paused; waiting for manual retry');
         }
         return;
       }
 
-      if (reconnectAttempts.current >= MAX_RECONNECT_ATTEMPTS) {
+      if (reconnectPolicyRef.current.shouldPause()) {
         pauseReconnect();
         if (import.meta.env.DEV) {
           console.debug('[WS] Reconnect limit reached; waiting for manual retry');
@@ -261,7 +221,6 @@ function useWSClient(url) {
         return;
       }
 
-      // STRICT CONNECTION GUARD: Never create new WS if one exists in CONNECTING/OPEN
       if (wsRef.current) {
         const state = wsRef.current.readyState;
         if (state === WebSocket.CONNECTING || state === WebSocket.OPEN) {
@@ -275,7 +234,6 @@ function useWSClient(url) {
         }
       }
 
-      // Prevent multiple simultaneous connection attempts
       if (isConnectingRef.current) {
         if (import.meta.env.DEV) {
           console.debug('[WS] Connection already in progress, skipping');
@@ -287,24 +245,12 @@ function useWSClient(url) {
       const currentMountId = mountIdRef.current;
       const instanceId = Math.random().toString(36).substring(7);
 
-      // Only show "reconnecting" if this is a retry (not the very first connect)
-      if (reconnectAttempts.current > 0) {
+      if (reconnectPolicyRef.current.attempt > 0) {
         setConnectionState(ConnectionState.RECONNECTING);
       }
 
       try {
-        let socketUrl = currentUrl;
-        try {
-          const parsed = new URL(currentUrl);
-          if (sessionIdRef.current) {
-            parsed.searchParams.set('resume', 'true');
-            parsed.searchParams.set('session_id', sessionIdRef.current);
-            parsed.searchParams.set('last_seq', String(lastSeqRef.current));
-          }
-          socketUrl = parsed.toString();
-        } catch {
-          // Keep original URL for non-standard runtimes.
-        }
+        const socketUrl = buildResumeUrl(currentUrl, sessionStateRef.current);
 
         const protocols = currentAccessToken ? ['access_token', currentAccessToken] : [];
         const socket = new WebSocket(socketUrl, protocols);
@@ -335,11 +281,8 @@ function useWSClient(url) {
             console.debug('[WS] State transition: → INITIALIZING');
           }
 
-          // Enter brief "initializing" phase so the UI can show a handshake state
           setConnectionState(ConnectionState.INITIALIZING);
 
-          // Transition to ONLINE after a short delay (lets the server send 'ready')
-          // If we receive a 'ready' message earlier, we promote immediately.
           initTimerRef.current = setTimeout(() => {
             initTimerRef.current = null;
             setConnectionState((prev) =>
@@ -347,64 +290,39 @@ function useWSClient(url) {
             );
           }, 800);
 
-          reconnectAttempts.current = 0;
+          reconnectPolicyRef.current.reset();
           authRefreshAttemptsRef.current = 0;
 
           if (import.meta.env.DEV) {
             console.log('[WS] ✅ Connected to backend');
           }
 
-          // Flush message queue
-          while (messageQueue.current.length > 0) {
-            const msg = messageQueue.current.shift();
-            try {
-              socket.send(JSON.stringify(msg));
-            } catch (err) {
-              logger.error('[WS] Failed to send queued message:', err);
-            }
-          }
+          flushMessageQueue(sessionStateRef.current, (payload) => socket.send(payload), logger);
         };
 
         socket.onmessage = (event) => {
-          try {
-            if (typeof Blob !== 'undefined' && event.data instanceof Blob) {
-              return;
-            }
-
-            const message = JSON.parse(event.data);
-
-            if (Number.isFinite(message.seq_id)) {
-              const nextSeq = Number(message.seq_id);
-              if (nextSeq > lastSeqRef.current) {
-                lastSeqRef.current = nextSeq;
+          eventRouterRef.current.route(event, {
+            onSeq: (seq) => {
+              if (seq > sessionStateRef.current.lastSeq) {
+                sessionStateRef.current.lastSeq = seq;
               }
               scheduleAck();
-            }
-
-            if (!message.type) {
-              if (import.meta.env.DEV) {
-                console.warn('[WS] Invalid message: missing type field', message);
+            },
+            onSessionId: (id) => {
+              if (!sessionStateRef.current.sessionId) {
+                sessionStateRef.current.sessionId = id;
               }
-              return;
-            }
-
-            const messageData = message.data || {};
-            if (
-              typeof messageData.session_id === 'string' &&
-              messageData.session_id.length > 0 &&
-              !sessionIdRef.current
-            ) {
-              sessionIdRef.current = messageData.session_id;
-            }
-
-            // 'ready' / 'pong' are control messages — use 'ready' to promote to ONLINE early
-            if (message.type === 'ready') {
+            },
+            onReady: (message) => {
               const readyData = message.data || {};
               if (typeof readyData.session_id === 'string' && readyData.session_id.length > 0) {
-                sessionIdRef.current = readyData.session_id;
+                sessionStateRef.current.sessionId = readyData.session_id;
               }
               if (Number.isFinite(readyData.last_seq)) {
-                lastSeqRef.current = Math.max(lastSeqRef.current, Number(readyData.last_seq));
+                sessionStateRef.current.lastSeq = Math.max(
+                  sessionStateRef.current.lastSeq,
+                  Number(readyData.last_seq)
+                );
               }
 
               if (initTimerRef.current) {
@@ -417,29 +335,8 @@ function useWSClient(url) {
               if (import.meta.env.DEV) {
                 console.debug('[WS] Received ready — promoted to ONLINE');
               }
-              return;
             }
-
-            if (message.type === 'pong') {
-              if (import.meta.env.DEV) {
-                console.debug('[WS] Received pong');
-              }
-              return;
-            }
-
-            // Dispatch to registered handlers
-            const typeHandlers = handlers.current[message.type];
-            const ignoredTypes = ['chat.abort'];
-            
-            if (typeHandlers && typeHandlers.size > 0) {
-              const data = message.data || message;
-              typeHandlers.forEach((handler) => handler(data));
-            } else if (import.meta.env.DEV && !ignoredTypes.includes(message.type)) {
-              console.warn('[WS] Unknown message type:', message.type);
-            }
-          } catch (err) {
-            logger.error('[WS] Failed to parse message:', err);
-          }
+          });
         };
 
         socket.onerror = () => {
@@ -484,7 +381,6 @@ function useWSClient(url) {
           isConnectingRef.current = false;
           wsRef.current = null;
 
-          // Clear initializing timer if still running
           if (initTimerRef.current) {
             clearTimeout(initTimerRef.current);
             initTimerRef.current = null;
@@ -502,8 +398,7 @@ function useWSClient(url) {
             return;
           }
 
-          // 4401 = invalid/expired access token. Try one HTTP refresh, then reconnect.
-          if (event.code === 4401) {
+          if (event.code === WS_CLOSE_TOKEN_EXPIRED) {
             clearReconnectTimer();
             if (authRefreshAttemptsRef.current >= 1) {
               clearBrowserAuthState();
@@ -517,6 +412,7 @@ function useWSClient(url) {
             setConnectionState(ConnectionState.RECONNECTING);
             refreshAccessTokenSingleFlight()
               .then((data) => {
+                if (isIntentionalCloseRef.current) return;
                 useAuthStore.setState({ accessToken: data.access_token });
                 isIntentionalCloseRef.current = false;
                 connectRef.current(socket._sourceUrl);
@@ -530,50 +426,37 @@ function useWSClient(url) {
             return;
           }
 
-          // 4403 = authorization failure — don't reconnect automatically
-          if (event.code === 4403) {
+          if (event.code === WS_CLOSE_UNAUTHORIZED) {
             clearReconnectTimer();
             setConnectionState(ConnectionState.OFFLINE);
             setReconnectError('Session authorization failed. Please log in again.');
             return;
           }
 
-          // 4404 = session not found (backend already gracefully falls back, but
-          // handle it defensively here too). Clear resume state so the retry
-          // connects fresh without injecting stale resume params.
-          if (event.code === 4404) {
+          if (event.code === WS_CLOSE_SESSION_INVALID) {
             if (import.meta.env.DEV) {
               console.warn('[WS] Session not found (4404) — clearing resume state before retry');
             }
-            sessionIdRef.current = null;
-            lastSeqRef.current = 0;
-            lastAckedSeqRef.current = 0;
+            resetSessionState(sessionStateRef.current);
           }
 
-          // Fast-fail detection: if the connection opened and then closed within 2s
-          // while we had a stale session_id, the session has expired. Clear it so
-          // the reconnect attempt goes in as a fresh connection (no resume=true).
           const openDuration = Date.now() - connectedAtRef.current;
-          if (openDuration < 2000 && sessionIdRef.current && connectedAtRef.current > 0) {
+          if (openDuration < 2000 && sessionStateRef.current.sessionId && connectedAtRef.current > 0) {
             if (import.meta.env.DEV) {
               console.warn(
                 `[WS] Fast-fail detected (closed after ${openDuration}ms with active session_id) — clearing resume state`
               );
             }
-            sessionIdRef.current = null;
-            lastSeqRef.current = 0;
-            lastAckedSeqRef.current = 0;
+            resetSessionState(sessionStateRef.current);
           }
 
-          // Normal close — don't reconnect
-          if (event.code === 1000 || event.code === 1001) {
+          if (event.code === WS_CLOSE_NORMAL || event.code === 1001) {
             clearReconnectTimer();
             clearReconnectState();
             setConnectionState(ConnectionState.OFFLINE);
             return;
           }
 
-          // Abnormal close — schedule reconnect with exponential backoff
           scheduleReconnect(`Socket closed with code ${event.code}`, socket._sourceUrl);
         };
       } catch (err) {
@@ -591,7 +474,6 @@ function useWSClient(url) {
     connectRef.current = connect;
   }, [connect]);
 
-  // Reinitialize the socket lifecycle whenever URL changes.
   useEffect(() => {
     mountIdRef.current = Math.random();
     if (!url) {
@@ -612,13 +494,9 @@ function useWSClient(url) {
 
       isIntentionalCloseRef.current = true;
       isConnectingRef.current = false;
-      reconnectPausedRef.current = false;
+      reconnectPolicyRef.current.reset();
 
-      // Wipe session/seq state on URL change so the next connection
-      // never injects stale resume params into a different session's URL.
-      sessionIdRef.current = null;
-      lastSeqRef.current = 0;
-      lastAckedSeqRef.current = 0;
+      resetSessionState(sessionStateRef.current);
       connectedAtRef.current = 0;
       authRefreshAttemptsRef.current = 0;
 
@@ -631,19 +509,15 @@ function useWSClient(url) {
         socket.onmessage = null;
         socket.onerror = null;
         socket.onclose = null;
-        socket.close(1000);
+        socket.close(WS_CLOSE_NORMAL);
         wsRef.current = null;
       }
 
-      reconnectAttempts.current = 0;
+      reconnectPolicyRef.current.reset();
       setReconnectError(null);
     };
   }, [url, connect, clearReconnectTimer, cleanupTimers]);
 
-  /**
-   * Send a message through WebSocket.
-   * JSON messages are queued when offline; binary data is dropped (time-sensitive).
-   */
   const send = useCallback(
     (message) => {
       const isBinary =
@@ -655,63 +529,41 @@ function useWSClient(url) {
         } catch (err) {
           logger.error('[WS] Failed to send message:', err);
           if (!isBinary) {
-            messageQueue.current.push(message);
+            pushToMessageQueue(sessionStateRef.current, message);
           }
         }
       } else if (!isBinary) {
-        messageQueue.current.push(message);
+        pushToMessageQueue(sessionStateRef.current, message);
       }
     },
-    [] // no dependency on isConnected — uses wsRef.current.readyState directly
+    []
   );
 
-  /**
-   * Register a handler for a specific message type. Returns an unsubscribe function.
-   */
   const onMessage = useCallback((type, handler) => {
-    if (!handlers.current[type]) {
-      handlers.current[type] = new Set();
-    }
-    handlers.current[type].add(handler);
-
-    return () => {
-      const set = handlers.current[type];
-      if (set) {
-        set.delete(handler);
-        if (set.size === 0) {
-          delete handlers.current[type];
-        }
-      }
-    };
+    return eventRouterRef.current.onMessage(type, handler);
   }, []);
 
-  /**
-   * Manually disconnect. Prevents automatic reconnection.
-   */
   const disconnect = useCallback(() => {
     isIntentionalCloseRef.current = true;
-    reconnectPausedRef.current = false;
+    reconnectPolicyRef.current.reset();
 
     cleanupTimers();
 
     if (wsRef.current) {
       wsRef.current.onclose = null;
-      wsRef.current.close(1000);
+      wsRef.current.close(WS_CLOSE_NORMAL);
       wsRef.current = null;
     }
 
     setConnectionState(ConnectionState.OFFLINE);
-    sessionIdRef.current = null;
-    lastSeqRef.current = 0;
-    lastAckedSeqRef.current = 0;
-    reconnectAttempts.current = 0;
+    resetSessionState(sessionStateRef.current);
+    reconnectPolicyRef.current.reset();
     authRefreshAttemptsRef.current = 0;
     setReconnectError(null);
   }, [cleanupTimers]);
 
   const reconnect = useCallback(() => {
-    reconnectPausedRef.current = false;
-    reconnectAttempts.current = 0;
+    reconnectPolicyRef.current.reset();
     authRefreshAttemptsRef.current = 0;
     clearReconnectTimer();
     setReconnectError(null);

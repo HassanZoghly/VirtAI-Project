@@ -233,7 +233,7 @@ export default function HowItWorks() {
         titlePrefix="How It"
         titleHighlight="Works"
         description="Your voice travels through a six-stage AI pipeline, from speech recognition to a lip-synced 3D avatar delivering the answer."
-        descriptionClassName="mx-auto mt-4 max-w-md text-offwhite/70"
+        descriptionClassName="mx-auto mt-4 max-w-[50ch] text-offwhite/70"
       />
 
       {/* ── Isolated scroll container ── */}

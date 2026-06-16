@@ -6,10 +6,18 @@ const isDev = import.meta.env.DEV;
 
 const noop = () => {};
 
+function reportError(level, msg, ...args) {
+  // Slot in Sentry / Datadog / custom endpoint here.
+  // Safe no-network fallback for now:
+  if (typeof window !== 'undefined' && typeof window.__telemetry === 'function') {
+    window.__telemetry({ level, msg, args, ts: Date.now() });
+  }
+}
+
 export const logger = {
   debug: isDev ? console.debug.bind(console) : noop,
   log: isDev ? console.log.bind(console) : noop,
-  warn: isDev ? console.warn.bind(console) : noop,
   info: isDev ? console.info.bind(console) : noop,
-  error: isDev ? console.error.bind(console) : noop,
+  warn: isDev ? console.warn.bind(console) : (...a) => reportError('warn', ...a),
+  error: isDev ? console.error.bind(console) : (...a) => reportError('error', ...a),
 };

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { hasBrowserAuthSessionHint } from '@/features/auth/services/authStateCleanup';
 import { useAuthStore } from '@/features/auth/store/authStore';
+import { shouldSkipAuthRefresh, isProtectedPath, shouldAttemptRefresh } from '@/features/auth/utils/authDecisions';
 
 export default function useAuthBootstrap() {
   const bootstrapStartedRef = useRef(false);
@@ -15,17 +16,16 @@ export default function useAuthBootstrap() {
     bootstrapStartedRef.current = true;
 
     const pathname = window.location.pathname;
-    // Skip for OAuth callback (it has its own flow)
-    if (pathname.startsWith('/auth/callback')) {
-      // Mark as initialized so the callback page can render
-      useAuthStore.setState({ isInitialized: true, isInitializing: false });
+    
+    if (shouldSkipAuthRefresh(pathname)) {
+      useAuthStore.setState({ isInitialized: true, isInitializing: false, isLoading: false });
       return;
     }
 
-    const protectedPath = pathname.startsWith('/setup') || pathname.startsWith('/classroom');
-    const shouldAttemptRefresh = protectedPath || hasBrowserAuthSessionHint();
+    const protectedPath = isProtectedPath(pathname);
+    const attemptRefresh = shouldAttemptRefresh(pathname, hasBrowserAuthSessionHint());
 
-    if (!shouldAttemptRefresh) {
+    if (!attemptRefresh) {
       useAuthStore.setState({ isInitialized: true, isInitializing: false, isLoading: false });
       return;
     }

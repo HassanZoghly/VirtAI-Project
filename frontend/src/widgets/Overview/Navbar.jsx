@@ -68,19 +68,41 @@ export default function Navbar({ ctaLabel, ctaTo }) {
       { rootMargin: '-40% 0px -55% 0px' }
     );
 
-    // Give DOM time to paint conditional elements
-    const timeoutId = setTimeout(() => {
+    const observed = new Set();
+    const observeElements = () => {
+      let newlyFound = false;
       ids.forEach((id) => {
-        const el = document.getElementById(id);
-        if (el) {
-          observer.observe(el);
+        if (!observed.has(id)) {
+          const el = document.getElementById(id);
+          if (el) {
+            observer.observe(el);
+            observed.add(id);
+            newlyFound = true;
+          }
         }
       });
-    }, 100);
+      return observed.size === ids.length;
+    };
+
+    let mutationObserver = null;
+    
+    // Attempt to observe immediately in case they are already in DOM
+    if (!observeElements()) {
+      // If not all found, wait for them to appear
+      mutationObserver = new MutationObserver(() => {
+        if (observeElements() && mutationObserver) {
+          mutationObserver.disconnect();
+          mutationObserver = null;
+        }
+      });
+      mutationObserver.observe(document.body, { childList: true, subtree: true });
+    }
 
     return () => {
-      clearTimeout(timeoutId);
       observer.disconnect();
+      if (mutationObserver) {
+        mutationObserver.disconnect();
+      }
     };
   }, []);
 

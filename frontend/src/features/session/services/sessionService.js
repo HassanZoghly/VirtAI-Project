@@ -1,4 +1,4 @@
-import apiClient from '@/shared/services/apiClient';
+import apiClient from '@/core/api/apiClient';
 import { extractCollection } from '../utils/sessionState';
 
 /**

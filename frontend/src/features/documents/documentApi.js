@@ -1,4 +1,4 @@
-import api from '@/shared/services/apiClient';
+import api from '@/core/api/apiClient';
 
 export const documentApi = {
   /**

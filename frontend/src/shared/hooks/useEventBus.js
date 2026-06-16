@@ -20,7 +20,7 @@ function on(event, handler) {
     listeners.set(event, new Set());
   }
   listeners.get(event).add(handler);
-  return () => listeners.get(event)?.delete(handler);
+  return () => off(event, handler);
 }
 
 function emit(event, data) {
@@ -32,7 +32,15 @@ function emit(event, data) {
 }
 
 function off(event, handler) {
-  listeners.get(event)?.delete(handler);
+  const set = listeners.get(event);
+  if (!set) {
+    if (import.meta.env.DEV) {
+      console.warn(`[EventBus] No listeners found for "${event}" on off() call.`);
+    }
+    return;
+  }
+  set.delete(handler);
+  if (set.size === 0) listeners.delete(event);
 }
 
 export const eventBus = { on, emit, off };

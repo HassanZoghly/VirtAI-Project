@@ -1,8 +1,6 @@
 import '@/widgets/Classroom/Classroom.css';
 import { lazy, Suspense } from 'react';
 
-import ProtectedRoute from '@/shared/components/ProtectedRoute';
-
 const ClassroomShell = lazy(() => import('@/widgets/Classroom/ClassroomShell'));
 
 function ShellFallback() {
@@ -19,12 +17,10 @@ function ShellFallback() {
 
 export default function Classroom() {
   return (
-    <ProtectedRoute>
-      <div className="classroom-page">
-        <Suspense fallback={<ShellFallback />}>
-          <ClassroomShell />
-        </Suspense>
-      </div>
-    </ProtectedRoute>
+    <div className="classroom-page">
+      <Suspense fallback={<ShellFallback />}>
+        <ClassroomShell />
+      </Suspense>
+    </div>
   );
 }

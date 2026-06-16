@@ -23,6 +23,7 @@
  *   // On unmount:     controller.dispose();
  */
 import * as THREE from 'three';
+import { rand, randInt } from '@/shared/utils/math';
 
 // ── States ───────────────────────────────────────────────────────────────────
 export const BODY_STATES = {
@@ -329,7 +330,7 @@ export class AvatarAnimationController {
     this._playAction('idle', CROSSFADE_DURATION);
 
     // After random delay, re-enter TALKING_MOVEMENT if still speaking
-    const delay = FACE_ONLY_DELAY_MIN + Math.random() * (FACE_ONLY_DELAY_MAX - FACE_ONLY_DELAY_MIN);
+    const delay = rand(FACE_ONLY_DELAY_MIN, FACE_ONLY_DELAY_MAX);
     this._cancelFaceOnlyTimer();
     this._faceOnlyTimerId = setTimeout(() => {
       this._faceOnlyTimerId = null;
@@ -469,7 +470,7 @@ export class AvatarAnimationController {
     let index;
     let attempts = 0;
     do {
-      index = Math.floor(Math.random() * this.talkActionNames.length);
+      index = randInt(0, this.talkActionNames.length - 1);
       attempts++;
     } while (index === this._lastTalkIndex && attempts < 10);
 

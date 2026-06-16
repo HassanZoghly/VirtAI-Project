@@ -1,7 +1,9 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useId } from 'react';
 
 export default function SlideDrawer({
+  title,
+  description,
   isOpen,
   onClose,
   children,
@@ -11,14 +13,36 @@ export default function SlideDrawer({
   enableDrag = false,
 }) {
   const drawerRef = useRef(null);
+  const previousFocusRef = useRef(null);
   const [isMobile, setIsMobile] = useState(false);
+  const id = useId();
 
   useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 1024);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    const mediaQuery = window.matchMedia('(max-width: 1023px)');
+    const handleChange = (e) => setIsMobile(e.matches);
+    setIsMobile(mediaQuery.matches);
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
+
+  // Focus restoration
+  useEffect(() => {
+    if (isOpen) {
+      previousFocusRef.current = document.activeElement;
+    } else if (previousFocusRef.current) {
+      previousFocusRef.current.focus();
+      previousFocusRef.current = null;
+    }
+  }, [isOpen]);
+
+  // Focus first focusable element on open
+  useEffect(() => {
+    if (!isOpen || !drawerRef.current) return;
+    const firstFocusable = drawerRef.current.querySelector(
+      'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    requestAnimationFrame(() => firstFocusable?.focus());
+  }, [isOpen]);
 
   // Escape key handler
   useEffect(() => {
@@ -43,9 +67,11 @@ export default function SlideDrawer({
     if (!drawer) {
       return;
     }
-    const focusable = drawer.querySelectorAll(
-      'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])'
-    );
+    const focusable = Array.from(
+      drawer.querySelectorAll(
+        'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter((el) => !el.disabled && el.offsetParent !== null);
     if (focusable.length === 0) {
       return;
     }
@@ -63,7 +89,7 @@ export default function SlideDrawer({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className={`settings-drawer open ${className}`} style={{ zIndex }}>
+        <div className={`slide-drawer open ${className}`} style={{ zIndex }}>
           <motion.div
             className="drawer-overlay"
             onClick={onClose}
@@ -77,6 +103,8 @@ export default function SlideDrawer({
             className={`drawer-content ${contentClassName}`}
             role="dialog"
             aria-modal="true"
+            aria-labelledby={title ? `${id}-title` : undefined}
+            aria-describedby={description ? `${id}-desc` : undefined}
             ref={drawerRef}
             onKeyDown={handleKeyDown}
             drag={isMobile && enableDrag ? 'y' : false}
@@ -109,6 +137,8 @@ export default function SlideDrawer({
                 }
               />
             )}
+            {title && <h2 id={`${id}-title`} className="sr-only">{title}</h2>}
+            {description && <p id={`${id}-desc`} className="sr-only">{description}</p>}
             {children}
           </motion.div>
         </div>

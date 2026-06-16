@@ -1,7 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "compilerOptions": {
-    "ignoreDeprecations": "6.0",
     "target": "ES2021",
     "lib": [
       "ES2021",
@@ -18,7 +17,6 @@
     "esModuleInterop": true,
     "allowJs": true,
     "resolveJsonModule": true,
-    "baseUrl": ".",
     "paths": {
       "@/*": [
         "./src/*"

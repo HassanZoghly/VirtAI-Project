@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { logger } from '@/shared/utils/logger';
 
 export const CSRF_COOKIE_NAME = 'csrf_token';
 export const CSRF_HEADER_NAME = 'X-CSRF-Token';
@@ -36,7 +37,7 @@ export async function ensureCsrfToken() {
     csrfTokenRequest = axios
       .get('/api/v1/auth/csrf', { withCredentials: true })
       .catch((error) => {
-        console.error('Failed to fetch initial CSRF token:', error);
+        logger.error('Failed to fetch initial CSRF token:', error);
         return null;
       })
       .finally(() => {

@@ -6,24 +6,16 @@ export default function SoundWaveAnimation({ active }) {
   const [stopping, setStopping] = useState(false);
   const [visible, setVisible] = useState(active);
 
-  const [prevActive, setPrevActive] = useState(active);
-
-  if (active !== prevActive) {
-    setPrevActive(active);
+  useEffect(() => {
     if (active) {
       setStopping(false);
       setVisible(true);
-    } else if (visible) {
+    } else {
       setStopping(true);
-    }
-  }
-
-  useEffect(() => {
-    if (!active && visible) {
       const timer = setTimeout(() => setVisible(false), 800);
       return () => clearTimeout(timer);
     }
-  }, [active, visible]);
+  }, [active]);
 
   if (!visible) {
     return null;

@@ -43,10 +43,10 @@ function isLowPerformanceDevice() {
   const lowMemoryDevice = typeof navigator.deviceMemory === 'number' && navigator.deviceMemory <= 4;
   const lowCpuDevice =
     typeof navigator.hardwareConcurrency === 'number' && navigator.hardwareConcurrency <= 4;
-  const desktopViewport =
-    typeof window.matchMedia !== 'function' || window.matchMedia('(min-width: 1024px)').matches;
+  const isMobileViewport =
+    typeof window.matchMedia !== 'function' || window.matchMedia('(max-width: 1023px)').matches;
 
-  return saveDataEnabled || slowNetwork || lowMemoryDevice || lowCpuDevice || !desktopViewport;
+  return saveDataEnabled || slowNetwork || lowMemoryDevice || lowCpuDevice || isMobileViewport;
 }
 
 function scheduleIdleTask(task, { delay = 0, timeout = 1500 } = {}) {
@@ -194,7 +194,8 @@ export default function OverviewPage() {
   }, [phase2.navbar, prefersReducedMotion]);
 
   useEffect(() => {
-    if (!phase2.footer || prefersReducedMotion || isLowPerformanceDevice()) {
+    const isLowPerf = isLowPerformanceDevice();
+    if (!phase2.footer || prefersReducedMotion || isLowPerf) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowAmbient(false);
       return;
@@ -208,8 +209,13 @@ export default function OverviewPage() {
     : { label: 'Log In / Sign Up', to: '/auth' };
 
   const handleSplashComplete = () => {
-    sessionStorage.setItem('virtai:overview-splash-seen', '1');
-    setShowSplash(false);
+    try {
+      sessionStorage.setItem('virtai:overview-splash-seen', '1');
+    } catch {
+      // ignore
+    } finally {
+      setShowSplash(false);
+    }
   };
 
   return (
@@ -231,7 +237,7 @@ export default function OverviewPage() {
       <div className="relative min-h-screen bg-dark text-offwhite">
         <a
           href="#main-content"
-          className="absolute -top-[1000px] left-4 z-100 focus:fixed focus:top-4 focus:rounded-md focus:bg-gold focus:px-4 focus:py-2 focus:text-dark focus:outline-none"
+          className="absolute -top-[1000px] left-4 z-[100] focus:fixed focus:top-4 focus:rounded-md focus:bg-gold focus:px-4 focus:py-2 focus:text-dark focus:outline-none"
         >
           Skip to content
         </a>

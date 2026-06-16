@@ -2,7 +2,7 @@
  * Voice configurations for the Setup page.
  * Each maps to a real Microsoft Edge TTS voice ID.
  */
-export const voices = [
+export const voices = Object.freeze([
   {
     id: 'aria',
     name: 'Aria',
@@ -58,8 +58,8 @@ export const voices = [
     greeting: "Hey there! Let's dive in and explore something new together!",
     previewUrl: '/audio/previews/ryan.mp3',
   },
-];
+].map(Object.freeze));
 
-export const getVoiceById = (id) => voices.find((v) => v.id === id) || voices[0];
+export const getVoiceById = (id) => voices.find((v) => v.id === id) ?? null;
 
 export const getVoicesByGender = (gender) => voices.filter((v) => v.gender === gender);

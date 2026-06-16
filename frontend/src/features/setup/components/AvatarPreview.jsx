@@ -15,7 +15,7 @@ export default function AvatarPreview({
     if (isPlaying) {
       onStopPreview();
     } else if (voice?.previewUrl) {
-      onPlayPreview(voice.previewUrl);
+      onPlayPreview(voice);
     }
   };
 

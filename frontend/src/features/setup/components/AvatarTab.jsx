@@ -1,24 +1,44 @@
 import { avatarImages } from '@/features/avatar/data/avatars';
 import { motion } from 'motion/react';
 import SelectionCheckmark from '@/shared/components/SelectionCheckmark';
+import { memo } from 'react';
 
 const avatarList = Object.values(avatarImages);
 
-export default function AvatarTab({ selected, onSelect }) {
+const AvatarTab = memo(function AvatarTab({ selected, onSelect }) {
   return (
     <div>
       <h2 className="setup-section-title">Choose Your Avatar</h2>
       <p className="setup-section-subtitle">Select the avatar that will be your AI assistant</p>
 
-      <div className="avatar-grid">
+      <div className="avatar-grid" role="radiogroup" aria-label="Avatars">
         {avatarList.map((avatar, idx) => {
           const isSelected = selected?.id === avatar.id;
+          const isFocusable = isSelected || (!selected && idx === 0);
+          
           return (
             <motion.button
               type="button"
               key={avatar.id}
               className={`avatar-card${isSelected ? ' selected' : ''}`}
               onClick={() => onSelect(avatar)}
+              onKeyDown={(e) => {
+                let nextIdx = null;
+                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                  nextIdx = (idx + 1) % avatarList.length;
+                } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                  nextIdx = (idx - 1 + avatarList.length) % avatarList.length;
+                }
+                
+                if (nextIdx !== null) {
+                  e.preventDefault();
+                  onSelect(avatarList[nextIdx]);
+                  const grid = e.currentTarget.parentNode;
+                  const nextElem = grid.children[nextIdx];
+                  if (nextElem) nextElem.focus();
+                }
+              }}
+              tabIndex={isFocusable ? 0 : -1}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: idx * 0.1 }}
@@ -51,4 +71,6 @@ export default function AvatarTab({ selected, onSelect }) {
       </div>
     </div>
   );
-}
+});
+
+export default AvatarTab;

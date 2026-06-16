@@ -6,11 +6,9 @@ import { useNavigate } from 'react-router-dom';
 import { updateSetupStatus } from '@/features/auth/services/authApi';
 import { selectIsAuthenticated, useAuthStore } from '@/features/auth/store/authStore';
 import { markStartNewConversation } from '@/features/session/services/sessionStorage';
-import Toast from '@/shared/utils/toast';
+import { toast } from 'sonner';
 import { saveSetup } from '../services/setupStorage';
 import SuccessAnimation from './SuccessAnimation';
-
-const toast = new Toast();
 
 export default function AllSetTab({
   avatar,
@@ -41,9 +39,9 @@ export default function AllSetTab({
       });
 
       markStartNewConversation();
-      navigate('/classroom');
+      navigate('/classroom', { replace: true });
     } catch {
-      toast.show('error', 'Setup Save Failed', 'Could not persist setup status. Please try again.');
+      toast.error('Setup Save Failed', { description: 'Could not persist setup status. Please try again.' });
     } finally {
       setIsSaving(false);
     }

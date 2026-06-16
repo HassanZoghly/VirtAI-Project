@@ -1,51 +1,50 @@
 import { motion } from 'motion/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo } from 'react';
 import { HiPlay, HiStop } from 'react-icons/hi2';
 import SelectionCheckmark from '@/shared/components/SelectionCheckmark';
 import { voices } from '../data/voices';
 
-export default function VoiceTab({ selected, onSelect, avatarGender, onPlay, onStop, isPlaying }) {
+const VoiceTab = memo(function VoiceTab({ selected, onSelect, avatarGender, onPlay, onStop, isPlaying, playingVoiceId }) {
   const filteredVoices = avatarGender ? voices.filter((v) => v.gender === avatarGender) : voices;
-  const [playingId, setPlayingId] = useState(null);
-  const playingIdRef = useRef(null);
 
-  // Keep ref in sync for event handlers
-  useEffect(() => {
-    playingIdRef.current = playingId;
-  }, [playingId]);
-
-  // Sync playingId with parent's isPlaying state during render
-  if (!isPlaying && playingId) {
-    setPlayingId(null);
-  }
-
-  const handlePlayToggle = useCallback(
-    (voice) => {
-      if (playingIdRef.current === voice.id) {
-        onStop();
-        setPlayingId(null);
-      } else {
-        setPlayingId(voice.id);
-        onPlay(voice.previewUrl);
-      }
-    },
-    [onPlay, onStop]
-  );
+  const handlePlayToggle = (e, voice) => {
+    e.stopPropagation();
+    if (playingVoiceId === voice.id && isPlaying) {
+      onStop();
+    } else {
+      onPlay(voice);
+    }
+  };
 
   return (
     <div className="voice-tab-scroll">
       <h2 className="setup-section-title">Choose a Voice</h2>
       <p className="setup-section-subtitle">Select how your avatar will sound</p>
 
-      <div className="voice-grid">
+      <div className="voice-grid" role="radiogroup" aria-label="Voices">
         {filteredVoices.map((voice, idx) => {
           const isSelected = selected?.id === voice.id;
-          const isCurrentlyPlaying = playingId === voice.id && isPlaying;
+          const isCurrentlyPlaying = playingVoiceId === voice.id && isPlaying;
+          const isFocusable = isSelected || (!selected && idx === 0);
+          
           return (
             <motion.div
-              tabIndex={0}
+              tabIndex={isFocusable ? 0 : -1}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
+                let nextIdx = null;
+                if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                  nextIdx = (idx + 1) % filteredVoices.length;
+                } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                  nextIdx = (idx - 1 + filteredVoices.length) % filteredVoices.length;
+                }
+                
+                if (nextIdx !== null) {
+                  e.preventDefault();
+                  onSelect(filteredVoices[nextIdx]);
+                  const grid = e.currentTarget.parentNode;
+                  const nextElem = grid.children[nextIdx];
+                  if (nextElem) nextElem.focus();
+                } else if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
                   onSelect(voice);
                 }
@@ -80,10 +79,7 @@ export default function VoiceTab({ selected, onSelect, avatarGender, onPlay, onS
               <button
                 type="button"
                 className={`voice-play-btn${isCurrentlyPlaying ? ' playing' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handlePlayToggle(voice);
-                }}
+                onClick={(e) => handlePlayToggle(e, voice)}
                 aria-label={
                   isCurrentlyPlaying ? `Stop ${voice.name} preview` : `Play ${voice.name} preview`
                 }
@@ -102,4 +98,6 @@ export default function VoiceTab({ selected, onSelect, avatarGender, onPlay, onS
       </div>
     </div>
   );
-}
+});
+
+export default VoiceTab;

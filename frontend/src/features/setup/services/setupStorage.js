@@ -5,13 +5,28 @@ const STORAGE_KEY = 'virtai-setup';
  * Returns null if nothing stored or data is corrupt.
  */
 export function loadSetup() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw === null) {
+    if (!raw) {
       return null;
     }
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : null;
+    
+    // Explicit schema validation
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (typeof parsed.avatarId !== 'string') return null;
+    if (typeof parsed.voiceId !== 'string') return null;
+    
+    // Optional boolean validation
+    if (parsed.movementEnabled !== undefined && typeof parsed.movementEnabled !== 'boolean') return null;
+    if (parsed.documentsSkipped !== undefined && typeof parsed.documentsSkipped !== 'boolean') return null;
+    if (parsed.documentsUploaded !== undefined && typeof parsed.documentsUploaded !== 'boolean') return null;
+
+    return parsed;
   } catch {
     return null;
   }
@@ -22,6 +37,10 @@ export function loadSetup() {
  * @param {{ avatarId: string, voiceId: string, movementEnabled?: boolean, documentsSkipped?: boolean, documentsUploaded?: boolean }} config
  */
 export function saveSetup(config) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...config, savedAt: Date.now() }));
   } catch {
@@ -31,5 +50,9 @@ export function saveSetup(config) {
 
 /** Remove setup configuration from localStorage. */
 export function clearSetup() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  
   localStorage.removeItem(STORAGE_KEY);
 }

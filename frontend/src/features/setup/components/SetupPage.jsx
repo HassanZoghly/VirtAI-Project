@@ -48,23 +48,35 @@ export default function SetupPage() {
 
 
   const [isPlaying, setIsPlaying] = useState(false);
+  const [playingVoiceId, setPlayingVoiceId] = useState(null);
   const [direction, setDirection] = useState(1);
   const audioRef = useRef(null);
+
+  const stopAudio = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+    setIsPlaying(false);
+    setPlayingVoiceId(null);
+  }, []);
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => stopAudio();
+  }, [stopAudio]);
 
   // Clear voice selection when avatar gender changes
   const handleAvatarSelect = useCallback(
     (avatar) => {
       if (selectedAvatar && avatar.gender !== selectedAvatar.gender) {
         setSelectedVoice(null);
-        if (audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
-        }
-        setIsPlaying(false);
+        stopAudio();
       }
       setSelectedAvatar(avatar);
     },
-    [selectedAvatar]
+    [selectedAvatar, stopAudio]
   );
 
 
@@ -105,28 +117,43 @@ export default function SetupPage() {
     }
   };
 
-  const stopAudio = () => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
-    setIsPlaying(false);
-  };
-
-  const playPreview = (url) => {
+  const playPreview = useCallback((voice) => {
     stopAudio();
-    if (!url) {
+    if (!voice?.previewUrl) {
       return;
     }
-    const audio = new Audio(url);
+    const audio = new Audio(voice.previewUrl);
     audioRef.current = audio;
-    audio.addEventListener('ended', () => setIsPlaying(false));
-    audio.addEventListener('error', () => setIsPlaying(false));
-    audio
+    const currentAudio = audio;
+
+    currentAudio.addEventListener('ended', () => {
+      if (audioRef.current === currentAudio) {
+        setIsPlaying(false);
+        setPlayingVoiceId(null);
+      }
+    });
+    currentAudio.addEventListener('error', () => {
+      if (audioRef.current === currentAudio) {
+        setIsPlaying(false);
+        setPlayingVoiceId(null);
+      }
+    });
+    
+    currentAudio
       .play()
-      .then(() => setIsPlaying(true))
-      .catch(() => setIsPlaying(false));
-  };
+      .then(() => {
+        if (audioRef.current === currentAudio) {
+          setIsPlaying(true);
+          setPlayingVoiceId(voice.id);
+        }
+      })
+      .catch(() => {
+        if (audioRef.current === currentAudio) {
+          setIsPlaying(false);
+          setPlayingVoiceId(null);
+        }
+      });
+  }, [stopAudio]);
 
   const slideVariants = {
     enter: (d) => ({ x: d > 0 ? 80 : -80, opacity: 0 }),
@@ -233,6 +260,7 @@ export default function SetupPage() {
                       onPlay={playPreview}
                       onStop={stopAudio}
                       isPlaying={isPlaying}
+                      playingVoiceId={playingVoiceId}
                     />
                   )}
                   {activeTab === 2 && (
@@ -271,8 +299,8 @@ export default function SetupPage() {
             <AvatarPreview
               avatar={selectedAvatar}
               voice={selectedVoice}
-              isPlaying={isPlaying}
-              onPlayPreview={playPreview}
+              isPlaying={isPlaying && selectedVoice?.id === playingVoiceId}
+              onPlayPreview={() => playPreview(selectedVoice)}
               onStopPreview={stopAudio}
               movementEnabled={isMovementEnabled}
               onMovementToggle={setIsMovementEnabled}

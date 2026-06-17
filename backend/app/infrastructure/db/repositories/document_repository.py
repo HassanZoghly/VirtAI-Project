@@ -63,15 +63,17 @@ class DocumentRepository(DocumentRepositoryPort):
         self.db = db
 
     async def create(
-        self, user_id: str, filename: str, file_type: str, session_id: str | None = None
+        self, user_id: str, filename: str, file_type: str, session_id: str | None = None,
+        id: str | None = None, document_sha256: str | None = None, file_size: int = 0, storage_key: str | None = None
     ) -> DomainDocument:
-        # Note: the full implementation with SHA-256 and size will require a specific payload,
-        # but to satisfy the port we create a QUEUED document.
 
         scope = "SESSION" if session_id else "GLOBAL"
         s_id = require_uuid(session_id, field_name="session_id") if session_id else None
+        
+        doc_id = require_uuid(id, field_name="id") if id else None
 
         doc = Document(
+            id=doc_id,
             user_id=require_uuid(user_id, field_name="user_id"),
             filename=filename,
             file_type=file_type,
@@ -80,6 +82,9 @@ class DocumentRepository(DocumentRepositoryPort):
             upload_date=_now(),
             retrieval_scope=scope,
             scope_id=s_id,
+            document_sha256=document_sha256,
+            file_size=file_size,
+            storage_key=storage_key,
         )
         self.db.add(doc)
         await self.db.flush()

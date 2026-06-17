@@ -75,10 +75,10 @@ class FastEmbedProvider(EmbeddingProvider):
         return [list(vec) for vec in embeddings_gen]
 
     async def embed(self, text: str) -> list[float]:
-        loop = asyncio.get_running_loop()
+        import asyncio
         try:
-            # Run the CPU-bound embedding in a thread pool
-            result = await loop.run_in_executor(self.get_executor(), self._embed_sync, [text])
+            # Run the CPU-bound embedding in the default, unconstrained thread pool
+            result = await asyncio.to_thread(self._embed_sync, [text])
             return result[0]
         except Exception as e:
             logger.error(f"FastEmbed generation failed: {e}")
@@ -87,9 +87,9 @@ class FastEmbedProvider(EmbeddingProvider):
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
-        loop = asyncio.get_running_loop()
+        import asyncio
         try:
-            return await loop.run_in_executor(self.get_executor(), self._embed_sync, texts)
+            return await asyncio.to_thread(self._embed_sync, texts)
         except Exception as e:
             logger.error(f"FastEmbed batch generation failed: {e}")
             raise RuntimeError(f"Batch embedding generation failed: {e}")

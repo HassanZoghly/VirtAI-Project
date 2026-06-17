@@ -37,8 +37,9 @@ async def init_redis() -> None:
             settings.REDIS_URL,
             encoding="utf-8",
             decode_responses=False,  # keep bytes; callers encode/decode as needed
-            socket_connect_timeout=5,
-            socket_timeout=5,
+            socket_connect_timeout=30.0,
+            socket_timeout=30.0,
+            max_connections=50,
         )
 
         try:

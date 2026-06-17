@@ -182,23 +182,21 @@ async def upload_document(
                 "message": "Document currently processing",
             }
 
-    # 6. Create DB record (QUEUED) FIRST
-    doc = await repo.create(user_id=str(user.id), filename=safe_filename, file_type=ext, session_id=session_id)
-
-    # Update with SHA256 and size — guarded against concurrent duplicate uploads
-    from sqlalchemy import update
-
-    from app.infrastructure.db.models import Document
+    # 6. Create DB record (QUEUED) ATOMICALLY
+    import uuid
+    doc_id_val = str(uuid.uuid4())
+    storage_key = f"{user.id}/{doc_id_val}.{ext}"
 
     try:
-        await db.execute(
-            update(Document)
-            .where(Document.id == doc.id)
-            .values(
-                document_sha256=file_sha256,
-                file_size=len(file_bytes),
-                storage_key=f"{user.id}/{doc.id}.{ext}",
-            )
+        doc = await repo.create(
+            id=doc_id_val,
+            user_id=str(user.id),
+            filename=safe_filename,
+            file_type=ext,
+            session_id=session_id,
+            document_sha256=file_sha256,
+            file_size=len(file_bytes),
+            storage_key=storage_key,
         )
         await db.commit()
     except IntegrityError:
@@ -206,9 +204,6 @@ async def upload_document(
         # A concurrent upload of the same file won the race
         logger.info(f"Concurrent duplicate detected for SHA256 {file_sha256[:12]}…")
         winner = await repo.find_by_sha256(str(user.id), file_sha256, session_id)
-        # Clean up the orphaned row we just created
-        await repo.delete_with_cascade(str(doc.id), str(user.id))
-        await db.commit()
         if winner:
             response.status_code = 200
             return {

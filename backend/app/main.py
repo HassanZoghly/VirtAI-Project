@@ -119,6 +119,10 @@ async def lifespan(app: FastAPI):
             app.state.reranker = CrossEncoderReranker(
                 model_name="cross-encoder/ms-marco-MiniLM-L-6-v2"
             )
+            logger.info("[Reranker] Aggressively warming up CrossEncoderReranker...")
+            # Preload the model into RAM asynchronously to avoid blocking startup or first chat request
+            loop = asyncio.get_running_loop()
+            loop.run_in_executor(app.state.reranker.get_executor(), app.state.reranker._ensure_model)
         except Exception as _reranker_exc:
             logger.warning(
                 f"[Reranker] CrossEncoderReranker construction failed "

@@ -1,3 +1,4 @@
+import asyncio
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -48,13 +49,34 @@ async def run_ingestion_task(
         "request_id": job_id,  # ARQ jobs have their own IDs, we use it as request_id if none exists
     }
 
-    acquired = await redis_client.set(lock_key, job_id, nx=True, ex=LOCK_TTL)
-    if not acquired:
-        logger.warning({**log_ctx, "event": "job_skipped_duplicate"})
-        return  # Another worker holds the lock — silent exit
-
     try:
+        acquired = await redis_client.set(lock_key, job_id, nx=True, ex=LOCK_TTL)
+        if not acquired:
+            logger.warning({**log_ctx, "event": "job_skipped_duplicate"})
+            return  # Another worker holds the lock — silent exit
+
         await _run_ingestion(ctx, doc_id, user_id, filename, file_type, storage_key, log_ctx)
+
+    except asyncio.CancelledError as e:
+        logger.warning({**log_ctx, "event": "ingestion_cancelled_by_arq", "error": str(e)})
+        from app.application.rag.ingest_document import IngestDocumentUseCase
+
+        try:
+            use_case = IngestDocumentUseCase(
+                storage=ctx["storage"], parser=None, chunker=None, embedder=None,
+                db_session_factory=cast("Any", get_short_session),
+                document_repo_factory=DocumentRepository, vector_store_factory=PGVectorStore,
+            )
+            await use_case.cleanup_failed_job(doc_id, storage_key)
+        except Exception as cleanup_err:
+            logger.error({**log_ctx, "event": "cleanup_failed", "error": str(cleanup_err)})
+
+        async with get_short_session() as db:
+            repo = DocumentRepository(db)
+            await repo.mark_failed(doc_id, "Job timed out or was cancelled by worker", False)
+            await db.commit()
+        raise
+
     except IngestionCancelledException:
         logger.info({**log_ctx, "event": "ingestion_cancelled"})
         # The usecase already cleans up. We just mark as CANCELLED.
@@ -62,6 +84,7 @@ async def run_ingestion_task(
             repo = DocumentRepository(db)
             await repo.mark_cancelled(doc_id)
             await db.commit()
+
     except Exception as e:
         from app.application.rag.ingest_document import IngestDocumentUseCase
 
@@ -108,9 +131,12 @@ async def run_ingestion_task(
             raise  # ARQ will retry
     finally:
         # Only release if we own the lock
-        current = await redis_client.get(lock_key)
-        if current and current.decode() == job_id:
-            await redis_client.delete(lock_key)
+        try:
+            current = await redis_client.get(lock_key)
+            if current and current.decode() == job_id:
+                await redis_client.delete(lock_key)
+        except Exception as e:
+            logger.error({**log_ctx, "event": "lock_release_failed", "error": str(e)})
 
 
 async def _run_ingestion(

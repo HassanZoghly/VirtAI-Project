@@ -101,11 +101,12 @@ class IngestDocumentUseCase:
         )
 
         # 3. CHUNKING
+        import asyncio
         t_chunk = time.monotonic()
         await progress_callback("CHUNKING", 25, 0, 0)
         if not self.chunker:
             raise ValueError("Chunker is required for this stage")
-        chunks_text = self.chunker.chunk(normalized)
+        chunks_text = await asyncio.to_thread(self.chunker.chunk, normalized)
 
         total_chunks = len(chunks_text)
         if total_chunks == 0:

@@ -15,7 +15,7 @@ class WorkerSettings:
     retry_backoff = True
     job_timeout = 600
     health_check_interval = 30
-    max_concurrency = 1
+    max_concurrency = 5
     on_startup = worker_startup_validation
     on_shutdown = worker_shutdown
     queue_name = "ingestion"

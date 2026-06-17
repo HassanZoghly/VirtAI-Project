@@ -1,4 +1,4 @@
-import { Component, lazy } from 'react';
+import { Component, lazy, ReactNode } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import RequireAuth from './guards/RequireAuth';
 import RequireSetupComplete from './guards/RequireSetupComplete';
@@ -10,8 +10,17 @@ const NotFound = lazy(() => import('@/pages/NotFound'));
 const AuthPage = lazy(() => import('@/pages/Auth'));
 const AuthCallbackHandler = lazy(() => import('@/pages/AuthCallback'));
 
-class RouteErrorBoundary extends Component {
-  constructor(props) {
+interface RouteErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface RouteErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class RouteErrorBoundary extends Component<RouteErrorBoundaryProps, RouteErrorBoundaryState> {
+  constructor(props: RouteErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
   }

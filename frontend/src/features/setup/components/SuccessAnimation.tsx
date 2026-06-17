@@ -41,7 +41,7 @@ export default function SuccessAnimation() {
             width: p.size,
             height: p.size,
             animationDelay: `${p.delay}s`,
-          }}
+          } as React.CSSProperties}
         />
       ))}
     </motion.div>

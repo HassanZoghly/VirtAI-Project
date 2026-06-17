@@ -1,5 +1,5 @@
 import LottieLib from 'lottie-react';
-const Lottie = LottieLib.default ?? LottieLib;
+const Lottie = (LottieLib as unknown as { default?: typeof LottieLib }).default ?? LottieLib;
 import { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';

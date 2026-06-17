@@ -2,7 +2,7 @@ import useAuthBootstrap from '@/app/bootstrap/useAuthBootstrap';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import PageLoader from '@/shared/components/PageLoader';
 
-export default function AuthProvider({ children }) {
+export default function AuthProvider({ children }: React.PropsWithChildren) {
   useAuthBootstrap();
 
   const isInitializing = useAuthStore((s) => s.isInitializing);

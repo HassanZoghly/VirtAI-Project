@@ -72,12 +72,12 @@ export default function SlideDrawer({
       drawer.querySelectorAll(
         'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])'
       )
-    ).filter((el) => !el.disabled && el.offsetParent !== null);
+    ).filter((el) => !(el as HTMLButtonElement).disabled && (el as HTMLElement).offsetParent !== null);
     if (focusable.length === 0) {
       return;
     }
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
+    const first = focusable[0] as HTMLElement;
+    const last = focusable[focusable.length - 1] as HTMLElement;
     if (e.shiftKey && document.activeElement === first) {
       e.preventDefault();
       last.focus();

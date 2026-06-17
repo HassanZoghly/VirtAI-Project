@@ -8,7 +8,7 @@ import LoginForm from './LoginForm';
 import SignupForm from './SignupForm';
 
 export default function AuthPage() {
-  const [mode, setMode] = useState('login');
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
   const navigate = useNavigate();
   const isInitializing = useAuthStore((s) => s.isInitializing);
   const isAuthenticated = useAuthStore(selectIsAuthenticated);

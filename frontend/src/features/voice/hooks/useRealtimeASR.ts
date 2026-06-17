@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { eventBus } from '../../../shared/hooks/useEventBus';
+
 import { useVoiceMode } from './useVoiceMode';
 
 /**
@@ -104,7 +104,7 @@ export function useRealtimeASR(
         setInterimText('');
         setIsProcessing(false);
         onFinalRef.current?.(message.text);
-        eventBus.emit('asr:final-result', { text: message.text });
+
       } else {
         setInterimText(message.text);
         setIsProcessing(false);

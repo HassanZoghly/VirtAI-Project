@@ -1,6 +1,6 @@
 import { selectIsAuthenticated, useAuthStore } from '@/features/auth/store/authStore';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { eventBus } from '../../../shared/hooks/useEventBus';
+
 import { SESSION_TITLE_MAX_LENGTH } from '../constants';
 import * as sessionService from '../services/sessionService';
 import { consumeStartNewConversationFlag } from '../services/sessionStorage';
@@ -240,7 +240,7 @@ export default function useSessionManager(urlSessionId, navigate) {
     (id) => {
       const previousId = currentSessionIdRef.current;
       setActiveSessionId(id);
-      eventBus.emit('session:switched', { sessionId: id });
+
       if (navigate && id !== previousId) {
         navigate(`/classroom/${id}`);
       }

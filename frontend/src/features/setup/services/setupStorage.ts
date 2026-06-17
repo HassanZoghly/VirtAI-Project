@@ -27,7 +27,8 @@ export function loadSetup() {
     if (parsed.documentsUploaded !== undefined && typeof parsed.documentsUploaded !== 'boolean') return null;
 
     return parsed;
-  } catch {
+  } catch (error) {
+    console.warn('Failed to load setup configuration from localStorage:', error);
     return null;
   }
 }
@@ -43,8 +44,8 @@ export function saveSetup(config) {
 
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...config, savedAt: Date.now() }));
-  } catch {
-    /* quota exceeded — keep in-memory */
+  } catch (error) {
+    console.warn('Failed to save setup configuration to localStorage (quota exceeded?):', error);
   }
 }
 
@@ -54,5 +55,9 @@ export function clearSetup() {
     return;
   }
 
-  localStorage.removeItem(STORAGE_KEY);
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch (error) {
+    console.warn('Failed to remove setup configuration from localStorage:', error);
+  }
 }

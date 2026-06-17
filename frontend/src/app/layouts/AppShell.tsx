@@ -1,10 +1,18 @@
 import PageLoader from '@/shared/components/PageLoader';
-import { Component, Suspense } from 'react';
+import { Component, Suspense, ReactNode } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Toaster } from 'sonner';
 
-class ErrorBoundary extends Component {
-  constructor(props) {
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false };
   }
@@ -31,7 +39,7 @@ class ErrorBoundary extends Component {
   }
 }
 
-export default function AppShell({ children }) {
+export default function AppShell({ children }: { children: ReactNode }) {
   return (
     <ErrorBoundary>
       <Helmet>

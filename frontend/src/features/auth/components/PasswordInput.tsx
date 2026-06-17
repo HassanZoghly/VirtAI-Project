@@ -1,4 +1,13 @@
 import { useState } from 'react';
+import { UseFormRegisterReturn } from 'react-hook-form';
+
+interface PasswordInputProps {
+  id: string;
+  placeholder?: string;
+  disabled?: boolean;
+  register: UseFormRegisterReturn;
+  className?: string;
+}
 
 export default function PasswordInput({
   id,
@@ -6,7 +15,7 @@ export default function PasswordInput({
   disabled,
   register,
   className
-}) {
+}: PasswordInputProps) {
   const [showPassword, setShowPassword] = useState(false);
 
   return (

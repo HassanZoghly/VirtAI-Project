@@ -1,6 +1,10 @@
 import { useGoogleAuth } from '@/features/auth/hooks/useAuth';
 
-export default function GoogleAuthButton({ label = 'Continue with Google' }) {
+interface GoogleAuthButtonProps {
+  label?: string;
+}
+
+export default function GoogleAuthButton({ label = 'Continue with Google' }: GoogleAuthButtonProps) {
   const { startGoogleAuth, isLoading } = useGoogleAuth();
 
   return (

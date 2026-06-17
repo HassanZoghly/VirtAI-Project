@@ -82,7 +82,12 @@ export function hasBrowserAuthSessionHint() {
   return window.localStorage.getItem(AUTH_SESSION_HINT_KEY) === '1';
 }
 
-export function isInvalidRefreshResponse(error) {
-  const status = error?.response?.status;
+export function isInvalidRefreshResponse(error: unknown): boolean {
+  // Distinctly separate network errors (no response) from actual token expirations
+  const err = error as { response?: { status?: number } };
+  if (!err || !err.response) {
+    return false; // Network error or timeout, don't force logout
+  }
+  const status = err.response.status;
   return status === 400 || status === 401 || status === 403;
 }

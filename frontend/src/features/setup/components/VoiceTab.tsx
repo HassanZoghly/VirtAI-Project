@@ -1,13 +1,23 @@
 import SelectionCheckmark from '@/shared/components/SelectionCheckmark';
 import { motion } from 'motion/react';
-import { memo } from 'react';
+import React, { memo } from 'react';
 import { HiPlay, HiStop } from 'react-icons/hi2';
-import { voices } from '../data/voices';
+import { voices, Voice } from '../data/voices';
 
-const VoiceTab = memo(function VoiceTab({ selected, onSelect, avatarGender, onPlay, onStop, isPlaying, playingVoiceId }) {
-  const filteredVoices = avatarGender ? voices.filter((v) => v.gender === avatarGender) : voices;
+export interface VoiceTabProps {
+  selected: Voice | null;
+  onSelect: (voice: Voice) => void;
+  avatarGender: string | undefined;
+  onPlay: (voice: Voice) => void;
+  onStop: () => void;
+  isPlaying: boolean;
+  playingVoiceId: string | null;
+}
 
-  const handlePlayToggle = (e, voice) => {
+const VoiceTab = memo(function VoiceTab({ selected, onSelect, avatarGender, onPlay, onStop, isPlaying, playingVoiceId }: VoiceTabProps) {
+  const filteredVoices = avatarGender ? voices.filter((v: Voice) => v.gender === avatarGender) : voices;
+
+  const handlePlayToggle = (e: React.MouseEvent, voice: Voice) => {
     e.stopPropagation();
     if (playingVoiceId === voice.id && isPlaying) {
       onStop();
@@ -22,7 +32,7 @@ const VoiceTab = memo(function VoiceTab({ selected, onSelect, avatarGender, onPl
       <p className="setup-section-subtitle">Select how your avatar will sound</p>
 
       <div className="voice-grid" role="radiogroup" aria-label="Voices">
-        {filteredVoices.map((voice, idx) => {
+        {filteredVoices.map((voice: Voice, idx: number) => {
           const isSelected = selected?.id === voice.id;
           const isCurrentlyPlaying = playingVoiceId === voice.id && isPlaying;
           const isFocusable = isSelected || (!selected && idx === 0);
@@ -30,8 +40,8 @@ const VoiceTab = memo(function VoiceTab({ selected, onSelect, avatarGender, onPl
           return (
             <motion.div
               tabIndex={isFocusable ? 0 : -1}
-              onKeyDown={(e) => {
-                let nextIdx = null;
+              onKeyDown={(e: React.KeyboardEvent) => {
+                let nextIdx: number | null = null;
                 if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
                   nextIdx = (idx + 1) % filteredVoices.length;
                 } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
@@ -42,7 +52,7 @@ const VoiceTab = memo(function VoiceTab({ selected, onSelect, avatarGender, onPl
                   e.preventDefault();
                   onSelect(filteredVoices[nextIdx]);
                   const grid = e.currentTarget.parentNode;
-                  const nextElem = grid.children[nextIdx];
+                  const nextElem = grid.children[nextIdx] as HTMLElement;
                   if (nextElem) nextElem.focus();
                 } else if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();

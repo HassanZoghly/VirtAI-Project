@@ -12,7 +12,11 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
-export default function LoginForm({ onToggleMode }) {
+interface LoginFormProps {
+  onToggleMode: () => void;
+}
+
+export default function LoginForm({ onToggleMode }: LoginFormProps) {
   const { login, isLoading } = useLogin();
   const inputClass =
     'w-full rounded-xl border border-(--border-color)/80 bg-black/[0.22] px-4 py-2.5 text-sm text-(--text-primary) placeholder-(--text-muted) shadow-[inset_0_1px_0_rgba(255,255,255,0.035)] outline-none transition-[border-color,box-shadow,background-color,transform] duration-200 focus:scale-[1.005] focus:border-(--accent-primary) focus:bg-black/30 focus:shadow-[0_0_0_3px_rgba(255,255,255,0.1)] disabled:cursor-not-allowed disabled:border-(--border-color)/55 disabled:bg-black/[0.16] disabled:opacity-60';

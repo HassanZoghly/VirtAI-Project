@@ -8,11 +8,12 @@ import { useNavigate } from 'react-router-dom';
 import { avatarImages } from '@/features/avatar/data/avatars';
 import { cn } from '@/shared/utils/cn';
 import CircuitBoardBackground from '@/widgets/Overview/CircuitBoardBackground';
-import { voices as VOICES } from '../data/voices';
+import { voices as VOICES, Voice } from '../data/voices';
+
 import { loadSetup } from '../services/setupStorage';
 import AllSetTab from './AllSetTab';
 import AvatarPreview from './AvatarPreview';
-import AvatarTab from './AvatarTab';
+import AvatarTab, { Avatar } from './AvatarTab';
 import VoiceTab from './VoiceTab';
 
 const TABS = [
@@ -24,20 +25,20 @@ const TABS = [
 export default function SetupPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(0);
-  const [selectedAvatar, setSelectedAvatar] = useState(() => {
+  const [selectedAvatar, setSelectedAvatar] = useState<Avatar | null>(() => {
     const saved = loadSetup();
     if (!saved || !saved.avatarId) return null;
-    return Object.values(avatarImages).find((av) => av.id === saved.avatarId) ?? null;
+    return (Object.values(avatarImages).find((av) => (av as Avatar).id === saved.avatarId) as Avatar) ?? null;
   });
-  const [selectedVoice, setSelectedVoice] = useState(() => {
+  const [selectedVoice, setSelectedVoice] = useState<Voice | null>(() => {
     const saved = loadSetup();
     if (!saved || !saved.voiceId) return null;
     const voice = VOICES.find((vo) => vo.id === saved.voiceId) ?? null;
-    const avatar = saved.avatarId ? Object.values(avatarImages).find((av) => av.id === saved.avatarId) : null;
+    const avatar = saved.avatarId ? Object.values(avatarImages).find((av) => (av as Avatar).id === saved.avatarId) as Avatar : null;
     if (avatar && voice && avatar.gender !== voice.gender) return null;
     return voice;
   });
-  const [isMovementEnabled, setIsMovementEnabled] = useState(() => {
+  const [isMovementEnabled, setIsMovementEnabled] = useState<boolean>(() => {
     const saved = loadSetup();
     if (saved && typeof saved.movementEnabled === 'boolean') {
       return saved.movementEnabled;
@@ -48,9 +49,9 @@ export default function SetupPage() {
 
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playingVoiceId, setPlayingVoiceId] = useState(null);
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
   const [direction, setDirection] = useState(1);
-  const audioRef = useRef(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const stopAudio = useCallback(() => {
     if (audioRef.current) {

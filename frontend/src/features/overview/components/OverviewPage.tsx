@@ -37,10 +37,14 @@ function isLowPerformanceDevice() {
     return true;
   }
 
-  const connection = navigator.connection;
+  const nav = navigator as unknown as {
+    connection?: { saveData?: boolean; effectiveType?: string };
+    deviceMemory?: number;
+  };
+  const connection = nav.connection;
   const saveDataEnabled = !!connection?.saveData;
   const slowNetwork = ['slow-2g', '2g'].includes(connection?.effectiveType || '');
-  const lowMemoryDevice = typeof navigator.deviceMemory === 'number' && navigator.deviceMemory <= 4;
+  const lowMemoryDevice = typeof nav.deviceMemory === 'number' && nav.deviceMemory <= 4;
   const lowCpuDevice =
     typeof navigator.hardwareConcurrency === 'number' && navigator.hardwareConcurrency <= 4;
   const isMobileViewport =
@@ -50,8 +54,8 @@ function isLowPerformanceDevice() {
 }
 
 function scheduleIdleTask(task, { delay = 0, timeout = 1500 } = {}) {
-  let idleId = null;
-  let timeoutId = null;
+  let idleId: number | null = null;
+  let timeoutId: number | null = null;
   let cancelled = false;
 
   const runTask = () => {
@@ -68,11 +72,11 @@ function scheduleIdleTask(task, { delay = 0, timeout = 1500 } = {}) {
       return;
     }
 
-    timeoutId = window.setTimeout(runTask, 1);
+    timeoutId = setTimeout(runTask, 1) as unknown as number;
   };
 
   if (delay > 0) {
-    timeoutId = window.setTimeout(queueTask, delay);
+    timeoutId = setTimeout(queueTask, delay) as unknown as number;
   } else {
     queueTask();
   }

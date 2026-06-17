@@ -1,11 +1,25 @@
 import { avatarImages } from '@/features/avatar/data/avatars';
 import SelectionCheckmark from '@/shared/components/SelectionCheckmark';
 import { motion } from 'motion/react';
-import { memo } from 'react';
+import React, { memo } from 'react';
 
 const avatarList = Object.values(avatarImages);
 
-const AvatarTab = memo(function AvatarTab({ selected, onSelect }) {
+export interface Avatar {
+  id: string;
+  name: string;
+  description: string;
+  image: string;
+  gender?: string;
+  [key: string]: unknown;
+}
+
+export interface AvatarTabProps {
+  selected: Avatar | null;
+  onSelect: (avatar: Avatar) => void;
+}
+
+const AvatarTab = memo(function AvatarTab({ selected, onSelect }: AvatarTabProps) {
   return (
     <div>
       <h2 className="setup-section-title">Choose Your Avatar</h2>
@@ -34,7 +48,7 @@ const AvatarTab = memo(function AvatarTab({ selected, onSelect }) {
                   e.preventDefault();
                   onSelect(avatarList[nextIdx]);
                   const grid = e.currentTarget.parentNode;
-                  const nextElem = grid.children[nextIdx];
+                  const nextElem = grid.children[nextIdx] as HTMLElement;
                   if (nextElem) nextElem.focus();
                 }
               }}

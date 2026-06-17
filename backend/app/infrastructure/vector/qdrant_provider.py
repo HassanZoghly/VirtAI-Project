@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from loguru import logger
-from qdrant_client import QdrantClient, models
+from qdrant_client import QdrantClient, models  # type: ignore[import-not-found]
 
 from app.domain.rag.ports import VectorCollectionStore
 from app.infrastructure.vector.enums import DistanceMethod

@@ -18,7 +18,7 @@ async def worker_startup_validation(ctx: dict[Any, Any]) -> None:
     logger.info("Worker startup: Pinging Redis...")
     await init_redis()
     redis_client = get_redis()
-    await redis_client.ping()
+    await redis_client.ping()  # type: ignore[misc]
 
     # 2. Test DB + pgvector
     logger.info("Worker startup: Testing DB and pgvector extension...")

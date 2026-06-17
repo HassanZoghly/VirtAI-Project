@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useEffect, useRef, useState, useId } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 export default function SlideDrawer({
   title,
@@ -14,13 +14,14 @@ export default function SlideDrawer({
 }) {
   const drawerRef = useRef(null);
   const previousFocusRef = useRef(null);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches
+  );
   const id = useId();
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(max-width: 1023px)');
     const handleChange = (e) => setIsMobile(e.matches);
-    setIsMobile(mediaQuery.matches);
     mediaQuery.addEventListener('change', handleChange);
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
@@ -89,7 +90,7 @@ export default function SlideDrawer({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className={`slide-drawer open ${className}`} style={{ zIndex }}>
+        <motion.div key="drawer-wrapper" className={`slide-drawer open ${className}`} style={{ zIndex }}>
           <motion.div
             className="drawer-overlay"
             onClick={onClose}
@@ -126,13 +127,13 @@ export default function SlideDrawer({
                 style={
                   enableDrag
                     ? {
-                        width: '40px',
-                        height: '5px',
-                        background: 'var(--border-color)',
-                        margin: '12px auto 0',
-                        borderRadius: '4px',
-                        flexShrink: 0,
-                      }
+                      width: '40px',
+                      height: '5px',
+                      background: 'var(--border-color)',
+                      margin: '12px auto 0',
+                      borderRadius: '4px',
+                      flexShrink: 0,
+                    }
                     : undefined
                 }
               />
@@ -141,7 +142,7 @@ export default function SlideDrawer({
             {description && <p id={`${id}-desc`} className="sr-only">{description}</p>}
             {children}
           </motion.div>
-        </div>
+        </motion.div>
       )}
     </AnimatePresence>
   );

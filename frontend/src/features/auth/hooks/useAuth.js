@@ -6,9 +6,9 @@ import {
   signupUser,
 } from '@/features/auth/services/authApi';
 import { useAuthStore } from '@/features/auth/store/authStore';
-import { toast } from 'sonner';
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 export function useLogin() {
   const [isLoading, setIsLoading] = useState(false);
@@ -64,7 +64,7 @@ export function useGoogleAuth() {
     try {
       const url = await getGoogleAuthUrl();
       window.location.href = url;
-    } catch (err) {
+    } catch {
       toast.error('Google Auth', { description: 'Could not connect to Google.' });
     } finally {
       setIsLoading(false);

@@ -2,12 +2,20 @@ from loguru import logger
 
 from app.application.rag.token_budget import TokenBudgetManager
 from app.domain.rag.entities import (
+    DocumentChunk,
     RetrievalResult,
     RetrievalStatus,
     RetrievedDocument,
 )
 from app.domain.rag.ports import EmbeddingProvider, RerankerPort, VectorStore
 from app.shared.ids import parse_uuid
+
+
+def _get_chunk_text(chunk: DocumentChunk | RetrievedDocument) -> str:
+    """Return the text content regardless of whether chunk is a DocumentChunk or RetrievedDocument."""
+    if isinstance(chunk, RetrievedDocument):
+        return chunk.text
+    return chunk.chunk_text
 
 
 class RetrievalError(Exception):
@@ -131,7 +139,7 @@ class RetrievalUseCase:
         context_parts = []
         for chunk in chunks:
             source = _source_name(chunk.metadata)
-            context_parts.append(f"--- Document: {source} ---\n{chunk.text}")
+            context_parts.append(f"--- Document: {source} ---\n{_get_chunk_text(chunk)}")
 
         context_block = "\n\n".join(context_parts)
 
@@ -174,6 +182,6 @@ class RetrievalUseCase:
         context_parts = []
         for chunk in chunks:
             source = _source_name(chunk.metadata)
-            context_parts.append(f"--- Document: {source} ---\n{chunk.text}\n")
+            context_parts.append(f"--- Document: {source} ---\n{_get_chunk_text(chunk)}\n")
 
         return "\n".join(context_parts)

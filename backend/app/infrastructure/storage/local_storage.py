@@ -2,8 +2,8 @@ import os
 from collections.abc import AsyncIterator
 from pathlib import Path
 
-import aiofiles
-import aiofiles.os
+import aiofiles  # type: ignore[import-untyped]
+import aiofiles.os  # type: ignore[import-untyped]
 
 from app.domain.storage.ports import StorageProvider
 

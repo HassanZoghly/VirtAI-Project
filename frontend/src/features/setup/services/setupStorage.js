@@ -8,19 +8,19 @@ export function loadSetup() {
   if (typeof window === 'undefined') {
     return null;
   }
-  
+
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
       return null;
     }
     const parsed = JSON.parse(raw);
-    
+
     // Explicit schema validation
     if (!parsed || typeof parsed !== 'object') return null;
     if (typeof parsed.avatarId !== 'string') return null;
     if (typeof parsed.voiceId !== 'string') return null;
-    
+
     // Optional boolean validation
     if (parsed.movementEnabled !== undefined && typeof parsed.movementEnabled !== 'boolean') return null;
     if (parsed.documentsSkipped !== undefined && typeof parsed.documentsSkipped !== 'boolean') return null;
@@ -53,6 +53,6 @@ export function clearSetup() {
   if (typeof window === 'undefined') {
     return;
   }
-  
+
   localStorage.removeItem(STORAGE_KEY);
 }

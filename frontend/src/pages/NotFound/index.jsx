@@ -1,19 +1,23 @@
-import Lottie from 'lottie-react';
+import LottieLib from 'lottie-react';
+const Lottie = LottieLib.default ?? LottieLib;
 import { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
 import './NotFound.css';
-import astronautAnimation from '/assets/lottie/error.json?url';
+
+const ANIMATION_URL = '/assets/lottie/error.json';
 
 export default function NotFound() {
   const navigate = useNavigate();
   const [animationData, setAnimationData] = useState(null);
 
   useEffect(() => {
-    fetch(astronautAnimation)
+    fetch(ANIMATION_URL)
       .then((res) => res.json())
-      .then(setAnimationData);
+      .then(setAnimationData)
+      .catch(() => {}); // silently ignore — animation is decorative
   }, []);
+
 
   return (
     <>

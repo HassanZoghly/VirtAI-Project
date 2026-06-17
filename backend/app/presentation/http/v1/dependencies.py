@@ -169,7 +169,7 @@ def get_vector_collection_store(
 
 
 def get_memory_manager(
-    request: Request, 
+    request: Request,
     db: AsyncSession = Depends(get_db),
     llm_provider: LLMGenerationProvider = Depends(get_llm_generation_provider)
 ) -> MemoryManager:

@@ -21,7 +21,7 @@ export default function AuthCallbackHandler() {
       return;
     }
     called.current = true;
-    
+
     (async () => {
       try {
         await handleCallback(code, state);

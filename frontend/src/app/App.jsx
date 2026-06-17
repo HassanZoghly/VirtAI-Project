@@ -7,7 +7,6 @@ import './styles/app.css';
 
 export default function App() {
   useVisualViewport();
-
   return (
     <AppProviders>
       <AppShell>

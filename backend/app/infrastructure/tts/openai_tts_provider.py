@@ -130,7 +130,7 @@ class OpenAITTSProvider(BaseTTSProvider):
             )
         requested_voice = voice or self.voice
         api_voice = self.resolve_voice(requested_voice)
-        
+
         # STRICT ENFORCEMENT: We will explicitly override the api_voice using the voice kwarg if it is present and valid.
         # This guarantees the pipeline passed voice is used.
         if voice:

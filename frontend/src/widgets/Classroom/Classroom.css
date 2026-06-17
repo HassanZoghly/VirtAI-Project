@@ -40,7 +40,10 @@
 
 /* Avatar Panel */
 .avatar-panel {
-  width: 40%;
+  /* Fixed at 40% of the container — must not grow or shrink */
+  flex: 0 0 40%;
+  min-width: 0;           /* Prevent intrinsic-size blowout */
+  width: 40%;             /* Belt-and-suspenders for older engines */
   height: 100%;
   background: var(--card-bg, #1e1e1e);
   position: relative;
@@ -379,13 +382,14 @@
 
 /* =============== Chat Panel =============== */
 .chat-panel {
-  width: 60%;
+  /* Takes all remaining space after the 40% avatar panel */
+  flex: 1 1 0;
+  min-width: 0;           /* Critical: prevents content from pushing the panel wider */
   background: var(--secondary-bg, #1a1a1a);
   display: flex;
   flex-direction: column;
-  min-width: 0;
   contain: inline-size;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .chat-messages {
@@ -795,20 +799,8 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-
-  /* Compositor-safe slide animation */
-  animation: slide-in-sidebar 0.3s ease-out forwards;
 }
 
-@keyframes slide-in-sidebar {
-  from {
-    transform: translateX(100%);
-  }
-
-  to {
-    transform: translateX(0);
-  }
-}
 
 .sidebar-inner {
   display: flex;
@@ -1614,6 +1606,7 @@
   .avatar-panel,
   .chat-panel {
     width: 100%;
+    flex: none; /* Reset flex-basis so they stack full-width in column layout */
   }
 
   .avatar-panel {
@@ -1624,7 +1617,8 @@
   }
 
   .chat-panel {
-    flex: 1; /* Allow chat panel to take remaining space up to --vv-height */
+    flex: 1 1 0; /* Allow chat panel to take remaining space up to --vv-height */
+    min-height: 0;
   }
 
   .classroom-top-controls {
@@ -1726,6 +1720,7 @@
 .markdown-body p,
 .markdown-body li {
   line-height: 1.6 !important;
+  max-width: 65ch;
 }
 
 .markdown-body li > p {

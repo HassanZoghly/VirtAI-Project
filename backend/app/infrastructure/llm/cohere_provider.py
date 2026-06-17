@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Union
 
-import cohere
+import cohere  # type: ignore[import-not-found]
 from loguru import logger
 
 from app.domain.rag.ports import LLMGenerationProvider

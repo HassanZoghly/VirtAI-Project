@@ -1,7 +1,7 @@
+import SelectionCheckmark from '@/shared/components/SelectionCheckmark';
 import { motion } from 'motion/react';
 import { memo } from 'react';
 import { HiPlay, HiStop } from 'react-icons/hi2';
-import SelectionCheckmark from '@/shared/components/SelectionCheckmark';
 import { voices } from '../data/voices';
 
 const VoiceTab = memo(function VoiceTab({ selected, onSelect, avatarGender, onPlay, onStop, isPlaying, playingVoiceId }) {
@@ -26,7 +26,7 @@ const VoiceTab = memo(function VoiceTab({ selected, onSelect, avatarGender, onPl
           const isSelected = selected?.id === voice.id;
           const isCurrentlyPlaying = playingVoiceId === voice.id && isPlaying;
           const isFocusable = isSelected || (!selected && idx === 0);
-          
+
           return (
             <motion.div
               tabIndex={isFocusable ? 0 : -1}
@@ -37,7 +37,7 @@ const VoiceTab = memo(function VoiceTab({ selected, onSelect, avatarGender, onPl
                 } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
                   nextIdx = (idx - 1 + filteredVoices.length) % filteredVoices.length;
                 }
-                
+
                 if (nextIdx !== null) {
                   e.preventDefault();
                   onSelect(filteredVoices[nextIdx]);

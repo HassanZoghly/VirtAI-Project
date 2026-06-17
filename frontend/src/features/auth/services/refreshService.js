@@ -1,10 +1,10 @@
+import { CSRF_HEADER_NAME, ensureCsrfToken } from '@/core/api/csrfService';
 import axios from 'axios';
 import {
   clearBrowserAuthState,
   isInvalidRefreshResponse,
   markBrowserAuthSession,
 } from './authStateCleanup';
-import { ensureCsrfToken, CSRF_HEADER_NAME } from '@/core/api/csrfService';
 
 let refreshPromise = null;
 

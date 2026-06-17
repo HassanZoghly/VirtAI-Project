@@ -17,7 +17,7 @@ export default function HeroSection({ ctaLabel, ctaTo }) {
             Success.
           </h1>
 
-          <p className="mt-7 max-w-[55ch] text-base leading-relaxed text-offwhite/80">
+          <p className="mt-7 max-w-[40ch] text-base leading-relaxed text-offwhite/80">
             Deliver personalized guidance, instant answers, and continuous academic support through
             real-time voice interaction, curriculum-aware reasoning, and lifelike AI avatars.
           </p>

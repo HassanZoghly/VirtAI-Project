@@ -1,4 +1,13 @@
-export function createSessionResumeState() {
+import type { RealtimeLogger, WSOutgoingMessage } from './types';
+
+export interface SessionResumeState {
+  sessionId: string | null;
+  lastSeq: number;
+  lastAckedSeq: number;
+  messageQueue: WSOutgoingMessage[];
+}
+
+export function createSessionResumeState(): SessionResumeState {
   return {
     sessionId: null,
     lastSeq: 0,
@@ -7,7 +16,7 @@ export function createSessionResumeState() {
   };
 }
 
-export function buildResumeUrl(url, state) {
+export function buildResumeUrl(url: string | null, state: SessionResumeState): string | null {
   if (!state.sessionId || !url) return url;
   try {
     const parsed = new URL(url);
@@ -20,7 +29,7 @@ export function buildResumeUrl(url, state) {
   }
 }
 
-export function flushAckBatch(state, sendFn) {
+export function flushAckBatch(state: SessionResumeState, sendFn: (data: string) => void): void {
   if (state.lastSeq <= state.lastAckedSeq) return;
   const ackPayload = {
     type: 'ws.ack',
@@ -32,32 +41,40 @@ export function flushAckBatch(state, sendFn) {
   try {
     sendFn(JSON.stringify(ackPayload));
     state.lastAckedSeq = state.lastSeq;
-  } catch (err) {
+  } catch (err: unknown) {
     if (import.meta.env.DEV) {
       console.debug('[WS] Failed to send ack payload:', err);
     }
   }
 }
 
-export function flushMessageQueue(state, sendFn, logger) {
+export function flushMessageQueue(
+  state: SessionResumeState,
+  sendFn: (data: string) => void,
+  logger: RealtimeLogger
+): void {
   while (state.messageQueue.length > 0) {
     const msg = state.messageQueue.shift();
     try {
       sendFn(JSON.stringify(msg));
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('[WS] Failed to send queued message:', err);
     }
   }
 }
 
-export function pushToMessageQueue(state, message, maxQueueSize = 100) {
+export function pushToMessageQueue(
+  state: SessionResumeState,
+  message: WSOutgoingMessage,
+  maxQueueSize = 100
+): void {
   if (state.messageQueue.length >= maxQueueSize) {
     state.messageQueue.shift();
   }
   state.messageQueue.push(message);
 }
 
-export function resetSessionState(state) {
+export function resetSessionState(state: SessionResumeState): void {
   state.sessionId = null;
   state.lastSeq = 0;
   state.lastAckedSeq = 0;

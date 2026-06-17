@@ -2,7 +2,7 @@ import hashlib
 import re
 from typing import Any
 
-import filetype
+import filetype  # type: ignore[import-not-found]
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from loguru import logger
 from sqlalchemy.exc import IntegrityError

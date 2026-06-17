@@ -1,12 +1,12 @@
-import axios from 'axios';
 import { logger } from '@/shared/utils/logger';
+import axios from 'axios';
 
 export const CSRF_COOKIE_NAME = 'csrf_token';
 export const CSRF_HEADER_NAME = 'X-CSRF-Token';
 
-let csrfTokenRequest = null;
+let csrfTokenRequest: Promise<string | null> | null = null;
 
-export function readCookie(name) {
+export function readCookie(name: string): string | null {
   if (typeof document === 'undefined') {
     return null;
   }
@@ -23,7 +23,7 @@ export function readCookie(name) {
   return null;
 }
 
-export async function ensureCsrfToken() {
+export async function ensureCsrfToken(): Promise<string | null> {
   if (typeof document === 'undefined') {
     return null;
   }
@@ -35,8 +35,9 @@ export async function ensureCsrfToken() {
 
   if (!csrfTokenRequest) {
     csrfTokenRequest = axios
-      .get('/api/v1/auth/csrf', { withCredentials: true })
-      .catch((error) => {
+      .get<{ csrf_token?: string }>('/api/v1/auth/csrf', { withCredentials: true })
+      .then(() => readCookie(CSRF_COOKIE_NAME))
+      .catch((error: unknown) => {
         logger.error('Failed to fetch initial CSRF token:', error);
         return null;
       })
@@ -45,6 +46,5 @@ export async function ensureCsrfToken() {
       });
   }
 
-  await csrfTokenRequest;
-  return readCookie(CSRF_COOKIE_NAME);
+  return csrfTokenRequest;
 }

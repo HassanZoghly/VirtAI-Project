@@ -1,5 +1,5 @@
-import { useAuthStore } from '@/features/auth/store/authStore';
 import useAuthBootstrap from '@/app/bootstrap/useAuthBootstrap';
+import { useAuthStore } from '@/features/auth/store/authStore';
 import PageLoader from '@/shared/components/PageLoader';
 
 export default function AuthProvider({ children }) {

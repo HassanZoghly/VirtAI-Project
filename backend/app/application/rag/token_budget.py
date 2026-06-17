@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Any
 
 import tiktoken
@@ -34,7 +35,7 @@ class TokenBudgetManager:
 
     def fit_chunks_to_budget(
         self,
-        chunks: list[DocumentChunk | RetrievedDocument],
+        chunks: Sequence[DocumentChunk | RetrievedDocument],
         system_prompt: str,
         user_query: str,
         max_context_tokens: int,

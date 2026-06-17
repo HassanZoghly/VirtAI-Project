@@ -37,7 +37,7 @@ except ImportError:
 _HAS_OCR = False
 try:
     import pytesseract
-    from pdf2image import convert_from_path
+    from pdf2image import convert_from_path  # type: ignore[import-not-found]
 
     _HAS_OCR = True
 except ImportError:

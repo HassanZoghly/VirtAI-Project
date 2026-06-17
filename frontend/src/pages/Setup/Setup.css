@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════
-   Setup Page — Premium Glassmorphism UI
+    Setup Page — Premium Glassmorphism UI
    ═══════════════════════════════════════════════════════════ */
 
 /* ── Page container ───────────────────────────────────────── */
@@ -207,7 +207,8 @@
   border-top: 1px solid rgb(255 255 255 / 6%);
 }
 
-.setup-nav-btn, .preview-voice-btn {
+.setup-nav-btn,
+.preview-voice-btn {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -260,21 +261,21 @@
   margin-top: 20px;
 }
 
-@media (width <= 1024px) {
+@media (width <=1024px) {
   .avatar-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 16px;
   }
 }
 
-@media (width <= 768px) {
+@media (width <=768px) {
   .avatar-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 12px;
   }
 }
 
-@media (width <= 480px) {
+@media (width <=480px) {
   .avatar-grid {
     grid-template-columns: 1fr;
     gap: 10px;
@@ -301,7 +302,7 @@
   justify-content: center;
 }
 
-@media (width <= 768px) {
+@media (width <=768px) {
   .avatar-card {
     padding: 12px;
     min-height: auto;
@@ -327,7 +328,7 @@
   transition: border-color 0.3s ease;
 }
 
-@media (width <= 480px) {
+@media (width <=480px) {
   .avatar-card-img {
     width: 70px;
     height: 70px;
@@ -345,7 +346,7 @@
   color: var(--text-primary, #fff);
 }
 
-@media (width <= 480px) {
+@media (width <=480px) {
   .avatar-card-name {
     font-size: 14px;
   }
@@ -357,7 +358,7 @@
   text-align: center;
 }
 
-@media (width <= 480px) {
+@media (width <=480px) {
   .avatar-card-desc {
     font-size: 12px;
   }
@@ -792,15 +793,15 @@
   transition: transform 0.2s ease;
 }
 
-.movement-toggle input:checked + .movement-switch {
+.movement-toggle input:checked+.movement-switch {
   background: rgb(180 171 139 / 60%);
 }
 
-.movement-toggle input:checked + .movement-switch .movement-thumb {
+.movement-toggle input:checked+.movement-switch .movement-thumb {
   transform: translateX(18px);
 }
 
-.movement-toggle input:focus-visible + .movement-switch {
+.movement-toggle input:focus-visible+.movement-switch {
   outline: 2px solid rgb(180 171 139 / 80%);
   outline-offset: 2px;
 }
@@ -1049,7 +1050,7 @@
 }
 
 /* ── Responsive: Tablet (≤1024px) ─────────────────────────── */
-@media (width <= 1024px) {
+@media (width <=1024px) {
   .setup-card {
     width: 95%;
     height: 90%;
@@ -1092,7 +1093,7 @@
 }
 
 /* ── Responsive: Mobile (≤768px) ──────────────────────────── */
-@media (width <= 768px) {
+@media (width <=768px) {
   .setup-card {
     width: 100%;
     height: 100%;

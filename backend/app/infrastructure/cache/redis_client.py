@@ -42,7 +42,7 @@ async def init_redis() -> None:
         )
 
         try:
-            await _redis.ping()
+            await _redis.ping()  # type: ignore[misc]
             logger.info("Redis connection established")
             return
         except Exception as exc:
@@ -89,7 +89,7 @@ async def is_redis_healthy() -> bool:
     if _redis is None:
         return False
     try:
-        await _redis.ping()
+        await _redis.ping()  # type: ignore[misc]
         return True
     except Exception:
         return False

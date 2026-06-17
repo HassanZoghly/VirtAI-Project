@@ -1,7 +1,19 @@
 import { logger } from '@/shared/utils/logger';
+import type { EventRouterPayload, RealtimeLogger, WSIncomingMessage } from './types';
 
-export function createEventRouter() {
-  const handlers = {};
+export interface EventRouterCallbacks {
+  onSeq: (seq: number) => void;
+  onSessionId: (id: string) => void;
+  onReady: (message: WSIncomingMessage) => void;
+}
+
+export interface EventRouter {
+  onMessage: (type: string, handler: (data: EventRouterPayload) => void) => () => void;
+  route: (event: MessageEvent, callbacks: EventRouterCallbacks) => void;
+}
+
+export function createEventRouter(): EventRouter {
+  const handlers: Record<string, Set<(data: EventRouterPayload) => void>> = {};
 
   return {
     onMessage(type, handler) {
@@ -20,14 +32,15 @@ export function createEventRouter() {
         }
       };
     },
-    
+
     route(event, callbacks) {
       try {
         if (typeof Blob !== 'undefined' && event.data instanceof Blob) {
           return;
         }
 
-        const message = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        const message: WSIncomingMessage =
+          typeof event.data === 'string' ? (JSON.parse(event.data) as WSIncomingMessage) : (event.data as WSIncomingMessage);
 
         if (Number.isFinite(message.seq_id)) {
           callbacks.onSeq(Number(message.seq_id));
@@ -40,7 +53,7 @@ export function createEventRouter() {
           return;
         }
 
-        const messageData = message.data || {};
+        const messageData = message.data ?? {};
         if (
           typeof messageData.session_id === 'string' &&
           messageData.session_id.length > 0
@@ -64,13 +77,13 @@ export function createEventRouter() {
         const ignoredTypes = ['chat.abort'];
 
         if (typeHandlers && typeHandlers.size > 0) {
-          const data = message.data || message;
+          const data: EventRouterPayload = message.data ?? message;
           typeHandlers.forEach((handler) => handler(data));
         } else if (import.meta.env.DEV && !ignoredTypes.includes(message.type)) {
           console.warn('[WS] Unknown message type:', message.type);
         }
-      } catch (err) {
-        logger.error('[WS] Failed to parse message:', err);
+      } catch (err: unknown) {
+        (logger as RealtimeLogger).error('[WS] Failed to parse message:', err);
       }
     }
   };

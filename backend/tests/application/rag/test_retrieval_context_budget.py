@@ -1,10 +1,11 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 from app.application.rag.retrieval_use_case import RetrievalUseCase
 from app.application.rag.token_budget import TokenBudgetManager
 from app.domain.rag.entities import DocumentChunk, RetrievedDocument
+from app.domain.rag.ports import EmbeddingProvider, VectorStore
 
 
 def test_token_budget_accepts_retrieved_documents() -> None:
@@ -33,18 +34,47 @@ def test_token_budget_accepts_retrieved_documents() -> None:
 async def test_retrieval_uses_session_scope_and_source_metadata() -> None:
     session_id = str(uuid4())
 
-    class FakeEmbedder:
+    class FakeEmbedder(EmbeddingProvider):
         async def embed(self, text: str) -> list[float]:
             return [0.1, 0.2]
 
-    class FakeVectorStore:
-        def __init__(self) -> None:
-            self.scope = None
-            self.scope_id = None
+        async def embed_batch(self, texts: list[str]) -> list[list[float]]:
+            return [[0.1, 0.2] for _ in texts]
 
-        async def hybrid_search(self, **kwargs):
-            self.scope = kwargs.get("scope")
-            self.scope_id = kwargs.get("scope_id")
+    class FakeVectorStore(VectorStore):
+        def __init__(self) -> None:
+            self.scope: str | None = None
+            self.scope_id: UUID | None = None
+
+        async def store_chunks_batch(
+            self, chunks: list[DocumentChunk], embeddings: list[list[float]]
+        ) -> None:
+            pass
+
+        async def search(
+            self,
+            query_vector: list[float],
+            limit: int = 5,
+            document_id: UUID | None = None,
+            scope: str | None = None,
+            scope_id: UUID | None = None,
+            min_dense_score: float = 0.5,
+        ) -> list[tuple[DocumentChunk, float]]:
+            return []
+
+        async def hybrid_search(
+            self,
+            query_text: str,
+            query_vector: list[float],
+            limit: int = 10,
+            document_id: UUID | None = None,
+            scope: str | None = None,
+            scope_id: UUID | None = None,
+            min_hybrid_score: float = 0.015,
+            min_dense_score: float = 0.5,
+        ) -> list[tuple[DocumentChunk, float]]:
+            self.scope = scope
+            self.scope_id = scope_id
             return [
                 (
                     DocumentChunk(

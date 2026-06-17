@@ -7,9 +7,30 @@ import {
 } from '../services/authStateCleanup';
 import { refreshAccessTokenSingleFlight } from '../services/refreshService';
 
-let initAuthPromise = null;
+export interface User {
+  id: string;
+  email: string;
+  setupComplete?: boolean;
+  [key: string]: unknown;
+}
 
-export const useAuthStore = create((set) => ({
+export interface AuthState {
+  user: User | null;
+  accessToken: string | null;
+  isLoading: boolean;
+  isInitializing: boolean;
+  isInitialized: boolean;
+
+  setAuth: (user: User | null, accessToken: string | null) => void;
+  setUser: (user: User | null) => void;
+  logout: () => void;
+  setLoading: (isLoading: boolean) => void;
+  initAuth: (options?: { forceRefresh?: boolean }) => Promise<void>;
+}
+
+let initAuthPromise: Promise<void> | null = null;
+
+export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   accessToken: null,
 
@@ -96,4 +117,4 @@ export const useAuthStore = create((set) => ({
   },
 }));
 
-export const selectIsAuthenticated = (state) => !!state.user && !!state.accessToken;
+export const selectIsAuthenticated = (state: AuthState): boolean => !!state.user && !!state.accessToken;

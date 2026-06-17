@@ -6,7 +6,7 @@ from typing import Any, cast
 
 import httpx
 import redis.asyncio as redis
-from arq import Retry
+from arq import Retry  # type: ignore[import-not-found]
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 

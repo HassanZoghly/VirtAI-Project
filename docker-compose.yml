@@ -44,6 +44,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: virtai-backend:latest
     container_name: virtai-backend
     restart: unless-stopped
     ports:
@@ -70,13 +71,12 @@ services:
       test: ['CMD', 'curl', '-f', 'http://localhost:8000/api/v1/health']
       interval: 15s
       timeout: 5s
-      start_period: 120s
+      start_period: 45s
       retries: 5
 
   worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: virtai-backend:latest
+    pull_policy: never
     container_name: virtai-worker
     restart: unless-stopped
     command: ['python', '-m', 'arq', 'app.infrastructure.worker.arq_settings.WorkerSettings']

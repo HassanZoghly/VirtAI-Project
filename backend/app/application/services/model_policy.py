@@ -83,7 +83,7 @@ class FallbackTTSChain(BaseTTSProvider):
         return getattr(self.primary, "voice", None)
 
     @voice.setter
-    def voice(self, value: str) -> None:
+    def voice(self, value: str | None) -> None:
         for provider in [self.primary, *self.fallbacks]:
             if hasattr(provider, "voice"):
                 provider.voice = value

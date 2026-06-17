@@ -64,7 +64,18 @@ class StreamingASRService(ABC):
 
 class BaseTTSProvider(ABC):
     """Abstract TTS provider interface."""
-    voice: str | None = None
+
+    # Subclasses that expose a voice attribute should store it here.
+    _voice: str | None = None
+
+    @property
+    def voice(self) -> str | None:
+        """The active voice ID (may be None if not yet configured)."""
+        return self._voice
+
+    @voice.setter
+    def voice(self, value: str | None) -> None:
+        self._voice = value
 
     @abstractmethod
     async def synthesize(self, text: str) -> TTSResult:

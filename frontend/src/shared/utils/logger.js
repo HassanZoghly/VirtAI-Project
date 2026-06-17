@@ -4,7 +4,7 @@
  */
 const isDev = import.meta.env.DEV;
 
-const noop = () => {};
+const noop = () => { };
 
 function reportError(level, msg, ...args) {
   // Slot in Sentry / Datadog / custom endpoint here.

@@ -125,6 +125,7 @@ body {
   font-family: var(--font-body);
   font-weight: 400;
   line-height: 1.6;
+  overflow-x: hidden;
 }
 
 p {
@@ -133,6 +134,24 @@ p {
 
 #root {
   min-height: 100vh;
+}
+
+/* ── Slide Drawer Base Styles ── */
+.slide-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: none;
+  pointer-events: none;
+}
+
+.slide-drawer.open {
+  display: block;
+}
+
+.slide-drawer .drawer-overlay,
+.slide-drawer .drawer-content {
+  pointer-events: auto;
 }
 
 /* ── Dark Theme Scrollbar ── */
@@ -205,6 +224,7 @@ body::-webkit-scrollbar-button:vertical:end:increment,
   background-image: none !important;
   appearance: none !important;
 }
+
 /* stylelint-enable no-descending-specificity */
 
 /* Keep top-right corner clean when both axes are scrollable */
@@ -253,7 +273,7 @@ body::-webkit-scrollbar-button:vertical:end:increment,
 [data-sonner-toast],
 html [data-sonner-toaster] [data-sonner-toast],
 html body [data-sonner-toaster] [data-sonner-toast] {
-  transition: transform 0.3s ease-out, opacity 0.3s ease-out, box-shadow 0.3s ease-out, height 0.3s ease-out !important;
+  transition: transform 0.3s ease-out, opacity 0.3s ease-out, box-shadow 0.3s ease-out !important;
 }
 
 [data-sonner-toaster],
@@ -634,7 +654,7 @@ input[type="password"]::-webkit-contacts-auto-fill-button {
   border-color: rgb(245 158 11 / 35%);
 }
 
-@media (width <= 640px) {
+@media (width <=640px) {
   .upload-card {
     padding: 18px;
     gap: 16px;
@@ -711,8 +731,13 @@ input[type="password"]::-webkit-contacts-auto-fill-button {
   padding-left: 1.5rem;
 }
 
-.markdown-body ul { list-style-type: disc; }
-.markdown-body ol { list-style-type: decimal; }
+.markdown-body ul {
+  list-style-type: disc;
+}
+
+.markdown-body ol {
+  list-style-type: decimal;
+}
 
 .markdown-body li {
   margin-top: 0.25rem;
@@ -727,7 +752,7 @@ input[type="password"]::-webkit-contacts-auto-fill-button {
   margin-bottom: 0;
 }
 
-.markdown-body li > p {
+.markdown-body li>p {
   margin: 0;
   display: inline;
 }
@@ -737,7 +762,10 @@ input[type="password"]::-webkit-contacts-auto-fill-button {
   font-weight: 600;
   color: var(--text-primary);
 }
-.markdown-body em { font-style: italic; }
+
+.markdown-body em {
+  font-style: italic;
+}
 
 /* Code Blocks */
 .markdown-body pre {
@@ -773,12 +801,14 @@ input[type="password"]::-webkit-contacts-auto-fill-button {
   text-underline-offset: 2px;
 }
 
-.markdown-body a:hover { color: var(--text-primary); }
+.markdown-body a:hover {
+  color: var(--text-primary);
+}
 
-.markdown-body hr { 
-  border: none; 
-  border-top: 1px solid var(--border-color); 
-  margin: 1.5rem 0; 
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 1.5rem 0;
 }
 
 .markdown-body blockquote {

@@ -1,6 +1,6 @@
 import { avatarImages } from '@/features/avatar/data/avatars';
-import { motion } from 'motion/react';
 import SelectionCheckmark from '@/shared/components/SelectionCheckmark';
+import { motion } from 'motion/react';
 import { memo } from 'react';
 
 const avatarList = Object.values(avatarImages);
@@ -15,7 +15,7 @@ const AvatarTab = memo(function AvatarTab({ selected, onSelect }) {
         {avatarList.map((avatar, idx) => {
           const isSelected = selected?.id === avatar.id;
           const isFocusable = isSelected || (!selected && idx === 0);
-          
+
           return (
             <motion.button
               type="button"
@@ -29,7 +29,7 @@ const AvatarTab = memo(function AvatarTab({ selected, onSelect }) {
                 } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
                   nextIdx = (idx - 1 + avatarList.length) % avatarList.length;
                 }
-                
+
                 if (nextIdx !== null) {
                   e.preventDefault();
                   onSelect(avatarList[nextIdx]);

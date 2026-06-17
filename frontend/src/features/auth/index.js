@@ -9,6 +9,6 @@ export {
   useLogin,
   useLogout,
   useRestoreSession,
-  useSignup,
+  useSignup
 } from './hooks/useAuth';
 export { useAuthStore } from './store/authStore';

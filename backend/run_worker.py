@@ -5,7 +5,7 @@ from pathlib import Path
 backend_dir = Path(__file__).resolve().parent
 sys.path.insert(0, str(backend_dir))
 
-from arq import run_worker
+from arq import run_worker  # type: ignore[import-not-found]
 
 from app.infrastructure.worker.arq_settings import WorkerSettings
 

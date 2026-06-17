@@ -1,4 +1,4 @@
-from arq.connections import RedisSettings
+from arq.connections import RedisSettings  # type: ignore[import-not-found]
 
 from app.infrastructure.worker.ingestion_task import run_ingestion_task
 from app.infrastructure.worker.worker_startup import worker_shutdown, worker_startup_validation
@@ -7,7 +7,6 @@ from app.shared.config import get_settings
 settings = get_settings()
 
 
-from typing import Any
 
 class WorkerSettings:
     functions = [run_ingestion_task]

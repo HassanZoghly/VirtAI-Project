@@ -152,8 +152,10 @@ class ConversationPipeline:
                     return
                 filler_tts = await fc.get_or_generate_filler("Hmm...", voice=self.tts_voice, session_id="system")
                 if filler_tts and getattr(filler_tts, "audio_ref", None) and not context.aborted and context.sentence_index == 0:
-                    from app.schemas.ws_messages import make_tts_ready
                     from pathlib import Path
+
+                    from app.schemas.ws_messages import make_tts_ready
+                    assert filler_tts.audio_ref is not None  # narrowed by the getattr check above
                     audio_file_id = Path(filler_tts.audio_ref).stem
                     audio_url = f"/api/v1/audio/system/{audio_file_id}.mp3"
                     await send_callback(

@@ -1,6 +1,6 @@
 """Prometheus metrics registry for tracking business and infrastructure health."""
 
-from prometheus_client import Counter, Gauge, Histogram
+from prometheus_client import Counter, Gauge, Histogram  # type: ignore[import-not-found]
 
 # Auth & Session Metrics
 auth_login_attempts = Counter(

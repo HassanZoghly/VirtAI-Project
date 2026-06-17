@@ -38,4 +38,8 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    include: ['lottie-react'],
+  },
 });
+

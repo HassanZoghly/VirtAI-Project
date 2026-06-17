@@ -4,8 +4,8 @@ import { motion } from 'motion/react';
 import { useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import GoogleAuthButton from './GoogleAuthButton';
-import PasswordStrength from './PasswordStrength';
 import PasswordInput from './PasswordInput';
+import PasswordStrength from './PasswordStrength';
 
 const signupSchema = z
   .object({

@@ -189,6 +189,7 @@ export default function ClassroomShell() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDocumentsOpen, setIsDocumentsOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
+  const isSidebarOpen = isSettingsOpen || isDocumentsOpen;
   // Avatar lifecycle: 'loading' | 'scene-mounted' | 'scene-ready' | 'failed'
   const [avatarStatus, _setAvatarStatus] = useState(AVATAR_STATUS.LOADING);
   const lastSceneReadyRef = useRef(null);
@@ -619,7 +620,13 @@ export default function ClassroomShell() {
           </div>
         </div>
 
-        <div className="split-container" id="main-content">
+        <div 
+          className="split-container" 
+          id="main-content"
+          style={{
+            width: isSidebarOpen ? 'calc(100% - 320px)' : '100%'
+          }}
+        >
           <AvatarPanel
             key={`${wsAvatarId}:${avatarRenderEpoch}`}
             modelPath={avatarModelPath}

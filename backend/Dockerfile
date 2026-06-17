@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # ─────────────────────────────────────────────────────────────
 # VirtAI Backend — FastAPI
 # Optimized Development Dockerfile
@@ -8,7 +9,6 @@ FROM pytorch/pytorch:2.6.0-cuda12.6-cudnn9-runtime
 # ── Environment ─────────────────────────────────────────────
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     XDG_CACHE_HOME=/app/.cache \
     HF_HOME=/app/.cache/huggingface \
@@ -27,21 +27,33 @@ RUN apt-get update && \
     tesseract-ocr \
     tesseract-ocr-eng \
     poppler-utils && \
+    tesseract --version && \
     rm -rf /var/lib/apt/lists/*
 
-# Verify Tesseract is available for OCR fallback in PDF parsing
-RUN tesseract --version
+# ── Install heavy ML dependencies (Layer 1) ────────────────
+# Install stable, heavy ML dependencies first to avoid re-downloading
+# when pyproject.toml changes (e.g., adding a dev dependency).
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip && \
+    pip install \
+    "sentence-transformers>=2.7.0" \
+    "fastembed>=0.3.1" \
+    "langchain==1.3.2" \
+    "langgraph==1.2.2" \
+    "pymupdf>=1.24.0" \
+    "cohere>=5.0.0" \
+    "qdrant-client>=1.10.0"
 
-# ── Install Python dependencies first (cache optimization) ─
+# ── Install Python dependencies (Layer 2) ──────────────────
 # Copy only the dependency manifest so pip install is cached
 # independently of application source changes.
 COPY pyproject.toml ./
 
 # Minimal stub so "pip install ." can resolve the package
 # without copying the full source tree yet.
-RUN mkdir -p app && touch app/__init__.py && \
-    pip install --upgrade pip && \
-    pip install --no-cache-dir . --no-deps --ignore-installed torch torchvision torchaudio
+RUN --mount=type=cache,target=/root/.cache/pip \
+    mkdir -p app && touch app/__init__.py && \
+    pip install .
 
 # Pre-download FastEmbed model into an image layer so production startup does
 # not fetch model files dynamically. A named Docker volume can persist this

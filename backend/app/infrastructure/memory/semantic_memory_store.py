@@ -1,8 +1,6 @@
 import asyncio
 import math
 from datetime import datetime, timezone
-from typing import Any
-from uuid import UUID
 
 from loguru import logger
 from sqlalchemy import select
@@ -40,12 +38,14 @@ class SemanticMemoryStore:
 
     def store_background(
         self, session_id: str, role: str, content: str, memory_type: str = "episodic"
-    ):
+    ) -> "asyncio.Task[None] | None":
         """Asynchronous background semantic extraction & embedding generation"""
         if not self.should_store(content):
             return
 
-        asyncio.create_task(self._process_and_store(session_id, role, content, memory_type))
+        _task = asyncio.create_task(self._process_and_store(session_id, role, content, memory_type))
+        # Keep reference so the task is not garbage-collected before it completes
+        return _task
 
     async def _process_and_store(
         self, session_id: str, role: str, content: str, memory_type: str
@@ -104,18 +104,18 @@ class SemanticMemoryStore:
                         "Strictly discard conversational filler, greetings, and generic pleasantries. "
                         "Write the summary in the exact primary language of the provided conversation text."
                     )
-                    
+
                     chat_history = [self.llm_provider.construct_prompt(prompt=system_prompt, role="system")]
                     summary = await self.llm_provider.generate_text(
                         prompt=f"Conversation turns:\n{content_to_summarize}",
                         chat_history=chat_history,
                         max_output_tokens=500,
                     )
-                    
+
                     if summary:
                         summary_content = f"SYSTEM_SUMMARY: {summary}"
                         embedding = await self.embedder.embed(summary_content)
-                        
+
                         compressed_memory = EpisodicMemory(
                             session_id=session_id,
                             content=summary_content,
@@ -124,10 +124,10 @@ class SemanticMemoryStore:
                             salience=1.2,
                         )
                         db.add(compressed_memory)
-                        
+
                         for m in to_compact:
                             await db.delete(m)
-                            
+
                         await db.commit()
                         logger.info(f"[SemanticMemory] Compacted 15 memories into 1 for session {session_id}")
         except Exception as e:
@@ -170,7 +170,7 @@ class SemanticMemoryStore:
                     created_at = memory.created_at
                     if created_at.tzinfo is None:
                         created_at = created_at.replace(tzinfo=timezone.utc)
-                        
+
                     days_old = (now - created_at).total_seconds() / 86400.0
                     decay_factor = math.pow(0.5, days_old / 7.0)
 

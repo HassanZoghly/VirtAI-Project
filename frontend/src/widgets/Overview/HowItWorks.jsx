@@ -1,6 +1,5 @@
 import steps from '@/features/overview/data/howItWorks';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import SectionHeader from './components/SectionHeader';
 import { useEffect, useRef, useState } from 'react';
 import { FiCheck } from 'react-icons/fi';
 import {
@@ -11,6 +10,7 @@ import {
   PiUserCircleFill,
   PiWaveformFill,
 } from 'react-icons/pi';
+import SectionHeader from './components/SectionHeader';
 
 /* ─── icon map ───────────────────────────────────────────────────────────── */
 
@@ -142,9 +142,8 @@ function TimelineStep({ step, index, isActive, isDone, isLast, stepRef, reduced 
             aria-hidden="true"
           />
           <h3
-            className={`text-sm font-semibold transition-colors duration-300 ${
-              isActive ? 'text-offwhite' : isDone ? 'text-offwhite/80' : 'text-offwhite/50'
-            }`}
+            className={`text-sm font-semibold transition-colors duration-300 ${isActive ? 'text-offwhite' : isDone ? 'text-offwhite/80' : 'text-offwhite/50'
+              }`}
           >
             {step.label}
           </h3>
@@ -165,9 +164,8 @@ function TimelineStep({ step, index, isActive, isDone, isLast, stepRef, reduced 
         </div>
 
         <p
-          className={`mt-1.5 text-xs leading-relaxed transition-colors duration-300 ${
-            isActive ? 'text-offwhite/72' : 'text-offwhite/38'
-          }`}
+          className={`mt-1.5 text-xs leading-relaxed transition-colors duration-300 ${isActive ? 'text-offwhite/72' : 'text-offwhite/38'
+            }`}
         >
           {step.description}
         </p>
@@ -233,7 +231,7 @@ export default function HowItWorks() {
         titlePrefix="How It"
         titleHighlight="Works"
         description="Your voice travels through a six-stage AI pipeline, from speech recognition to a lip-synced 3D avatar delivering the answer."
-        descriptionClassName="mx-auto mt-4 max-w-[50ch] text-offwhite/70"
+        descriptionClassName="mx-auto mt-4 max-w-[40ch] text-offwhite/70"
       />
 
       {/* ── Isolated scroll container ── */}

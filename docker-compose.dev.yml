@@ -1,8 +1,27 @@
 services:
+  backend:
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/alembic:/app/alembic
+      - ./backend/alembic.ini:/app/alembic.ini
+      - ./backend/.env:/app/.env
+      - backend-cache:/app/.cache
+    command: >
+      sh -c "alembic upgrade head &&
+            uvicorn app.main:app --host 0.0.0.0 --port 8000
+            --reload --reload-dir /app/app"
+    environment:
+      - WATCHFILES_FORCE_POLLING=true
+
+  worker:
+    volumes:
+      - ./backend/app:/app/app
+      - ./backend/.env:/app/.env
+    command: >
+      sh -c "python -m arq app.infrastructure.worker.arq_settings.WorkerSettings
+            --watch /app/app"
+
   frontend:
     volumes:
       - ./frontend:/app
       - /app/node_modules
-  backend:
-    volumes:
-      - ./backend/.env:/app/.env

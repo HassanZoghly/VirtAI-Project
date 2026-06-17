@@ -56,8 +56,8 @@ async def lifespan(app: FastAPI):
     # ── RAG Infrastructure ───────────────────────────────────────────────────
     import time
 
-    from arq import create_pool
-    from arq.connections import RedisSettings
+    from arq import create_pool  # type: ignore[import-not-found]
+    from arq.connections import RedisSettings  # type: ignore[import-not-found]
 
     from app.infrastructure.rag.fastembed_provider import FastEmbedProvider
     from app.infrastructure.rag.openai_embedder import OpenAIEmbedder
@@ -110,8 +110,22 @@ async def lifespan(app: FastAPI):
 
     if settings.USE_DUMMY_RERANKER:
         app.state.reranker = DummyCrossEncoderReranker()
+        logger.info("[Reranker] Using DummyCrossEncoderReranker (USE_DUMMY_RERANKER=True)")
     else:
-        app.state.reranker = CrossEncoderReranker(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
+        try:
+            # CrossEncoderReranker is now lazy: __init__ does NOT import
+            # sentence_transformers, so this line is safe even if torchaudio
+            # native libs are broken.  The heavy import happens on first rerank().
+            app.state.reranker = CrossEncoderReranker(
+                model_name="cross-encoder/ms-marco-MiniLM-L-6-v2"
+            )
+        except Exception as _reranker_exc:
+            logger.warning(
+                f"[Reranker] CrossEncoderReranker construction failed "
+                f"({type(_reranker_exc).__name__}: {_reranker_exc}). "
+                "Falling back to DummyCrossEncoderReranker for this session."
+            )
+            app.state.reranker = DummyCrossEncoderReranker()
 
     redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
     app.state.arq_pool = await create_pool(redis_settings)
@@ -287,7 +301,9 @@ async def lifespan(app: FastAPI):
     from app.infrastructure.rag.fastembed_provider import FastEmbedProvider
     FastEmbedProvider.shutdown_executor()
     from app.infrastructure.rag.reranker import CrossEncoderReranker
-    CrossEncoderReranker.shutdown_executor()
+    # Only shut down the executor if the real reranker was ever loaded
+    if not CrossEncoderReranker._import_failed:
+        CrossEncoderReranker.shutdown_executor()
     logger.info("Server shutdown complete")
 
 
@@ -344,7 +360,7 @@ def create_app() -> FastAPI:
     app.include_router(api_v1_router)
 
     # ── Prometheus Metrics ────────────────────────────────────────────────────
-    from prometheus_fastapi_instrumentator import Instrumentator
+    from prometheus_fastapi_instrumentator import Instrumentator  # type: ignore[import-not-found]
 
     Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 

@@ -4,10 +4,9 @@ from loguru import logger
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.infrastructure.db.database import AsyncSessionLocal
-
 from app.domain.rag.entities import DocumentChunk
 from app.domain.rag.ports import VectorStore
+from app.infrastructure.db.database import AsyncSessionLocal
 from app.infrastructure.db.models import DocumentChunk as ChunkModel
 from app.shared.config import get_settings
 from app.shared.errors import VectorDimensionMismatch
@@ -163,14 +162,14 @@ class PGVectorStore(VectorStore):
 
         res_dense = await self.db.execute(stmt_dense)
         res_lexical = await self.db.execute(stmt_lexical)
-        
+
         dense_rows = res_dense.all()
         lexical_rows = res_lexical.all()
 
         rrf_k = 60
         scores: dict[UUID, float] = {}
         models: dict[UUID, ChunkModel] = {}
-        
+
         for rank, row in enumerate(dense_rows):
             model = row[0]
             sim = float(row[1])
@@ -178,15 +177,15 @@ class PGVectorStore(VectorStore):
                 continue
             models[model.id] = model
             scores[model.id] = 1.0 / (rrf_k + rank + 1)
-            
+
         for rank, row in enumerate(lexical_rows):
             model = row[0]
             models[model.id] = model
             scores[model.id] = scores.get(model.id, 0.0) + (1.0 / (rrf_k + rank + 1))
-            
+
         # Sort and threshold
         sorted_results = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-        
+
         output = []
         for chunk_id, hybrid_score in sorted_results:
             if hybrid_score < min_hybrid_score:

@@ -70,14 +70,12 @@ export default function Navbar({ ctaLabel, ctaTo }) {
 
     const observed = new Set();
     const observeElements = () => {
-      let newlyFound = false;
       ids.forEach((id) => {
         if (!observed.has(id)) {
           const el = document.getElementById(id);
           if (el) {
             observer.observe(el);
             observed.add(id);
-            newlyFound = true;
           }
         }
       });
@@ -85,7 +83,7 @@ export default function Navbar({ ctaLabel, ctaTo }) {
     };
 
     let mutationObserver = null;
-    
+
     // Attempt to observe immediately in case they are already in DOM
     if (!observeElements()) {
       // If not all found, wait for them to appear
@@ -246,11 +244,10 @@ export default function Navbar({ ctaLabel, ctaTo }) {
                       <button
                         key={target}
                         onClick={() => scrollTo(target)}
-                        className={`text-left px-4 py-3 rounded-lg font-medium transition-colors ${
-                          activeId === target
-                            ? 'bg-gold/15 text-gold font-semibold'
-                            : 'text-offwhite/80 hover:bg-white/10'
-                        }`}
+                        className={`text-left px-4 py-3 rounded-lg font-medium transition-colors ${activeId === target
+                          ? 'bg-gold/15 text-gold font-semibold'
+                          : 'text-offwhite/80 hover:bg-white/10'
+                          }`}
                         style={{ fontFamily: 'var(--font-display)' }}
                       >
                         {label}

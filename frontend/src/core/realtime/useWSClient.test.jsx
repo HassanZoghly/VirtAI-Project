@@ -1,8 +1,8 @@
 /* @vitest-environment happy-dom */
+import { refreshAccessTokenSingleFlight } from '@/features/auth/services/refreshService';
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import useWSClient from './useWSClient';
-import { refreshAccessTokenSingleFlight } from '@/features/auth/services/refreshService';
 
 const mockStore = { accessToken: 'test-access-token', logout: vi.fn() };
 
@@ -146,7 +146,7 @@ describe('useWSClient lifecycle', () => {
 
   it('fast-fail detection: purges resume state if closed <2000ms', () => {
     const { unmount } = renderHook(() => useWSClient('ws://localhost/ws/chat/fast-fail'));
-    
+
     const socket = MockWebSocket.instances[0];
     act(() => {
       socket.emitOpen();
@@ -154,7 +154,7 @@ describe('useWSClient lifecycle', () => {
       vi.advanceTimersByTime(500); // Wait 500ms (less than 2000ms)
       socket.emitClose(1006, 'fast-fail-network');
     });
-    
+
     act(() => {
       vi.runOnlyPendingTimers(); // trigger reconnect
     });
@@ -168,7 +168,7 @@ describe('useWSClient lifecycle', () => {
 
   it('4404 invalid session handler: purges resume state', () => {
     const { unmount } = renderHook(() => useWSClient('ws://localhost/ws/chat/session-4404'));
-    
+
     const socket = MockWebSocket.instances[0];
     act(() => {
       socket.emitOpen();
@@ -176,7 +176,7 @@ describe('useWSClient lifecycle', () => {
       vi.advanceTimersByTime(3000); // longer than fast-fail
       socket.emitClose(4404, 'Session invalid');
     });
-    
+
     act(() => {
       vi.runOnlyPendingTimers(); // trigger reconnect
     });
@@ -192,16 +192,16 @@ describe('useWSClient lifecycle', () => {
     refreshAccessTokenSingleFlight.mockResolvedValueOnce({ access_token: 'new-token' });
 
     const { unmount } = renderHook(() => useWSClient('ws://localhost/ws/chat/token-4401'));
-    
+
     const socket = MockWebSocket.instances[0];
-    
+
     await act(async () => {
       socket.emitClose(4401, 'Token expired');
       await Promise.resolve(); // flush promise microtasks
     });
-    
+
     expect(refreshAccessTokenSingleFlight).toHaveBeenCalledTimes(1);
-    
+
     const nextSocket = MockWebSocket.instances[1];
     expect(nextSocket).toBeDefined();
     expect(mockStore.accessToken).toBe('new-token');

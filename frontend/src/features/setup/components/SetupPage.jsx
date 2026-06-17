@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { FiCheck, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { HiOutlineSparkles, HiOutlineSpeakerWave, HiOutlineUser } from 'react-icons/hi2';
@@ -138,7 +138,7 @@ export default function SetupPage() {
         setPlayingVoiceId(null);
       }
     });
-    
+
     currentAudio
       .play()
       .then(() => {

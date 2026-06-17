@@ -255,7 +255,7 @@ class RetrieverAgent(BaseAgent):
                     id=r.get("id")
                 ) for r in results
             ]
-            
+
             status = RetrievalStatus.SUCCESS
             if docs and docs[0].score < 0.2:
                 status = RetrievalStatus.LOW_CONFIDENCE
@@ -269,8 +269,8 @@ class RetrieverAgent(BaseAgent):
         except Exception as e:
             logger.error(f"[RetrieverAgent] error: {e}")
             return self._make_output(
-                input_data, 
-                success=False, 
+                input_data,
+                success=False,
                 error=str(e),
                 result=RetrievalResult(status=RetrievalStatus.FAILED)
             )
@@ -297,7 +297,7 @@ class AnswerAgent(BaseAgent):
                     )
             else:
                 docs = retrieved_documents or []
-                
+
             if not docs:
                 return self._make_output(
                     input_data, success=False, error="No relevant documents found."
@@ -333,7 +333,7 @@ class AnswerAgent(BaseAgent):
                         variables={
                             "doc_num": idx + 1,
                             "chunk_text": self.llm_provider.process_text(
-                                doc.text if hasattr(doc, "text") else doc.get("text", "")
+                                getattr(doc, "text", "")
                             ),
                         },
                     ) or ""
@@ -434,7 +434,7 @@ class SummarizerAgent(BaseAgent):
                         key="document_prompt",
                         variables={
                             "doc_num": idx + 1,
-                            "chunk_text": doc.text if hasattr(doc, "text") else doc.get("text", ""),
+                            "chunk_text": doc.text if hasattr(doc, "text") else getattr(doc, "chunk_text", ""),
                         },
                     ) or ""
                     for idx, doc in enumerate(docs)
@@ -533,7 +533,7 @@ class QuizAgent(BaseAgent):
                         key="document_prompt",
                         variables={
                             "doc_num": idx + 1,
-                            "chunk_text": doc.text if hasattr(doc, "text") else doc.get("text", ""),
+                            "chunk_text": doc.text if hasattr(doc, "text") else getattr(doc, "chunk_text", ""),
                         },
                     ) or ""
                     for idx, doc in enumerate(docs)

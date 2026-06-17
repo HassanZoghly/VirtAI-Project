@@ -56,7 +56,10 @@ export default function ChatInput({
           className="input-icon-btn"
           title="Manage Knowledge Base"
           type="button"
-          onClick={onToggleDocuments}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleDocuments();
+          }}
           aria-label="Manage Knowledge Base"
         >
           <PiPaperclipFill />

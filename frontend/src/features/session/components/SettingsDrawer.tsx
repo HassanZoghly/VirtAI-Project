@@ -1,17 +1,21 @@
 import SlideDrawer from '../../../shared/components/SlideDrawer';
+import { ISession } from '../types';
 import SessionList from './SessionList';
+
+export interface SettingsDrawerProps {
+  isOpen: boolean;
+  onClose: () => void;
+  sessions: ISession[];
+  currentSessionId: string | null;
+  onSessionSelect: (id: string) => void;
+  onNewSession: () => void;
+  onDeleteSession: (id: string) => void;
+  onRenameSession: (id: string, title: string) => void;
+  onClearAllSessions?: () => void;
+}
 
 /**
  * Side drawer for settings, session list, current session info, and tutor status.
- * @param {object} props
- * @param {boolean} props.isOpen - Whether the drawer is visible
- * @param {() => void} props.onClose - Close callback
- * @param {{ id: string, title: string }[]} props.sessions - All chat sessions
- * @param {string} props.currentSessionId - Active session ID
- * @param {(id: string) => void} props.onSessionSelect - Session switch callback
- * @param {() => void} props.onNewSession - New session callback
- * @param {(id: string) => void} props.onDeleteSession - Delete session callback
- * @param {(id: string, title: string) => void} props.onRenameSession - Rename session callback
  */
 export default function SettingsDrawer({
   isOpen,
@@ -23,9 +27,11 @@ export default function SettingsDrawer({
   onDeleteSession,
   onRenameSession,
   onClearAllSessions,
-}) {
+}: SettingsDrawerProps) {
   return (
     <SlideDrawer
+      title="Settings Drawer"
+      description="Sidebar for chat sessions and account settings"
       isOpen={isOpen}
       onClose={onClose}
       contentClassName="sidebar-minimal"

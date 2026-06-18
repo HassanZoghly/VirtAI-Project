@@ -11,16 +11,17 @@ import {
   PiUserGearFill,
 } from 'react-icons/pi';
 import { useNavigate } from 'react-router-dom';
+import { ISession } from '../types';
 import SessionHoverPreview from './SessionHoverPreview';
 
 /** Format a timestamp to a short relative / absolute label. */
-function formatTime(ts) {
+function formatTime(ts?: string | number): string {
   if (!ts) {
     return '';
   }
   const d = new Date(ts);
   const now = new Date();
-  const diffMs = now - d;
+  const diffMs = now.getTime() - d.getTime();
   const diffMin = Math.floor(diffMs / 60_000);
   if (diffMin < 1) {
     return 'Just now';
@@ -39,17 +40,89 @@ function formatTime(ts) {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+export interface SessionListProps {
+  sessions: ISession[];
+  currentSessionId: string | null;
+  onSessionSelect: (id: string) => void;
+  onNewSession: () => void;
+  onDeleteSession: (id: string) => void;
+  onRenameSession: (id: string, title: string) => void;
+  onClearAllSessions?: () => void;
+  onCloseDrawer?: () => void;
+}
+
+interface SessionListItemProps {
+  session: ISession;
+  isActive: boolean;
+  isEditing: boolean;
+  editValue: string;
+  onEditValueChange: (val: string) => void;
+  onSaveEdit: (id: string) => void;
+  onEditKeyDown: (e: React.KeyboardEvent<HTMLInputElement>, id: string) => void;
+  onContextMenu: (e: React.MouseEvent, id: string) => void;
+  onMouseEnter: (session: ISession, element: HTMLElement) => void;
+  onMouseLeave: () => void;
+  onSelect: (id: string) => void;
+}
+
+const SessionListItem = memo(function SessionListItem({
+  session,
+  isActive,
+  isEditing,
+  editValue,
+  onEditValueChange,
+  onSaveEdit,
+  onEditKeyDown,
+  onContextMenu,
+  onMouseEnter,
+  onMouseLeave,
+  onSelect,
+}: SessionListItemProps) {
+  const displayTime = session.updated_at || session.created_at;
+
+  return (
+    <div
+      className="sidebar-session-item-wrapper"
+      onContextMenu={(e) => onContextMenu(e, session.id)}
+      onMouseEnter={(e) => onMouseEnter(session, e.currentTarget)}
+      onMouseLeave={onMouseLeave}
+    >
+      <button
+        className={`sidebar-session-item ${isActive ? 'active' : ''}`}
+        onClick={() => onSelect(session.id)}
+        aria-label={`Open chat: ${session.title || 'New chat'}`}
+      >
+        <PiChatCircleTextFill className="session-icon" />
+
+        <div className="session-info">
+          {isEditing ? (
+            <input
+              type="text"
+              className="session-edit-input"
+              value={editValue}
+              onChange={(e) => onEditValueChange(e.target.value)}
+              onBlur={() => onSaveEdit(session.id)}
+              onKeyDown={(e) => onEditKeyDown(e, session.id)}
+              autoFocus
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <div className="session-title-row">
+              <span className="session-title">{session.title || 'New chat'}</span>
+              {displayTime && (
+                <span className="session-time">{formatTime(displayTime)}</span>
+              )}
+            </div>
+          )}
+        </div>
+      </button>
+    </div>
+  );
+});
+
 /**
  * Scrollable list of chat sessions with new/rename/delete actions.
  * Right-click a chat item to open the floating context menu.
- * @param {object} props
- * @param {{ id: string, title: string, messages: any[], createdAt?: number }[]} props.sessions
- * @param {string} props.currentSessionId
- * @param {(id: string) => void} props.onSessionSelect
- * @param {() => void} props.onNewSession
- * @param {(id: string) => void} props.onDeleteSession
- * @param {(id: string, title: string) => void} props.onRenameSession
- * @param {() => void} props.onCloseDrawer
  */
 const SessionList = memo(function SessionList({
   sessions,
@@ -60,30 +133,33 @@ const SessionList = memo(function SessionList({
   onRenameSession,
   onClearAllSessions,
   onCloseDrawer,
-}) {
+}: SessionListProps) {
   const navigate = useNavigate();
-  const [editingId, setEditingId] = useState(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
-  const [hoveredSession, setHoveredSession] = useState(null);
-  const [hoverElement, setHoverElement] = useState(null);
+  const [hoveredSession, setHoveredSession] = useState<ISession | null>(null);
+  const [hoverElement, setHoverElement] = useState<HTMLElement | null>(null);
   const { logout } = useLogout();
 
   // Context menu state: { sessionId, x, y } or null
-  const [contextMenu, setContextMenu] = useState(null);
+  const [contextMenu, setContextMenu] = useState<{
+    sessionId: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const [isConfirmClearOpen, setIsConfirmClearOpen] = useState(false);
-  const contextMenuRef = useRef(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
 
   // Close context menu on any click outside of it
   useEffect(() => {
     if (!contextMenu) {
       return;
     }
-    function handleClickOutside(event) {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
+    function handleClickOutside(event: MouseEvent) {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as Node)) {
         setContextMenu(null);
       }
     }
-    // Use a short delay so the opening right-click doesn't immediately close it
     const id = setTimeout(() => {
       document.addEventListener('mousedown', handleClickOutside);
     }, 0);
@@ -103,36 +179,43 @@ const SessionList = memo(function SessionList({
     return () => window.removeEventListener('scroll', handleScroll, true);
   }, [contextMenu]);
 
-  const filtered = useMemo(() => {
-    return [...sessions].sort((a, b) => {
-      const aTime = new Date(a.updated_at || a.created_at || 0).getTime();
-      const bTime = new Date(b.updated_at || b.created_at || 0).getTime();
-      return bTime - aTime;
-    });
+  const sortedIds = useMemo(() => {
+    return [...sessions]
+      .sort((a, b) => {
+        const aTime = new Date(a.updated_at || a.created_at || 0).getTime();
+        const bTime = new Date(b.updated_at || b.created_at || 0).getTime();
+        return bTime - aTime;
+      })
+      .map((s) => s.id);
   }, [sessions]);
 
-  const handleContextMenu = useCallback((e, sessionId) => {
+  const filtered = useMemo(() => {
+    const sessionMap = new Map(sessions.map((s) => [s.id, s]));
+    return sortedIds.map((id) => sessionMap.get(id)).filter(Boolean) as ISession[];
+  }, [sortedIds, sessions]);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, sessionId: string) => {
     e.preventDefault();
     e.stopPropagation();
     setContextMenu({ sessionId, x: e.clientX, y: e.clientY });
   }, []);
 
   const handleDelete = useCallback(
-    (sessionId) => {
+    (sessionId: string) => {
       onDeleteSession(sessionId);
       setContextMenu(null);
     },
     [onDeleteSession]
   );
 
-  const startEditing = useCallback((session) => {
+  const startEditing = useCallback((session: ISession) => {
     setEditingId(session.id);
     setEditValue(session.title || 'New chat');
     setContextMenu(null);
   }, []);
 
   const saveEdit = useCallback(
-    (sessionId) => {
+    (sessionId: string) => {
       if (editValue.trim() && editingId === sessionId) {
         onRenameSession(sessionId, editValue.trim());
       }
@@ -142,7 +225,7 @@ const SessionList = memo(function SessionList({
   );
 
   const handleEditKeyDown = useCallback(
-    (e, sessionId) => {
+    (e: React.KeyboardEvent<HTMLInputElement>, sessionId: string) => {
       if (e.key === 'Enter') {
         e.preventDefault();
         saveEdit(sessionId);
@@ -154,7 +237,7 @@ const SessionList = memo(function SessionList({
   );
 
   const handleSessionSelect = useCallback(
-    (id) => {
+    (id: string) => {
       onSessionSelect(id);
       if (onCloseDrawer && window.innerWidth < 1024) {
         onCloseDrawer();
@@ -177,12 +260,20 @@ const SessionList = memo(function SessionList({
     }
   }, [logout, onCloseDrawer]);
 
-  // Find the session object for the context menu (needed for "Rename")
+  const handleItemMouseEnter = useCallback((session: ISession, element: HTMLElement) => {
+    setHoveredSession(session);
+    setHoverElement(element);
+  }, []);
+
+  const handleItemMouseLeave = useCallback(() => {
+    setHoveredSession(null);
+    setHoverElement(null);
+  }, []);
+
   const contextSession = contextMenu ? sessions.find((s) => s.id === contextMenu.sessionId) : null;
 
   return (
     <div className="sidebar-inner">
-      {/* 1. Avatar & System Setup Card */}
       <div className="sidebar-setup-card-wrapper">
         <button
           className="sidebar-setup-card"
@@ -198,7 +289,6 @@ const SessionList = memo(function SessionList({
         </button>
       </div>
 
-      {/* 2. Chats Section */}
       <div className="sidebar-chats-section">
         <div className="sidebar-chats-header">
           <h2 className="sidebar-section-title">
@@ -229,62 +319,23 @@ const SessionList = memo(function SessionList({
             </div>
           ) : (
             filtered.map((session) => {
-              const displayTime = session.updated_at || session.created_at;
               const isEditing = editingId === session.id;
-              const msgCount = session.message_count || 0;
 
               return (
-                <div
+                <SessionListItem
                   key={session.id}
-                  className="sidebar-session-item-wrapper"
-                  onContextMenu={(e) => handleContextMenu(e, session.id)}
-                  onMouseEnter={(e) => {
-                    setHoveredSession(session);
-                    setHoverElement(e.currentTarget);
-                  }}
-                  onMouseLeave={() => {
-                    setHoveredSession(null);
-                    setHoverElement(null);
-                  }}
-                >
-                  <button
-                    className={`sidebar-session-item ${session.id === currentSessionId ? 'active' : ''}`}
-                    onClick={() => handleSessionSelect(session.id)}
-                    aria-label={`Open chat: ${session.title || 'New chat'}`}
-                  >
-                    <PiChatCircleTextFill className="session-icon" />
-
-                    <div className="session-info">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          className="session-edit-input"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onBlur={() => saveEdit(session.id)}
-                          onKeyDown={(e) => handleEditKeyDown(e, session.id)}
-                          autoFocus
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      ) : (
-                        <div className="session-title-row">
-                          <span className="session-title">{session.title || 'New chat'}</span>
-                          {displayTime && (
-                            <span className="session-time">{formatTime(displayTime)}</span>
-                          )}
-                        </div>
-                      )}
-
-                      {!isEditing && (
-                        <div className="session-preview-row">
-                          <span className="session-preview">
-                            {msgCount} msg{msgCount !== 1 ? 's' : ''}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </button>
-                </div>
+                  session={session}
+                  isActive={session.id === currentSessionId}
+                  isEditing={isEditing}
+                  editValue={isEditing ? editValue : ''}
+                  onEditValueChange={setEditValue}
+                  onSaveEdit={saveEdit}
+                  onEditKeyDown={handleEditKeyDown}
+                  onContextMenu={handleContextMenu}
+                  onMouseEnter={handleItemMouseEnter}
+                  onMouseLeave={handleItemMouseLeave}
+                  onSelect={handleSessionSelect}
+                />
               );
             })
           )}
@@ -303,7 +354,6 @@ const SessionList = memo(function SessionList({
         </div>
       </div>
 
-      {/* Floating Context Menu — rendered via portal at cursor position */}
       {contextMenu &&
         contextSession &&
         createPortal(
@@ -330,7 +380,7 @@ const SessionList = memo(function SessionList({
           </div>,
           document.body
         )}
-        
+
       {isConfirmClearOpen &&
         createPortal(
           <div className="clear-confirm-overlay">
@@ -338,11 +388,14 @@ const SessionList = memo(function SessionList({
               <h3 className="clear-confirm-title">Clear all chats?</h3>
               <p className="clear-confirm-desc">This action cannot be undone.</p>
               <div className="clear-confirm-actions">
-                <button className="clear-confirm-cancel" onClick={() => setIsConfirmClearOpen(false)}>
+                <button
+                  className="clear-confirm-cancel"
+                  onClick={() => setIsConfirmClearOpen(false)}
+                >
                   Cancel
                 </button>
-                <button 
-                  className="clear-confirm-danger" 
+                <button
+                  className="clear-confirm-danger"
                   onClick={() => {
                     setIsConfirmClearOpen(false);
                     onClearAllSessions?.();
@@ -355,12 +408,12 @@ const SessionList = memo(function SessionList({
           </div>,
           document.body
         )}
-        
+
       {hoveredSession && hoverElement && (
-        <SessionHoverPreview 
-          session={hoveredSession} 
-          triggerElement={hoverElement} 
-          isHovered={!!hoveredSession} 
+        <SessionHoverPreview
+          session={hoveredSession}
+          triggerElement={hoverElement}
+          isHovered={!!hoveredSession}
         />
       )}
     </div>

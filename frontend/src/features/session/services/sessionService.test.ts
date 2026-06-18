@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import apiClient from '@/core/api/apiClient';
+import { beforeEach, describe, expect, it, MockedFunction, vi } from 'vitest';
 import { fetchSessionMessages, fetchSessions } from './sessionService';
 
 vi.mock('@/core/api/apiClient', () => ({
@@ -10,13 +10,15 @@ vi.mock('@/core/api/apiClient', () => ({
   },
 }));
 
+const mockGet = apiClient.get as MockedFunction<typeof apiClient.get>;
+
 describe('sessionService response extraction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('unwraps wrapped sessions payloads', async () => {
-    apiClient.get.mockResolvedValueOnce({ data: { sessions: [{ id: 's1' }] } });
+    mockGet.mockResolvedValueOnce({ data: { sessions: [{ id: 's1' }] } } as any);
 
     const sessions = await fetchSessions();
 
@@ -24,7 +26,7 @@ describe('sessionService response extraction', () => {
   });
 
   it('returns [] when sessions payload is not an array', async () => {
-    apiClient.get.mockResolvedValueOnce({ data: { ok: true } });
+    mockGet.mockResolvedValueOnce({ data: { ok: true } } as any);
 
     const sessions = await fetchSessions();
 
@@ -32,7 +34,7 @@ describe('sessionService response extraction', () => {
   });
 
   it('unwraps wrapped messages payloads', async () => {
-    apiClient.get.mockResolvedValueOnce({ data: { messages: [{ id: 'm1' }] } });
+    mockGet.mockResolvedValueOnce({ data: { messages: [{ id: 'm1' }] } } as any);
 
     const messages = await fetchSessionMessages('session-1');
 

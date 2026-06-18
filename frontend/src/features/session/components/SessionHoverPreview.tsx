@@ -1,19 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { FiFileText, FiClock, FiCheckCircle, FiXCircle } from 'react-icons/fi';
+import { FiCheckCircle, FiClock, FiFileText, FiXCircle } from 'react-icons/fi';
+import { ISession } from '../types';
 import './SessionHoverPreview.css';
 
-export default function SessionHoverPreview({ session, triggerElement, isHovered }) {
-  const [show, setShow] = useState(false);
-  const timerRef = useRef(null);
-  const [prevHovered, setPrevHovered] = useState(isHovered);
+export interface SessionHoverPreviewProps {
+  session: ISession;
+  triggerElement: HTMLElement | null;
+  isHovered: boolean;
+}
 
-  if (isHovered !== prevHovered) {
-    setPrevHovered(isHovered);
-    if (!isHovered && show) {
-      setShow(false);
-    }
-  }
+export default function SessionHoverPreview({
+  session,
+  triggerElement,
+  isHovered,
+}: SessionHoverPreviewProps) {
+  const [show, setShow] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (isHovered) {
@@ -21,12 +24,13 @@ export default function SessionHoverPreview({ session, triggerElement, isHovered
         setShow(true);
       }, 2000); // 2s delay
     } else {
+      setShow(false);
       if (timerRef.current) clearTimeout(timerRef.current);
     }
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [isHovered]);
+  }, [isHovered, session.id]);
 
   if (!show || !triggerElement) return null;
   if (!session.documents || session.documents.length === 0) return null;
@@ -40,23 +44,23 @@ export default function SessionHoverPreview({ session, triggerElement, isHovered
   const remainingFiles = session.documents.length - maxFiles;
 
   return createPortal(
-    <div 
+    <div
       className="session-hover-preview"
       style={{
         position: 'absolute',
         top: `${top}px`,
         left: `${left}px`,
-        zIndex: 9999
+        zIndex: 9999,
       }}
     >
-      <div className="preview-header">
-        Attached Documents
-      </div>
+      <div className="preview-header">Attached Documents</div>
       <div className="preview-files">
-        {displayedFiles.map(doc => (
+        {displayedFiles.map((doc: any) => (
           <div key={doc.id} className="preview-file-item">
             <FiFileText className="preview-file-icon" />
-            <span className="preview-file-name" title={doc.filename}>{doc.filename}</span>
+            <span className="preview-file-name" title={doc.filename}>
+              {doc.filename}
+            </span>
             {doc.status === 'QUEUED' && <FiClock className="preview-status-icon pending" />}
             {doc.status === 'READY' && <FiCheckCircle className="preview-status-icon success" />}
             {doc.status === 'FAILED' && <FiXCircle className="preview-status-icon error" />}

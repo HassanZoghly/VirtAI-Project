@@ -152,7 +152,7 @@ export class VoiceActivityDetector implements VADProcessor {
     };
   }
 
-    // Use calculateRMSEnergy from vadMath.ts directly since we removed the private method
+  // Use calculateRMSEnergy from vadMath.ts directly since we removed the private method
 
   /**
    * Reset the VAD state to initial conditions

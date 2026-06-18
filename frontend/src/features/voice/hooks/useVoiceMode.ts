@@ -1,7 +1,7 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { useMicrophoneStream } from './useMicrophoneStream';
-import { OptimizedVADProcessor } from '../audio/vadOptimized';
 import { logger } from '@/shared/utils/logger';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { OptimizedVADProcessor } from '../audio/vadOptimized';
+import { useMicrophoneStream } from './useMicrophoneStream';
 
 /**
  * Hook interface for voice mode management
@@ -117,9 +117,6 @@ export function useVoiceMode(
   // VAD instance (created once) - using optimized version
   const vadRef = useRef<OptimizedVADProcessor | null>(null);
 
-  // Audio context for decoding audio blobs
-  const audioContextRef = useRef<AudioContext | null>(null);
-
   // Track previous pipeline state for echo prevention
   const previousPipelineStateRef = useRef<string>(pipelineState);
 
@@ -127,7 +124,7 @@ export function useVoiceMode(
   const autoStopInProgressRef = useRef<boolean>(false);
 
   // Ref to hold stopListening so handleAudioChunk can call it without stale closures
-  const stopListeningRef = useRef<() => void>(() => {});
+  const stopListeningRef = useRef<() => void>(() => { });
 
   /**
    * Initialize optimized VAD on first use
@@ -135,7 +132,6 @@ export function useVoiceMode(
    * Uses OptimizedVADProcessor which:
    * - Automatically switches to Web Worker if processing exceeds 10ms
    * - Uses circular buffer to minimize allocations
-   * - Batches WebSocket sends every 100ms
    *
    * Requirements: 14.1, 14.2
    */
@@ -148,14 +144,10 @@ export function useVoiceMode(
       },
       {
         enableWorker: true,
-        batchInterval: 100, // Batch WebSocket sends every 100ms
         bufferCapacity: 100, // Circular buffer capacity
       }
     );
   }
-
-  // Note: We do NOT register vadRef.onBatch here because handleAudioChunk
-  // sends frames directly with VAD-informed markers. The batch path is unused.
 
   /**
    * Process audio chunk through VAD and send via WebSocket
@@ -566,15 +558,10 @@ export function useVoiceMode(
    * Cleanup on unmount
    */
   useEffect(() => {
-    const audioCtx = audioContextRef.current;
     return () => {
       // Dispose optimized VAD processor
       if (vadRef.current) {
         vadRef.current.dispose();
-      }
-      // Close audio context
-      if (audioCtx) {
-        audioCtx.close().catch(() => {});
       }
     };
   }, []);

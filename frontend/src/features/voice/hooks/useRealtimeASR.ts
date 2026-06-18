@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useVoiceMode } from './useVoiceMode';
 
@@ -154,7 +154,7 @@ export function useRealtimeASR(
     error: voiceMode.error,
     errorCode: voiceMode.errorCode ?? null,
     canRetry: voiceMode.canRetry ?? false,
-    clearError: voiceMode.clearError ?? (() => {}),
+    clearError: voiceMode.clearError ?? (() => { }),
     startListening,
     stopListening,
     resetTranscript,

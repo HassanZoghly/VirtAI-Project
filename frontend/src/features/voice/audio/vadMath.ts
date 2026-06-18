@@ -1,6 +1,6 @@
 /**
  * Voice Activity Detection (VAD) Math Utilities
- * 
+ *
  * Provides pure mathematical functions for VAD analysis, extracted to
  * be shared across standard, optimized, and Web Worker implementations.
  */

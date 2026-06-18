@@ -4,14 +4,13 @@
  * Provides performance optimizations for VAD processing:
  * 1. Offloads VAD calculations to Web Worker when processing exceeds 10ms
  * 2. Uses circular buffer to minimize memory allocations
- * 3. Batches WebSocket sends every 100ms to reduce network overhead
  *
  * Requirements: 14.1, 14.2
  */
 
-import { VADConfig, VADResult, VADProcessor, VoiceActivityDetector } from './vad';
-import { CircularAudioBuffer } from './circularBuffer';
 import { logger } from '@/shared/utils/logger';
+import { CircularAudioBuffer } from './circularBuffer';
+import { VADConfig, VADProcessor, VADResult, VoiceActivityDetector } from './vad';
 import { calculateRMSEnergy } from './vadMath';
 
 /**
@@ -25,22 +24,9 @@ interface VADPerformanceMetrics {
 }
 
 /**
- * Batched audio chunk for WebSocket transmission
- */
-export interface BatchedAudioChunk {
-  chunks: Array<{
-    audio: string;
-    timestamp: number;
-    is_final: boolean;
-  }>;
-  batchTimestamp: number;
-}
-
-/**
- * Optimized VAD processor with Web Worker support and batching
+ * Optimized VAD processor with Web Worker support
  *
  * Automatically switches to Web Worker mode if processing time exceeds 10ms.
- * Batches WebSocket sends every 100ms to reduce network overhead.
  */
 export class OptimizedVADProcessor implements VADProcessor {
   private config: VADConfig;
@@ -55,15 +41,6 @@ export class OptimizedVADProcessor implements VADProcessor {
   // Circular buffer for audio chunks
   private audioBuffer: CircularAudioBuffer;
 
-  // Batching for WebSocket sends
-  private batchInterval: number = 100; // ms
-  private batchTimer: number | null = null;
-  private pendingChunks: Array<{ audioData: Float32Array; timestamp: number; isFinal: boolean }> =
-    [];
-  private onBatchReady:
-    | ((chunks: Array<{ audioData: Float32Array; timestamp: number; isFinal: boolean }>) => void)
-    | null = null;
-
   /**
    * Create a new optimized VAD processor
    *
@@ -74,7 +51,6 @@ export class OptimizedVADProcessor implements VADProcessor {
     config: VADConfig,
     options?: {
       enableWorker?: boolean;
-      batchInterval?: number;
       bufferCapacity?: number;
     }
   ) {
@@ -86,11 +62,6 @@ export class OptimizedVADProcessor implements VADProcessor {
       options?.bufferCapacity || 100,
       16000 // Max chunk size (1 second at 16kHz)
     );
-
-    // Set batch interval
-    if (options?.batchInterval !== undefined) {
-      this.batchInterval = options.batchInterval;
-    }
 
     // Initialize worker if enabled
     if (options?.enableWorker !== false) {
@@ -218,9 +189,6 @@ export class OptimizedVADProcessor implements VADProcessor {
       this.useWorker = true;
     }
 
-    // Add to batch for WebSocket sending
-    this.addToBatch(audioData, Date.now(), result.shouldFinalize);
-
     return result;
   }
 
@@ -232,66 +200,11 @@ export class OptimizedVADProcessor implements VADProcessor {
   }
 
   /**
-   * Add audio chunk to batch for WebSocket sending
-   *
-   * Batches chunks every 100ms to reduce network overhead (Requirement 14.2)
-   */
-  private addToBatch(audioData: Float32Array, timestamp: number, isFinal: boolean): void {
-    this.pendingChunks.push({ audioData, timestamp, isFinal });
-
-    // Start batch timer if not already running
-    if (this.batchTimer === null && !isFinal) {
-      this.batchTimer = window.setTimeout(() => {
-        this.flushBatch();
-      }, this.batchInterval);
-    }
-
-    // Flush immediately if final chunk
-    if (isFinal) {
-      this.flushBatch();
-    }
-  }
-
-  /**
-   * Flush pending chunks to callback
-   */
-  private flushBatch(): void {
-    if (this.batchTimer !== null) {
-      clearTimeout(this.batchTimer);
-      this.batchTimer = null;
-    }
-
-    if (this.pendingChunks.length > 0 && this.onBatchReady) {
-      this.onBatchReady([...this.pendingChunks]);
-      this.pendingChunks = [];
-    }
-  }
-
-  /**
-   * Set callback for batched chunks
-   *
-   * @param callback - Function to call when batch is ready
-   */
-  onBatch(
-    callback: (
-      chunks: Array<{ audioData: Float32Array; timestamp: number; isFinal: boolean }>
-    ) => void
-  ): void {
-    this.onBatchReady = callback;
-  }
-
-  /**
    * Reset VAD state
    */
   reset(): void {
     this.syncVAD.reset();
     this.audioBuffer.clear();
-    this.pendingChunks = [];
-
-    if (this.batchTimer !== null) {
-      clearTimeout(this.batchTimer);
-      this.batchTimer = null;
-    }
 
     if (this.useWorker && this.worker) {
       this.worker.postMessage({ type: 'reset' });
@@ -332,12 +245,6 @@ export class OptimizedVADProcessor implements VADProcessor {
       this.worker = null;
     }
 
-    if (this.batchTimer !== null) {
-      clearTimeout(this.batchTimer);
-      this.batchTimer = null;
-    }
-
     this.audioBuffer.clear();
-    this.pendingChunks = [];
   }
 }

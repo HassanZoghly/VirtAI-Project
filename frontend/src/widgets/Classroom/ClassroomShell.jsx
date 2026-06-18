@@ -650,6 +650,7 @@ export default function ClassroomShell() {
           <div className="chat-panel" key={currentSessionId || 'empty'}>
             <MessageList
               messages={currentSession?.messages || []}
+              outboxQueue={conversationState.outboxQueue || []}
               currentMessage={conversationState.currentMessage}
               interimTranscript={interimTranscript}
               error={conversationState.error}

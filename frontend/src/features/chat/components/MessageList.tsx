@@ -1,27 +1,29 @@
-import {
-  PiLightbulbFilament,
-} from 'react-icons/pi';
+import React from 'react';
+import { PiLightbulbFilament, PiClockFill } from 'react-icons/pi';
 import { Bot, User } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import MessageBubble from './MessageBubble';
+import { IMessage } from '../../session/types';
+import { IOutboxMessage } from '../hooks/useConversationReducer';
 
-/**
- * Scrollable message list with welcome state, streaming indicator, and error display.
- * @param {object} props
- * @param {{ id: string, role: string, content: string }[]} props.messages - Chat history
- * @param {string|null} props.currentMessage - In-progress streaming text
- * @param {string} [props.interimTranscript] - Interim ASR transcript (grayed/italic)
- * @param {string|null} props.error - Error message to display
- * @param {string} props.avatarName - Tutor display name for welcome text
- * @param {React.RefObject<HTMLDivElement>} props.chatScrollRef - Scroll container ref
- * @param {React.RefObject<HTMLDivElement>} props.messagesEndRef - Scroll-to-bottom anchor ref
- * @param {string} [props.pipelineState] - Pipeline state (e.g. 'thinking', 'speaking')
- * @param {(text: string) => void} [props.onSendText] - Send a message directly
- * @param {(e: React.UIEvent) => void} props.onScroll - Scroll event handler
- */
+interface MessageListProps {
+  messages: IMessage[];
+  outboxQueue: IOutboxMessage[];
+  currentMessage: string | null;
+  interimTranscript?: string;
+  error?: string | null;
+  avatarName: string;
+  chatScrollRef: React.RefObject<HTMLDivElement>;
+  messagesEndRef: React.RefObject<HTMLDivElement>;
+  pipelineState?: string;
+  onSendText?: (text: string) => void;
+  onScroll: (e: React.UIEvent<HTMLDivElement>) => void;
+}
+
 export default function MessageList({
   messages,
+  outboxQueue,
   currentMessage,
   interimTranscript,
   avatarName,
@@ -29,7 +31,7 @@ export default function MessageList({
   messagesEndRef,
   onScroll,
   pipelineState,
-}) {
+}: MessageListProps) {
   return (
     <div
       className="chat-messages"
@@ -39,7 +41,7 @@ export default function MessageList({
       aria-live="polite"
       aria-label="Chat messages"
     >
-      {messages.length === 0 ? (
+      {messages.length === 0 && outboxQueue.length === 0 ? (
         <div className="welcome-state">
           <PiLightbulbFilament className="welcome-icon" />
           <h2 className="welcome-title">Start a conversation</h2>
@@ -50,6 +52,26 @@ export default function MessageList({
           {messages.map((msg) => (
             <MessageBubble key={msg.id} msg={msg} />
           ))}
+          
+          {/* Queued / Offline Messages */}
+          {outboxQueue.map((msg) => (
+            <div
+              key={msg.id}
+              className="chat-message-wrapper user-message-wrapper message-enter"
+              style={{ opacity: 0.6 }}
+            >
+              <div className="chat-message user-message items-start">
+                <div className="message-bubble flex items-center gap-2">
+                  <PiClockFill />
+                  <span>{msg.text}</span>
+                </div>
+                <div className="message-avatar user-avatar">
+                  <User size={22} aria-hidden="true" />
+                </div>
+              </div>
+            </div>
+          ))}
+
           {/* Typing indicator when AI is thinking but not yet streaming */}
           {pipelineState === 'thinking' && !currentMessage && (
             <div
@@ -69,6 +91,7 @@ export default function MessageList({
               </div>
             </div>
           )}
+
           {/* Show interim ASR transcript as grayed/italic user bubble */}
           {interimTranscript && (
             <div
@@ -84,6 +107,7 @@ export default function MessageList({
               </div>
             </div>
           )}
+
           {/* Show streaming message if present */}
           {currentMessage && (
             <div className="chat-message-wrapper ai-message-wrapper">

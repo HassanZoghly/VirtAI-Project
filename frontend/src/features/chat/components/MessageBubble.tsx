@@ -1,14 +1,15 @@
-import { memo } from 'react';
+import React, { memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Bot, User } from 'lucide-react';
 import CopyButton from '../../../shared/components/CopyButton';
+import { IMessage } from '../../session/types';
 
-/**
- * Renders a single chat message with role-based styling and copy support.
- * @param {{ msg: { id: string, role: 'user'|'assistant', content: string } }} props
- */
-const MessageBubble = memo(function MessageBubble({ msg }) {
+interface MessageBubbleProps {
+  msg: IMessage;
+}
+
+const MessageBubble: React.FC<MessageBubbleProps> = memo(function MessageBubble({ msg }) {
   const isUser = msg.role === 'user';
 
   return (

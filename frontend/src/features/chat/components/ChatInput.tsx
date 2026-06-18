@@ -1,21 +1,21 @@
-import { useCallback } from 'react';
+import React, { useCallback, KeyboardEvent } from 'react';
 import { PiPaperclipFill, PiPaperPlaneTiltFill } from 'react-icons/pi';
 import VoiceModeButton from '../../voice/components/VoiceModeButton';
 
 const MAX_CHARS = 2000;
 
-/**
- * Chat input bar with textarea, send button, voice mode toggle, and attachment stub.
- * @param {object} props
- * @param {string} props.inputValue - Current textarea value
- * @param {(value: string) => void} props.onInputChange - Text change callback
- * @param {() => void} props.onSend - Send button callback
- * @param {(e: React.KeyboardEvent) => void} props.onKeyDown - Keyboard handler (Enter to send)
- * @param {React.RefObject<HTMLTextAreaElement>} props.textareaRef - Textarea element ref
- * @param {'online'|'offline'|'checking'} props.backendStatus - Server connection status
- * @param {object} props.wsClient - WebSocket client instance
- * @param {string} props.pipelineState - Current pipeline state
- */
+interface ChatInputProps {
+  inputValue: string;
+  onInputChange: (value: string) => void;
+  onSend: () => void;
+  onKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
+  textareaRef: React.RefObject<HTMLTextAreaElement>;
+  backendStatus: 'online' | 'offline' | 'checking';
+  wsClient: any;
+  pipelineState: string;
+  onToggleDocuments: () => void;
+}
+
 export default function ChatInput({
   inputValue,
   onInputChange,
@@ -26,23 +26,20 @@ export default function ChatInput({
   wsClient,
   pipelineState,
   onToggleDocuments,
-}) {
+}: ChatInputProps) {
   const handleChange = useCallback(
-    (e) => {
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const el = e.target;
       onInputChange(el.value);
+      
+      const hardcodedMaxHeight = 150;
+      
       el.style.height = 'auto';
-
-      const computed = window.getComputedStyle(el);
-      const maxHeight = Number.parseFloat(computed.maxHeight);
-      const effectiveMaxHeight = Number.isFinite(maxHeight) ? maxHeight : 0;
-      const nextHeight = effectiveMaxHeight
-        ? Math.min(el.scrollHeight, effectiveMaxHeight)
-        : el.scrollHeight;
-
+      const nextHeight = Math.min(el.scrollHeight, hardcodedMaxHeight);
+      
       el.style.height = `${nextHeight}px`;
 
-      const shouldScroll = effectiveMaxHeight > 0 && el.scrollHeight > effectiveMaxHeight + 1;
+      const shouldScroll = el.scrollHeight > hardcodedMaxHeight + 1;
       el.classList.toggle('is-scrollable', shouldScroll);
       el.style.overflowY = shouldScroll ? 'auto' : 'hidden';
     },
@@ -65,7 +62,6 @@ export default function ChatInput({
           <PiPaperclipFill />
         </button>
 
-        {/* Voice Mode Button - Requirements 1.1, 1.4 */}
         <div style={{ marginBottom: '4px' }}>
           <VoiceModeButton wsClient={wsClient} pipelineState={pipelineState} />
         </div>

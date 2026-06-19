@@ -71,6 +71,7 @@ class _FakeSessionManager:
 
 class _FakeConnectionManager(WSConnectionManager):
     def __init__(self) -> None:
+        super().__init__()
         self.unregister_calls: list[str] = []
 
     async def unregister(self, session_id: str, websocket) -> None:
@@ -78,7 +79,7 @@ class _FakeConnectionManager(WSConnectionManager):
 
 
 def _mock_decode_token(token: str, expected_type: str = "access"):
-    return SimpleNamespace(user_id=MOCK_USER_ID, jti="mock-jti", token_version=0)
+    return SimpleNamespace(user_id=MOCK_USER_ID, jti="mock-jti", token_version=0, family_id=None)
 
 
 async def _mock_get_user_by_id(*args, **kwargs):
@@ -126,7 +127,7 @@ async def test_ws_does_not_create_session_on_connect_when_not_resuming(
         last_seq=0,
         session_manager=fake_sm,
         connection_manager=fake_cm,
-        db=None,
+        db=object(),
     )
 
     assert fake_ws.accepted is True
@@ -149,7 +150,7 @@ async def test_ws_resume_uses_existing_session(monkeypatch: pytest.MonkeyPatch) 
     )
     created_handler = {}
 
-    async def _connect_existing(session_id: str):
+    async def _connect_existing(session_id: str, **kwargs):
         return resumed_session if session_id == MOCK_SESSION_ID else None
 
     class FakeHandler:
@@ -177,7 +178,7 @@ async def test_ws_resume_uses_existing_session(monkeypatch: pytest.MonkeyPatch) 
         last_seq=2,
         session_manager=fake_sm,
         connection_manager=fake_cm,
-        db=None,
+        db=object(),
     )
 
     assert fake_ws.accepted is True
@@ -218,7 +219,7 @@ async def test_ws_non_resume_forwards_requested_session_id(monkeypatch: pytest.M
         last_seq=0,
         session_manager=fake_sm,
         connection_manager=fake_cm,
-        db=None,
+        db=object(),
     )
 
     assert fake_ws.accepted is True

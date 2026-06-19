@@ -61,7 +61,7 @@ async def test_refresh_reissues_refresh_cookie(monkeypatch: pytest.MonkeyPatch) 
     async def _lock(*args, **kwargs) -> str:
         return "lock-token"
 
-    monkeypatch.setattr(auth_endpoint, "_assert_rate_limit", _noop_rate_limit)
+    monkeypatch.setattr(auth_endpoint, "_assert_rate_limit_refresh", _noop_rate_limit)
     monkeypatch.setattr(
         auth_endpoint,
         "decode_auth_token",
@@ -90,8 +90,10 @@ async def test_refresh_reissues_refresh_cookie(monkeypatch: pytest.MonkeyPatch) 
     )
 
     class FakeRedis:
-        async def get(self, key):
-            return b"old-refresh-token"
+        async def execute_command(self, command, *args):
+            if command == "GET":
+                return b"old-refresh-token"
+            return None
 
         async def delete(self, *args, **kwargs):
             pass
@@ -141,7 +143,7 @@ async def test_refresh_rejects_legacy_object_id_before_db(
         algorithm=settings.JWT_ALGORITHM,
     )
 
-    monkeypatch.setattr(auth_endpoint, "_assert_rate_limit", _noop_rate_limit)
+    monkeypatch.setattr(auth_endpoint, "_assert_rate_limit_refresh", _noop_rate_limit)
     monkeypatch.setattr(auth_endpoint, "get_user_by_id", _db_should_not_be_called)
 
     response = Response()
@@ -164,7 +166,11 @@ def test_refresh_cookie_policy_uses_none_in_production(
     monkeypatch.setattr(
         auth_endpoint,
         "get_settings",
-        lambda: SimpleNamespace(ENVIRONMENT=Environment.production, REFRESH_TOKEN_EXPIRE_DAYS=7),
+        lambda: SimpleNamespace(
+            ENVIRONMENT=Environment.production,
+            REFRESH_TOKEN_EXPIRE_DAYS=7,
+            COOKIE_DOMAIN=None,
+        ),
     )
     response = Response()
     auth_endpoint._set_refresh_cookie(response, "refresh-token")
@@ -180,7 +186,11 @@ def test_refresh_cookie_policy_uses_lax_in_development(
     monkeypatch.setattr(
         auth_endpoint,
         "get_settings",
-        lambda: SimpleNamespace(ENVIRONMENT=Environment.development, REFRESH_TOKEN_EXPIRE_DAYS=7),
+        lambda: SimpleNamespace(
+            ENVIRONMENT=Environment.development,
+            REFRESH_TOKEN_EXPIRE_DAYS=7,
+            COOKIE_DOMAIN=None,
+        ),
     )
     response = Response()
     auth_endpoint._set_refresh_cookie(response, "refresh-token")
@@ -218,7 +228,7 @@ async def test_refresh_reuse_revokes_family_and_user_tokens(
     async def _blacklist(*args, **kwargs) -> None:
         calls.append("blacklist")
 
-    monkeypatch.setattr(auth_endpoint, "_assert_rate_limit", _noop_rate_limit)
+    monkeypatch.setattr(auth_endpoint, "_assert_rate_limit_refresh", _noop_rate_limit)
     monkeypatch.setattr(
         auth_endpoint,
         "decode_auth_token",

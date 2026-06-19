@@ -1,6 +1,4 @@
-import { AvatarPanel } from '@/features/avatar';
-import { getAvatarById, getAvatarModelPath } from '@/features/avatar/data/avatars';
-import { isAvatarDebugEnabled } from '@/features/avatar/utils/avatarFirstFrameValidation';
+// Avatar imports removed
 import { ChatInput, MessageList } from '@/features/chat';
 import { SettingsDrawer, useSessionManager } from '@/features/session';
 import { DocumentsDrawer } from '@/features/documents/components/DocumentsDrawer';
@@ -12,13 +10,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { PiGearFill, PiWifiSlashFill } from 'react-icons/pi';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  AVATAR_LIFECYCLE_EVENTS,
-  AVATAR_STATUS,
-  emitAvatarLifecycleTelemetry,
-  installAvatarLifecycleDebugControls,
-  resolveAvatarLifecycleTransition,
-} from './avatarLifecycle';
 import { SCROLL_STICK_THRESHOLD_PX } from './constants';
 const SETUP_STORAGE_KEYS = ['virtai-setup', 'virtai:setup', 'setupConfig', 'setup'];
 
@@ -133,36 +124,12 @@ export default function ClassroomShell() {
   const activeAvatarId = setupConfig.avatarId || 'omar';
   const activeVoiceId = setupConfig.voiceId || getDefaultVoiceId(activeAvatarId);
   const movementEnabled = setupConfig.movementEnabled ?? false;
-  const avatarModelPath = getAvatarModelPath(activeAvatarId);
-  const wsAvatarId = avatarModelPath.split('/').pop().replace('.glb', '');
+  const wsAvatarId = activeAvatarId;
 
   const [conversationState, dispatch] = useConversationReducer();
   const session = useSessionManager(urlSessionId, navigate);
 
-  const avatarDebugEnabled = isAvatarDebugEnabled();
-  const [avatarRenderEpoch, setAvatarRenderEpoch] = useState(0);
-
-  useEffect(() => {
-    if (avatarDebugEnabled) {
-      console.info(`[DIAG][ClassroomShell] 🔄 avatarRenderEpoch changed to: ${avatarRenderEpoch}`);
-    }
-  }, [avatarRenderEpoch, avatarDebugEnabled]);
-
-  const renderCountRef = useRef(0);
-  useEffect(() => {
-    renderCountRef.current++;
-    if (avatarDebugEnabled) {
-      console.info(`[DIAG][ClassroomShell] 🔄 Render #${renderCountRef.current}`);
-    }
-  });
-
-  useEffect(() => {
-    if (avatarDebugEnabled) {
-      console.info('[DIAG][ClassroomShell] 🟢 MOUNTED');
-      return () => console.info('[DIAG][ClassroomShell] 🔴 UNMOUNTED');
-    }
-    return undefined;
-  }, [avatarDebugEnabled]);
+  // Avatar UI temporarily decoupled
 
   const sessionList = session.sessions;
   const currentSessionId = session.currentSessionId;
@@ -190,53 +157,7 @@ export default function ClassroomShell() {
   const [isDocumentsOpen, setIsDocumentsOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const isSidebarOpen = isSettingsOpen || isDocumentsOpen;
-  // Avatar lifecycle: 'loading' | 'scene-mounted' | 'scene-ready' | 'failed'
-  const [avatarStatus, _setAvatarStatus] = useState(AVATAR_STATUS.LOADING);
-  const lastSceneReadyRef = useRef(null);
-
-  const trackedApplyAvatarLifecycleEvent = useCallback((event, source) => {
-    _setAvatarStatus((prev) => {
-      const transition = resolveAvatarLifecycleTransition(prev, event);
-      emitAvatarLifecycleTelemetry({
-        avatarId: wsAvatarId,
-        lifecycleState: transition.status,
-        event,
-        source,
-        previousStatus: prev,
-        nextStatus: transition.status,
-        changed: transition.changed,
-        rejected: !!transition.rejected,
-        stale: !!transition.stale,
-        failureReason:
-          event === AVATAR_LIFECYCLE_EVENTS.FAILED ? 'UNKNOWN' : null,
-      });
-
-      if (!transition.changed) {
-        if (avatarDebugEnabled) {
-          if (transition.rejected) {
-            console.warn(`[AvatarState] ⚠️ Rejected invalid event: ${prev} + ${event} (source: ${source})`);
-          } else if (transition.stale) {
-            console.info(`[DIAG][AvatarState] Ignored stale event: ${prev} + ${event} (source: ${source})`);
-          }
-        }
-        return prev;
-      }
-
-      if (avatarDebugEnabled) {
-        console.info(`[DIAG][AvatarState] ${prev} → ${transition.status} (event: ${event}, source: ${source}) @ ${new Date().toISOString()}`);
-      }
-
-      if (transition.status === AVATAR_STATUS.SCENE_READY) {
-        lastSceneReadyRef.current = Date.now();
-      }
-
-      return transition.status;
-    });
-  }, [avatarDebugEnabled, wsAvatarId]);
-
-  const [lastAvatarError, setLastAvatarError] = useState(null);
   const [interimTranscript, setInterimTranscript] = useState('');
-  const [emotionData, setEmotionData] = useState(null);
 
   const messagesEndRef = useRef(null);
   const chatScrollRef = useRef(null);
@@ -342,14 +263,6 @@ export default function ClassroomShell() {
         if (d.text) d.text = d.text.replace(/\[.*?\]/g, '');
         dispatch({ type: 'CHAT_FINAL', payload: d });
         sessionRef.current.addAssistantMessage(`${d.message_id}-assistant`, d.text);
-        if (d.emotion) {
-          // Shape expected by AvatarFaceController.applyAIResponse(): { primary, intensity }
-          setEmotionData({
-            primary: d.emotion,
-            intensity: 0.85,
-            timestamp: Date.now(),
-          });
-        }
       }),
       onMessage('pipeline.state', (d) => dispatch({ type: 'PIPELINE_STATE', payload: d })),
       onMessage('animation.timeline.v2', () => { /* Handled internally by audio sync */ }),
@@ -386,80 +299,7 @@ export default function ClassroomShell() {
     return () => unsubs.forEach((fn) => fn?.());
   }, [onMessage, dispatch, send, commitAndSend]);
 
-  const avatarData = useMemo(() => getAvatarById(activeAvatarId), [activeAvatarId]);
-
-  const handleAvatarError = useCallback((err) => {
-    if (avatarDebugEnabled) {
-      console.error('[DIAG][ClassroomShell] ❌ handleAvatarError called:', err?.message || err);
-    }
-    trackedApplyAvatarLifecycleEvent(AVATAR_LIFECYCLE_EVENTS.FAILED, 'handleAvatarError');
-    setLastAvatarError(err instanceof Error ? err : new Error(String(err || 'Unknown avatar error')));
-  }, [avatarDebugEnabled, trackedApplyAvatarLifecycleEvent]);
-
-  const handleAvatarSceneMounted = useCallback(() => {
-    trackedApplyAvatarLifecycleEvent(
-      AVATAR_LIFECYCLE_EVENTS.SCENE_MOUNTED,
-      'handleAvatarSceneMounted'
-    );
-  }, [trackedApplyAvatarLifecycleEvent]);
-
-  const handleAvatarFirstFrameValidated = useCallback(() => {
-    trackedApplyAvatarLifecycleEvent(
-      AVATAR_LIFECYCLE_EVENTS.FIRST_FRAME_VALIDATED,
-      'handleAvatarFirstFrameValidated'
-    );
-  }, [trackedApplyAvatarLifecycleEvent]);
-
-  const handleAvatarRenderFailure = useCallback((err) => {
-    if (avatarDebugEnabled) {
-      console.error('[DIAG][ClassroomShell] ❌ handleAvatarRenderFailure called:', err?.message || err);
-    }
-    trackedApplyAvatarLifecycleEvent(AVATAR_LIFECYCLE_EVENTS.FAILED, 'handleAvatarRenderFailure');
-    setLastAvatarError(err instanceof Error ? err : new Error(String(err || 'Unknown render failure')));
-  }, [avatarDebugEnabled, trackedApplyAvatarLifecycleEvent]);
-
-  const handleAvatarRetry = useCallback(() => {
-    if (avatarDebugEnabled) {
-      console.info('[DIAG][ClassroomShell] 🔄 handleAvatarRetry — forcing full remount');
-    }
-    lastSceneReadyRef.current = null;
-    setAvatarRenderEpoch((e) => e + 1); // forces full remount
-    trackedApplyAvatarLifecycleEvent(AVATAR_LIFECYCLE_EVENTS.RETRY, 'handleAvatarRetry');
-    setLastAvatarError(null);
-  }, [avatarDebugEnabled, trackedApplyAvatarLifecycleEvent, setAvatarRenderEpoch, setLastAvatarError]);
-
-  useEffect(() => {
-    return installAvatarLifecycleDebugControls({
-      onRetry: handleAvatarRetry,
-    }) || undefined;
-  }, [handleAvatarRetry]);
-
-  useEffect(() => {
-    if (avatarStatus !== AVATAR_STATUS.SCENE_READY) {
-      return undefined;
-    }
-
-    let cancelled = false;
-    const promoteToVisible = () => {
-      if (!cancelled) {
-        trackedApplyAvatarLifecycleEvent(AVATAR_LIFECYCLE_EVENTS.VISIBLE, 'sceneReadyPaint');
-      }
-    };
-
-    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-      const frameId = window.requestAnimationFrame(promoteToVisible);
-      return () => {
-        cancelled = true;
-        window.cancelAnimationFrame(frameId);
-      };
-    }
-
-    const timerId = setTimeout(promoteToVisible, 0);
-    return () => {
-      cancelled = true;
-      clearTimeout(timerId);
-    };
-  }, [avatarStatus, trackedApplyAvatarLifecycleEvent]);
+  const avatarName = 'AI Tutor';
 
   const openSettings = useCallback(() => setIsSettingsOpen(true), []);
   const closeSettings = useCallback(() => setIsSettingsOpen(false), []);
@@ -507,7 +347,6 @@ export default function ClassroomShell() {
     [handleSendMessage]
   );
 
-  const avatarName = avatarData?.name || 'AI Tutor';
 
   const statusBadgeClass =
     {
@@ -620,32 +459,18 @@ export default function ClassroomShell() {
           </div>
         </div>
 
-        <div 
-          className="split-container" 
+        <div
+          className="split-container"
           id="main-content"
           style={{
             width: isSidebarOpen ? 'calc(100% - 320px)' : '100%'
           }}
         >
-          <AvatarPanel
-            key={`${wsAvatarId}:${avatarRenderEpoch}`}
-            modelPath={avatarModelPath}
-            avatarId={wsAvatarId}
-            avatarStatus={avatarStatus}
-            pipelineState={conversationState.pipelineState}
-            audioUrl={audioUrl}
-            audioItems={audioItems}
-            audioQueueResetToken={audioQueueResetToken}
-            mouthCues={mouthCues}
-            onSceneMounted={handleAvatarSceneMounted}
-            onFirstFrameValidated={handleAvatarFirstFrameValidated}
-            onRenderFailure={handleAvatarRenderFailure}
-            onError={handleAvatarError}
-            onRetry={handleAvatarRetry}
-            emotionData={emotionData}
-            isMovementEnabled={movementEnabled}
-            lastError={lastAvatarError}
-          />
+          <div className="avatar-panel">
+            <div style={{ textAlign: 'center', color: 'var(--text-secondary, #b0b0b0)', fontSize: '1.2rem', fontWeight: 500 }}>
+              Avatar Coming Soon...
+            </div>
+          </div>
 
           <div className="chat-panel" key={currentSessionId || 'empty'}>
             <MessageList

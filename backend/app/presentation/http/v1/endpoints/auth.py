@@ -213,7 +213,7 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
         samesite=same_site,
         path=COOKIE_PATH,
         max_age=_refresh_cookie_max_age(),
-        domain=settings.COOKIE_DOMAIN,
+        domain=getattr(settings, "COOKIE_DOMAIN", None),
     )
 
 
@@ -226,7 +226,7 @@ def _delete_refresh_cookie(response: Response) -> None:
         secure=secure,
         samesite=same_site,
         path=COOKIE_PATH,
-        domain=settings.COOKIE_DOMAIN,
+        domain=getattr(settings, "COOKIE_DOMAIN", None),
     )
 
 

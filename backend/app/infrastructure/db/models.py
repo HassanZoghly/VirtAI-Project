@@ -59,7 +59,6 @@ class ChatSession(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
-    is_archived: Mapped[bool] = mapped_column(Boolean, default=False)
     message_count: Mapped[int] = mapped_column(Integer, default=0)
 
     __table_args__ = (Index("ix_chat_sessions_user_updated", "user_id", "updated_at"),)
@@ -337,4 +336,3 @@ class EpisodicMemory(Base):
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
     )
-

@@ -54,16 +54,11 @@ class ChatRepository(ChatRepositoryPort):
         session = result.scalar_one_or_none()
         return self._serialize_session(session) if session else None
 
-    async def list_user_sessions(
-        self, user_id: str, archived: bool = False, limit: int = 50
-    ) -> list[dict]:
+    async def list_user_sessions(self, user_id: str, limit: int = 50) -> list[dict]:
         """List sessions for a user, ordered by updated_at desc."""
         stmt = (
             select(ChatSession)
-            .where(
-                ChatSession.user_id == require_uuid(user_id, field_name="user_id"),
-                ChatSession.is_archived == archived,
-            )
+            .where(ChatSession.user_id == require_uuid(user_id, field_name="user_id"))
             .order_by(ChatSession.updated_at.desc())
             .limit(limit)
         )
@@ -233,7 +228,6 @@ class ChatRepository(ChatRepositoryPort):
             "title": session.title,
             "created_at": session.created_at.isoformat() if session.created_at else None,
             "updated_at": session.updated_at.isoformat() if session.updated_at else None,
-            "is_archived": session.is_archived,
             "message_count": session.message_count,
         }
 

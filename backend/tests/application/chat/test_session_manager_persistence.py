@@ -31,7 +31,7 @@ def _make_manager(get_session=None, create_session=None) -> SessionManager:
                 return await get_session(session_id)
             return None
 
-        async def list_user_sessions(self, user_id: str, archived: bool = False, limit: int = 50) -> list[dict]:
+        async def list_user_sessions(self, user_id: str, limit: int = 50) -> list[dict]:
             return []
 
         async def delete_chat_session(self, session_id: str) -> bool:

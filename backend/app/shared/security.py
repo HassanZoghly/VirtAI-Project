@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
+import bcrypt
 from jose import ExpiredSignatureError, JWTError, jwt
-from passlib.context import CryptContext
 
 from app.shared.config import get_settings
 from app.shared.errors import (
@@ -18,7 +18,7 @@ from app.shared.errors import (
 from app.shared.ids import parse_uuid
 from app.shared.key_manager import get_signing_key, get_verification_keys
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+BCRYPT_MAX_PASSWORD_BYTES = 72
 
 
 # ---------------------------------------------------------------------------
@@ -27,11 +27,17 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def hash_password(plain: str) -> str:
-    return pwd_context.hash(plain)
+    password = plain.encode("utf-8")
+    if len(password) > BCRYPT_MAX_PASSWORD_BYTES:
+        raise ValueError("Password cannot be longer than 72 bytes")
+    return bcrypt.hashpw(password, bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except ValueError:
+        return False
 
 
 # ---------------------------------------------------------------------------

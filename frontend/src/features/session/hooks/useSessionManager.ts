@@ -1,4 +1,5 @@
 import { selectIsAuthenticated, useAuthStore } from '@/features/auth/store/authStore';
+import { toast } from '@/shared/utils/toast';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import * as sessionService from '../services/sessionService';
@@ -35,6 +36,19 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
     currentSessionIdRef.current = id;
     setCurrentSessionId(id);
   }, []);
+
+  /**
+   * Reset state on logout
+   */
+  useEffect(() => {
+    if (!isAuthenticated && isAuthInitialized) {
+      hasInitialized.current = false;
+      isInitializingRef.current = false;
+      setSessions([]);
+      setSessionMessages({});
+      setActiveSessionId(null);
+    }
+  }, [isAuthenticated, isAuthInitialized, setActiveSessionId]);
 
   /**
    * Single Async Initialization
@@ -312,31 +326,39 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
 
   const deleteSession = useCallback(
     async (sessionId: string) => {
+      const wasActive = sessionId === currentSessionIdRef.current;
+      const snapshotSessions = sessionsRef.current;
+      const snapshotMessages = { ...sessionMessages };
+
+      // Optimistic delete
+      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+      setSessionMessages((prev) => {
+        const next = { ...prev };
+        delete next[sessionId];
+        return next;
+      });
+
+      if (wasActive) {
+        setActiveSessionId(null);
+        if (navigate) {
+          navigate('/classroom', { replace: true });
+        }
+      }
+
       try {
         await sessionService.deleteSession(sessionId);
-
-        setSessionMessages(prev => {
-          const next = { ...prev };
-          delete next[sessionId];
-          return next;
-        });
-
-        setSessions((prev) => {
-          const remaining = prev.filter((s) => s.id !== sessionId);
-
-          if (sessionId === currentSessionIdRef.current) {
-            setActiveSessionId(null);
-            if (navigate) {
-              navigate('/classroom', { replace: true });
-            }
-          }
-          return remaining;
-        });
       } catch (error) {
+        // Rollback
+        setSessions(snapshotSessions);
+        setSessionMessages(snapshotMessages);
+        if (wasActive) {
+          setActiveSessionId(sessionId);
+        }
+        toast.error('Delete Failed', 'Failed to delete chat session');
         console.error('Failed to delete session:', error);
       }
     },
-    [setActiveSessionId, navigate]
+    [setActiveSessionId, navigate, sessionMessages]
   );
 
   const clearAllSessions = useCallback(async () => {
@@ -350,8 +372,22 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
     }
   }, [createNewSession]);
 
-  const renameSession = useCallback((sessionId: string, newTitle: string) => {
+  const renameSession = useCallback(async (sessionId: string, newTitle: string) => {
+    const previousTitle = sessionsRef.current.find((s) => s.id === sessionId)?.title;
+
+    // Optimistic update
     setSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, title: newTitle } : s)));
+
+    try {
+      await sessionService.renameSession(sessionId, newTitle);
+    } catch (error) {
+      // Rollback on error
+      setSessions((prev) =>
+        prev.map((s) => (s.id === sessionId ? { ...s, title: previousTitle ?? s.title } : s))
+      );
+      toast.error('Rename Failed', 'Failed to rename chat session');
+      console.error('Failed to rename session:', error);
+    }
   }, []);
 
   const addUserMessage = useCallback((message: IMessage, explicitSessionId?: string) => {

@@ -52,3 +52,11 @@ export async function generateSmartTitle(sessionId: string, firstUserMessage: st
     return `Conversation ${new Date().toLocaleDateString()}`;
   }
 }
+
+/**
+ * Rename a chat session manually.
+ */
+export async function renameSession(sessionId: string, title: string): Promise<any> {
+  const response = await apiClient.patch(`/chat/${sessionId}`, { title });
+  return response.data;
+}

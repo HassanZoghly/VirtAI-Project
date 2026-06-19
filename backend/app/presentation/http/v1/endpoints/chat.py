@@ -21,6 +21,10 @@ class TitleRequest(BaseModel):
     message: str
 
 
+class RenameRequest(BaseModel):
+    title: str
+
+
 def _fallback_title(message: str, max_chars: int = 48) -> str:
     compact = re.sub(r"\s+", " ", message).strip()
     compact = re.sub(r"^[\"'`]+|[\"'`]+$", "", compact)
@@ -148,6 +152,36 @@ async def generate_session_title(
         raise HTTPException(status_code=400, detail="Invalid session_id")
     except Exception as e:
         logger.error(f"Failed to generate title for session {session_id}: {e}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.patch("/{session_id}", response_model=dict)
+async def rename_session(
+    session_id: str,
+    payload: RenameRequest,
+    user: UserEntity = Depends(_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Manually rename a chat session title."""
+    if parse_uuid(session_id) is None:
+        raise HTTPException(status_code=400, detail="Invalid session_id")
+
+    try:
+        repo = ChatRepository(db)
+        session = await repo.get_chat_session(session_id)
+        if not session or session.get("user_id") != str(user.id):
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        updated = await repo.update_chat_session_title(session_id, payload.title)
+        await db.commit()
+        return updated or session
+    except HTTPException:
+        raise
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session_id")
+    except Exception as e:
+        logger.error(f"Failed to rename session {session_id}: {e}")
         await db.rollback()
         raise HTTPException(status_code=500, detail="Internal server error")
 

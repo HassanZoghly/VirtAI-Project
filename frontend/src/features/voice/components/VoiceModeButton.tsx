@@ -16,6 +16,8 @@ interface VoiceModeButtonProps {
   pipelineState: 'idle' | 'thinking' | 'speaking' | 'error';
   /** Optional CSS class name */
   className?: string;
+  /** Optional guard used to prepare a session before microphone capture starts */
+  onBeforeStart?: () => Promise<boolean> | boolean;
 }
 
 /**
@@ -42,6 +44,7 @@ export default function VoiceModeButton({
   wsClient,
   pipelineState,
   className = '',
+  onBeforeStart,
 }: VoiceModeButtonProps) {
   // Use realtime ASR hook for voice + transcript state (Requirement 1.1, 1.4)
   const { isListening, isPaused, isProcessing, interimText, error, startListening, stopListening } =
@@ -108,7 +111,16 @@ export default function VoiceModeButton({
       {/* Main voice mode button (Requirement 1.1, 1.4) */}
       <button
         className={`voice-mode-btn ${buttonState}`}
-        onClick={isListening ? stopListening : startListening}
+        onClick={async () => {
+          if (isListening) {
+            stopListening();
+            return;
+          }
+          const canStart = onBeforeStart ? await onBeforeStart() : true;
+          if (canStart) {
+            startListening();
+          }
+        }}
         title={buttonTitle}
         aria-label={ariaLabel}
         disabled={!!error}

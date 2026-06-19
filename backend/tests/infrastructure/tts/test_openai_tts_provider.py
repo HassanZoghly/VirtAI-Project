@@ -1,7 +1,9 @@
 import pytest
 
+import app.infrastructure.tts.openai_tts_provider as tts_provider_module
 from app.infrastructure.cache.cache_keys import tts_cache_key
 from app.infrastructure.tts.openai_tts_provider import OpenAITTSProvider
+from app.shared.errors import TTSException
 
 
 def test_frontend_voice_ids_resolve_to_openai_api_voices() -> None:
@@ -39,5 +41,43 @@ async def test_api_voice_reflects_current_provider_voice() -> None:
         provider.voice = "guy"
 
         assert provider.api_voice == "onyx"
+    finally:
+        await provider._client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_generate_uses_configured_tts_timeout(monkeypatch, tmp_path) -> None:
+    class Settings:
+        TTS_TIMEOUT_SEC = 0.01
+        AUDIO_STORAGE_PATH = str(tmp_path)
+
+    async def slow_synthesize(*args, **kwargs):
+        import asyncio
+
+        await asyncio.sleep(0.05)
+        from app.domain.voice.entities import TTSResult
+
+        return TTSResult(audio_bytes=b"audio", audio_duration_ms=100)
+
+    async def no_cached_audio(*args, **kwargs):
+        return None
+
+    async def cache_noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(tts_provider_module, "get_settings", lambda: Settings())
+    monkeypatch.setattr(tts_provider_module, "get_cached_audio", no_cached_audio)
+    monkeypatch.setattr(tts_provider_module, "cache_audio", cache_noop)
+
+    provider = OpenAITTSProvider(voice="aria")
+    monkeypatch.setattr(provider, "synthesize", slow_synthesize)
+
+    try:
+        with pytest.raises(TTSException, match="timed out"):
+            await provider.generate(
+                text="This should time out.",
+                session_id="session1",
+                message_id="message1",
+            )
     finally:
         await provider._client.aclose()

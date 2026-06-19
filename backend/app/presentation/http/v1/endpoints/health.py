@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
+import httpx
 from loguru import logger
 from sqlalchemy import text
 
@@ -66,6 +67,17 @@ async def health_check(request: Request) -> dict:
         status["status"] = "degraded"
     else:
         status["services"]["embedding_provider"] = "ok"
+
+    # TTS container readiness
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            response = await client.get("http://tts:8000/health")
+            response.raise_for_status()
+        status["services"]["tts"] = "ok"
+    except Exception as e:
+        logger.warning(f"[Health] TTS ping failed: {e}")
+        status["services"]["tts"] = "unavailable"
+        status["status"] = "degraded"
 
     # WebSocket subsystem readiness
     try:

@@ -14,6 +14,7 @@ interface ChatInputProps {
   wsClient: any;
   pipelineState: string;
   onToggleDocuments: () => void;
+  onBeforeVoiceStart?: () => Promise<boolean> | boolean;
 }
 
 export default function ChatInput({
@@ -26,6 +27,7 @@ export default function ChatInput({
   wsClient,
   pipelineState,
   onToggleDocuments,
+  onBeforeVoiceStart,
 }: ChatInputProps) {
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -63,7 +65,11 @@ export default function ChatInput({
         </button>
 
         <div style={{ marginBottom: '4px' }}>
-          <VoiceModeButton wsClient={wsClient} pipelineState={pipelineState} />
+          <VoiceModeButton
+            wsClient={wsClient}
+            pipelineState={pipelineState}
+            onBeforeStart={onBeforeVoiceStart}
+          />
         </div>
 
         <textarea

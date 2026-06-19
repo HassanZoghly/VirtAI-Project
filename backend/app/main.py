@@ -152,6 +152,7 @@ async def lifespan(app: FastAPI):
         api_key=settings.GROQ_API_KEY,
     )
     openai_tts = OpenAITTSProvider(voice="aria", speed=0.8)
+    app.state.tts_provider = openai_tts
 
     app.state.model_policy.registry.register_llm("groq_llm", groq_llm)
     app.state.model_policy.registry.register_tts("openai_tts", openai_tts)

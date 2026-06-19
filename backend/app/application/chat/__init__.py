@@ -1,11 +1,13 @@
-from app.application.chat.handle_text_turn import (
-    handle_message,
-    handle_text_turn,
-)
-from app.application.chat.session_manager import (
-    ConversationSession,
-    Session,
-    SessionManager,
-)
-
 __all__ = ["Session", "ConversationSession", "SessionManager", "handle_text_turn", "handle_message"]
+
+
+def __getattr__(name: str):
+    if name in {"handle_text_turn", "handle_message"}:
+        from app.application.chat import handle_text_turn as handle_text_turn_module
+
+        return getattr(handle_text_turn_module, name)
+    if name in {"Session", "ConversationSession", "SessionManager"}:
+        from app.application.chat import session_manager as session_manager_module
+
+        return getattr(session_manager_module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

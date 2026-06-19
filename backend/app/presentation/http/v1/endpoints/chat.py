@@ -1,16 +1,45 @@
 """Chat session management endpoints."""
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException
 from loguru import logger
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.chat.entities import ConversationHistory
 from app.domain.user.entities import UserEntity
 from app.infrastructure.db.database import get_db
 from app.infrastructure.db.repositories.chat_repository import ChatRepository
-from app.presentation.http.v1.dependencies import _current_user
+from app.presentation.http.v1.dependencies import ChatUseCaseDep, _current_user
 from app.shared.ids import parse_uuid
 
 router = APIRouter()
+
+
+class TitleRequest(BaseModel):
+    message: str
+
+
+def _fallback_title(message: str, max_chars: int = 48) -> str:
+    compact = re.sub(r"\s+", " ", message).strip()
+    compact = re.sub(r"^[\"'`]+|[\"'`]+$", "", compact)
+    if not compact:
+        return "New chat"
+    words = compact.split(" ")
+    title = " ".join(words[:7]).strip(" .,:;!?")
+    if len(title) > max_chars:
+        title = title[:max_chars].rsplit(" ", 1)[0].strip()
+    return title or "New chat"
+
+
+def _clean_generated_title(raw_title: str, original_message: str) -> str:
+    title = re.sub(r"\s+", " ", raw_title or "").strip()
+    title = re.sub(r"^[\"'`]+|[\"'`]+$", "", title)
+    title = title.removeprefix("Title:").strip()
+    if not title or len(title) > 80 or "\n" in title:
+        return _fallback_title(original_message)
+    return title[:60].strip(" .,:;!?") or _fallback_title(original_message)
 
 
 @router.get("/", response_model=list[dict])
@@ -70,6 +99,59 @@ async def get_messages(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@router.post("/{session_id}/title", response_model=dict)
+async def generate_session_title(
+    session_id: str,
+    payload: TitleRequest,
+    chat_use_case: ChatUseCaseDep,
+    user: UserEntity = Depends(_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Generate and persist a concise title for a chat session."""
+    if parse_uuid(session_id) is None:
+        raise HTTPException(status_code=400, detail="Invalid session_id")
+
+    message = payload.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Message is required")
+
+    try:
+        repo = ChatRepository(db)
+        session = await repo.get_chat_session(session_id)
+        if not session or session.get("user_id") != str(user.id):
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        title = _fallback_title(message)
+        try:
+            history = ConversationHistory(
+                system_prompt=(
+                    "Generate a concise chat title from the user's first message. "
+                    "Return only the title, no quotes, no punctuation at the end, "
+                    "maximum 6 words. Preserve the user's language when possible."
+                ),
+                max_messages=1,
+            )
+            history.add_user_message(message)
+            result = await chat_use_case.llm.complete(history)
+            title = _clean_generated_title(result.full_text, message)
+        except Exception as title_error:
+            logger.warning(
+                f"Falling back to heuristic title for session {session_id}: {title_error}"
+            )
+
+        updated = await repo.update_chat_session_title(session_id, title)
+        await db.commit()
+        return {"id": session_id, "title": updated.get("title") if updated else title}
+    except HTTPException:
+        raise
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session_id")
+    except Exception as e:
+        logger.error(f"Failed to generate title for session {session_id}: {e}")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @router.delete("/all", status_code=204)
 async def delete_all_sessions(
     user: UserEntity = Depends(_current_user),
@@ -108,11 +190,6 @@ async def delete_session(
     except Exception as e:
         logger.error(f"Failed to delete session {session_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
-
-
-from pydantic import BaseModel
-
-from app.presentation.http.v1.dependencies import ChatUseCaseDep
 
 
 class RAGQuery(BaseModel):

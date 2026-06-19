@@ -98,6 +98,7 @@ class WebSocketHandler:
         await self.pipeline_bridge.cancel_pipeline()
 
         if self._voice_mode_handler:
+            await self._voice_mode_handler.shutdown()
             self._voice_mode_handler.audio_pipeline.clear_buffer()
 
         try:

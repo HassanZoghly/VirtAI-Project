@@ -54,6 +54,21 @@ class ChatRepository(ChatRepositoryPort):
         session = result.scalar_one_or_none()
         return self._serialize_session(session) if session else None
 
+    async def update_chat_session_title(self, session_id: str, title: str) -> dict | None:
+        """Update a chat session title."""
+        sid = require_uuid(session_id, field_name="session_id")
+        cleaned_title = title.strip()[:255]
+        if not cleaned_title:
+            return await self.get_chat_session(session_id)
+
+        await self.db.execute(
+            update(ChatSession)
+            .where(ChatSession.id == sid)
+            .values(title=cleaned_title, updated_at=_now())
+        )
+        await self.db.flush()
+        return await self.get_chat_session(session_id)
+
     async def list_user_sessions(self, user_id: str, limit: int = 50) -> list[dict]:
         """List sessions for a user, ordered by updated_at desc."""
         stmt = (

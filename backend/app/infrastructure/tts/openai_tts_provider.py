@@ -154,7 +154,7 @@ class OpenAITTSProvider(BaseTTSProvider):
             try:
                 result = await asyncio.wait_for(
                     self.synthesize(sanitized_text, trace_id=trace_id, voice=api_voice),
-                    timeout=70.0,
+                    timeout=get_settings().TTS_TIMEOUT_SEC,
                 )
             except asyncio.TimeoutError:
                 raise TTSException("TTS synthesis timed out (wait_for trigger)")

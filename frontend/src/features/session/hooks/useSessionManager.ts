@@ -100,6 +100,7 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
   }, [isAuthInitialized, isAuthenticated, urlSessionId, setActiveSessionId, navigate]);
 
   const fetchTriggeredRef = useRef<Set<string>>(new Set());
+  const titleGenerationTriggeredRef = useRef<Set<string>>(new Set());
   const sessionsRef = useRef(sessions);
   useEffect(() => {
     sessionsRef.current = sessions;
@@ -194,6 +195,69 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
     return null;
   }, [switchSession]);
 
+  const createPersistedSession = useCallback(async (): Promise<string | null> => {
+    if (currentSessionIdRef.current) {
+      return currentSessionIdRef.current;
+    }
+    if (isCreatingRef.current) {
+      return null;
+    }
+    isCreatingRef.current = true;
+
+    try {
+      const newSession = await sessionService.createSession();
+      const createdSession: ISession = {
+        ...newSession,
+        messages_loaded: true,
+      };
+
+      if (!createdSession.id) {
+        throw new Error('Created session missing id');
+      }
+
+      setSessions((prev) => [createdSession, ...prev]);
+      setSessionMessages((prev) => ({ ...prev, [createdSession.id]: [] }));
+      setActiveSessionId(createdSession.id);
+
+      if (navigate) {
+        navigate(`/classroom/${createdSession.id}`, { replace: true });
+      }
+
+      return createdSession.id;
+    } catch (error) {
+      console.error('Failed to create persisted session', error);
+      return null;
+    } finally {
+      isCreatingRef.current = false;
+    }
+  }, [navigate, setActiveSessionId]);
+
+  const generateTitleForSession = useCallback((sessionId: string, text: string) => {
+    if (!sessionId || !text.trim()) {
+      return;
+    }
+    if (titleGenerationTriggeredRef.current.has(sessionId)) {
+      return;
+    }
+    titleGenerationTriggeredRef.current.add(sessionId);
+
+    sessionService.generateSmartTitle(sessionId, text).then((generatedTitle) => {
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (s.id !== sessionId) {
+            return s;
+          }
+          if (s.title !== 'New chat' && s.title !== 'New Chat') {
+            return s;
+          }
+          return { ...s, title: generatedTitle };
+        })
+      );
+    }).catch(() => {
+      titleGenerationTriggeredRef.current.delete(sessionId);
+    });
+  }, []);
+
   /**
    * Explicitly handle the mutation sequence for the first message.
    * - Mutex guard: if a creation is already in-flight, immediately return null
@@ -234,20 +298,7 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
       // title is still the server-assigned default "New chat". If the user
       // has manually renamed the session while the API was pending, we abort
       // the update to respect their explicit intent.
-      sessionService.generateSmartTitle(createdSession.id, text).then((generatedTitle) => {
-        setSessions((prev) =>
-          prev.map((s) => {
-            if (s.id !== createdSession.id) {
-              return s;
-            }
-            // Abort if the user has already renamed this session
-            if (s.title !== 'New chat') {
-              return s;
-            }
-            return { ...s, title: generatedTitle };
-          })
-        );
-      });
+      generateTitleForSession(createdSession.id, text);
 
       return createdSession.id;
     } catch (e) {
@@ -257,7 +308,7 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
       // Always release the lock, even on error
       isCreatingRef.current = false;
     }
-  }, [navigate, setActiveSessionId]);
+  }, [navigate, setActiveSessionId, generateTitleForSession]);
 
   const deleteSession = useCallback(
     async (sessionId: string) => {
@@ -293,14 +344,11 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
       await sessionService.deleteAllSessions();
       setSessionMessages({});
       setSessions([]);
-      setActiveSessionId(null);
-      if (navigate) {
-        navigate('/classroom', { replace: true });
-      }
+      createNewSession();
     } catch (error) {
       console.error('Failed to clear all sessions:', error);
     }
-  }, [setActiveSessionId, navigate]);
+  }, [createNewSession]);
 
   const renameSession = useCallback((sessionId: string, newTitle: string) => {
     setSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, title: newTitle } : s)));
@@ -348,6 +396,7 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
     status,
     isLoadingMessages,
     createNewSession,
+    createPersistedSession,
     switchSession,
     deleteSession,
     clearAllSessions,
@@ -355,5 +404,6 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
     addUserMessage,
     addAssistantMessage,
     handleFirstMessage,
+    generateTitleForSession,
   };
 }

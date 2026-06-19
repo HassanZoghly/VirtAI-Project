@@ -5,6 +5,7 @@ import { DocumentsDrawer } from '@/features/documents/components/DocumentsDrawer
 import { loadSetup } from '@/features/setup';
 import useConversationReducer from '@/features/chat/hooks/useConversationReducer';
 import useWSClient, { ConnectionState } from '@/core/realtime/useWSClient';
+import { useAuthStore } from '@/features/auth/store/authStore';
 import { toast } from '@/shared/utils/toast';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
@@ -101,8 +102,8 @@ function loadClassroomSetup() {
   return primary;
 }
 
-function getDefaultVoiceId(avatarId) {
-  return getAvatarById(avatarId)?.gender === 'female' ? 'aria' : 'guy';
+function getDefaultVoiceId() {
+  return 'guy';
 }
 
 function buildWsUrl(avatarId, voiceId, sessionId) {
@@ -112,7 +113,9 @@ function buildWsUrl(avatarId, voiceId, sessionId) {
     `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`;
   const url = new URL(`/api/v1/ws/${avatarId}`, base);
   url.searchParams.set('voice', voiceId);
-  url.searchParams.set('session_id', sessionId);
+  if (sessionId) {
+    url.searchParams.set('session_id', sessionId);
+  }
   return url.toString();
 }
 
@@ -121,8 +124,8 @@ export default function ClassroomShell() {
   const navigate = useNavigate();
 
   const [setupConfig] = useState(loadClassroomSetup);
-  const activeAvatarId = setupConfig.avatarId || 'omar';
-  const activeVoiceId = setupConfig.voiceId || getDefaultVoiceId(activeAvatarId);
+  const activeAvatarId = setupConfig.avatarId || 'avatar1';
+  const activeVoiceId = setupConfig.voiceId || getDefaultVoiceId();
   const movementEnabled = setupConfig.movementEnabled ?? false;
   const wsAvatarId = activeAvatarId;
 
@@ -136,18 +139,31 @@ export default function ClassroomShell() {
   const currentSession = session.currentSession;
   const status = session.status;
   const createNewSession = session.createNewSession;
+  const createPersistedSession = session.createPersistedSession;
+  const handleFirstMessage = session.handleFirstMessage;
+  const generateTitleForSession = session.generateTitleForSession;
   const switchSession = session.switchSession;
   const deleteSession = session.deleteSession;
   const clearAllSessions = session.clearAllSessions;
   const renameSession = session.renameSession;
 
   const WS_URL =
-    status === 'success' && currentSessionId
-      ? buildWsUrl(wsAvatarId, activeVoiceId, currentSessionId)
-      : null;
+    status === 'success' ? buildWsUrl(wsAvatarId, activeVoiceId, currentSessionId) : null;
 
-  const { connectionState, isConnected, send, onMessage, reconnect, reconnectError } =
+  const { connectionState, isConnected, send, onMessage, reconnect, reconnectError, disconnect } =
     useWSClient(WS_URL);
+
+  const handleClearAllSessions = useCallback(async () => {
+    disconnect();
+    await clearAllSessions();
+  }, [disconnect, clearAllSessions]);
+
+  const handleDeleteSession = useCallback(async (sessionId) => {
+    if (sessionId === currentSessionId) {
+      disconnect();
+    }
+    await deleteSession(sessionId);
+  }, [disconnect, deleteSession, currentSessionId]);
 
   const [audioUrl, setAudioUrl] = useState(null);
   const [audioItems, setAudioItems] = useState([]);
@@ -165,6 +181,9 @@ export default function ClassroomShell() {
   const textareaRef = useRef(null);
   const scrollPositionsRef = useRef(new Map());
   const prevSessionIdRef = useRef(currentSessionId);
+  const audioPlayerRef = useRef(null);
+  const playedAudioIdsRef = useRef(new Set());
+  const isFallbackAudioPlayingRef = useRef(false);
 
   const sessionRef = useRef(session);
   useEffect(() => {
@@ -175,14 +194,26 @@ export default function ClassroomShell() {
     setAudioUrl(null);
     setAudioItems([]);
     setAudioQueueResetToken((token) => token + 1);
+    if (audioPlayerRef.current) {
+      audioPlayerRef.current.pause();
+      audioPlayerRef.current = null;
+    }
+    playedAudioIdsRef.current.clear();
+    isFallbackAudioPlayingRef.current = false;
   }, []);
 
+  useEffect(() => {
+    if (!currentSessionId) {
+      dispatch({ type: 'RESET' });
+      resetAvatarAudio();
+    }
+  }, [currentSessionId, dispatch, resetAvatarAudio]);
+
   const ensureSessionAndSend = useCallback(
-    async (sendAction) => {
+    async (text, sendAction) => {
       let activeId = currentSessionId;
       if (!activeId) {
-        toast.info('Starting chat', 'Initializing conversation...', 2000);
-        activeId = await createNewSession();
+        activeId = await handleFirstMessage(text);
         if (!activeId) {
           toast.error('Error', 'Failed to initialize session');
           return;
@@ -190,19 +221,19 @@ export default function ClassroomShell() {
       }
       sendAction(activeId);
     },
-    [currentSessionId, createNewSession]
+    [currentSessionId, handleFirstMessage]
   );
 
   const commitAndSend = useCallback(
     (text) => {
-      ensureSessionAndSend(() => {
+      ensureSessionAndSend(text, (activeId) => {
         const message_id = crypto.randomUUID();
         resetAvatarAudio();
         dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
         dispatch({ type: 'PIPELINE_STATE', payload: { state: 'thinking' } });
         sessionRef.current.addUserMessage(
           { id: message_id, role: 'user', content: text, timestamp: Date.now() },
-          text
+          activeId
         );
         send({ type: 'chat.user_message', data: { message_id, text } });
       });
@@ -212,10 +243,22 @@ export default function ClassroomShell() {
 
   const safeSend = useCallback(
     (message) => {
-      ensureSessionAndSend(() => send(message));
+      send(message);
     },
-    [ensureSessionAndSend, send]
+    [send]
   );
+
+  const ensureVoiceSession = useCallback(async () => {
+    if (currentSessionId) {
+      return true;
+    }
+    const activeId = await createPersistedSession();
+    if (!activeId) {
+      toast.error('Error', 'Failed to initialize voice session');
+      return false;
+    }
+    return true;
+  }, [currentSessionId, createPersistedSession]);
 
   // Save / restore scroll position on session switch
   useEffect(() => {
@@ -249,11 +292,15 @@ export default function ClassroomShell() {
         if (!d?.message_id || !d?.text) {
           return;
         }
+        const echoSessionId = d.session_id || currentSessionId;
         dispatch({ type: 'USER_MESSAGE', payload: { message_id: d.message_id, text: d.text } });
         sessionRef.current.addUserMessage(
           { id: d.message_id, role: 'user', content: d.text, timestamp: Date.now() },
-          d.text
+          echoSessionId
         );
+        if (echoSessionId) {
+          sessionRef.current.generateTitleForSession(echoSessionId, d.text);
+        }
       }),
       onMessage('chat.delta', (d) => {
         if (d.delta) d.delta = d.delta.replace(/\[.*?\]/g, '');
@@ -262,7 +309,7 @@ export default function ClassroomShell() {
       onMessage('chat.final', (d) => {
         if (d.text) d.text = d.text.replace(/\[.*?\]/g, '');
         dispatch({ type: 'CHAT_FINAL', payload: d });
-        sessionRef.current.addAssistantMessage(`${d.message_id}-assistant`, d.text);
+        sessionRef.current.addAssistantMessage(`${d.message_id}-assistant`, d.text, d.session_id);
       }),
       onMessage('pipeline.state', (d) => dispatch({ type: 'PIPELINE_STATE', payload: d })),
       onMessage('animation.timeline.v2', () => { /* Handled internally by audio sync */ }),
@@ -298,6 +345,66 @@ export default function ClassroomShell() {
     ];
     return () => unsubs.forEach((fn) => fn?.());
   }, [onMessage, dispatch, send, commitAndSend]);
+
+  useEffect(() => {
+    if (isFallbackAudioPlayingRef.current) {
+      return;
+    }
+
+    const nextItem = audioItems.find((item) => item?.url && !playedAudioIdsRef.current.has(item.id));
+    if (!nextItem) {
+      return;
+    }
+
+    playedAudioIdsRef.current.add(nextItem.id);
+    isFallbackAudioPlayingRef.current = true;
+
+    const fetchAndPlay = async () => {
+      try {
+        const token = useAuthStore.getState().accessToken;
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const response = await fetch(nextItem.url, { headers });
+        if (!response.ok) {
+          throw new Error(`Failed to fetch audio: ${response.status}`);
+        }
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const player = new Audio(objectUrl);
+        audioPlayerRef.current = player;
+
+        const playNext = () => {
+          if (audioPlayerRef.current === player) {
+            audioPlayerRef.current = null;
+          }
+          isFallbackAudioPlayingRef.current = false;
+          URL.revokeObjectURL(objectUrl);
+          setAudioItems((items) => [...items]);
+        };
+
+        player.addEventListener('ended', playNext, { once: true });
+        player.addEventListener('error', playNext, { once: true });
+        player.play().catch(() => {
+          playNext();
+        });
+      } catch (err) {
+        console.error("Audio playback error:", err);
+        isFallbackAudioPlayingRef.current = false;
+        setAudioItems((items) => [...items]);
+      }
+    };
+
+    fetchAndPlay();
+  }, [audioItems, audioQueueResetToken]);
+
+  useEffect(() => {
+    return () => {
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+        audioPlayerRef.current = null;
+      }
+      isFallbackAudioPlayingRef.current = false;
+    };
+  }, []);
 
   const avatarName = 'AI Tutor';
 
@@ -415,9 +522,9 @@ export default function ClassroomShell() {
           currentSessionId={currentSessionId}
           onSessionSelect={switchSession}
           onNewSession={createNewSession}
-          onDeleteSession={deleteSession}
+          onDeleteSession={handleDeleteSession}
           onRenameSession={renameSession}
-          onClearAllSessions={clearAllSessions}
+          onClearAllSessions={handleClearAllSessions}
         />
         <DocumentsDrawer isOpen={isDocumentsOpen} onClose={() => setIsDocumentsOpen(false)} sessionId={currentSessionId} />
 
@@ -495,6 +602,7 @@ export default function ClassroomShell() {
               wsClient={{ connectionState, isConnected, send: safeSend, onMessage }}
               pipelineState={conversationState.pipelineState}
               onToggleDocuments={toggleDocuments}
+              onBeforeVoiceStart={ensureVoiceSession}
             />
           </div>
         </div>

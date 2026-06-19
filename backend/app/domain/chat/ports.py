@@ -20,6 +20,9 @@ class ChatRepositoryPort(ABC):
     async def get_chat_session(self, session_id: str) -> dict | None: ...
 
     @abstractmethod
+    async def update_chat_session_title(self, session_id: str, title: str) -> dict | None: ...
+
+    @abstractmethod
     async def list_user_sessions(self, user_id: str, limit: int = 50) -> list[dict]: ...
 
     @abstractmethod

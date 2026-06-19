@@ -167,7 +167,14 @@ class ConversationPipeline:
                         )
                     )
 
-            filler_task = asyncio.create_task(filler_task_fn())
+            from app.shared.config import get_settings
+
+            settings = get_settings()
+            filler_task = (
+                asyncio.create_task(filler_task_fn())
+                if settings.ENABLE_FILLER_AUDIO
+                else None
+            )
 
             async def process_audio():
                 while not context.aborted:
@@ -184,7 +191,18 @@ class ConversationPipeline:
 
             audio_task = asyncio.create_task(process_audio())
 
-            await asyncio.gather(llm_task, audio_task, filler_task)
+            tasks = [llm_task, audio_task]
+            if filler_task is not None:
+                tasks.append(filler_task)
+            try:
+                await asyncio.gather(*tasks)
+            except Exception:
+                context.abort()
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                raise
 
             # Output Persistence
             if context.llm_full_response and not context.aborted:

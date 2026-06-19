@@ -80,7 +80,8 @@ class Settings(BaseSettings):
     TTS_VOLUME: str = "+0%"
     TTS_PITCH: str = "+0Hz"
     TTS_VISEME_DEFAULT_DURATION_MS: float = 60.0
-    TTS_TIMEOUT_SEC: float = 60.0
+    TTS_TIMEOUT_SEC: float = 20.0
+    ENABLE_FILLER_AUDIO: bool = False
 
     # Avatar
     DEFAULT_AVATAR_ID: str = "avatar1"

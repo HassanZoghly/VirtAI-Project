@@ -21,6 +21,7 @@ export function normalizeSession(session: any): ISession {
     updated_at: session?.updated_at,
     messages: Array.isArray(session?.messages) ? session.messages : undefined,
     messages_loaded: session?.messages_loaded === true,
+    message_count: session?.message_count,
   };
 }
 

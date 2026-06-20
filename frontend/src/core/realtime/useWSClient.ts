@@ -8,7 +8,7 @@ import { ConnectionState, WS_CLOSE_NORMAL } from './wsConstants';
 
 export { ConnectionState } from './wsConstants';
 
-export default function useWSClient(url: string | null) {
+export default function useWSClient(url: string | null, currentSessionId?: string | null) {
   const wsRef = useRef<WebSocket | null>(null);
   const urlRef = useRef<string | null>(url);
   const accessToken = useAuthStore((state) => state.accessToken);
@@ -108,14 +108,15 @@ export default function useWSClient(url: string | null) {
 
   useEffect(() => {
     if (
-      accessTokenRef.current &&
+      accessToken &&
       urlRef.current &&
       !wsRef.current &&
       connectionState !== ConnectionState.RECONNECTING
     ) {
       connectRef.current();
     }
-  }, [accessToken, connectionState]);
+  }, [accessToken]);
+
 
   const send = useCallback(
     (message: WSOutgoingMessage) => {

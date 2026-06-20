@@ -202,7 +202,9 @@ export function useWSConnectionManager(deps: ConnectionManagerDeps) {
               if (typeof readyData.session_id === 'string' && readyData.session_id.length > 0) {
                 sessionStateRef.current.sessionId = readyData.session_id;
               }
-              if (Number.isFinite(readyData.last_seq)) {
+              if (readyData.resumed === false) {
+                sessionStateRef.current.lastSeq = Number.isFinite(readyData.last_seq) ? Number(readyData.last_seq) : 0;
+              } else if (Number.isFinite(readyData.last_seq)) {
                 sessionStateRef.current.lastSeq = Math.max(
                   sessionStateRef.current.lastSeq,
                   Number(readyData.last_seq)
@@ -293,10 +295,13 @@ export function useWSConnectionManager(deps: ConnectionManagerDeps) {
             resetSession();
           }
 
-          if (event.code === WS_CLOSE_NORMAL || event.code === 1001) {
+          if (event.code === WS_CLOSE_NORMAL || event.code === 1001 || event.code === 1012) {
             clearReconnectTimer();
             clearReconnectState();
             setConnectionState(ConnectionState.OFFLINE);
+            if (event.code === 1012) {
+              setReconnectError('Session connected in another tab.');
+            }
             return;
           }
 
@@ -320,6 +325,9 @@ export function useWSConnectionManager(deps: ConnectionManagerDeps) {
     cleanupTimers();
 
     if (wsRef.current) {
+      wsRef.current.onopen = null;
+      wsRef.current.onmessage = null;
+      wsRef.current.onerror = null;
       wsRef.current.onclose = null;
       wsRef.current.close(WS_CLOSE_NORMAL);
       wsRef.current = null;
@@ -363,6 +371,7 @@ export function useWSConnectionManager(deps: ConnectionManagerDeps) {
       wsRef.current.close(WS_CLOSE_NORMAL);
       wsRef.current = null;
     }
+    setConnectionState(ConnectionState.OFFLINE);
     setReconnectError(null);
   }, [resetSession, cleanupTimers, wsRef]);
 

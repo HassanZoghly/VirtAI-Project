@@ -176,18 +176,25 @@ class WSConnectionManager:
                         try:
                             data = json.loads(message["data"])
                             event = data.get("event")
-                            if event == "session_invalidated":
+                            if event in ("session_invalidated", "chat_session_deleted"):
                                 uid = data.get("user_id")
                                 fid = data.get("family_id")
+                                sid = data.get("session_id")
                                 if not uid:
                                     continue
 
                                 sockets_to_close: set = set()
                                 async with self._lock:
-                                    if fid == "all":
-                                        sockets_to_close = set(self._user_to_ws.get(uid, []))
+                                    if event == "chat_session_deleted":
+                                        if sid:
+                                            ws = self._active.get(sid)
+                                            if ws:
+                                                sockets_to_close.add(ws)
                                     else:
-                                        sockets_to_close = set(self._family_to_ws.get(fid, []))
+                                        if fid == "all":
+                                            sockets_to_close = set(self._user_to_ws.get(uid, []))
+                                        else:
+                                            sockets_to_close = set(self._family_to_ws.get(fid, []))
 
                                 for ws in sockets_to_close:
                                     try:
@@ -195,7 +202,7 @@ class WSConnectionManager:
                                     except Exception:
                                         pass
                                     logger.info(
-                                        f"[WSManager] Closed connection | user={uid} | family={fid} | "
+                                        f"[WSManager] Closed connection | user={uid} | session_id={sid or 'all'} | "
                                         f"reason=Session invalidated via PubSub"
                                     )
                         except Exception as e:

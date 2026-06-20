@@ -6,12 +6,15 @@
 
 FROM pytorch/pytorch:2.6.0-cuda12.6-cudnn9-runtime
 
+ARG DEBIAN_FRONTEND=noninteractive
 # ── Environment ─────────────────────────────────────────────
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_ROOT_USER_ACTION=ignore \
     XDG_CACHE_HOME=/app/.cache \
     HF_HOME=/app/.cache/huggingface \
+    HF_HUB_DISABLE_TELEMETRY=1 \
     FASTEMBED_CACHE_DIR=/app/.cache/fastembed
 
 WORKDIR /app
@@ -20,15 +23,17 @@ ARG EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 ENV EMBEDDING_MODEL=${EMBEDDING_MODEL}
 
 # ── System dependencies ────────────────────────────────────
-RUN apt-get update && \
+RUN rm -f /etc/apt/apt.conf.d/docker-clean; echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
     tesseract-ocr \
     tesseract-ocr-eng \
     poppler-utils && \
-    tesseract --version && \
-    rm -rf /var/lib/apt/lists/*
+    tesseract --version
 
 # ── Install heavy ML dependencies (Layer 1) ────────────────
 # Install stable, heavy ML dependencies first to avoid re-downloading
@@ -69,8 +74,12 @@ COPY app ./app
 COPY alembic.ini ./alembic.ini
 COPY alembic ./alembic
 
-# ── Runtime directories ────────────────────────────────────
-RUN mkdir -p /app/.data/sessions /app/.data/uploads
+# ── Runtime directories & Security ───────────────────────────
+RUN mkdir -p /app/.data/sessions /app/.data/uploads && \
+    useradd -m appuser && \
+    chown -R appuser:appuser /app/.data && \
+    chown -R appuser:appuser /app
+# USER appuser
 
 # ── Expose port ────────────────────────────────────────────
 EXPOSE 8000

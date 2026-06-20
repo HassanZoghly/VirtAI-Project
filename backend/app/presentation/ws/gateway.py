@@ -109,6 +109,9 @@ class WebSocketHandler:
         except Exception as e:
             logger.debug(f"[WS] Could not send abort frame during cleanup: {e}")
 
+        if self.session and getattr(self.session, "session_id", None):
+            await self.connection_manager.unregister(self.session.session_id, self.ws)
+
         from app.shared.metrics import ws_connections_active
 
         ws_connections_active.dec()

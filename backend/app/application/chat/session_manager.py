@@ -223,7 +223,13 @@ class SessionManager:
                 if persisted.get("user_id") != user_id:
                     raise PermissionError("Cannot attach to another user's session.")
             else:
-                await repo.create_chat_session(user_id=user_id, session_id=sid)
+                from sqlalchemy.exc import IntegrityError
+                try:
+                    # Wrap the create_chat_session in a nested transaction (savepoint) to make it atomic
+                    async with repo.db.begin_nested():
+                        await repo.create_chat_session(user_id=user_id, session_id=sid)
+                except IntegrityError:
+                    pass  # It already exists
 
         # Create service instances
         asr = asr_service or (self._asr_service_factory() if self._asr_service_factory else None)
@@ -291,6 +297,9 @@ class SessionManager:
             if session:
                 if user_id and session.user_id != user_id:
                     raise PermissionError("Cannot attach to another user's session.")
+                if avatar_id and session.avatar_id != avatar_id:
+                    session.pipeline.change_avatar(avatar_id)
+                    session.avatar_id = avatar_id
                 session.mark_connected()
                 self._set_session_tts_voice(session, voice_id, "updated")
                 return session
@@ -344,6 +353,22 @@ class SessionManager:
                     await session.pipeline._context_cache.invalidate(session_id)
                 del self._sessions[session_id]
         logger.info(f"Session removed | id={session_id}")
+
+    async def remove_user_sessions(self, user_id: str) -> None:
+        parsed_user_id = parse_uuid(user_id)
+        if parsed_user_id is None:
+            return
+        user_id = str(parsed_user_id)
+        async with self._lock:
+            to_remove = [sid for sid, s in self._sessions.items() if s.user_id == user_id]
+            for sid in to_remove:
+                session = self._sessions[sid]
+                session.cleanup()
+                if session.pipeline._context_cache:
+                    await session.pipeline._context_cache.invalidate(sid)
+                del self._sessions[sid]
+        if to_remove:
+            logger.info(f"Removed {len(to_remove)} sessions for user={user_id}")
 
     async def cleanup_idle(self) -> int:
         async with self._lock:

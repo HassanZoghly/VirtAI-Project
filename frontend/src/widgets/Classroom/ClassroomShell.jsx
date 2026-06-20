@@ -1,13 +1,13 @@
 // Avatar imports removed
-import { ChatInput, MessageList } from '@/features/chat';
-import { SettingsDrawer, useSessionManager } from '@/features/session';
-import { DocumentsDrawer } from '@/features/documents/components/DocumentsDrawer';
-import { loadSetup } from '@/features/setup';
-import useConversationReducer from '@/features/chat/hooks/useConversationReducer';
 import useWSClient, { ConnectionState } from '@/core/realtime/useWSClient';
 import { useAuthStore } from '@/features/auth/store/authStore';
+import { ChatInput, MessageList } from '@/features/chat';
+import useConversationReducer from '@/features/chat/hooks/useConversationReducer';
+import { DocumentsDrawer } from '@/features/documents/components/DocumentsDrawer';
+import { SettingsDrawer, useSessionManager } from '@/features/session';
+import { loadSetup } from '@/features/setup';
 import { toast } from '@/shared/utils/toast';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { PiGearFill, PiWifiSlashFill } from 'react-icons/pi';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -148,10 +148,10 @@ export default function ClassroomShell() {
   const renameSession = session.renameSession;
 
   const WS_URL =
-    status === 'success' ? buildWsUrl(wsAvatarId, activeVoiceId, currentSessionId) : null;
+    status === 'success' && currentSessionId ? buildWsUrl(wsAvatarId, activeVoiceId, currentSessionId) : null;
 
   const { connectionState, isConnected, send, onMessage, reconnect, reconnectError, disconnect } =
-    useWSClient(WS_URL);
+    useWSClient(WS_URL, currentSessionId);
 
   const handleClearAllSessions = useCallback(async () => {
     disconnect();
@@ -184,6 +184,22 @@ export default function ClassroomShell() {
   const audioPlayerRef = useRef(null);
   const playedAudioIdsRef = useRef(new Set());
   const isFallbackAudioPlayingRef = useRef(false);
+  const pendingFirstMessagesRef = useRef([]);
+  const currentSessionIdRef = useRef(currentSessionId);
+
+  useEffect(() => {
+    currentSessionIdRef.current = currentSessionId;
+  }, [currentSessionId]);
+
+  useEffect(() => {
+    if (isConnected && pendingFirstMessagesRef.current.length > 0 && currentSessionId) {
+      const messages = [...pendingFirstMessagesRef.current];
+      pendingFirstMessagesRef.current = [];
+      messages.forEach(({ text, message_id }) => {
+        send({ type: 'chat.user_message', data: { message_id, text } });
+      });
+    }
+  }, [isConnected, currentSessionId, send]);
 
   const sessionRef = useRef(session);
   useEffect(() => {
@@ -209,24 +225,27 @@ export default function ClassroomShell() {
     }
   }, [currentSessionId, dispatch, resetAvatarAudio]);
 
-  const ensureSessionAndSend = useCallback(
-    async (text, sendAction) => {
-      let activeId = currentSessionId;
-      if (!activeId) {
-        activeId = await handleFirstMessage(text);
-        if (!activeId) {
-          toast.error('Error', 'Failed to initialize session');
-          return;
-        }
-      }
-      sendAction(activeId);
-    },
-    [currentSessionId, handleFirstMessage]
-  );
-
   const commitAndSend = useCallback(
     (text) => {
-      ensureSessionAndSend(text, (activeId) => {
+      let activeId = currentSessionId;
+      if (!activeId) {
+        const message_id = crypto.randomUUID();
+        resetAvatarAudio();
+        dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
+        dispatch({ type: 'PIPELINE_STATE', payload: { state: 'thinking' } });
+        pendingFirstMessagesRef.current.push({ message_id, text });
+
+        handleFirstMessage(text).then((newId) => {
+          if (newId) {
+            pendingFirstMessagesRef.current.forEach((msg) => {
+              sessionRef.current.addUserMessage(
+                { id: msg.message_id, role: 'user', content: msg.text, timestamp: Date.now() },
+                newId
+              );
+            });
+          }
+        });
+      } else {
         const message_id = crypto.randomUUID();
         resetAvatarAudio();
         dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
@@ -236,9 +255,9 @@ export default function ClassroomShell() {
           activeId
         );
         send({ type: 'chat.user_message', data: { message_id, text } });
-      });
+      }
     },
-    [dispatch, send, ensureSessionAndSend, resetAvatarAudio]
+    [dispatch, send, currentSessionId, handleFirstMessage, resetAvatarAudio]
   );
 
   const safeSend = useCallback(
@@ -268,6 +287,10 @@ export default function ClassroomShell() {
       // EXPLICIT MEDIA HALT: clear media state to force AvatarController to pause and unmount audio
       resetAvatarAudio();
       setMouthCues([]);
+      pendingFirstMessagesRef.current = [];
+      if (prevId !== null && nextId !== null) {
+        dispatch({ type: 'RESET' });
+      }
 
       if (chatScrollRef.current) {
         scrollPositionsRef.current.set(prevId, chatScrollRef.current.scrollTop);
@@ -287,8 +310,14 @@ export default function ClassroomShell() {
 
   // WebSocket message subscriptions
   useEffect(() => {
+    const checkSession = (d) => {
+      if (d && d.session_id && d.session_id !== currentSessionIdRef.current) return false;
+      return true;
+    };
+
     const unsubs = [
       onMessage('user.message.echo', (d) => {
+        if (!checkSession(d)) return;
         if (!d?.message_id || !d?.text) {
           return;
         }
@@ -303,17 +332,23 @@ export default function ClassroomShell() {
         }
       }),
       onMessage('chat.delta', (d) => {
+        if (!checkSession(d)) return;
         if (d.delta) d.delta = d.delta.replace(/\[.*?\]/g, '');
         dispatch({ type: 'CHAT_DELTA', payload: d });
       }),
       onMessage('chat.final', (d) => {
+        if (!checkSession(d)) return;
         if (d.text) d.text = d.text.replace(/\[.*?\]/g, '');
         dispatch({ type: 'CHAT_FINAL', payload: d });
         sessionRef.current.addAssistantMessage(`${d.message_id}-assistant`, d.text, d.session_id);
       }),
-      onMessage('pipeline.state', (d) => dispatch({ type: 'PIPELINE_STATE', payload: d })),
+      onMessage('pipeline.state', (d) => {
+        if (!checkSession(d)) return;
+        dispatch({ type: 'PIPELINE_STATE', payload: d });
+      }),
       onMessage('animation.timeline.v2', () => { /* Handled internally by audio sync */ }),
       onMessage('tts.ready', (d) => {
+        if (!checkSession(d)) return;
         const url = d?.audio?.url;
         if (!url) {
           return;
@@ -330,8 +365,12 @@ export default function ClassroomShell() {
           },
         ]);
       }),
-      onMessage('visemes.ready', (d) => setMouthCues(d.mouthCues)),
+      onMessage('visemes.ready', (d) => {
+        if (!checkSession(d)) return;
+        setMouthCues(d.mouthCues);
+      }),
       onMessage('error', (d) => {
+        if (!checkSession(d)) return;
         dispatch({ type: 'ERROR', payload: d });
         toast.error('Error', d.message || 'An error occurred', 5000);
       }),
@@ -439,10 +478,10 @@ export default function ClassroomShell() {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    if (!isConnected) {
+    if (!isConnected && currentSessionId !== null) {
       toast.warning('Offline', 'Message queued. Will send when connected.', 3000);
     }
-  }, [inputValue, isConnected, commitAndSend]);
+  }, [inputValue, isConnected, currentSessionId, commitAndSend]);
 
   const onKeyDown = useCallback(
     (e) => {
@@ -456,6 +495,7 @@ export default function ClassroomShell() {
 
 
   const statusBadgeClass =
+    !currentSessionId ? 'idle' :
     {
       [ConnectionState.OFFLINE]: 'offline',
       [ConnectionState.RECONNECTING]: 'reconnecting',
@@ -464,6 +504,7 @@ export default function ClassroomShell() {
     }[connectionState] || 'offline';
 
   const statusLabel =
+    !currentSessionId ? `${avatarName} — Ready` :
     reconnectError ||
     {
       [ConnectionState.OFFLINE]: `${avatarName} — Offline`,
@@ -543,7 +584,7 @@ export default function ClassroomShell() {
             role="status"
             aria-live="polite"
           >
-            {connectionState === ConnectionState.OFFLINE ? (
+            {connectionState === ConnectionState.OFFLINE && currentSessionId !== null ? (
               <PiWifiSlashFill className="status-icon-offline" />
             ) : (
               <span
@@ -551,7 +592,9 @@ export default function ClassroomShell() {
                   ? ' status-dot-reconnecting'
                   : connectionState === ConnectionState.INITIALIZING
                     ? ' status-dot-initializing'
-                    : ''
+                    : currentSessionId === null
+                      ? ' status-dot-idle'
+                      : ''
                   }`}
               />
             )}

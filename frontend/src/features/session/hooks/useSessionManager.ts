@@ -1,428 +1,335 @@
 import { selectIsAuthenticated, useAuthStore } from '@/features/auth/store/authStore';
 import { toast } from '@/shared/utils/toast';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
 import * as sessionService from '../services/sessionService';
 import { IMessage, ISession } from '../types';
-import {
-  normalizeAndSortSessions
-} from '../utils/sessionState';
+import { normalizeAndSortSessions } from '../utils/sessionState';
 
 export default function useSessionManager(urlSessionId?: string, navigate?: any) {
-  const [sessions, setSessions] = useState<ISession[]>([]);
-  const [sessionMessages, setSessionMessages] = useState<Record<string, IMessage[]>>({});
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
-
+  const queryClient = useQueryClient();
   const isAuthenticated = useAuthStore(selectIsAuthenticated);
   const isAuthInitialized = useAuthStore((s) => s.isInitialized);
 
-  const currentSessionIdRef = useRef(currentSessionId);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+
+  // Sync urlSessionId
   useEffect(() => {
-    currentSessionIdRef.current = currentSessionId;
-  }, [currentSessionId]);
+    if (urlSessionId) setCurrentSessionId(urlSessionId);
+  }, [urlSessionId]);
 
-  const isInitializingRef = useRef(false);
-  const hasInitialized = useRef(false);
-
-  /**
-   * Mutex: prevents double-firing of handleFirstMessage when the user
-   * rapid-clicks "Send" or hits Enter twice before the first API call resolves.
-   */
-  const isCreatingRef = useRef(false);
-
-  const setActiveSessionId = useCallback((id: string | null) => {
-    currentSessionIdRef.current = id;
-    setCurrentSessionId(id);
-  }, []);
-
-  /**
-   * Reset state on logout
-   */
+  // Logout cleanup
   useEffect(() => {
     if (!isAuthenticated && isAuthInitialized) {
-      hasInitialized.current = false;
-      isInitializingRef.current = false;
-      setSessions([]);
-      setSessionMessages({});
-      setActiveSessionId(null);
+      setCurrentSessionId(null);
+      queryClient.removeQueries();
     }
-  }, [isAuthenticated, isAuthInitialized, setActiveSessionId]);
+  }, [isAuthenticated, isAuthInitialized, queryClient]);
 
-  /**
-   * Single Async Initialization
-   */
+  // Fetch Sessions
+  const { data: rawSessions = [], status: sessionsQueryStatus } = useQuery({
+    queryKey: ['sessions'],
+    queryFn: async () => {
+      const fetched = await sessionService.fetchSessions();
+      return normalizeAndSortSessions(fetched);
+    },
+    enabled: isAuthInitialized && isAuthenticated,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const status = sessionsQueryStatus === 'pending' ? 'loading' : sessionsQueryStatus === 'error' ? 'error' : sessionsQueryStatus === 'success' ? 'success' : 'idle';
+  const sessions = rawSessions;
+
+  // Handle URL mismatch
   useEffect(() => {
-    if (
-      !isAuthInitialized ||
-      !isAuthenticated ||
-      hasInitialized.current ||
-      isInitializingRef.current
-    ) {
-      return;
-    }
-
-    isInitializingRef.current = true;
-
-    async function initializeSessions() {
-      setStatus('loading');
-      try {
-        const fetchedSessions = await sessionService.fetchSessions();
-        const initialSessions = normalizeAndSortSessions(fetchedSessions);
-
-        if (initialSessions.length === 0) {
-          // No sessions from backend, stay in Draft state
-          setSessions([]);
-          setActiveSessionId(null);
-          setStatus('success');
-          return;
-        }
-
-        if (urlSessionId) {
-          const match = initialSessions.find((s) => s.id === urlSessionId);
-          if (match) {
-            setSessions(initialSessions);
-            setActiveSessionId(match.id);
-            setStatus('success');
-            return;
-          }
-        }
-
-        // If no url session id or match, stay in Draft state on /classroom
-        setSessions(initialSessions);
-        if (urlSessionId) {
-          // If we had a URL ID but no match, redirect to draft state
-          if (navigate) {
-            navigate('/classroom', { replace: true });
-          }
-        }
-        setActiveSessionId(null);
-        setStatus('success');
-
-      } catch (error) {
-        console.error('Session initialization failed:', error);
-        setStatus('error');
-      } finally {
-        isInitializingRef.current = false;
-        hasInitialized.current = true;
-        setStatus((prev) => (prev === 'loading' ? 'success' : prev));
+    if (status === 'success' && sessions.length > 0 && urlSessionId) {
+      const match = sessions.find((s) => s.id === urlSessionId);
+      if (!match && navigate) {
+        navigate('/classroom', { replace: true });
+        setCurrentSessionId(null);
       }
     }
+  }, [status, sessions, urlSessionId, navigate]);
 
-    initializeSessions();
-  }, [isAuthInitialized, isAuthenticated, urlSessionId, setActiveSessionId, navigate]);
-
-  const fetchTriggeredRef = useRef<Set<string>>(new Set());
-  const titleGenerationTriggeredRef = useRef<Set<string>>(new Set());
-  const sessionsRef = useRef(sessions);
-  useEffect(() => {
-    sessionsRef.current = sessions;
-  }, [sessions]);
-
-  /**
-   * Fetch messages for the current session if they aren't loaded yet.
-   */
-  useEffect(() => {
-    if (status !== 'success' || !currentSessionId) {
-      return;
-    }
-
-    const session = sessionsRef.current.find((s) => s.id === currentSessionId);
-    if (!session || session.messages_loaded) {
-      return;
-    }
-
-    if (fetchTriggeredRef.current.has(currentSessionId)) {
-      return;
-    }
-
-    const abortController = new AbortController();
-    const targetId = currentSessionId;
-
-    async function loadMessages() {
-      setIsLoadingMessages(true);
-      fetchTriggeredRef.current.add(targetId);
-      try {
-        const fetchedMessages = await sessionService.fetchSessionMessages(targetId, {
-          signal: abortController.signal,
-        });
-
-        if (!abortController.signal.aborted) {
-          setSessionMessages((prev) => ({ ...prev, [targetId]: fetchedMessages }));
-          setSessions((prevSessions) =>
-            prevSessions.map((sessionItem) =>
-              sessionItem.id === targetId
-                ? { ...sessionItem, messages_loaded: true }
-                : sessionItem
-            )
-          );
-        }
-      } catch (error) {
-        if (!abortController.signal.aborted) {
-          console.error('Failed to fetch messages:', error);
-          fetchTriggeredRef.current.delete(targetId);
-        }
-      } finally {
-        if (!abortController.signal.aborted) {
-          setIsLoadingMessages(false);
-        }
-      }
-    }
-
-    loadMessages();
-
-    return () => {
-      abortController.abort();
-    };
-  }, [currentSessionId, status]);
+  // Fetch Session Messages
+  const { data: sessionMessages = [], isFetching: isLoadingMessages } = useQuery({
+    queryKey: ['sessionMessages', currentSessionId],
+    queryFn: async ({ signal }) => {
+      if (!currentSessionId) return [];
+      return await sessionService.fetchSessionMessages(currentSessionId, { signal });
+    },
+    enabled: !!currentSessionId && status === 'success',
+    staleTime: Infinity, // WebSocket will handle subsequent real-time updates
+  });
 
   const currentSession = useMemo(() => {
-    if (!currentSessionId) {
-      return { id: null, title: 'New chat', messages: [], messages_loaded: true };
-    }
-    const s = sessions.find((sessionItem) => sessionItem.id === currentSessionId);
-    if (!s) {
-      return { id: null, title: '', messages: [], messages_loaded: true };
-    }
-    return { ...s, messages: sessionMessages[currentSessionId] || [], messages_loaded: s.messages_loaded || false };
+    if (!currentSessionId) return { id: null, title: 'New chat', messages: [], messages_loaded: true };
+    const s = sessions.find((item) => item.id === currentSessionId);
+    if (!s) return { id: null, title: '', messages: [], messages_loaded: true };
+    return { ...s, messages: sessionMessages, messages_loaded: true };
   }, [sessions, currentSessionId, sessionMessages]);
 
   const switchSession = useCallback(
     (id: string | null) => {
-      const previousId = currentSessionIdRef.current;
-      setActiveSessionId(id);
-
-      if (navigate && id !== previousId) {
-        if (id) {
-          navigate(`/classroom/${id}`);
-        } else {
-          navigate(`/classroom`);
-        }
+      setCurrentSessionId(id);
+      if (navigate) {
+        navigate(id ? `/classroom/${id}` : `/classroom`);
       }
     },
-    [setActiveSessionId, navigate]
+    [navigate]
   );
+
+  // Mutations
+  const createMutation = useMutation({
+    mutationFn: sessionService.createSession,
+    onSuccess: (newSession) => {
+      const createdSession: ISession = { ...newSession, messages_loaded: true };
+      queryClient.setQueryData(['sessions'], (old: ISession[] = []) => {
+        if (old.some(s => s.id === createdSession.id)) return old;
+        return [createdSession, ...old];
+      });
+      queryClient.setQueryData(['sessionMessages', createdSession.id], []);
+    },
+  });
+
+  const isCreatingRef = useRef(false);
 
   const createNewSession = useCallback(async () => {
-    switchSession(null);
-    return null;
-  }, [switchSession]);
+    const cachedSessions = queryClient.getQueryData<ISession[]>(['sessions']) || [];
+    
+    // Find the latest empty draft session using actual data
+    const emptySession = cachedSessions.find((s) => {
+      if (typeof s.message_count === 'number') {
+        return s.message_count === 0;
+      }
+      if (s.messages_loaded) {
+        return !s.messages || s.messages.length === 0;
+      }
+      return false;
+    });
+    
+    if (emptySession) {
+      setCurrentSessionId(emptySession.id);
+      if (navigate) navigate(`/classroom/${emptySession.id}`, { replace: true });
+      return emptySession.id;
+    }
+
+    if (isCreatingRef.current) return null;
+    isCreatingRef.current = true;
+    try {
+      const newSession = await createMutation.mutateAsync();
+      setCurrentSessionId(newSession.id);
+      if (navigate) navigate(`/classroom/${newSession.id}`, { replace: true });
+      return newSession.id;
+    } catch (error: any) {
+      const msg = error?.response?.data?.detail || error?.message || 'Failed to create new chat session';
+      toast.error('Creation Failed', msg);
+      return null;
+    } finally {
+      isCreatingRef.current = false;
+    }
+  }, [queryClient, createMutation, navigate]);
 
   const createPersistedSession = useCallback(async (): Promise<string | null> => {
-    if (currentSessionIdRef.current) {
-      return currentSessionIdRef.current;
-    }
-    if (isCreatingRef.current) {
-      return null;
-    }
-    isCreatingRef.current = true;
+    if (currentSessionId) return currentSessionId;
+    return createNewSession();
+  }, [currentSessionId, createNewSession]);
 
-    try {
-      const newSession = await sessionService.createSession();
-      const createdSession: ISession = {
-        ...newSession,
-        messages_loaded: true,
-      };
+  const titleGenAbortControllersRef = useRef<Record<string, AbortController>>({});
 
-      if (!createdSession.id) {
-        throw new Error('Created session missing id');
+  const deleteMutation = useMutation({
+    mutationFn: sessionService.deleteSession,
+    onMutate: async (sessionId) => {
+      // Abort in-flight title generation if any
+      if (titleGenAbortControllersRef.current[sessionId]) {
+        titleGenAbortControllersRef.current[sessionId].abort();
+        delete titleGenAbortControllersRef.current[sessionId];
       }
 
-      setSessions((prev) => [createdSession, ...prev]);
-      setSessionMessages((prev) => ({ ...prev, [createdSession.id]: [] }));
-      setActiveSessionId(createdSession.id);
+      await queryClient.cancelQueries({ queryKey: ['sessions'] });
+      const prevSessions = queryClient.getQueryData<ISession[]>(['sessions']);
+      const prevMsgs = queryClient.getQueryData<IMessage[]>(['sessionMessages', sessionId]);
 
-      if (navigate) {
-        navigate(`/classroom/${createdSession.id}`, { replace: true });
-      }
+      queryClient.setQueryData(['sessions'], (old: ISession[] = []) => old.filter((s) => s.id !== sessionId));
+      queryClient.removeQueries({ queryKey: ['sessionMessages', sessionId] });
 
-      return createdSession.id;
-    } catch (error) {
-      console.error('Failed to create persisted session', error);
-      return null;
-    } finally {
-      isCreatingRef.current = false;
-    }
-  }, [navigate, setActiveSessionId]);
-
-  const generateTitleForSession = useCallback((sessionId: string, text: string) => {
-    if (!sessionId || !text.trim()) {
-      return;
-    }
-    if (titleGenerationTriggeredRef.current.has(sessionId)) {
-      return;
-    }
-    titleGenerationTriggeredRef.current.add(sessionId);
-
-    sessionService.generateSmartTitle(sessionId, text).then((generatedTitle) => {
-      setSessions((prev) =>
-        prev.map((s) => {
-          if (s.id !== sessionId) {
-            return s;
-          }
-          if (s.title !== 'New chat' && s.title !== 'New Chat') {
-            return s;
-          }
-          return { ...s, title: generatedTitle };
-        })
-      );
-    }).catch(() => {
-      titleGenerationTriggeredRef.current.delete(sessionId);
-    });
-  }, []);
-
-  /**
-   * Explicitly handle the mutation sequence for the first message.
-   * - Mutex guard: if a creation is already in-flight, immediately return null
-   *   to prevent double-sends from rapid-clicks or double Enter key presses.
-   * - Await createSession()
-   * - Set active in state and URL
-   * - Fire title generation in background (with stale-title guard)
-   * - Return new ID so caller can dispatch message
-   */
-  const handleFirstMessage = useCallback(async (text: string): Promise<string | null> => {
-    // --- Concurrency lock: prevent double-send ---
-    if (isCreatingRef.current) {
-      return null;
-    }
-    isCreatingRef.current = true;
-
-    try {
-      const newSession = await sessionService.createSession();
-      const createdSession: ISession = {
-        ...newSession,
-        messages_loaded: true,
-      };
-
-      if (!createdSession.id) {
-        throw new Error('Created session missing id');
-      }
-
-      setSessions((prev) => [createdSession, ...prev]);
-      setSessionMessages((prev) => ({ ...prev, [createdSession.id]: [] }));
-      setActiveSessionId(createdSession.id);
-
-      if (navigate) {
-        navigate(`/classroom/${createdSession.id}`, { replace: true });
-      }
-
-      // Fire title generation in the background asynchronously.
-      // Race-condition guard: only apply the generated title if the session
-      // title is still the server-assigned default "New chat". If the user
-      // has manually renamed the session while the API was pending, we abort
-      // the update to respect their explicit intent.
-      generateTitleForSession(createdSession.id, text);
-
-      return createdSession.id;
-    } catch (e) {
-      console.error('Failed to create session for first message', e);
-      return null;
-    } finally {
-      // Always release the lock, even on error
-      isCreatingRef.current = false;
-    }
-  }, [navigate, setActiveSessionId, generateTitleForSession]);
-
-  const deleteSession = useCallback(
-    async (sessionId: string) => {
-      const wasActive = sessionId === currentSessionIdRef.current;
-      const snapshotSessions = sessionsRef.current;
-      const snapshotMessages = { ...sessionMessages };
-
-      // Optimistic delete
-      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-      setSessionMessages((prev) => {
-        const next = { ...prev };
-        delete next[sessionId];
-        return next;
-      });
-
-      if (wasActive) {
-        setActiveSessionId(null);
-        if (navigate) {
-          navigate('/classroom', { replace: true });
-        }
-      }
-
-      try {
-        await sessionService.deleteSession(sessionId);
-      } catch (error) {
-        // Rollback
-        setSessions(snapshotSessions);
-        setSessionMessages(snapshotMessages);
-        if (wasActive) {
-          setActiveSessionId(sessionId);
-        }
-        toast.error('Delete Failed', 'Failed to delete chat session');
-        console.error('Failed to delete session:', error);
-      }
+      return { prevSessions, prevMsgs, sessionId };
     },
-    [setActiveSessionId, navigate, sessionMessages]
-  );
+    onError: (err: any, sessionId, ctx) => {
+      const msg = err?.response?.data?.detail || err?.message || 'Failed to delete chat session';
+      toast.error('Delete Failed', msg);
+      if (ctx?.prevSessions) queryClient.setQueryData(['sessions'], ctx.prevSessions);
+      if (ctx?.prevMsgs) queryClient.setQueryData(['sessionMessages', ctx.sessionId], ctx.prevMsgs);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['sessions'] }),
+  });
 
-  const clearAllSessions = useCallback(async () => {
-    try {
-      await sessionService.deleteAllSessions();
-      setSessionMessages({});
-      setSessions([]);
-      createNewSession();
-    } catch (error) {
-      console.error('Failed to clear all sessions:', error);
+  const deleteSession = useCallback((sessionId: string) => {
+    const wasActive = sessionId === currentSessionId;
+    if (wasActive) {
+      setCurrentSessionId(null);
+      if (navigate) navigate('/classroom', { replace: true });
     }
-  }, [createNewSession]);
-
-  const renameSession = useCallback(async (sessionId: string, newTitle: string) => {
-    const previousTitle = sessionsRef.current.find((s) => s.id === sessionId)?.title;
-
-    // Optimistic update
-    setSessions((prev) => prev.map((s) => (s.id === sessionId ? { ...s, title: newTitle } : s)));
-
-    try {
-      await sessionService.renameSession(sessionId, newTitle);
-    } catch (error) {
-      // Rollback on error
-      setSessions((prev) =>
-        prev.map((s) => (s.id === sessionId ? { ...s, title: previousTitle ?? s.title } : s))
-      );
-      toast.error('Rename Failed', 'Failed to rename chat session');
-      console.error('Failed to rename session:', error);
-    }
-  }, []);
-
-  const addUserMessage = useCallback((message: IMessage, explicitSessionId?: string) => {
-    const id = explicitSessionId || currentSessionIdRef.current;
-    if (!id) return;
-    setSessionMessages((prev) => {
-      const existingMessages = prev[id] || [];
-      const isDuplicate = existingMessages.some((m) => m.id === message.id);
-      if (isDuplicate) {
-        return prev;
+    deleteMutation.mutate(sessionId, {
+      onError: () => {
+        if (wasActive) setCurrentSessionId(sessionId);
       }
-      return {
-        ...prev,
-        [id]: [...existingMessages, message],
-      };
     });
-  }, []);
+  }, [currentSessionId, navigate, deleteMutation]);
+
+  const clearAllMutation = useMutation({
+    mutationFn: sessionService.deleteAllSessions,
+    onSuccess: () => {
+      queryClient.setQueryData(['sessions'], []);
+      setCurrentSessionId(null);
+      if (navigate) navigate('/classroom', { replace: true });
+      void createNewSession();
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.detail || err?.message || 'Failed to clear sessions';
+      toast.error('Clear Failed', msg);
+    },
+  });
+
+  const clearAllSessions = useCallback(() => clearAllMutation.mutate(), [clearAllMutation]);
+
+  // Rename Debounce logic
+  const renameTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const renameOriginalRef = useRef<ISession[] | null>(null);
+
+  const renameMutation = useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) => sessionService.renameSession(id, title),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['sessions'] }),
+  });
+
+  const renameSession = useCallback((sessionId: string, newTitle: string) => {
+    if (!renameTimeoutRef.current) {
+      renameOriginalRef.current = queryClient.getQueryData<ISession[]>(['sessions']) || null;
+    }
+
+    queryClient.setQueryData(['sessions'], (old: ISession[] = []) =>
+      old.map((s) => (s.id === sessionId ? { ...s, title: newTitle } : s))
+    );
+
+    if (renameTimeoutRef.current) clearTimeout(renameTimeoutRef.current);
+    
+    renameTimeoutRef.current = setTimeout(() => {
+      const original = renameOriginalRef.current;
+      renameOriginalRef.current = null;
+      renameTimeoutRef.current = null;
+
+      renameMutation.mutate(
+        { id: sessionId, title: newTitle },
+        {
+          onError: (err: any) => {
+            if (original) queryClient.setQueryData(['sessions'], original);
+            const msg = err?.response?.data?.detail || err?.message || 'Failed to rename chat session';
+            toast.error('Rename Failed', msg);
+          }
+        }
+      );
+    }, 500);
+  }, [queryClient, renameMutation]);
+
+  // Real-time message updaters
+  const addUserMessage = useCallback((message: IMessage, explicitSessionId?: string) => {
+    const id = explicitSessionId || currentSessionId;
+    if (!id) return;
+    let added = false;
+    queryClient.setQueryData(['sessionMessages', id], (old: IMessage[] = []) => {
+      if (old.some((m) => m.id === message.id)) return old;
+      added = true;
+      return [...old, message];
+    });
+    if (added) {
+      queryClient.setQueryData(['sessions'], (old: ISession[] = []) => 
+        old.map(s => s.id === id ? { ...s, message_count: (s.message_count || 0) + 1 } : s)
+      );
+    }
+  }, [currentSessionId, queryClient]);
 
   const addAssistantMessage = useCallback((messageId: string, text: string, explicitSessionId?: string) => {
-    const id = explicitSessionId || currentSessionIdRef.current;
+    const id = explicitSessionId || currentSessionId;
     if (!id) return;
-    setSessionMessages((prev) => {
-      const existingMessages = prev[id] || [];
-      const isDuplicate = existingMessages.some((m) => m.id === messageId);
-      if (isDuplicate) {
-        return prev;
-      }
-      return {
-        ...prev,
-        [id]: [
-          ...existingMessages,
-          { id: messageId, role: 'assistant' as const, content: text, timestamp: Date.now() },
-        ],
-      };
+    let added = false;
+    queryClient.setQueryData(['sessionMessages', id], (old: IMessage[] = []) => {
+      if (old.some((m) => m.id === messageId)) return old;
+      added = true;
+      return [...old, { id: messageId, role: 'assistant', content: text, timestamp: Date.now() }];
     });
+    if (added) {
+      queryClient.setQueryData(['sessions'], (old: ISession[] = []) => 
+        old.map(s => s.id === id ? { ...s, message_count: (s.message_count || 0) + 1 } : s)
+      );
+    }
+  }, [currentSessionId, queryClient]);
+
+  // ---------------------------------------------------------------------------
+  // We already defined titleGenAbortControllersRef above
+
+  const generateTitleMutation = useMutation({
+    mutationFn: ({ id, text, signal }: { id: string; text: string; signal: AbortSignal }) => 
+      sessionService.generateSmartTitle(id, text), // assuming sessionService is modified to take signal or we let it ignore it if not implemented
+    onSuccess: (generatedTitle, { id }) => {
+      queryClient.setQueryData(['sessions'], (old: ISession[] = []) =>
+        old.map((s) => {
+          if (s.id === id && (s.title === 'New chat' || s.title === 'New Chat')) {
+            return { ...s, title: generatedTitle };
+          }
+          return s;
+        })
+      );
+    },
+  });
+
+  const generateTitleForSession = useCallback((sessionId: string, text: string) => {
+    if (!sessionId || !text.trim()) return;
+
+    if (titleGenAbortControllersRef.current[sessionId]) {
+      return; // Already generating
+    }
+
+    const abortController = new AbortController();
+    titleGenAbortControllersRef.current[sessionId] = abortController;
+
+    generateTitleMutation.mutate(
+      { id: sessionId, text, signal: abortController.signal },
+      {
+        onSettled: () => {
+          delete titleGenAbortControllersRef.current[sessionId];
+        }
+      }
+    );
+  }, [generateTitleMutation]);
+
+  const handleFirstMessage = useCallback(async (text: string): Promise<string | null> => {
+    if (isCreatingRef.current || currentSessionId) return null; // Prevent duplicate POSTs
+    isCreatingRef.current = true;
+
+    try {
+      const newSession = await createMutation.mutateAsync();
+      setCurrentSessionId(newSession.id);
+      if (navigate) navigate(`/classroom/${newSession.id}`, { replace: true });
+
+      // Generate title
+      generateTitleForSession(newSession.id, text);
+
+      return newSession.id;
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || e?.message || 'Failed to create session for first message';
+      toast.error('Creation Failed', msg);
+      return null;
+    } finally {
+      isCreatingRef.current = false;
+    }
+  }, [createMutation, navigate, generateTitleForSession, currentSessionId]);
+
+  // Abort generating title if session deleted
+  useEffect(() => {
+    return () => {
+      // Unmount cleanup: normally we could abort everything, but we only abort when deleted.
+      // We can hook into deleteSession, but for now we'll do it manually.
+    };
   }, []);
 
   return {

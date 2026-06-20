@@ -22,21 +22,28 @@ class SessionBootstrap:
         family_id: str | None,
         session_pending: bool,
     ) -> tuple[Session, bool]:
-        """Creates or registers the session if pending."""
-        if not session_pending:
-            # Assume session is already created and managed outside, return as is (but we need the current session)
-            # Actually, the caller will handle if it's already created.
-            raise ValueError("ensure_session called but session is not pending")
+        """Registers the websocket to an existing session. Fails if no session_id provided."""
+        if not requested_session_id:
+            raise ValueError("WS lazy session creation is disabled. session_id is required.")
 
-        session = await self.session_manager.create_session(
-            user_id=user_id,
+        session = await self.session_manager.connect_existing_session(
             session_id=requested_session_id,
+            user_id=user_id,
             avatar_id=avatar_id,
             voice_id=voice_id,
         )
 
+        if not session:
+            logger.warning(f"[WS] Session {requested_session_id} not found or does not belong to user. Creating new session.")
+            session = await self.session_manager.create_session(
+                user_id=user_id,
+                session_id=requested_session_id,
+                avatar_id=avatar_id,
+                voice_id=voice_id,
+            )
+
         await self.connection_manager.register(
             session.session_id, websocket, user_id=user_id, family_id=family_id
         )
-        logger.info(f"[WS] Lazy session created | session={session.session_id}")
+        logger.info(f"[WS] Session registered | session={session.session_id}")
         return session, False

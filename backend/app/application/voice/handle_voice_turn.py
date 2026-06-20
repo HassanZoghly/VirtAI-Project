@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -204,8 +205,25 @@ class ConversationPipeline:
                 await asyncio.gather(*tasks, return_exceptions=True)
                 raise
 
-            # Output Persistence
-            if context.llm_full_response and not context.aborted:
+        except asyncio.CancelledError:
+            context.abort()
+            logger.info(
+                f"Pipeline cancelled | session={session_id} | message={message_id} | trace_id={trace_id}"
+            )
+            return
+        except Exception as e:
+            logger.error(f"Pipeline error: {e} | trace_id={trace_id}")
+            await send_callback(
+                make_error(
+                    code="PIPELINE_ERROR",
+                    message=str(e),
+                    session_id=session_id,
+                    message_id=message_id,
+                )
+            )
+        finally:
+            # Output Persistence (Save partial text if disconnected)
+            if context.llm_full_response:
                 tts_key: str | None = None
                 try:
                     if self._tts:
@@ -224,31 +242,17 @@ class ConversationPipeline:
                     )
 
                 if self._context_cache:
-                    await self._context_cache.push_message(
-                        session_id,
-                        "assistant",
-                        context.llm_full_response,
-                        extra={"tts_cache_key": tts_key} if tts_key else None,
-                    )
+                    # ensure we only yield control inside async if possible
+                    with suppress(Exception):
+                        await self._context_cache.push_message(
+                            session_id,
+                            "assistant",
+                            context.llm_full_response,
+                            extra={"tts_cache_key": tts_key} if tts_key else None,
+                        )
 
-        except asyncio.CancelledError:
-            context.abort()
-            logger.info(
-                f"Pipeline cancelled | session={session_id} | message={message_id} | trace_id={trace_id}"
-            )
-            return
-        except Exception as e:
-            logger.error(f"Pipeline error: {e} | trace_id={trace_id}")
-            await send_callback(
-                make_error(
-                    code="PIPELINE_ERROR",
-                    message=str(e),
-                    session_id=session_id,
-                    message_id=message_id,
-                )
-            )
-        finally:
-            await send_callback(make_pipeline_state(session_id, "idle"))
+            with suppress(Exception):
+                await send_callback(make_pipeline_state(session_id, "idle"))
             self._current_message_id = None
             self._current_context = None
             logger.info(

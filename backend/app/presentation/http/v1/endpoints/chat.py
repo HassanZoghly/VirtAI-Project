@@ -11,7 +11,7 @@ from app.domain.chat.entities import ConversationHistory
 from app.domain.user.entities import UserEntity
 from app.infrastructure.db.database import get_db
 from app.infrastructure.db.repositories.chat_repository import ChatRepository
-from app.presentation.http.v1.dependencies import ChatUseCaseDep, _current_user
+from app.presentation.http.v1.dependencies import ChatUseCaseDep, _current_user, get_session_manager
 from app.shared.ids import parse_uuid
 
 router = APIRouter()
@@ -190,12 +190,24 @@ async def rename_session(
 async def delete_all_sessions(
     user: UserEntity = Depends(_current_user),
     db: AsyncSession = Depends(get_db),
+    session_manager = Depends(get_session_manager),
 ) -> None:
     """Physically delete all sessions and messages for the user."""
     try:
+        await session_manager.remove_user_sessions(str(user.id))
         repo = ChatRepository(db)
         await repo.delete_all_user_sessions(str(user.id))
         await db.commit()
+        
+        from app.infrastructure.cache.redis_client import get_redis
+        import json
+        redis = get_redis()
+        event_payload = {
+            "event": "session_invalidated",
+            "user_id": str(user.id),
+            "family_id": "all"
+        }
+        await redis.publish(f"virtai:ws:events:{user.id}", json.dumps(event_payload))
     except Exception as e:
         logger.error(f"Failed to delete all sessions for {user.id}: {e}")
         await db.rollback()
@@ -207,22 +219,36 @@ async def delete_session(
     session_id: str,
     user: UserEntity = Depends(_current_user),
     db: AsyncSession = Depends(get_db),
+    session_manager = Depends(get_session_manager),
 ) -> None:
     """Physically delete a session and its messages."""
     if parse_uuid(session_id) is None:
         raise HTTPException(status_code=400, detail="Invalid session_id")
     try:
+        await session_manager.remove_session(session_id)
         repo = ChatRepository(db)
         session = await repo.get_chat_session(session_id)
         if not session or session.get("user_id") != str(user.id):
             raise HTTPException(status_code=404, detail="Session not found")
         await repo.delete_chat_session(session_id)
+        await db.commit()
+        
+        from app.infrastructure.cache.redis_client import get_redis
+        import json
+        redis = get_redis()
+        event_payload = {
+            "event": "chat_session_deleted",
+            "user_id": str(user.id),
+            "session_id": session_id
+        }
+        await redis.publish(f"virtai:ws:events:{user.id}", json.dumps(event_payload))
     except HTTPException:
         raise
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session_id")
     except Exception as e:
         logger.error(f"Failed to delete session {session_id}: {e}")
+        await db.rollback()
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

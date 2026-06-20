@@ -108,13 +108,9 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile
     container_name: virtai-frontend
     restart: unless-stopped
-    ports:
-      - '3000:3000'
-    environment:
-      VITE_API_TARGET: http://backend:8000
     depends_on:
       backend:
         condition: service_healthy

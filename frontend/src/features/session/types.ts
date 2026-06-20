@@ -6,6 +6,7 @@ export interface ISession {
   messages?: IMessage[];
   messages_loaded?: boolean;
   documents?: any[];
+  message_count?: number;
 }
 
 export interface IMessage {

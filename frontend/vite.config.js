@@ -32,14 +32,18 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: process.env.VITE_API_TARGET || 'http://localhost:8000',
+        target: process.env.VITE_API_TARGET || 'http://backend:8000',
         changeOrigin: true,
+        secure: false,
         ws: true,
       },
     },
   },
   optimizeDeps: {
     include: ['lottie-react'],
+  },
+  test: {
+    environment: 'happy-dom',
   },
 });
 

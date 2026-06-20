@@ -184,6 +184,7 @@ class Settings(BaseSettings):
 
     OPENAI_API_KEY: str = ""
     COHERE_API_KEY: str = ""
+    HF_TOKEN: str = ""
 
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
@@ -249,6 +250,10 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_safety(self):
+        if self.HF_TOKEN:
+            import os
+            os.environ["HF_TOKEN"] = self.HF_TOKEN
+
         if Environment.production != self.ENVIRONMENT:
             return self
         if self.DEBUG:

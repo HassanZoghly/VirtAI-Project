@@ -179,6 +179,12 @@ See [Microsoft Voice Gallery](https://speech.microsoft.com/portal/voicegallery) 
 |----------|---------|-------------|
 | `ALLOWED_ORIGINS` | `["http://localhost:3000", "http://localhost:5173"]` | Allowed frontend origins (JSON array) |
 
+### RAG & Hugging Face Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HF_TOKEN` | (None) | Optional Hugging Face User Access Token to prevent unauthenticated API rate-limiting or warnings when downloading local models. |
+
 <div style="width: 100%; height: 30px; background: linear-gradient(to right, rgb(235, 238, 212), rgb(235, 238, 212));"></div>
 
 ## **API Endpoints**

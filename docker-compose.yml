@@ -80,6 +80,7 @@ services:
       FASTEMBED_CACHE_DIR: /app/.cache/fastembed
     volumes:
       - backend-data:/app/.data
+      - backend-cache:/app/.cache
     networks:
       - virtai-network
     depends_on:
@@ -115,6 +116,7 @@ services:
       FASTEMBED_CACHE_DIR: /app/.cache/fastembed
     volumes:
       - backend-data:/app/.data
+      - backend-cache:/app/.cache
     networks:
       - virtai-network
     depends_on:
@@ -156,6 +158,7 @@ services:
       HF_HOME: /app/voices/huggingface
     volumes:
       - tts_config:/app/config
+      - tts-voices:/app/voices
     networks:
       - virtai-network
     healthcheck:
@@ -174,7 +177,9 @@ volumes:
   postgres-data:
   redis-data:
   backend-data:
+  backend-cache:
   tts_config:
+  tts-voices:
 
 networks:
   virtai-network:

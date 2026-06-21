@@ -49,6 +49,13 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     "cohere>=5.0.0" \
     "qdrant-client>=1.10.0"
 
+# Pre-download FastEmbed model into an image layer so production startup does
+# not fetch model files dynamically. A named Docker volume can persist this
+# cache across container replacements.
+# MOVED UP: Cache this BEFORE pyproject.toml is copied so dependency changes don't invalidate it.
+RUN mkdir -p /app/.cache/fastembed /app/.cache/huggingface && \
+    python -c "import os; from fastembed import TextEmbedding; model=os.environ.get('EMBEDDING_MODEL', 'BAAI/bge-small-en-v1.5'); list(TextEmbedding(model_name=model).embed(['warmup']))"
+
 # ── Install Python dependencies (Layer 2) ──────────────────
 # Copy only the dependency manifest so pip install is cached
 # independently of application source changes.
@@ -59,12 +66,6 @@ COPY pyproject.toml ./
 RUN --mount=type=cache,target=/root/.cache/pip \
     mkdir -p app && touch app/__init__.py && \
     pip install .
-
-# Pre-download FastEmbed model into an image layer so production startup does
-# not fetch model files dynamically. A named Docker volume can persist this
-# cache across container replacements.
-RUN mkdir -p /app/.cache/fastembed /app/.cache/huggingface && \
-    python -c "import os; from fastembed import TextEmbedding; model=os.environ.get('EMBEDDING_MODEL', 'BAAI/bge-small-en-v1.5'); list(TextEmbedding(model_name=model).embed(['warmup']))"
 
 # ── Copy application source (invalidates less often) ───────
 COPY app ./app

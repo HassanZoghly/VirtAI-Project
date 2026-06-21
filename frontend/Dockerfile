@@ -2,7 +2,8 @@
 FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN HUSKY=0 npm install --no-audit --no-fund --legacy-peer-deps
+RUN --mount=type=cache,target=/root/.npm \
+    HUSKY=0 npm install --no-audit --no-fund --legacy-peer-deps
 COPY . .
 RUN npm run build
 

@@ -26,4 +26,7 @@ services:
       - 3000:3000
     volumes:
       - ./frontend:/app
-      - /app/node_modules
+      - frontend-node-modules:/app/node_modules
+
+volumes:
+  frontend-node-modules:

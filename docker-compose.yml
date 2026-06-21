@@ -40,6 +40,27 @@ services:
       timeout: 5s
       retries: 5
 
+  backend-init:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: virtai-backend:latest
+    container_name: virtai-backend-init
+    env_file:
+      - ./backend/.env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      XDG_CACHE_HOME: /app/.cache
+      HF_HOME: /app/.cache/huggingface
+      FASTEMBED_CACHE_DIR: /app/.cache/fastembed
+    networks:
+      - virtai-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["alembic", "upgrade", "head"]
+
   backend:
     build:
       context: ./backend
@@ -59,10 +80,11 @@ services:
       FASTEMBED_CACHE_DIR: /app/.cache/fastembed
     volumes:
       - backend-data:/app/.data
-      - backend-cache:/app/.cache
     networks:
       - virtai-network
     depends_on:
+      backend-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -71,9 +93,9 @@ services:
         condition: service_healthy
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:8000/api/v1/health']
-      interval: 15s
-      timeout: 5s
-      start_period: 45s
+      interval: 10s
+      timeout: 10s
+      start_period: 90s
       retries: 5
 
   worker:
@@ -93,10 +115,11 @@ services:
       FASTEMBED_CACHE_DIR: /app/.cache/fastembed
     volumes:
       - backend-data:/app/.data
-      - backend-cache:/app/.cache
     networks:
       - virtai-network
     depends_on:
+      backend-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -104,8 +127,9 @@ services:
     healthcheck:
       test: ["CMD", "python", "-c", "import redis; redis.Redis(host='redis', password='${REDIS_PASSWORD}').ping()"]
       interval: 30s
-      timeout: 5s
-      retries: 3
+      timeout: 10s
+      start_period: 60s
+      retries: 5
 
   frontend:
     build:
@@ -120,7 +144,9 @@ services:
       - virtai-network
 
   tts:
-    image: ghcr.io/matatonic/openedai-speech
+    build:
+      context: ./tts
+      dockerfile: Dockerfile
     container_name: virtai-tts
     restart: unless-stopped
     ports:
@@ -129,23 +155,25 @@ services:
       TTS_HOME: /app/voices
       HF_HOME: /app/voices/huggingface
     volumes:
-      - tts_voices:/app/voices
       - tts_config:/app/config
     networks:
       - virtai-network
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:8000/health']
-      interval: 30s
-      timeout: 5s
-      start_period: 20s
-      retries: 3
+      interval: 10s
+      timeout: 15s
+      start_period: 120s
+      retries: 5
+    deploy:
+      resources:
+        reservations:
+          cpus: '1.0'
+          memory: '3G'
 
 volumes:
   postgres-data:
   redis-data:
   backend-data:
-  backend-cache:
-  tts_voices:
   tts_config:
 
 networks:

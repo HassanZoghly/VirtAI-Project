@@ -17,12 +17,23 @@ class PCMWorkletProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
 
-    // Target chunk size: 20-40ms at 16kHz = 320-640 samples
-    // Using 30ms (480 samples) as a good balance
-    this.targetChunkSize = 480;
+    // Target chunk size: 250ms at 16kHz = 4000 samples
+    // Using 250ms chunks ensures we send 4 chunks/sec, well below the 25 chunks/sec limit
+    this.targetChunkSize = 4000;
 
     // Accumulation buffer for samples
     this.buffer = [];
+
+    // Handle flush messages from main thread
+    this.port.onmessage = (event) => {
+      if (event.data && event.data.type === 'flush') {
+        if (this.buffer.length > 0) {
+          const chunk = new Float32Array(this.buffer);
+          this.port.postMessage(chunk);
+          this.buffer = [];
+        }
+      }
+    };
   }
 
   /**

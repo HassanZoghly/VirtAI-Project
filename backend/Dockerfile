@@ -30,6 +30,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
+    gosu \
     tesseract-ocr \
     tesseract-ocr-eng \
     poppler-utils && \
@@ -80,7 +81,10 @@ RUN mkdir -p /app/.data/sessions /app/.data/uploads && \
     useradd -m appuser && \
     chown -R appuser:appuser /app/.data && \
     chown -R appuser:appuser /app
-USER appuser
+
+COPY entrypoint.sh /entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
 
 # ── Expose port ────────────────────────────────────────────
 EXPOSE 8000

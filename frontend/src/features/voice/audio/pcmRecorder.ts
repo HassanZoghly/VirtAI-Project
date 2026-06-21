@@ -303,8 +303,15 @@ export class PCMRecorder {
     try {
       // Disconnect worklet node
       if (this.workletNode) {
-        this.workletNode.port.onmessage = null;
-        this.workletNode.disconnect();
+        // Send flush signal to capture remaining audio samples before destruction
+        this.workletNode.port.postMessage({ type: 'flush' });
+        
+        // Delay actual disconnection to allow the final chunk to be sent back
+        const node = this.workletNode;
+        setTimeout(() => {
+          node.port.onmessage = null;
+          node.disconnect();
+        }, 50);
         this.workletNode = null;
       }
 

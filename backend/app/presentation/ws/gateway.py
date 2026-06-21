@@ -72,6 +72,7 @@ class WebSocketHandler:
         # Background tasks
         self._heartbeat_task: asyncio.Task | None = None
         self._voice_mode_handler: VoiceModeHandler | None = None
+        self._turn_lock = asyncio.Lock()
 
         # Components
         self.outbound_sender = OutboundSender(self.ws, self.connection_manager)
@@ -293,11 +294,12 @@ class WebSocketHandler:
         if not text or not text.strip():
             return
 
-        await self._ensure_session()
-        await self.pipeline_bridge.cancel_pipeline()
-        pipeline = self.pipeline
-        if not pipeline:
-            raise RuntimeError("Pipeline not initialized")
+        async with self._turn_lock:
+            await self._ensure_session()
+            await self.pipeline_bridge.cancel_pipeline()
+            pipeline = self.pipeline
+            if not pipeline:
+                raise RuntimeError("Pipeline not initialized")
 
         message_id = str(uuid.uuid4())
         self._current_message_id = message_id

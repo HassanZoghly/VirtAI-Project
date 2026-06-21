@@ -39,6 +39,7 @@ class TokenBudgetManager:
         system_prompt: str,
         user_query: str,
         max_context_tokens: int,
+        history_tokens: int = 0,
     ) -> list[DocumentChunk | RetrievedDocument]:
         """
         Calculates the available token budget and returns only the chunks that fit.
@@ -46,7 +47,7 @@ class TokenBudgetManager:
         # Calculate base tokens
         system_tokens = self.count_tokens(system_prompt)
         query_tokens = self.count_tokens(user_query)
-        base_tokens = system_tokens + query_tokens
+        base_tokens = system_tokens + query_tokens + history_tokens
 
         # Add some buffer for formatting and structural tokens
         buffer_tokens = 100

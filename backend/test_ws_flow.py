@@ -1,7 +1,8 @@
 import asyncio
-import websockets
 import json
-import sys
+
+import websockets
+
 
 async def main():
     uri = "ws://localhost:8000/api/v1/chat/ws/test-session"
@@ -16,7 +17,7 @@ async def main():
             }
             await websocket.send(json.dumps(msg))
             print("Sent message. Waiting for responses...")
-            
+
             # Wait for some responses
             for _ in range(5):
                 response = await asyncio.wait_for(websocket.recv(), timeout=10.0)

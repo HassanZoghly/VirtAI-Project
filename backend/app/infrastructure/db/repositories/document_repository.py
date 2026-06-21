@@ -69,7 +69,7 @@ class DocumentRepository(DocumentRepositoryPort):
 
         scope = "SESSION" if session_id else "GLOBAL"
         s_id = require_uuid(session_id, field_name="session_id") if session_id else None
-        
+
         doc_id = require_uuid(id, field_name="id") if id else None
 
         doc = Document(
@@ -80,6 +80,7 @@ class DocumentRepository(DocumentRepositoryPort):
             status="QUEUED",
             current_stage="QUEUED",
             upload_date=_now(),
+            started_at=_now(),
             retrieval_scope=scope,
             scope_id=s_id,
             document_sha256=document_sha256,
@@ -255,7 +256,7 @@ class DocumentRepository(DocumentRepositoryPort):
         if session_id:
             s_id = require_uuid(session_id, field_name="session_id")
             stmt = stmt.where(Document.retrieval_scope == "SESSION", Document.scope_id == s_id)
-        
+
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
@@ -390,4 +391,18 @@ class DocumentRepository(DocumentRepositoryPort):
             DocumentChunk.document_id == require_uuid(document_id, field_name="document_id")
         )
         await self.db.execute(stmt)
+
+    async def delete_chunks_by_version(self, document_id: str, version: int) -> None:
+        stmt = delete(DocumentChunk).where(
+            DocumentChunk.document_id == require_uuid(document_id, field_name="document_id"),
+            DocumentChunk.chunk_version == version
+        )
+        await self.db.execute(stmt)
+
+    async def has_any_chunks(self, document_id: str) -> bool:
+        stmt = select(func.count(DocumentChunk.id)).where(
+            DocumentChunk.document_id == require_uuid(document_id, field_name="document_id")
+        )
+        result = await self.db.execute(stmt)
+        return (result.scalar_one() or 0) > 0
 

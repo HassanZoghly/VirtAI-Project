@@ -7,13 +7,6 @@ import { EventRouter } from './wsEventRouter';
 import { createReconnectPolicy, ReconnectPolicy } from './wsReconnectPolicy';
 import { buildResumeUrl, SessionResumeState } from './wsSessionResume';
 
-// Augment the window object for the internal reconnect callback.
-declare global {
-  interface Window {
-    _wsConnectFn?: (url: string) => void;
-  }
-}
-
 // Typed WebSocket extension — avoids `any` casts on custom props.
 interface ManagedWebSocket extends WebSocket {
   _mountId: number;
@@ -51,6 +44,10 @@ export function useWSConnectionManager(deps: ConnectionManagerDeps) {
   const initTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectedAtRef = useRef(0);
   const authRefreshAttemptsRef = useRef(0);
+
+  // Stable ref to the connect function so reconnect timers can call the
+  // latest version without being part of any dependency array.
+  const connectRef = useRef<(overrideUrl?: string | null, overrideToken?: string | null) => void>(() => {});
 
   const clearReconnectTimer = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -112,16 +109,14 @@ export function useWSConnectionManager(deps: ConnectionManagerDeps) {
       reconnectTimeoutRef.current = setTimeout(() => {
         reconnectTimeoutRef.current = null;
         if (!urlRef.current || urlRef.current !== expectedUrl) return;
-        if (window._wsConnectFn && expectedUrl) {
-          window._wsConnectFn(expectedUrl);
-        }
+        connectRef.current(expectedUrl, null);
       }, delay);
     },
     [clearReconnectTimer, pauseReconnect, urlRef]
   );
 
   const connect = useCallback(
-    (overrideUrl: string | null = null) => {
+    (overrideUrl: string | null = null, overrideToken: string | null = null) => {
       const currentUrl = overrideUrl || urlRef.current;
 
       if (!currentUrl) {
@@ -135,7 +130,9 @@ export function useWSConnectionManager(deps: ConnectionManagerDeps) {
         return;
       }
 
-      const currentAccessToken = accessTokenRef.current;
+      // Prefer an explicitly supplied token (e.g. freshly refreshed) so we
+      // never reconnect with the stale value still sitting in the React Ref.
+      const currentAccessToken = overrideToken ?? accessTokenRef.current;
       if (!currentAccessToken) {
         clearReconnectTimer();
         setConnectionState(ConnectionState.OFFLINE);
@@ -266,9 +263,14 @@ export function useWSConnectionManager(deps: ConnectionManagerDeps) {
             refreshAccessTokenSingleFlight()
               .then((data) => {
                 if (isIntentionalCloseRef.current) return;
-                useAuthStore.setState({ accessToken: data.access_token });
+                const freshToken: string = data.access_token;
+                // Update the store so the rest of the app has the new token.
+                useAuthStore.setState({ accessToken: freshToken });
                 isIntentionalCloseRef.current = false;
-                if (window._wsConnectFn) window._wsConnectFn(socket._sourceUrl);
+                // Pass the fresh token *directly* — do not rely on the React
+                // Ref (accessTokenRef) which may not have updated yet because
+                // the useEffect that syncs it has not yet committed.
+                connectRef.current(socket._sourceUrl, freshToken);
               })
               .catch(() => {
                 clearBrowserAuthState();
@@ -319,6 +321,12 @@ export function useWSConnectionManager(deps: ConnectionManagerDeps) {
     [urlRef, accessTokenRef, sessionStateRef, wsRef, clearReconnectTimer, pauseReconnect, flushQueue, scheduleAck, clearReconnectState, logBackendOffline, scheduleReconnect, resetSession, eventRouterRef]
   );
 
+  // Keep the stable ref pointing at the latest connect so reconnect timers
+  // and the token-refresh callback always call the current closure.
+  // This is an intentional pattern — assigning to a ref in render is safe
+  // because the assignment itself has no observable side-effects.
+  connectRef.current = connect;
+
   const disconnect = useCallback(() => {
     isIntentionalCloseRef.current = true;
     reconnectPolicyRef.current.reset();
@@ -352,8 +360,7 @@ export function useWSConnectionManager(deps: ConnectionManagerDeps) {
 
   const mount = useCallback(() => {
     mountIdRef.current = Math.random();
-    window._wsConnectFn = connect;
-  }, [connect]);
+  }, []);
 
   const unmount = useCallback(() => {
     isIntentionalCloseRef.current = true;

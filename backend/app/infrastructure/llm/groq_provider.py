@@ -160,7 +160,7 @@ class GroqLLMProvider(BaseLLMProvider):
                     )
         except Exception as e:
             logger.error(f"Groq LLM stream init failed: {e} | trace_id={trace_id}")
-            raise LLMException(f"LLM stream failed: {e!s}")
+            raise LLMException(f"LLM stream failed: {e!s}") from e
 
         # ── Process stream ────────────────────────────────────────────────────
         try:
@@ -200,7 +200,7 @@ class GroqLLMProvider(BaseLLMProvider):
             raise
         except Exception as e:
             logger.error(f"LLM stream error during iteration: {e} | trace_id={trace_id}")
-            raise LLMException(f"LLM stream error: {e!s}")
+            raise LLMException(f"LLM stream error: {e!s}") from e
 
         # ── Flush remaining buffer ────────────────────────────────────────────
         remainder = splitter.flush()
@@ -254,7 +254,7 @@ class GroqLLMProvider(BaseLLMProvider):
                     )
         except Exception as e:
             logger.error(f"Groq LLM complete failed: {e}")
-            raise LLMException(f"LLM complete failed: {e!s}")
+            raise LLMException(f"LLM complete failed: {e!s}") from e
         elapsed_ms = (time.perf_counter() - start_time) * 1000
 
         full_text = response.choices[0].message.content or ""

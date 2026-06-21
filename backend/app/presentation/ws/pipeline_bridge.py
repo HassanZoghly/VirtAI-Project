@@ -1,22 +1,6 @@
 import asyncio
-from contextlib import suppress
 
 from loguru import logger
-
-from app.domain.chat.entities import PipelineEvent, PipelineEventType
-from app.schemas.ws_messages import (
-    AvatarStatus,
-    ServerMessage,
-    ServerMessageType,
-    VisemeEvent,
-    VisemesData,
-    make_error_msg,
-    make_llm_chunk_msg,
-    make_status_msg,
-    make_transcript_msg,
-    make_tts_chunk_msg,
-    make_visemes_msg,
-)
 
 
 def _pipeline_task_done_callback(task: asyncio.Task) -> None:

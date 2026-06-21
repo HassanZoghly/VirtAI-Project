@@ -166,6 +166,8 @@ class Settings(BaseSettings):
     # RAG
     VECTOR_DB_BACKEND: Literal["PGVECTOR", "QDRANT"] = "PGVECTOR"
     VECTOR_DB_DISTANCE_METHOD: Literal["cosine", "dot"] = "cosine"
+    RAG_MIN_HYBRID_SCORE: float = 0.015
+    RAG_MIN_DENSE_SCORE: float = 0.5
 
     EMBEDDING_PROVIDER: Literal["openai", "cohere", "fastembed"] = "fastembed"
     EMBEDDING_MODEL: str = "BAAI/bge-small-en-v1.5"

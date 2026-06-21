@@ -1,16 +1,9 @@
 import { useReducer, Dispatch } from 'react';
 
-export interface IOutboxMessage {
-  id: string;
-  text: string;
-  timestamp: number;
-}
-
 export interface ConversationState {
   currentMessage: string;
   pipelineState: 'idle' | 'thinking' | 'speaking' | 'error';
   error: string | null;
-  outboxQueue: IOutboxMessage[];
   activeMessageId: string | null;
 }
 
@@ -18,7 +11,6 @@ const initialState: ConversationState = {
   currentMessage: '',
   pipelineState: 'idle',
   error: null,
-  outboxQueue: [],
   activeMessageId: null,
 };
 
@@ -29,10 +21,7 @@ type Action =
   | { type: 'USER_MESSAGE'; payload: { message_id: string; text: string } }
   | { type: 'ERROR'; payload: { message: string } }
   | { type: 'CLEAR_ERROR' }
-  | { type: 'RESET' }
-  | { type: 'ENQUEUE_MESSAGE'; payload: IOutboxMessage }
-  | { type: 'DEQUEUE_MESSAGE'; payload: { id: string } }
-  | { type: 'CLEAR_QUEUE' };
+  | { type: 'RESET' };
 
 function conversationReducer(state: ConversationState, action: Action): ConversationState {
   switch (action.type) {
@@ -81,21 +70,6 @@ function conversationReducer(state: ConversationState, action: Action): Conversa
       };
     case 'RESET':
       return initialState;
-    case 'ENQUEUE_MESSAGE':
-      return {
-        ...state,
-        outboxQueue: [...state.outboxQueue, action.payload],
-      };
-    case 'DEQUEUE_MESSAGE':
-      return {
-        ...state,
-        outboxQueue: state.outboxQueue.filter((m) => m.id !== action.payload.id),
-      };
-    case 'CLEAR_QUEUE':
-      return {
-        ...state,
-        outboxQueue: [],
-      };
     default:
       return state;
   }

@@ -26,13 +26,11 @@ from app.schemas.auth import (
 # ── voice_mode ───────────────────────────────────────────────
 from app.schemas.voice_mode import (
     AudioChunkMessage,
-    TranscriptMessage,
     VoiceModeError,
     VoiceModeStop,
     make_buffer_overflow_error,
     make_invalid_audio_format_error,
     make_rate_limit_error,
-    make_transcript_message,
     make_transcription_failed_error,
     make_voice_mode_error,
 )
@@ -57,6 +55,7 @@ from app.schemas.ws_messages import (
     # Legacy models
     ServerMessage,
     ServerMessageType,
+    TranscriptMessage,
     TTSReady,
     TTSRequest,
     VisemeEvent,
@@ -74,6 +73,7 @@ from app.schemas.ws_messages import (
     make_llm_chunk_msg,
     make_pipeline_state,
     make_status_msg,
+    make_transcript_message,
     make_transcript_msg,
     make_tts_chunk_msg,
     make_tts_ready,

@@ -9,7 +9,7 @@ import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import ClassVar
+from typing import Any, ClassVar
 
 _logger = logging.getLogger(__name__)
 
@@ -319,6 +319,16 @@ class ConversationHistory:
     max_tokens: int = 4096  # safe token limit threshold
     _messages: list[ChatMessage] = field(default_factory=list)
     sanitizer: Callable[[str], str] | None = None
+    _tokenizer: Any = field(init=False, default=None)
+    _tokenizer_failed: bool = field(init=False, default=False)
+
+    def __post_init__(self):
+        try:
+            import tiktoken
+            self._tokenizer = tiktoken.get_encoding("cl100k_base")
+        except ImportError:
+            self._tokenizer_failed = True
+            _logger.warning("tiktoken not installed, falling back to char heuristic")
 
     def add_user_message(self, content: str) -> None:
         """Add a user message, applying the configured sanitizer if present.
@@ -364,12 +374,21 @@ class ConversationHistory:
                 self.max_messages,
             )
 
-        while len(self._messages) >= 2:
-            total_chars = len(self.system_prompt) + sum(len(m.content) for m in self._messages)
-            estimated_tokens = total_chars // 4
+        if self._tokenizer:
+            system_tokens = len(self._tokenizer.encode(self.system_prompt, disallowed_special=()))
+            message_tokens = [len(self._tokenizer.encode(m.content, disallowed_special=())) for m in self._messages]
+            estimated_tokens = system_tokens + sum(message_tokens)
+        else:
+            estimated_tokens = (len(self.system_prompt) + sum(len(m.content) for m in self._messages)) // 4
 
-            if estimated_tokens <= self.max_tokens:
-                break
+        while len(self._messages) >= 2 and estimated_tokens > self.max_tokens:
+            if self._tokenizer:
+                dropped_tokens = message_tokens[0] + message_tokens[1]
+                message_tokens = message_tokens[2:]
+                estimated_tokens -= dropped_tokens
+            else:
+                dropped_chars = len(self._messages[0].content) + len(self._messages[1].content)
+                estimated_tokens -= dropped_chars // 4
 
             self._messages = self._messages[2:]
             _logger.warning(
@@ -378,6 +397,14 @@ class ConversationHistory:
                 self.max_tokens,
                 len(self._messages),
             )
+
+    def get_estimated_tokens(self) -> int:
+        """Calculates the current estimated token count using the tokenizer or heuristic fallback."""
+        if self._tokenizer:
+            system_tokens = len(self._tokenizer.encode(self.system_prompt, disallowed_special=()))
+            message_tokens = sum(len(self._tokenizer.encode(m.content, disallowed_special=())) for m in self._messages)
+            return system_tokens + message_tokens
+        return (len(self.system_prompt) + sum(len(m.content) for m in self._messages)) // 4
 
     @property
     def message_count(self) -> int:

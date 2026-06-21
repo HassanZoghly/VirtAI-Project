@@ -21,7 +21,6 @@ from app.shared.config import get_settings
 from app.shared.errors import (
     AvatarBaseException,
     avatar_exception_handler,
-    generic_exception_handler,
 )
 from app.shared.log_config import setup_logging
 
@@ -133,10 +132,12 @@ async def lifespan(app: FastAPI):
     try:
         from app.application.rag.intent_classifier import IntentClassifier
         logger.info("[IntentClassifier] Preloading Semantic Router V2.0...")
-        await asyncio.to_thread(IntentClassifier.preload)
+        app.state.intent_classifier = IntentClassifier(embedder)
+        await app.state.intent_classifier.initialize()
     except Exception as e:
-        logger.error(f"[IntentClassifier] CRITICAL FAIL: Preload crashed ({type(e).__name__}: {e}). "
-                     f"Falling back to standard retrieval.")
+        logger.error(f"[IntentClassifier] CRITICAL ERROR: Preload crashed ({type(e).__name__}: {e}). "
+                     f"Semantic router is offline. Gracefully degrading to standard chat/retrieval.")
+        app.state.intent_classifier = None
 
     redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
     app.state.arq_pool = await create_pool(redis_settings)
@@ -197,7 +198,7 @@ async def lifespan(app: FastAPI):
         from app.infrastructure.db.repositories.chat_repository import ChatRepository
 
         async with AsyncSessionLocal() as db:
-            yield ChatRepository(db)
+            yield ChatRepository(db, storage_provider=app.state.storage)
             await db.commit()
 
     def create_animation_stage():
@@ -225,6 +226,7 @@ async def lifespan(app: FastAPI):
         retrieval_service_factory=create_retrieval_service,
         animation_stage_factory=create_animation_stage,
         chat_context_cache_factory=create_chat_context_cache,
+        intent_classifier=getattr(app.state, "intent_classifier", None),
     )
     init_session_manager(session_manager)
 
@@ -258,18 +260,24 @@ async def lifespan(app: FastAPI):
         try:
             while True:
                 await asyncio.sleep(settings.STALE_QUEUE_THRESHOLD_MINUTES * 60)
-                from sqlalchemy import text
+                from datetime import timedelta
+
+                from sqlalchemy import select
 
                 from app.infrastructure.db.database import AsyncSessionLocal
+                from app.infrastructure.db.models import Document
+                from app.shared.config import utc_now
 
                 async with AsyncSessionLocal() as db:
-                    stmt = text(f"""
-                        SELECT id, user_id, filename, file_type, upload_source, storage_key
-                        FROM documents
-                        WHERE current_stage = 'QUEUED'
-                        AND upload_date < NOW() - INTERVAL '{settings.STALE_QUEUE_THRESHOLD_MINUTES} minutes'
-                        AND started_at IS NULL
-                    """)
+                    threshold_dt = utc_now() - timedelta(minutes=settings.STALE_QUEUE_THRESHOLD_MINUTES)
+                    stmt = select(
+                        Document.id, Document.user_id, Document.filename,
+                        Document.file_type, Document.upload_source, Document.storage_key
+                    ).where(
+                        Document.current_stage == 'QUEUED',
+                        Document.upload_date < threshold_dt,
+                        Document.started_at.is_(None)
+                    )
                     result = await db.execute(stmt)
                     rows = result.fetchall()
                     for row in rows:
@@ -310,8 +318,9 @@ async def lifespan(app: FastAPI):
         await arq_pool.close()
     await close_redis()
     await close_db()
-    from app.infrastructure.rag.fastembed_provider import FastEmbedProvider
-    FastEmbedProvider.shutdown_executor()
+    embedder = getattr(app.state, "embedder", None)
+    if embedder is not None:
+        await embedder.close()
     from app.infrastructure.rag.reranker import CrossEncoderReranker
     # Only shut down the executor if the real reranker was ever loaded
     if not CrossEncoderReranker._import_failed:
@@ -357,9 +366,19 @@ def create_app() -> FastAPI:
 
     app.add_middleware(CSRFMiddleware)
 
-    # ── Error Handlers ────────────────────────────────────────────────────────
+    import traceback
+
+    from fastapi.responses import JSONResponse
+
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        logger.error(f"Global exception caught: {exc}\n{traceback.format_exc()}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": "INTERNAL_SERVER_ERROR", "message": "An unexpected error occurred."}
+        )
+
     app.add_exception_handler(AvatarBaseException, avatar_exception_handler)
-    app.add_exception_handler(Exception, generic_exception_handler)
 
     # ── JWKS Endpoint ─────────────────────────────────────────────────────────
     @app.get("/.well-known/jwks.json", tags=["auth"])

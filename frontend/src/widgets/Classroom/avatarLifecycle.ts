@@ -1,6 +1,4 @@
-import {
-  isAvatarDebugEnabled,
-} from '@/features/avatar/utils/avatarFirstFrameValidation';
+const isAvatarDebugEnabled = (env: any) => false;
 import { logger as defaultLogger } from '@/shared/utils/logger';
 
 export const AVATAR_STATUS = {

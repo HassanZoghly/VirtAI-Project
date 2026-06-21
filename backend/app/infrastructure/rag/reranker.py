@@ -4,9 +4,8 @@ from loguru import logger
 
 from app.domain.rag.entities import DocumentChunk
 from app.domain.rag.ports import RerankerPort
-
-
 from app.shared.config import get_settings
+
 
 class DummyCrossEncoderReranker(RerankerPort):
     """
@@ -155,7 +154,7 @@ class CrossEncoderReranker(RerankerPort):
         pairs = [[query, chunk.chunk_text] for chunk in chunks]
         scores = self.model.predict(pairs)
         ranked = sorted(
-            zip(chunks, (float(s) for s in scores)), key=lambda x: x[1], reverse=True
+            zip(chunks, (float(s) for s in scores), strict=False), key=lambda x: x[1], reverse=True
         )
         return ranked[:top_k]
 

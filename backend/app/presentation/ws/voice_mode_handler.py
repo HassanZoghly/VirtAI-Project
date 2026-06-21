@@ -118,6 +118,11 @@ class VoiceModeHandler:
         self._transcription_tasks: set[asyncio.Task] = set()
         self.max_concurrent_transcriptions = 3
 
+        # Sequence tracking for strict ordering
+        self._current_sequence = 0
+        self._next_sequence_to_process = 1
+        self._completed_transcripts: dict[int, str] = {}
+
         # Rate limiting configuration
         self.rate_limit_chunks = rate_limit_chunks
         self.rate_limit_window = rate_limit_window
@@ -398,9 +403,12 @@ class VoiceModeHandler:
                     await self.websocket.send_json(error_message)
                 return
 
+            self._current_sequence += 1
+            seq = self._current_sequence
+
             task = asyncio.create_task(
-                self._transcribe_and_send(audio_data, total_size),
-                name=f"voice_asr_{self.session_id}",
+                self._transcribe_and_send(audio_data, total_size, seq),
+                name=f"voice_asr_{self.session_id}_{seq}",
             )
             self._track_transcription_task(task)
 
@@ -445,13 +453,14 @@ class VoiceModeHandler:
             # Clear buffer to prepare for next attempt
             self.audio_pipeline.clear_buffer()
 
-    async def _transcribe_and_send(self, audio_data, total_size: int) -> None:
+    async def _transcribe_and_send(self, audio_data, total_size: int, sequence_id: int) -> None:
         try:
             result = await self.asr_service.transcribe_stream(audio_data=audio_data)
 
             logger.info(
                 f"Transcription complete | "
                 f"session={self.session_id} | "
+                f"seq={sequence_id} | "
                 f"transcript_length={len(result.transcript)} | "
                 f"confidence={result.confidence:.2f} | "
                 f"language={result.language}"
@@ -464,20 +473,34 @@ class VoiceModeHandler:
                 language=result.language,
             )
 
-            # Pass transcript to conversation pipeline if not empty
-            if result.transcript.strip():
-                # Trigger conversation pipeline with the transcript
-                logger.info(
-                    f"Triggering conversation pipeline | "
-                    f"session={self.session_id} | "
-                    f"transcript='{result.transcript[:60]}'"
-                )
-                if self.turn_callback:
-                    await self.turn_callback(result.transcript)
-            else:
-                logger.warning(f"Empty transcript received | session={self.session_id}")
+            self._completed_transcripts[sequence_id] = result.transcript
+
+            # Process sequentially
+            while self._next_sequence_to_process in self._completed_transcripts:
+                transcript = self._completed_transcripts.pop(self._next_sequence_to_process)
+                current_seq = self._next_sequence_to_process
+                self._next_sequence_to_process += 1
+
+                if transcript.strip():
+                    logger.info(
+                        f"Triggering conversation pipeline | "
+                        f"session={self.session_id} | "
+                        f"seq={current_seq} | "
+                        f"transcript='{transcript[:60]}'"
+                    )
+                    if self.turn_callback:
+                        await self.turn_callback(transcript)
+                else:
+                    logger.warning(f"Empty transcript received | session={self.session_id} | seq={current_seq}")
 
         except Exception as e:
+            # Ensure sequence moves forward even on error
+            self._completed_transcripts[sequence_id] = ""
+            while self._next_sequence_to_process in self._completed_transcripts:
+                transcript = self._completed_transcripts.pop(self._next_sequence_to_process)
+                self._next_sequence_to_process += 1
+                if transcript.strip() and self.turn_callback:
+                    await self.turn_callback(transcript)
             # Comprehensive error logging for transcription failures (Requirement 10.3, 10.4)
             logger.exception(
                 f"Transcription failed | "

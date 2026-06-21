@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { OptimizedVADProcessor } from '../audio/vadOptimized';
 import { useMicrophoneStream } from './useMicrophoneStream';
 
+const MIN_SPEECH_THRESHOLD_MS = 300;
+
 export interface VoiceModeHook {
   isListening: boolean;
   toggleListening: () => void;
@@ -63,19 +65,29 @@ export function useVoiceMode(
 
   const stopListeningRef = useRef<() => void>(() => { });
 
-  if (vadRef.current === null) {
-    vadRef.current = new OptimizedVADProcessor(
+  // Initialise the VAD processor once on mount and dispose it on unmount.
+  // Doing this inside a useEffect (rather than directly in the render body)
+  // prevents React Strict Mode / concurrent-mode double-invocations from
+  // creating orphaned processor instances that can never be cleaned up.
+  useEffect(() => {
+    const processor = new OptimizedVADProcessor(
       {
         silenceThreshold: 0.01,
         silenceDuration: 800,
         minSpeechDuration: 300,
       },
       {
-        enableWorker: true,
+        enableWorker: true, // kept for API compatibility; no-op in current impl
         bufferCapacity: 100,
       }
     );
-  }
+    vadRef.current = processor;
+
+    return () => {
+      processor.dispose();
+      vadRef.current = null;
+    };
+  }, []);
 
   const handleAudioChunk = useCallback(
     (pcmData: Int16Array) => {
@@ -96,30 +108,34 @@ export function useVoiceMode(
           continuousSpeechMsRef.current += chunkDurationMs;
 
           if (
-            continuousSpeechMsRef.current >= 300 &&
+            continuousSpeechMsRef.current >= MIN_SPEECH_THRESHOLD_MS &&
             pipelineState === 'speaking' &&
             !hasBargedInRef.current
           ) {
             hasBargedInRef.current = true;
+            // DEFENSIVE: Dispatch global event to flush audio immediately,
+            // bypassing React prop-drilling.
+            window.dispatchEvent(new CustomEvent('voice-barge-in'));
             if (wsClient.isConnected) {
-              wsClient.send(
-                JSON.stringify({
-                  type: 'client.barge_in',
-                  timestamp: Date.now(),
-                })
-              );
+              wsClient.send({
+                type: 'chat.abort',
+                data: {}
+              });
             }
           }
         } else {
           continuousSpeechMsRef.current = 0;
         }
 
-        if (vadResult.isSpeech || vadResult.isPostRollTail || isCurrentlyStreamingRef.current) {
+        if (vadResult.isSpeech || (vadResult as any).isPostRollTail || isCurrentlyStreamingRef.current) {
           isCurrentlyStreamingRef.current = true;
 
           if (wsClient.isConnected) {
             const pcmBytes = new Uint8Array(pcmData.buffer, pcmData.byteOffset, pcmData.byteLength);
-            wsClient.send(pcmBytes.buffer);
+            const payload = new Uint8Array(pcmBytes.length + 1);
+            payload.set(pcmBytes);
+            payload[pcmBytes.length] = vadResult.shouldFinalize ? 0x01 : 0x00;
+            wsClient.send(payload.buffer);
           }
         }
 
@@ -129,12 +145,10 @@ export function useVoiceMode(
           continuousSpeechMsRef.current = 0;
 
           if (wsClient.isConnected) {
-            wsClient.send(
-              JSON.stringify({
-                type: 'client.speech_stopped',
-                timestamp: Date.now(),
-              })
-            );
+            wsClient.send({
+              type: 'client.speech_stopped',
+              data: {}
+            });
           }
         }
       } catch (err) {
@@ -223,12 +237,10 @@ export function useVoiceMode(
     if (micIsListening) {
       if (wsClient.isConnected) {
         try {
-          wsClient.send(
-            JSON.stringify({
-              type: 'client.speech_stopped',
-              timestamp: Date.now(),
-            })
-          );
+          wsClient.send({
+            type: 'client.speech_stopped',
+            data: {}
+          });
         } catch (err) {
           if (import.meta.env.DEV) {
             logger.warn('[VoiceMode] Error sending final chunk:', err);
@@ -339,13 +351,16 @@ export function useVoiceMode(
     }
   }, [wsClient.isConnected, wsClient.connectionState, micIsListening, stopListening, state.errorCode]);
 
+  // Cleanup is handled by the initialisation effect above.
+
+  // VAD Deadlock Resolution: Reset barge-in lock when pipeline is no longer speaking.
+  // This ensures that if the avatar starts speaking again in the same or next turn, 
+  // the user can interrupt again.
   useEffect(() => {
-    return () => {
-      if (vadRef.current) {
-        vadRef.current.dispose();
-      }
-    };
-  }, []);
+    if (pipelineState === 'idle' || pipelineState === 'thinking') {
+      hasBargedInRef.current = false;
+    }
+  }, [pipelineState]);
 
   return {
     isListening: state.isListening,

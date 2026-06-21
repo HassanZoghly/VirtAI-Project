@@ -26,6 +26,7 @@ from app.domain.chat.ports import BaseLLMProvider, ChatContextCachePort
 from app.domain.voice.ports import BaseTTSProvider, StreamingASRService
 
 if TYPE_CHECKING:
+    from app.application.rag.intent_classifier import IntentClassifier
     from app.application.rag.retrieval_use_case import RetrievalUseCase
 
 
@@ -51,6 +52,7 @@ class ConversationPipeline:
         retrieval: RetrievalUseCase | None = None,
         animation_stage: AnimationStage | None = None,
         context_cache: ChatContextCachePort | None = None,
+        intent_classifier: IntentClassifier | None = None,
         avatar_id: str = "avatar1",
         tts_voice: str | None = None,
         persist_turn: Callable[[str, str, str, str, str | None], Awaitable[None]] | None = None,
@@ -59,6 +61,7 @@ class ConversationPipeline:
         self._llm = llm
         self._tts = tts
         self._retrieval = retrieval
+        self._intent_classifier = intent_classifier
         self.avatar_id = avatar_id
         self._persist_turn = persist_turn
         self._context_cache = context_cache
@@ -66,7 +69,7 @@ class ConversationPipeline:
         self.tts_voice = tts_voice or getattr(tts, "voice", None)
 
         # Stages setup
-        self.llm_stage = LLMStage(llm=self._llm, retrieval=self._retrieval)
+        self.llm_stage = LLMStage(llm=self._llm, retrieval=self._retrieval, intent_classifier=self._intent_classifier)
         self.sentence_stage = SentenceSegmentationStage()
         self.tts_stage = TTSStage(tts=self._tts)
         self.animation_stage = animation_stage or AnimationStage(
@@ -152,7 +155,14 @@ class ConversationPipeline:
             # Execute pipeline stages concurrently for streaming
             # LLMStage pushes to sentence_queue.
             # Audio task pulls from sentence_queue and runs TTS+Animation sequentially per chunk.
-            
+
+            async def _llm_with_sentinel():
+                try:
+                    await self.llm_stage.process(context)
+                finally:
+                    with suppress(Exception):
+                        await context.sentence_queue.put(None)
+
             async def filler_task_fn():
                 await asyncio.sleep(0.4)
                 if context.aborted or context.sentence_index > 0 or not self._tts:
@@ -161,7 +171,18 @@ class ConversationPipeline:
                 fc = get_filler_cache()
                 if not fc:
                     return
-                filler_tts = await fc.get_or_generate_filler("Hmm...", voice=self.tts_voice, session_id="system")
+
+                locale = getattr(self._history, "locale", "en-US")
+                base_lang = locale[:2] if locale else "en"
+                filler_map = {
+                    "ar": "ممم...",
+                    "fr": "Euh...",
+                    "es": "Mmm...",
+                    "en": "Hmm..."
+                }
+                filler_text = filler_map.get(base_lang, "Hmm...")
+
+                filler_tts = await fc.get_or_generate_filler(filler_text, voice=self.tts_voice, session_id="system")
                 if filler_tts and getattr(filler_tts, "audio_ref", None) and not context.aborted and context.sentence_index == 0:
                     from pathlib import Path
 
@@ -183,7 +204,10 @@ class ConversationPipeline:
 
             async def process_audio():
                 while not context.aborted:
-                    sentence = await context.sentence_queue.get()
+                    try:
+                        sentence = await asyncio.wait_for(context.sentence_queue.get(), timeout=60.0)
+                    except asyncio.TimeoutError:
+                        break
                     if sentence is None:
                         break
 
@@ -197,7 +221,7 @@ class ConversationPipeline:
             # 2. TaskGroup Stability Execution
             try:
                 async with asyncio.TaskGroup() as tg:
-                    tg.create_task(_safe_task(self.llm_stage.process(context), "llm_stage"))
+                    tg.create_task(_safe_task(_llm_with_sentinel(), "llm_stage"))
                     tg.create_task(_safe_task(process_audio(), "audio_stage"))
                     if settings.ENABLE_FILLER_AUDIO:
                         tg.create_task(_safe_task(filler_task_fn(), "filler_task"))
@@ -280,6 +304,14 @@ class ConversationPipeline:
         self._history = build_conversation(avatar_id)
         self.avatar_id = avatar_id
         logger.info(f"Avatar changed to {avatar_id}")
+
+    @property
+    def tts(self) -> BaseTTSProvider | None:
+        return self._tts
+
+    async def invalidate_context(self, session_id: str) -> None:
+        if self._context_cache:
+            await self._context_cache.invalidate(session_id)
 
     @property
     def history_length(self) -> int:

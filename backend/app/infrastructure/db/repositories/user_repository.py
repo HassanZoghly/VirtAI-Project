@@ -52,7 +52,7 @@ class UserRepository(UserRepositoryPort):
             return self._to_entity(model)
         except IntegrityError:
             await self.db.rollback()
-            raise ValueError("User already exists")
+            raise ValueError("User already exists") from None
 
     async def update(self, user: UserEntity) -> UserEntity:
         entity = user

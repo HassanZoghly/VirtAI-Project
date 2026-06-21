@@ -61,6 +61,17 @@ class ProtocolRouter:
             )
             return
 
+        if not isinstance(data, dict):
+            await self.ctx.outbound_sender.safe_send_error(
+                code="INVALID_MESSAGE",
+                message="Message must be a JSON object",
+                session_id=None,
+                session_pending=self.ctx._session_pending,
+                connected=self.ctx._connected,
+            )
+            return
+
+
         msg_type_str = data.get("type", "")
         if not msg_type_str:
             return
@@ -161,13 +172,14 @@ class ProtocolRouter:
         )
 
     async def _handle_abort(self, data: dict | None = None) -> None:
-        await self.ctx.pipeline_bridge.cancel_pipeline()
-        await self.ctx.outbound_sender.send_protocol_message(
-            make_pipeline_state(self.ctx.session.session_id, "idle", getattr(self.ctx, "_current_message_id", None)),
-            self.ctx.session.session_id,
-            self.ctx._session_pending,
-            self.ctx._connected,
-        )
+        async with self.ctx._turn_lock:
+            await self.ctx.pipeline_bridge.cancel_pipeline()
+            await self.ctx.outbound_sender.send_protocol_message(
+                make_pipeline_state(self.ctx.session.session_id, "idle", getattr(self.ctx, "_current_message_id", None)),
+                self.ctx.session.session_id,
+                self.ctx._session_pending,
+                self.ctx._connected,
+            )
 
     async def _handle_voice_mode_stop(self, data: dict | None = None) -> None:
         if self.ctx._voice_mode_handler is not None:
@@ -203,24 +215,27 @@ class ProtocolRouter:
             if self.ctx._connected:
                 await self.ctx.outbound_sender.send_binary(data)
 
-        self.ctx.pipeline_bridge.pipeline_task = asyncio.create_task(
-            self.ctx.pipeline.process_message(
-                message_id=msg.message_id,
-                text=msg.text,
-                session_id=session_id,
-                send_callback=send_callback,
-                send_binary_callback=send_binary_callback,
-                trace_id=trace_id,
-            ),
-            name=f"pipeline_message_{session_id}",
-        )
-        self.ctx.pipeline_bridge.pipeline_task.add_done_callback(_pipeline_task_done_callback)
+        async with self.ctx._turn_lock:
+            await self.ctx.pipeline_bridge.cancel_pipeline()
+            self.ctx.pipeline_bridge.pipeline_task = asyncio.create_task(
+                self.ctx.pipeline.process_message(
+                    message_id=msg.message_id,
+                    text=msg.text,
+                    session_id=session_id,
+                    send_callback=send_callback,
+                    send_binary_callback=send_binary_callback,
+                    trace_id=trace_id,
+                ),
+                name=f"pipeline_message_{session_id}",
+            )
+            self.ctx.pipeline_bridge.pipeline_task.add_done_callback(_pipeline_task_done_callback)
 
     async def _handle_chat_abort(self, msg: ChatAbort) -> None:
-        await self.ctx.pipeline_bridge.cancel_pipeline()
-        await self.ctx.outbound_sender.send_protocol_message(
-            make_pipeline_state(self.ctx.session.session_id, "idle", getattr(self.ctx, "_current_message_id", None)),
-            self.ctx.session.session_id,
-            self.ctx._session_pending,
-            self.ctx._connected,
-        )
+        async with self.ctx._turn_lock:
+            await self.ctx.pipeline_bridge.cancel_pipeline()
+            await self.ctx.outbound_sender.send_protocol_message(
+                make_pipeline_state(self.ctx.session.session_id, "idle", getattr(self.ctx, "_current_message_id", None)),
+                self.ctx.session.session_id,
+                self.ctx._session_pending,
+                self.ctx._connected,
+            )

@@ -46,6 +46,7 @@ export const WSPayloadSchema = z.object({
   }).passthrough().optional().catch(undefined),
   mouthCues: z.array(VisemeSchema).optional().catch(undefined),
   message: z.string().optional().catch(undefined),
+  state: z.enum(['idle', 'thinking', 'speaking', 'error']).optional().catch(undefined),
 }).passthrough();
 
 export type WSPayload = z.infer<typeof WSPayloadSchema>;
@@ -95,13 +96,14 @@ export default function ClassroomShell() {
     inputValue,
     setInputValue,
     interimTranscript,
-    onMessage
+    onMessage,
+    wsClient
   } = useClassroomChat({
     wsAvatarId: activeAvatarId,
     activeVoiceId,
     session,
     onTtsReady: handleTtsReady,
-    onVisemesReady: handleVisemesReady,
+    onVisemesReady: handleVisemesReady as any,
     resetAvatarAudio,
     getAudioContext
   });
@@ -124,6 +126,7 @@ export default function ClassroomShell() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollPositionsRef = useRef<Map<string | null, number>>(new Map());
   const prevSessionIdRef = useRef<string | null>(currentSessionId);
+  const isCreatingSessionRef = useRef<boolean>(false);
 
   // Save / restore scroll position on session switch
   useEffect(() => {
@@ -160,9 +163,24 @@ export default function ClassroomShell() {
   }, [currentSession?.messages, conversationState.currentMessage, interimTranscript]);
 
   const handleStop = useCallback(() => {
-    safeSend({ type: 'client.barge_in' });
-    resetAvatarAudio();
-  }, [safeSend, resetAvatarAudio]);
+    safeSend({ 
+      type: 'chat.abort',
+      data: {
+        session_id: currentSessionId || undefined,
+        message_id: conversationState.activeMessageId || undefined
+      }
+    });
+    resetAvatarAudio(conversationState.activeMessageId);
+  }, [safeSend, resetAvatarAudio, currentSessionId, conversationState.activeMessageId]);
+
+  useEffect(() => {
+    const handleVoiceBargeIn = () => {
+      // DEFENSIVE: Listen for out-of-band VAD interruption and instantly kill audio.
+      handleStop();
+    };
+    window.addEventListener('voice-barge-in', handleVoiceBargeIn);
+    return () => window.removeEventListener('voice-barge-in', handleVoiceBargeIn);
+  }, [handleStop]);
 
   const handleSendMessage = useCallback(() => {
     const text = inputValue.trim();
@@ -197,13 +215,19 @@ export default function ClassroomShell() {
     }
     
     if (currentSessionId) return true;
+    if (isCreatingSessionRef.current) return false;
     
-    const activeId = await session.createPersistedSession();
-    if (!activeId) {
-      toast.error('Error', 'Failed to initialize voice session');
-      return false;
+    isCreatingSessionRef.current = true;
+    try {
+      const activeId = await session.createPersistedSession();
+      if (!activeId) {
+        toast.error('Error', 'Failed to initialize voice session');
+        return false;
+      }
+      return true;
+    } finally {
+      isCreatingSessionRef.current = false;
     }
-    return true;
   }, [currentSessionId, session, getAudioContext]);
 
   const statusBadgeClass =
@@ -342,7 +366,6 @@ export default function ClassroomShell() {
           <div className="chat-panel" key={currentSessionId || 'empty'}>
             <MessageList
               messages={currentSession?.messages || []}
-              outboxQueue={conversationState.outboxQueue || []}
               currentMessage={conversationState.currentMessage}
               interimTranscript={interimTranscript}
               error={conversationState.error}
@@ -358,8 +381,8 @@ export default function ClassroomShell() {
               onSend={handleSendMessage}
               onKeyDown={onKeyDown}
               textareaRef={textareaRef}
-              backendStatus={connectionState}
-              wsClient={{ connectionState, isConnected, send: safeSend, onMessage }}
+              backendStatus={connectionState as any}
+              wsClient={wsClient}
               pipelineState={conversationState.pipelineState}
               onToggleDocuments={toggleDocuments}
               onBeforeVoiceStart={ensureVoiceSession}

@@ -42,9 +42,11 @@ export function useDocumentList(sessionId: string | null = null) {
     ));
   }, []);
 
-  const fetchDocuments = useCallback(async () => {
+  const fetchDocuments = useCallback(async (signal?: AbortSignal) => {
     try {
       const data = await documentApi.list(sessionId);
+      
+      if (signal?.aborted) return;
 
       setDocuments(prev => {
         // Preserve optimistic documents that don't have an ID yet
@@ -53,9 +55,12 @@ export function useDocumentList(sessionId: string | null = null) {
       });
       setError(null);
     } catch (err: unknown) {
+      if (signal?.aborted) return;
       setError(isAxiosError(err) ? err.response?.data?.detail || 'Failed to fetch documents' : 'Failed to fetch documents');
     } finally {
-      setIsLoading(false);
+      if (!signal?.aborted) {
+        setIsLoading(false);
+      }
     }
   }, [sessionId]);
 
@@ -203,7 +208,9 @@ export function useDocumentList(sessionId: string | null = null) {
   }, []);
 
   useEffect(() => {
-    fetchDocuments();
+    const controller = new AbortController();
+    fetchDocuments(controller.signal);
+    return () => controller.abort();
   }, [fetchDocuments]);
 
   return {

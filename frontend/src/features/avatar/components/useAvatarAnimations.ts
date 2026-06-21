@@ -13,6 +13,16 @@ const FADE_DURATION = 0.5;
 const IDLE_BREAK_MULTIPLIER = 2;
 const IDLE_BREAK_OFFSET = 2;
 
+const ANIMATION_LOOP_ONCE_COUNT = 1;
+const NORMAL_TIME_SCALE = 1;
+const FULL_WEIGHT = 1;
+const MS_PER_SECOND = 1000;
+const SINGLE_ANIMATION_COUNT = 1;
+const FIRST_INDEX = 0;
+const INITIAL_TIME = 0;
+const NO_INDEX = -1;
+const ARRAY_EMPTY_LENGTH = 0;
+
 interface TimelineState {
   phase: 'idle' | 'thinking' | 'speaking' | 'talking' | 'idle_break';
   timeInPhase: number;
@@ -26,7 +36,9 @@ export function useAvatarAnimations(
   movementEnabled: boolean
 ) {
   const idleFbx = useFBX(IDLE_URL);
-  const talkFbxs = useFBX(TALK_MANIFEST);
+  const talkFbx1 = useFBX(TALK_MANIFEST[0]);
+  const talkFbx2 = useFBX(TALK_MANIFEST[1]);
+  const talkFbxs = useMemo(() => [talkFbx1, talkFbx2], [talkFbx1, talkFbx2]);
 
   const animations = useMemo(() => {
     const clips: THREE.AnimationClip[] = [];
@@ -43,15 +55,15 @@ export function useAvatarAnimations(
       return clonedClip;
     };
 
-    if (idleFbx.animations.length > 0) {
-      const idleClip = idleFbx.animations[0].clone();
+    if (idleFbx.animations.length > ARRAY_EMPTY_LENGTH) {
+      const idleClip = idleFbx.animations[FIRST_INDEX].clone();
       idleClip.name = 'Idle';
       clips.push(renameTracks(idleClip));
     }
     
     talkFbxs.forEach((fbx, index) => {
-      if (fbx.animations.length > 0) {
-        const talkClip = fbx.animations[0].clone();
+      if (fbx.animations.length > ARRAY_EMPTY_LENGTH) {
+        const talkClip = fbx.animations[FIRST_INDEX].clone();
         talkClip.name = `Talk_${index}`;
         clips.push(renameTracks(talkClip));
       }
@@ -61,13 +73,14 @@ export function useAvatarAnimations(
 
   const { actions, mixer } = useAnimations(animations, scene);
   const currentActionNameRef = useRef<string | null>(null);
+  const stopTimeoutRef = useRef<number | null>(null);
   const talkActionNames = useMemo(() => Object.keys(actions).filter(k => k.startsWith('Talk_')), [actions]);
 
   const timelineStateRef = useRef<TimelineState>({
     phase: 'idle',
-    timeInPhase: 0,
-    targetBreakDuration: 0,
-    lastTalkIndex: -1,
+    timeInPhase: INITIAL_TIME,
+    targetBreakDuration: INITIAL_TIME,
+    lastTalkIndex: NO_INDEX,
   });
 
   useEffect(() => {
@@ -78,7 +91,7 @@ export function useAvatarAnimations(
     Object.keys(actions).forEach(key => {
       const action = actions[key];
       if (key.startsWith('Talk_') && action) {
-        action.setLoop(THREE.LoopOnce, 1);
+        action.setLoop(THREE.LoopOnce, ANIMATION_LOOP_ONCE_COUNT);
         action.clampWhenFinished = true;
       }
     });
@@ -98,20 +111,38 @@ export function useAvatarAnimations(
       if (!nextAction) return;
 
       if (currentActionNameRef.current === targetName) {
-        if (!nextAction.isRunning()) nextAction.reset().play();
+        if (!nextAction.isRunning()) nextAction.reset().fadeIn(fadeTime).play();
         return;
       }
 
       const prevAction = currentActionNameRef.current ? actions[currentActionNameRef.current] : null;
 
       nextAction.reset();
-      nextAction.setEffectiveTimeScale(1);
-      nextAction.setEffectiveWeight(1);
-      nextAction.play();
-
-      if (prevAction && prevAction.isRunning()) {
-        prevAction.crossFadeTo(nextAction, fadeTime, true); // true = warp, syncing timescales
+      nextAction.setEffectiveTimeScale(NORMAL_TIME_SCALE);
+      nextAction.setEffectiveWeight(FULL_WEIGHT);
+      
+      if (prevAction) {
+        // DEFENSIVE: Animation Memory Leak Fix
+        // Crossfade strictly manages weight transition. 
+        // Schedule a hard .stop() to prevent the Three.js mixer from evaluating invisible, zero-weight actions indefinitely.
+        prevAction.crossFadeTo(nextAction, fadeTime, true);
+        
+        // DEFENSIVE: Use clearable timeout for React hook safety
+        if (stopTimeoutRef.current !== null) {
+          window.clearTimeout(stopTimeoutRef.current);
+        }
+        stopTimeoutRef.current = window.setTimeout(() => {
+          if (currentActionNameRef.current !== prevAction.getClip().name) {
+            prevAction.stop();
+          }
+        }, fadeTime * MS_PER_SECOND);
+        
+        // Note: Timeout is cleared on unmount.
+      } else {
+        nextAction.fadeIn(fadeTime);
       }
+      
+      nextAction.play();
 
       currentActionNameRef.current = targetName;
     },
@@ -122,23 +153,28 @@ export function useAvatarAnimations(
     const { lastTalkIndex } = timelineStateRef.current;
     let nextIndex: number;
 
-    if (talkActionNames.length > 1) {
+    if (talkActionNames.length > SINGLE_ANIMATION_COUNT) {
       do {
         nextIndex = Math.floor(Math.random() * talkActionNames.length);
       } while (nextIndex === lastTalkIndex);
     } else {
-      nextIndex = 0;
+      nextIndex = FIRST_INDEX;
     }
 
     timelineStateRef.current = {
       phase: 'talking',
-      timeInPhase: 0,
-      targetBreakDuration: 0,
+      timeInPhase: INITIAL_TIME,
+      targetBreakDuration: INITIAL_TIME,
       lastTalkIndex: nextIndex,
     };
 
     playAnimation(talkActionNames[nextIndex]);
   }, [talkActionNames, playAnimation]);
+
+  const pipelineStateRef = useRef(pipelineState);
+  useEffect(() => {
+    pipelineStateRef.current = pipelineState;
+  }, [pipelineState]);
 
   useEffect(() => {
     if (!mixer) return;
@@ -147,11 +183,11 @@ export function useAvatarAnimations(
       // @ts-expect-error Three.js AnimationAction event typing is loose
       const finishedName = e.action?.getClip()?.name;
 
-      if (finishedName && typeof finishedName === 'string' && finishedName.startsWith('Talk_') && pipelineState === 'speaking') {
+      if (finishedName && typeof finishedName === 'string' && finishedName.startsWith('Talk_') && pipelineStateRef.current === 'speaking') {
         timelineStateRef.current = {
           ...timelineStateRef.current,
           phase: 'idle_break',
-          timeInPhase: 0,
+          timeInPhase: INITIAL_TIME,
           targetBreakDuration: Math.random() * IDLE_BREAK_MULTIPLIER + IDLE_BREAK_OFFSET,
         };
         playAnimation('Idle');
@@ -161,13 +197,23 @@ export function useAvatarAnimations(
     mixer.addEventListener('finished', onFinished);
     return () => {
       mixer.removeEventListener('finished', onFinished);
-      // Cleanly stop all animations on unmount/re-render to prevent memory leaks and zombie weights
-      mixer.stopAllAction();
     };
-  }, [mixer, pipelineState, playAnimation]);
+  }, [mixer, playAnimation]);
+
+  useEffect(() => {
+    return () => {
+      if (mixer) mixer.stopAllAction();
+      if (stopTimeoutRef.current !== null) {
+        window.clearTimeout(stopTimeoutRef.current);
+      }
+    };
+  }, [mixer]);
 
   useEffect(() => {
     if (!movementEnabled) {
+      if (timelineStateRef.current.phase === 'talking') {
+        timelineStateRef.current.phase = 'idle';
+      }
       playAnimation('Idle');
       return;
     }
@@ -179,9 +225,9 @@ export function useAvatarAnimations(
     } else {
       timelineStateRef.current = {
         phase: 'idle',
-        timeInPhase: 0,
-        targetBreakDuration: 0,
-        lastTalkIndex: -1,
+        timeInPhase: INITIAL_TIME,
+        targetBreakDuration: INITIAL_TIME,
+        lastTalkIndex: NO_INDEX,
       };
       playAnimation('Idle');
     }

@@ -28,16 +28,34 @@ async def worker_startup_validation(ctx: dict[Any, Any]) -> None:
         if not result.scalar_one_or_none():
             raise RuntimeError("pgvector extension is not installed in the database")
 
-    # 3. Warm FastEmbed
-    logger.info("Worker startup: Warming FastEmbed provider...")
+    # 3. Warm Embedding Provider (must match API server configuration)
+    logger.info(
+        {
+            "event": "worker_embedding_provider_start",
+            "provider": settings.EMBEDDING_PROVIDER,
+            "model": settings.EMBEDDING_MODEL,
+        }
+    )
     t0 = time.monotonic()
-    embedder = FastEmbedProvider(model_name=settings.EMBEDDING_MODEL)
+    if settings.EMBEDDING_PROVIDER == "fastembed":
+        embedder = FastEmbedProvider(
+            model_name=settings.EMBEDDING_MODEL,
+            cache_dir=settings.FASTEMBED_CACHE_DIR,
+        )
+    elif settings.EMBEDDING_PROVIDER == "openai":
+        from app.infrastructure.rag.openai_embedder import OpenAIEmbedder
+        embedder = OpenAIEmbedder()
+    else:
+        raise ValueError(
+            f"Unsupported EMBEDDING_PROVIDER: {settings.EMBEDDING_PROVIDER}. "
+            f"Expected 'fastembed' or 'openai'."
+        )
     warmup_ms = int((time.monotonic() - t0) * 1000)
 
     logger.info(
         {
             "event": "embedding_provider_ready",
-            "provider": "FastEmbed",
+            "provider": settings.EMBEDDING_PROVIDER,
             "model": settings.EMBEDDING_MODEL,
             "warmup_ms": warmup_ms,
         }

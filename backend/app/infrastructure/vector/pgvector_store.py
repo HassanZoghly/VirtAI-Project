@@ -42,7 +42,7 @@ class PGVectorStore(VectorStore):
                 retrieval_scope=chunk.retrieval_scope,
                 scope_id=chunk.scope_id,
             )
-            for chunk, emb in zip(chunks, embeddings)
+            for chunk, emb in zip(chunks, embeddings, strict=False)
         ]
         self.db.add_all(models)
         await self.db.flush()
@@ -54,14 +54,25 @@ class PGVectorStore(VectorStore):
         document_id: UUID | None = None,
         scope: str | None = None,
         scope_id: UUID | None = None,
-        min_dense_score: float = 0.5,
+        min_dense_score: float | None = None,
+        user_id: UUID | None = None,
     ) -> list[tuple[DocumentChunk, float]]:
+        if min_dense_score is None:
+            min_dense_score = settings.RAG_MIN_DENSE_SCORE
+        from app.infrastructure.db.models import Document
+
+        if not user_id:
+            logger.warning("[VectorStore] search aborted: user_id is required to prevent data leaks.")
+            return []
+
         stmt = (
             select(
                 ChunkModel,
                 (1 - ChunkModel.embedding.cosine_distance(query_vector)).label("similarity"),
             )
+            .join(Document, ChunkModel.document_id == Document.id)
             .where(ChunkModel.is_active == True)
+            .where(Document.user_id == user_id)
             .order_by(ChunkModel.embedding.cosine_distance(query_vector))
             .limit(limit)
         )
@@ -69,7 +80,16 @@ class PGVectorStore(VectorStore):
         if document_id:
             stmt = stmt.where(ChunkModel.document_id == document_id)
 
-        if scope:
+        from sqlalchemy import or_
+
+        if scope == "SESSION" and scope_id:
+            stmt = stmt.where(
+                or_(
+                    ChunkModel.retrieval_scope == "GLOBAL",
+                    (ChunkModel.retrieval_scope == "SESSION") & (ChunkModel.scope_id == scope_id)
+                )
+            )
+        elif scope:
             stmt = stmt.where(ChunkModel.retrieval_scope == scope)
             if scope_id:
                 stmt = stmt.where(ChunkModel.scope_id == scope_id)
@@ -118,20 +138,42 @@ class PGVectorStore(VectorStore):
         document_id: UUID | None = None,
         scope: str | None = None,
         scope_id: UUID | None = None,
-        min_hybrid_score: float = 0.015,
-        min_dense_score: float = 0.5,
+        min_hybrid_score: float | None = None,
+        min_dense_score: float | None = None,
+        user_id: UUID | None = None,
     ) -> list[tuple[DocumentChunk, float]]:
+        if min_hybrid_score is None:
+            min_hybrid_score = settings.RAG_MIN_HYBRID_SCORE
+        if min_dense_score is None:
+            min_dense_score = settings.RAG_MIN_DENSE_SCORE
+        from app.infrastructure.db.models import Document
+
+        if not user_id:
+            logger.warning("[VectorStore] hybrid_search aborted: user_id is required to prevent data leaks.")
+            return []
+
         # Dense query
         stmt_dense = (
             select(
                 ChunkModel,
                 (1 - ChunkModel.embedding.cosine_distance(query_vector)).label("similarity"),
             )
+            .join(Document, ChunkModel.document_id == Document.id)
             .where(ChunkModel.is_active == True)
+            .where(Document.user_id == user_id)
         )
         if document_id:
             stmt_dense = stmt_dense.where(ChunkModel.document_id == document_id)
-        if scope:
+        from sqlalchemy import or_
+
+        if scope == "SESSION" and scope_id:
+            stmt_dense = stmt_dense.where(
+                or_(
+                    ChunkModel.retrieval_scope == "GLOBAL",
+                    (ChunkModel.retrieval_scope == "SESSION") & (ChunkModel.scope_id == scope_id)
+                )
+            )
+        elif scope:
             stmt_dense = stmt_dense.where(ChunkModel.retrieval_scope == scope)
             if scope_id:
                 stmt_dense = stmt_dense.where(ChunkModel.scope_id == scope_id)
@@ -147,12 +189,21 @@ class PGVectorStore(VectorStore):
                 ChunkModel,
                 func.ts_rank(text_vector, text_query).label("ts_rank"),
             )
+            .join(Document, ChunkModel.document_id == Document.id)
             .where(ChunkModel.is_active == True)
+            .where(Document.user_id == user_id)
             .where(text_vector.op("@@")(text_query))
         )
         if document_id:
             stmt_lexical = stmt_lexical.where(ChunkModel.document_id == document_id)
-        if scope:
+        if scope == "SESSION" and scope_id:
+            stmt_lexical = stmt_lexical.where(
+                or_(
+                    ChunkModel.retrieval_scope == "GLOBAL",
+                    (ChunkModel.retrieval_scope == "SESSION") & (ChunkModel.scope_id == scope_id)
+                )
+            )
+        elif scope:
             stmt_lexical = stmt_lexical.where(ChunkModel.retrieval_scope == scope)
             if scope_id:
                 stmt_lexical = stmt_lexical.where(ChunkModel.scope_id == scope_id)
@@ -240,11 +291,12 @@ class SessionManagedPGVectorStore(VectorStore):
         document_id: UUID | None = None,
         scope: str | None = None,
         scope_id: UUID | None = None,
-        min_dense_score: float = 0.5,
+        min_dense_score: float | None = None,
+        user_id: UUID | None = None,
     ) -> list[tuple[DocumentChunk, float]]:
         async with AsyncSessionLocal() as db:
             store = PGVectorStore(db)
-            return await store.search(query_vector, limit, document_id, scope, scope_id, min_dense_score)
+            return await store.search(query_vector, limit, document_id, scope, scope_id, min_dense_score, user_id=user_id)
 
     async def hybrid_search(
         self,
@@ -254,11 +306,12 @@ class SessionManagedPGVectorStore(VectorStore):
         document_id: UUID | None = None,
         scope: str | None = None,
         scope_id: UUID | None = None,
-        min_hybrid_score: float = 0.015,
-        min_dense_score: float = 0.5,
+        min_hybrid_score: float | None = None,
+        min_dense_score: float | None = None,
+        user_id: UUID | None = None,
     ) -> list[tuple[DocumentChunk, float]]:
         async with AsyncSessionLocal() as db:
             store = PGVectorStore(db)
             return await store.hybrid_search(
-                query_text, query_vector, limit, document_id, scope, scope_id, min_hybrid_score, min_dense_score
+                query_text, query_vector, limit, document_id, scope, scope_id, min_hybrid_score, min_dense_score, user_id=user_id
             )

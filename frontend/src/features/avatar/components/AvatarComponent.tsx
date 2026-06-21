@@ -1,6 +1,9 @@
+/// <reference types="@react-three/fiber" />
 import React, { useRef, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { useGLTF } from '@react-three/drei';
+import { useGraph } from '@react-three/fiber';
+import { SkeletonUtils } from 'three-stdlib';
 import { useAvatarAnimations } from './useAvatarAnimations';
 import { useAvatarLipSync, Viseme } from './useAvatarLipSync';
 import { toast } from '@/shared/utils/toast';
@@ -31,11 +34,14 @@ export function AvatarComponent({
 }: AvatarComponentProps) {
   const groupRef = useRef<THREE.Group>(null);
   const avatarUrl = `/models/${avatarId}.glb`;
-  const { scene, nodes } = useGLTF(avatarUrl) as unknown as GLTFResult;
+  const { scene } = useGLTF(avatarUrl) as unknown as GLTFResult;
+  
+  const clone = useMemo(() => SkeletonUtils.clone(scene), [scene]);
+  const { nodes } = useGraph(clone) as unknown as GLTFResult;
   
   const avatarRoot = useMemo(() => {
-    return nodes.Armature || scene;
-  }, [nodes, scene]);
+    return clone;
+  }, [clone]);
 
   // Hook 1: Animation Mixer, Tracks, and State Machine
   useAvatarAnimations(avatarRoot as THREE.Group, pipelineState, movementEnabled);
@@ -81,7 +87,7 @@ export function AvatarComponent({
 
   return (
     <group position={[0, -0.2, 0]}>
-      <primitive object={scene} ref={groupRef} />
+      <primitive object={clone} ref={groupRef} />
     </group>
   );
 }

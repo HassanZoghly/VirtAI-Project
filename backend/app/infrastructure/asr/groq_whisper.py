@@ -214,7 +214,7 @@ class GroqWhisperASR(BaseASRProvider, StreamingASRService):
         if segments:
             weights = [len(segment.words) or max(1, len(segment.text.split())) for segment in segments]
             avg_confidence = sum(
-                segment.confidence * weight for segment, weight in zip(segments, weights)
+                segment.confidence * weight for segment, weight in zip(segments, weights, strict=False)
             ) / sum(weights)
         else:
             avg_confidence = 1.0
@@ -284,7 +284,7 @@ class GroqWhisperASR(BaseASRProvider, StreamingASRService):
             response = await self._call_groq_api(audio_file, lang)
         except Exception as e:
             logger.error(f"Groq ASR API call failed: {e}")
-            raise ASRException(f"ASR transcription failed: {e!s}")
+            raise ASRException(f"ASR transcription failed: {e!s}") from e
 
         # ── Parse Response ────────────────────────────────────────────────────
         elapsed_ms = (time.perf_counter() - start_time) * 1000

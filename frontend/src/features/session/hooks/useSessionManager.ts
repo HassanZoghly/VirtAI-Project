@@ -60,8 +60,14 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
       return await sessionService.fetchSessionMessages(currentSessionId, { signal });
     },
     enabled: !!currentSessionId && status === 'success',
-    staleTime: Infinity, // WebSocket will handle subsequent real-time updates
   });
+
+  // Invalidate queries when currentSessionId changes to heal dropped events
+  useEffect(() => {
+    if (currentSessionId) {
+      queryClient.invalidateQueries({ queryKey: ['sessionMessages', currentSessionId] });
+    }
+  }, [currentSessionId, queryClient]);
 
   const currentSession = useMemo(() => {
     if (!currentSessionId) return { id: null, title: 'New chat', messages: [], messages_loaded: true };
@@ -195,8 +201,7 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
   const clearAllSessions = useCallback(() => clearAllMutation.mutate(), [clearAllMutation]);
 
   // Rename Debounce logic
-  const renameTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const renameOriginalRef = useRef<ISession[] | null>(null);
+  const renameTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const renameMutation = useMutation({
     mutationFn: ({ id, title }: { id: string; title: string }) => sessionService.renameSession(id, title),
@@ -204,26 +209,24 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
   });
 
   const renameSession = useCallback((sessionId: string, newTitle: string) => {
-    if (!renameTimeoutRef.current) {
-      renameOriginalRef.current = queryClient.getQueryData<ISession[]>(['sessions']) || null;
-    }
-
+    // Optimistic Update
     queryClient.setQueryData(['sessions'], (old: ISession[] = []) =>
       old.map((s) => (s.id === sessionId ? { ...s, title: newTitle } : s))
     );
 
-    if (renameTimeoutRef.current) clearTimeout(renameTimeoutRef.current);
+    // Debounce per session
+    if (renameTimeoutsRef.current[sessionId]) {
+      clearTimeout(renameTimeoutsRef.current[sessionId]);
+    }
     
-    renameTimeoutRef.current = setTimeout(() => {
-      const original = renameOriginalRef.current;
-      renameOriginalRef.current = null;
-      renameTimeoutRef.current = null;
+    renameTimeoutsRef.current[sessionId] = setTimeout(() => {
+      delete renameTimeoutsRef.current[sessionId];
 
       renameMutation.mutate(
         { id: sessionId, title: newTitle },
         {
           onError: (err: unknown) => {
-            if (original) queryClient.setQueryData(['sessions'], original);
+            queryClient.invalidateQueries({ queryKey: ['sessions'] }); // Revert on error
             const msg = isAxiosError(err) ? err.response?.data?.detail || err.message : err instanceof Error ? err.message : 'Failed to rename chat session';
             toast.error('Rename Failed', msg);
           }
@@ -254,7 +257,10 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
     if (!id) return;
     let added = false;
     queryClient.setQueryData(['sessionMessages', id], (old: IMessage[] = []) => {
-      if (old.some((m) => m.id === messageId)) return old;
+      const exists = old.some((m) => m.id === messageId);
+      if (exists) {
+        return old.map(m => m.id === messageId ? { ...m, content: text } : m);
+      }
       added = true;
       return [...old, { id: messageId, role: 'assistant', content: text, timestamp: Date.now() }];
     });
@@ -325,11 +331,11 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
     }
   }, [createMutation, navigate, generateTitleForSession, currentSessionId]);
 
-  // Abort generating title if session deleted
+  // Abort generating title if session deleted or unmounted
   useEffect(() => {
     return () => {
-      // Unmount cleanup: normally we could abort everything, but we only abort when deleted.
-      // We can hook into deleteSession, but for now we'll do it manually.
+      Object.values(titleGenAbortControllersRef.current).forEach(controller => controller.abort());
+      titleGenAbortControllersRef.current = {};
     };
   }, []);
 

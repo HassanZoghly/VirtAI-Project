@@ -1,8 +1,8 @@
 """Health check endpoints."""
 
+import httpx
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
-import httpx
 from loguru import logger
 from sqlalchemy import text
 

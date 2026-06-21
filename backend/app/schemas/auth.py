@@ -58,7 +58,6 @@ class UserResponse(BaseModel):
     )
 
     id: str
-    first_name: str
+    full_name: str
     email: str
-    is_new_user: bool
     setup_complete: bool

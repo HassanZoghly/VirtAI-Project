@@ -119,7 +119,7 @@ def _build_energy_curve(
 
     return [
         {"time": round(float(t), 3), "value": round(_clamp(float(v), 0.0, 1.0), 4)}
-        for t, v in zip(times.tolist(), values.tolist())
+        for t, v in zip(times.tolist(), values.tolist(), strict=False)
     ]
 
 

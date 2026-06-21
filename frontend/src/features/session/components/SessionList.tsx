@@ -179,13 +179,24 @@ const SessionList = memo(function SessionList({
     return () => window.removeEventListener('scroll', handleScroll, true);
   }, [contextMenu]);
 
+  // Schwartzian transform: parse each timestamp exactly once, then sort.
+  // The previous version called `new Date()` inside the comparator, executing
+  // it O(N log N) times on every render — catastrophic for large session lists.
+
+  /** Normalise a session timestamp (string ISO or epoch number) to ms. */
+  function toMs(v: string | number | undefined): number {
+    if (v === undefined || v === null) return 0;
+    return typeof v === 'number' ? v : Date.parse(v) || 0;
+  }
+
   const sortedIds = useMemo(() => {
+    // Step 1: compute a numeric timestamp for every session — O(N).
+    const tsMap = new Map<string, number>(
+      sessions.map((s) => [s.id, toMs(s.updated_at ?? s.created_at)])
+    );
+    // Step 2: sort by pre-computed value — O(N log N), comparisons are cheap.
     return [...sessions]
-      .sort((a, b) => {
-        const aTime = new Date(a.updated_at || a.created_at || 0).getTime();
-        const bTime = new Date(b.updated_at || b.created_at || 0).getTime();
-        return bTime - aTime;
-      })
+      .sort((a, b) => (tsMap.get(b.id) ?? 0) - (tsMap.get(a.id) ?? 0))
       .map((s) => s.id);
   }, [sessions]);
 

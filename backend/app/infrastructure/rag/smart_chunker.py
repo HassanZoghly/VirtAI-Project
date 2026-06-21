@@ -18,7 +18,6 @@ RAG pipeline for re-processing uploaded documents.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
 
 from loguru import logger
 
@@ -29,12 +28,6 @@ except ImportError:
     logger.warning("langchain text_splitter not installed — SmartChunker unavailable")
 
 
-@dataclass
-class ChunkedDocument:
-    """A single chunk of text with metadata."""
-
-    page_content: str
-    metadata: dict = field(default_factory=dict)
 
 
 class SmartChunker:
@@ -65,9 +58,24 @@ class SmartChunker:
         "",  # character break (last resort)
     ]
 
-    def __init__(self, chunk_size: int = 1000, overlap_size: int = 200):
+    def __init__(
+        self,
+        chunk_size: int = 1000,
+        overlap_size: int = 200,
+        max_tokens: int | None = 512,
+        encoding_name: str = "cl100k_base"
+    ):
         self.chunk_size = chunk_size
         self.overlap_size = overlap_size
+        self.max_tokens = max_tokens
+        self.encoding_name = encoding_name
+
+        try:
+            import tiktoken
+            self.tokenizer = tiktoken.get_encoding(self.encoding_name)
+        except ImportError:
+            self.tokenizer = None
+            logger.warning("tiktoken not installed — Token validation unavailable")
 
         if RecursiveCharacterTextSplitter is None:
             raise ImportError(
@@ -82,46 +90,7 @@ class SmartChunker:
             keep_separator=True,
         )
 
-    def chunk_pages(self, pages: list) -> list[ChunkedDocument]:
-        """
-        Chunk a list of page objects (anything with .page_content and .metadata).
 
-        This is the main entry point for the agentic RAG pipeline.
-        """
-        chunks: list[ChunkedDocument] = []
-
-        for idx, page in enumerate(pages):
-            text = getattr(page, "page_content", "")
-            metadata = getattr(page, "metadata", {})
-            normalized = self._clean_markdown_text(text)
-
-            if not normalized.strip():
-                continue
-
-            # Small pages go in as single chunks
-            if len(normalized) <= self.chunk_size:
-                chunks.append(
-                    ChunkedDocument(
-                        page_content=normalized,
-                        metadata=metadata,
-                    )
-                )
-                continue
-
-            # Extract structural blocks and build chunks
-            blocks = self._extract_markdown_blocks(normalized)
-            page_chunks = self._build_chunks_from_blocks(blocks)
-
-            for chunk_text in page_chunks:
-                if chunk_text.strip():
-                    chunks.append(
-                        ChunkedDocument(
-                            page_content=chunk_text.strip(),
-                            metadata=metadata,
-                        )
-                    )
-
-        return chunks
 
     def chunk_text(self, raw_text: str) -> list[str]:
         """
@@ -132,6 +101,13 @@ class SmartChunker:
         clean = raw_text.replace("\x00", "")
         clean = re.sub(r"\n{3,}", "\n\n", clean)
         return self._splitter.split_text(clean)
+
+    def chunk(self, text: str) -> list[str]:
+        """
+        Implementation of the ChunkingStrategy interface.
+        """
+        blocks = self._extract_markdown_blocks(text)
+        return self._build_chunks_from_blocks(blocks)
 
     # ── Block extraction ─────────────────────────────────────────────────
 
@@ -255,7 +231,35 @@ class SmartChunker:
                 current_blocks = candidate
 
         flush()
-        return chunks
+
+        if not self.max_tokens or not self.tokenizer:
+            return chunks
+
+        # Final Token Safety Pass
+        safe_chunks = []
+        for chunk in chunks:
+            tokens = self.tokenizer.encode(chunk, disallowed_special=())
+            if len(tokens) <= self.max_tokens:
+                safe_chunks.append(chunk)
+            else:
+                # Sub-chunk fallback using RecursiveCharacterTextSplitter with strict length limits
+                fallback_splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=self.chunk_size // 2,
+                    chunk_overlap=self.overlap_size // 2,
+                    separators=["\n\n", "\n", " ", ""],
+                )
+                sub_chunks = fallback_splitter.split_text(chunk)
+                for sub in sub_chunks:
+                    sub_tokens = self.tokenizer.encode(sub, disallowed_special=())
+                    if len(sub_tokens) <= self.max_tokens:
+                        safe_chunks.append(sub)
+                    else:
+                        # Absolute worst case fallback: truncate
+                        logger.warning(f"Chunk still exceeded max_tokens ({len(sub_tokens)} > {self.max_tokens}) after sub-chunking. Truncating.")
+                        truncated_tokens = sub_tokens[:self.max_tokens]
+                        safe_chunks.append(self.tokenizer.decode(truncated_tokens))
+
+        return safe_chunks
 
     # ── Utilities ────────────────────────────────────────────────────────
 

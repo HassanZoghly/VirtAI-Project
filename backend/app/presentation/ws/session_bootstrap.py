@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import WebSocket
 from loguru import logger
 
@@ -41,6 +42,11 @@ class SessionBootstrap:
                 avatar_id=avatar_id,
                 voice_id=voice_id,
             )
+
+        # Set cleanup handler to clear WS memory when session is permanently destroyed
+        session.on_cleanup = lambda sid=session.session_id: asyncio.create_task(
+            self.connection_manager.cleanup_session(sid)
+        )
 
         await self.connection_manager.register(
             session.session_id, websocket, user_id=user_id, family_id=family_id

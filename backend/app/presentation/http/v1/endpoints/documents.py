@@ -4,7 +4,17 @@ import re
 from typing import Any
 
 import filetype  # type: ignore[import-not-found]
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from loguru import logger
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,8 +22,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.rag.stage_machine import IngestionStage
 from app.domain.user.entities import UserEntity
 from app.infrastructure.db.database import get_db
-from app.infrastructure.db.repositories.document_repository import DocumentRepository
 from app.infrastructure.db.repositories.chat_repository import ChatRepository
+from app.infrastructure.db.repositories.document_repository import DocumentRepository
 from app.presentation.http.v1.dependencies import StorageDep, _current_user
 from app.shared.config import get_settings
 from app.shared.ids import parse_uuid
@@ -28,7 +38,7 @@ async def _verify_session_ownership(
     db: AsyncSession = Depends(get_db),
 ) -> str | None:
     session_id = session_id_query or session_id_form
-        
+
     if session_id:
         session_repo = ChatRepository(db)
         session_obj = await session_repo.get_chat_session(str(session_id))
@@ -66,22 +76,30 @@ def validate_declared_mime(content_type: str | None, declared_ext: str) -> None:
         )
 
 
-async def validate_file_magic(data: bytes, declared_ext: str) -> None:
-    kind = filetype.guess(data)
+async def validate_file_magic(file: UploadFile, declared_ext: str) -> None:
+    await file.seek(0)
+    magic_chunk = await file.read(2048)
+    kind = filetype.guess(magic_chunk)
     if declared_ext == "pdf":
         if kind is None or kind.extension != "pdf":
             raise HTTPException(
                 status_code=400, detail="File content does not match declared type 'pdf'"
             )
     elif declared_ext in ("txt", "md"):
-        # For plain text/markdown, filetype might not match a known binary format,
-        # but if it matches a KNOWN binary format, it's definitely not pure text.
         if kind is not None:
             raise HTTPException(
                 status_code=400, detail=f"File appears to be {kind.mime}, not text/markdown"
             )
+        import codecs
+        decoder = codecs.getincrementaldecoder('utf-8')()
+        await file.seek(0)
         try:
-            data.decode("utf-8")
+            while True:
+                chunk = await file.read(65536)
+                if not chunk:
+                    decoder.decode(b'', True)
+                    break
+                decoder.decode(chunk)
         except UnicodeDecodeError:
             raise HTTPException(status_code=400, detail="File is not valid UTF-8") from None
 
@@ -122,30 +140,34 @@ async def upload_document(
             detail="Too many active ingestion jobs. Please wait for them to finish.",
         )
 
-    # 3. Read file bytes with chunked size limits to prevent memory exhaustion
-    file_bytes_array = bytearray()
+    # 3. Validate file size and compute sha256 in chunks to prevent memory exhaustion
+    import anyio
+
+    file_sha256_hash = hashlib.sha256()
+    file_size = 0
+    await file.seek(0)
     try:
         while True:
             chunk = await file.read(65536)  # 64KB chunks
             if not chunk:
                 break
-            file_bytes_array.extend(chunk)
-            if len(file_bytes_array) > max_upload_bytes:
+            await anyio.to_thread.run_sync(file_sha256_hash.update, chunk)
+            file_size += len(chunk)
+            if file_size > max_upload_bytes:
                 raise HTTPException(
                     status_code=413, detail=f"File exceeds maximum size of {settings.MAX_UPLOAD_SIZE_MB}MB"
                 )
     except asyncio.CancelledError:
-        logger.warning(f"Client disconnected during file upload")
+        logger.warning("Client disconnected during file upload")
         raise
 
-    file_bytes = bytes(file_bytes_array)
-    if not file_bytes:
+    if file_size == 0:
         raise HTTPException(status_code=400, detail="File is empty")
 
-    await validate_file_magic(file_bytes, ext)
+    await validate_file_magic(file, ext)
 
     # 4. Compute sha256
-    file_sha256 = hashlib.sha256(file_bytes).hexdigest()
+    file_sha256 = file_sha256_hash.hexdigest()
 
     # 5. Check dedup
     existing = await repo.find_by_sha256(str(user.id), file_sha256, session_id)
@@ -216,11 +238,11 @@ async def upload_document(
             file_type=ext,
             session_id=session_id,
             document_sha256=file_sha256,
-            file_size=len(file_bytes),
+            file_size=file_size,
             storage_key=storage_key,
         )
         await db.commit()
-    except IntegrityError:
+    except IntegrityError as e:
         await db.rollback()
         # A concurrent upload of the same file won the race
         logger.info(f"Concurrent duplicate detected for SHA256 {file_sha256[:12]}…")
@@ -237,12 +259,24 @@ async def upload_document(
         raise HTTPException(
             status_code=409,
             detail="Conflict: A document with this SHA256 already exists in the requested scope."
-        )
+        ) from e
 
-    # 7. Write to storage
-    storage_key = f"{user.id}/{doc.id}.{ext}"
+    # 7. Write to storage (uses the same storage_key stored in the DB record)
     try:
-        await storage.save(storage_key, file_bytes)
+        if hasattr(storage, "base_path"):
+            import aiofiles
+            import aiofiles.os
+            file_path = storage.base_path / storage_key
+            await aiofiles.os.makedirs(file_path.parent, exist_ok=True)
+            await file.seek(0)
+            async with aiofiles.open(file_path, "wb") as dest:
+                while True:
+                    chunk = await file.read(65536)
+                    if not chunk:
+                        break
+                    await dest.write(chunk)
+        else:
+            raise HTTPException(status_code=500, detail="Storage provider must support streaming")
     except asyncio.CancelledError:
         logger.warning(f"Client disconnected while saving file {doc.id}")
         # Let FastAPI's dependency teardown handle the session rollback if necessary.
@@ -298,7 +332,7 @@ async def list_statuses(
     from app.infrastructure.cache.redis_client import get_redis_or_none
 
     repo = DocumentRepository(db)
-            
+
     if active_only:
         docs = await repo.list_active(str(user.id), session_id=session_id)
     else:

@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import useWSClient from '@/core/realtime/useWSClient';
 import useConversationReducer from '@/features/chat/hooks/useConversationReducer';
 import { toast } from '@/shared/utils/toast';
 import { WSPayloadSchema, WSPayload, Viseme } from '../ClassroomShell';
 import { PCMRecorder } from '@/features/voice/audio/pcmRecorder';
+import type { WSOutgoingMessage } from '@/core/realtime/types';
+
+const TOAST_DURATION_MS = 5000;
 
 export function buildWsUrl(avatarId: string, voiceId: string, sessionId?: string | null) {
   const configuredBase = import.meta.env.VITE_WS_BASE_URL;
@@ -51,9 +54,9 @@ export function useClassroomChat({
   const [inputValue, setInputValue] = useState<string>('');
   const [interimTranscript, setInterimTranscript] = useState<string>('');
   
-  const pendingFirstMessagesRef = useRef<any[]>([]);
   const currentSessionIdRef = useRef<string | null>(currentSessionId);
   const sessionRef = useRef(session);
+  const isCreatingSessionRef = useRef<boolean>(false);
 
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
@@ -63,25 +66,12 @@ export function useClassroomChat({
     sessionRef.current = session;
   }, [session]);
 
-  useEffect(() => {
-    if (isConnected && pendingFirstMessagesRef.current.length > 0 && currentSessionId) {
-      const messages = [...pendingFirstMessagesRef.current];
-      pendingFirstMessagesRef.current = [];
-      messages.forEach(({ text, message_id }) => {
-        sessionRef.current.addUserMessage(
-          { id: message_id, role: 'user', content: text, timestamp: Date.now() },
-          currentSessionId
-        );
-        send({ type: 'chat.user_message', data: { message_id, text } });
-      });
-    }
-  }, [isConnected, currentSessionId, send]);
+  // Relying on core useWSMessageQueue for offline-queue delivery instead of custom manual queue.
+
 
   useEffect(() => {
-    if (!currentSessionId) {
-      dispatch({ type: 'RESET' });
-      resetAvatarAudio();
-    }
+    dispatch({ type: 'RESET' });
+    resetAvatarAudio();
   }, [currentSessionId, dispatch, resetAvatarAudio]);
 
   const commitAndSend = useCallback(
@@ -93,17 +83,27 @@ export function useClassroomChat({
       }
       let activeId = currentSessionId;
       if (!activeId) {
+        // DEFENSIVE: Prevent Concurrent Session Creation Race Condition
+        if (isCreatingSessionRef.current) return;
+        isCreatingSessionRef.current = true;
+
         const message_id = crypto.randomUUID();
         resetAvatarAudio();
         dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
         dispatch({ type: 'PIPELINE_STATE', payload: { state: 'thinking' } });
-        pendingFirstMessagesRef.current.push({ message_id, text });
-
         sessionRef.current.handleFirstMessage(text).then((newId: string | null) => {
+          isCreatingSessionRef.current = false;
           if (!newId) {
-            pendingFirstMessagesRef.current = [];
             dispatch({ type: 'PIPELINE_STATE', payload: { state: 'idle' } });
             toast.error('Error', 'Failed to start a new conversation.');
+          } else {
+            // The handleFirstMessage successfully created a session, so the currentSessionId will update shortly.
+            sessionRef.current.addUserMessage(
+              { id: message_id, role: 'user', content: text, timestamp: Date.now() },
+              newId
+            );
+            // The message will be queued by the core WS queue until connection is established.
+            send({ type: 'chat.user_message', data: { message_id, text } });
           }
         });
       } else {
@@ -123,7 +123,7 @@ export function useClassroomChat({
 
   const safeSend = useCallback(
     (message: Record<string, unknown>) => {
-      send(message);
+      send(message as unknown as WSOutgoingMessage);
     },
     [send]
   );
@@ -179,7 +179,8 @@ export function useClassroomChat({
       onMessage('pipeline.state', (rawData: unknown) => {
         const d = validatePayload(rawData);
         if (!d || !checkSession(d)) return;
-        dispatch({ type: 'PIPELINE_STATE', payload: d });
+        const state = (d.state as 'idle' | 'thinking' | 'speaking' | 'error') || 'idle';
+        dispatch({ type: 'PIPELINE_STATE', payload: { state, message_id: d.message_id } });
       }),
       onMessage('tts.ready', (rawData: unknown) => {
         const d = validatePayload(rawData);
@@ -200,8 +201,9 @@ export function useClassroomChat({
       onMessage('error', (rawData: unknown) => {
         const d = validatePayload(rawData);
         if (!d || !checkSession(d)) return;
-        dispatch({ type: 'ERROR', payload: d });
-        toast.error('Error', d.message || 'An error occurred', 5000);
+        const message = d.message || 'An error occurred';
+        dispatch({ type: 'ERROR', payload: { message } });
+        toast.error('Error', message, TOAST_DURATION_MS);
       }),
       onMessage('transcript', (rawData: unknown) => {
         const d = validatePayload(rawData);
@@ -216,6 +218,8 @@ export function useClassroomChat({
     return () => unsubs.forEach((fn) => fn?.());
   }, [onMessage, dispatch, currentSessionId, onTtsReady, onVisemesReady]);
 
+  const wsClient = useMemo(() => ({ connectionState, isConnected, send: safeSend, onMessage }), [connectionState, isConnected, safeSend, onMessage]);
+
   return {
     conversationState,
     connectionState,
@@ -228,6 +232,7 @@ export function useClassroomChat({
     inputValue,
     setInputValue,
     interimTranscript,
-    onMessage
+    onMessage,
+    wsClient
   };
 }

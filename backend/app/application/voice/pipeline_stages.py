@@ -1,17 +1,18 @@
+import asyncio
+import collections
+import contextlib
 import re
 from abc import ABC, abstractmethod
 from pathlib import Path
-
-import collections
 
 from loguru import logger
 
 from app.application.animation.audio_analysis import analyze_tts_for_animation
 from app.application.chat.prompt_builder import PromptBuilder
 from app.application.rag.intent_classifier import IntentClassifier
-from app.domain.voice.entities import TTSResult
 from app.application.voice.pipeline_context import TurnContext
 from app.domain.chat.ports import BaseLLMProvider
+from app.domain.voice.entities import TTSResult
 from app.domain.voice.ports import BaseTTSProvider
 from app.schemas.ws_messages import (
     make_animation_timeline_v2,
@@ -52,9 +53,10 @@ class BaseStage(ABC):
 
 
 class LLMStage(BaseStage):
-    def __init__(self, llm: BaseLLMProvider | None, retrieval=None):
+    def __init__(self, llm: BaseLLMProvider | None, retrieval=None, intent_classifier: IntentClassifier | None = None):
         self._llm = llm
         self._retrieval = retrieval
+        self._intent_classifier = intent_classifier
 
     async def process(self, context: TurnContext) -> None:
         if context.aborted or not context.text_input or not context.history:
@@ -65,11 +67,16 @@ class LLMStage(BaseStage):
 
         if self._retrieval:
             try:
-                if await IntentClassifier.async_is_casual_chat(context.text_input):
+                is_casual = False
+                if self._intent_classifier:
+                    is_casual = await self._intent_classifier.async_is_casual_chat(context.text_input)
+
+                if is_casual:
                     retrieved = ""
                 else:
+                    history_tokens = context.history.get_estimated_tokens()
                     retrieved = await self._retrieval.execute(
-                        context.text_input, session_id=context.session_id
+                        context.text_input, session_id=context.session_id, history_tokens=history_tokens
                     )
                 context.history.system_prompt = PromptBuilder.build_system_prompt_with_context(
                     original_sys_prompt, retrieved
@@ -109,13 +116,10 @@ class LLMStage(BaseStage):
                     if sentence:
                         # Bug 1 Fix: strip all bracketed metadata before TTS
                         clean_sentence = re.sub(r"\[.*?\]", "", sentence).strip()
-                        while not context.cancel_event.is_set():
-                            try:
-                                import asyncio
-                                await asyncio.wait_for(context.sentence_queue.put(clean_sentence), timeout=0.1)
-                                break
-                            except asyncio.TimeoutError:
-                                continue
+                        try:
+                            await context.sentence_queue.put(clean_sentence)
+                        except asyncio.CancelledError:
+                            break
                 if chunk.is_done:
                     break
         except LLMException as e:
@@ -134,14 +138,8 @@ class LLMStage(BaseStage):
         finally:
             context.history.system_prompt = original_sys_prompt
             # Ensure the audio consumer task unblocks when LLM finishes or fails
-            if not context.cancel_event.is_set():
-                while not context.cancel_event.is_set():
-                    try:
-                        import asyncio
-                        await asyncio.wait_for(context.sentence_queue.put(None), timeout=0.1)
-                        break
-                    except asyncio.TimeoutError:
-                        continue
+            with contextlib.suppress(asyncio.CancelledError):
+                await context.sentence_queue.put(None)
 
         if context.aborted:
             return

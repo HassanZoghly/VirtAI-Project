@@ -25,9 +25,7 @@
         "./src/components/*"
       ]
     },
-    "types": [
-      "vite/client"
-    ]
+    "types": ["vite/client"]
   },
   "include": [
     "src"

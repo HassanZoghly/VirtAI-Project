@@ -24,6 +24,7 @@ from app.infrastructure.asr.audio_pipeline import AudioPipeline
 from app.shared.ids import parse_uuid
 
 if TYPE_CHECKING:
+    from app.application.rag.intent_classifier import IntentClassifier
     from app.application.rag.retrieval_use_case import RetrievalUseCase
     from app.domain.chat.ports import BaseLLMProvider, ChatContextCachePort, ChatRepositoryPort
     from app.domain.voice.ports import BaseTTSProvider, StreamingASRService
@@ -45,7 +46,9 @@ class ConversationSession:
         retrieval_service: RetrievalUseCase | None = None,
         animation_stage: Any | None = None,
         context_cache: ChatContextCachePort | None = None,
+        intent_classifier: IntentClassifier | None = None,
         tts_voice: str | None = None,
+        persist_turn: Callable[[str, str, str, str, str | None], Awaitable[None]] | None = None,
     ):
         self.session_id: str = session_id
         self.user_id: str = user_id
@@ -57,8 +60,10 @@ class ConversationSession:
             retrieval=retrieval_service,
             animation_stage=animation_stage,
             context_cache=context_cache,
+            intent_classifier=intent_classifier,
             avatar_id=avatar_id,
             tts_voice=tts_voice,
+            persist_turn=persist_turn,
         )
         self.audio_pipeline = AudioPipeline(
             max_buffer_size=10 * 1024 * 1024,
@@ -119,6 +124,7 @@ class SessionManager:
         retrieval_service_factory: Callable[[], Awaitable[RetrievalUseCase]] | None = None,
         animation_stage_factory: Callable[[], Any] | None = None,
         chat_context_cache_factory: Callable[[], ChatContextCachePort] | None = None,
+        intent_classifier: IntentClassifier | None = None,
     ):
         if session_timeout_sec <= 0:
             raise ValueError("session_timeout_sec must be positive")
@@ -129,13 +135,13 @@ class SessionManager:
         self._sessions: dict[str, ConversationSession] = {}
         self._timeout = session_timeout_sec
         self._cleanup_interval = session_cleanup_interval
-        self._cleanup_task: asyncio.Task | None = None
         self._asr_service_factory = asr_service_factory
         self._llm_service_factory = llm_service_factory
         self._tts_service_factory = tts_service_factory
         self._retrieval_service_factory = retrieval_service_factory
         self._animation_stage_factory = animation_stage_factory
         self._chat_context_cache_factory = chat_context_cache_factory
+        self._intent_classifier = intent_classifier
         self._lock = asyncio.Lock()
 
         logger.info(
@@ -150,7 +156,7 @@ class SessionManager:
         if not voice_id:
             return
 
-        tts = session.pipeline._tts
+        tts = session.pipeline.tts
         if tts is None:
             logger.warning(
                 f"Session TTS voice not applied | id={session.session_id} | "
@@ -235,8 +241,10 @@ class SessionManager:
                     # Wrap the create_chat_session in a nested transaction (savepoint) to make it atomic
                     async with repo.db.begin_nested():
                         await repo.create_chat_session(user_id=user_id, session_id=sid)
-                except IntegrityError:
-                    pass  # It already exists
+                except IntegrityError as e:
+                    persisted_check = await repo.get_chat_session(sid)
+                    if not persisted_check:
+                        raise ValueError("Failed to create session (likely invalid user_id)") from e
 
         # Create service instances
         asr = asr_service or (self._asr_service_factory() if self._asr_service_factory else None)
@@ -258,9 +266,10 @@ class SessionManager:
             retrieval_service=retrieval,
             animation_stage=animation,
             context_cache=context_cache,
+            intent_classifier=self._intent_classifier,
             tts_voice=voice_id,
+            persist_turn=self.persist_turn,
         )
-        session.pipeline._persist_turn = self.persist_turn
         session.on_cleanup = on_cleanup
         async with self._lock:
             self._sessions[sid] = session
@@ -352,13 +361,14 @@ class SessionManager:
         if parsed_session_id is None:
             return
         session_id = str(parsed_session_id)
+        session_to_clean = None
         async with self._lock:
             if session_id in self._sessions:
-                session = self._sessions[session_id]
-                session.cleanup()
-                if session.pipeline._context_cache:
-                    await session.pipeline._context_cache.invalidate(session_id)
-                del self._sessions[session_id]
+                session_to_clean = self._sessions.pop(session_id)
+
+        if session_to_clean:
+            session_to_clean.cleanup()
+            await session_to_clean.pipeline.invalidate_context(session_id)
         logger.info(f"Session removed | id={session_id}")
 
     async def remove_user_sessions(self, user_id: str) -> None:
@@ -366,25 +376,34 @@ class SessionManager:
         if parsed_user_id is None:
             return
         user_id = str(parsed_user_id)
+        sessions_to_clean = []
         async with self._lock:
             to_remove = [sid for sid, s in self._sessions.items() if s.user_id == user_id]
             for sid in to_remove:
-                session = self._sessions[sid]
-                session.cleanup()
-                if session.pipeline._context_cache:
-                    await session.pipeline._context_cache.invalidate(sid)
-                del self._sessions[sid]
-        if to_remove:
-            logger.info(f"Removed {len(to_remove)} sessions for user={user_id}")
+                sessions_to_clean.append(self._sessions.pop(sid))
+
+        for session in sessions_to_clean:
+            session.cleanup()
+            await session.pipeline.invalidate_context(session.session_id)
+
+        if sessions_to_clean:
+            logger.info(f"Removed {len(sessions_to_clean)} sessions for user={user_id}")
 
     async def cleanup_idle(self) -> int:
+        idle_sessions = []
         async with self._lock:
             idle_ids = [sid for sid, s in self._sessions.items() if s.idle_seconds > self._timeout]
-        for sid in idle_ids:
-            await self.remove_session(sid)
-        if idle_ids:
-            logger.info(f"Cleaned up {len(idle_ids)} idle sessions")
-        return len(idle_ids)
+            for sid in idle_ids:
+                idle_sessions.append(self._sessions.pop(sid))
+
+        cleaned = len(idle_sessions)
+        for session in idle_sessions:
+            session.cleanup()
+            await session.pipeline.invalidate_context(session.session_id)
+
+        if cleaned:
+            logger.info(f"Cleaned up {cleaned} idle sessions")
+        return cleaned
 
     async def abort_session(self, session_id: str, message_id: str) -> None:
         parsed_session_id = parse_uuid(session_id)

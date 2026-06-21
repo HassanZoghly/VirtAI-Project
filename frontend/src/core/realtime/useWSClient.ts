@@ -83,18 +83,18 @@ export default function useWSClient(url: string | null) {
   useEffect(() => {
     mount();
     let timerId: ReturnType<typeof setTimeout> | null = null;
-    
+
     if (!url) {
       clearReconnectTimer();
       unmount();
       return;
     }
-    
-    // Debounce the connection attempt to handle React Strict Mode double-mounts
+
+    // Debounce the connection attempt to handle React Strict Mode double-mounts.
     timerId = setTimeout(() => {
-      connect(url);
+      connect(url, null);
     }, 500);
-    
+
     return () => {
       if (timerId) clearTimeout(timerId);
       unmount();
@@ -102,18 +102,9 @@ export default function useWSClient(url: string | null) {
   }, [url, mount, unmount, connect, clearReconnectTimer]);
 
   // Re-connect when the token becomes available (e.g. after a silent refresh)
-  // and there is no live socket yet.
-  // NOTE: `connect` and `connectionState` are intentionally omitted from the
-  // dependency array here. `connect` is stable (wrapped in useCallback with
-  // stable deps) but adding it would trigger an extra connect on every render
-  // where `connectionState` changes, causing an infinite reconnect loop.
-  // `urlRef` and `accessTokenRef` are refs, so they never trigger re-renders.
-  // The only trigger we need is `accessToken` changing.
-  const connectRef = useRef(connect);
-  useEffect(() => {
-    connectRef.current = connect;
-  });
-
+  // and there is no live socket yet. We pass the token explicitly so that the
+  // connection manager never reads a stale ref value — the freshly received
+  // `accessToken` from the Zustand selector is the ground truth here.
   useEffect(() => {
     if (
       accessToken &&
@@ -121,8 +112,12 @@ export default function useWSClient(url: string | null) {
       !wsRef.current &&
       connectionState !== ConnectionState.RECONNECTING
     ) {
-      connectRef.current();
+      connect(null, accessToken);
     }
+    // `connect` is stable (useCallback). `connectionState` is intentionally
+    // excluded: we only want to fire when the *token* changes, not on every
+    // connection-state transition (which would cause infinite reconnect loops).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
 

@@ -10,7 +10,7 @@ Provides FastAPI dependency injection for:
 - Settings
 """
 
-from typing import Annotated, Any, cast
+from typing import Annotated
 
 import redis.asyncio as aioredis
 from fastapi import Depends, Request
@@ -91,6 +91,22 @@ def get_storage(request: Request) -> StorageProvider:
 
 StorageDep = Annotated[StorageProvider, Depends(get_storage)]
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.domain.chat.ports import ChatRepositoryPort
+from app.infrastructure.db.database import get_db
+from app.infrastructure.db.repositories.chat_repository import ChatRepository
+
+
+def get_chat_repository(
+    db: AsyncSession = Depends(get_db),
+    storage_provider: StorageProvider = Depends(get_storage)
+) -> ChatRepositoryPort:
+    return ChatRepository(db=db, storage_provider=storage_provider)
+
+ChatRepositoryDep = Annotated[ChatRepositoryPort, Depends(get_chat_repository)]
+
+
 from app.application.chat.chat_use_case import ChatUseCase
 from app.application.rag.retrieval_use_case import RetrievalUseCase
 from app.application.rag.token_budget import TokenBudgetManager
@@ -111,7 +127,13 @@ async def get_chat_use_case(request: Request) -> ChatUseCase:
             reranker=request.app.state.reranker,
             budget_manager=TokenBudgetManager(),
         )
-        _chat_use_case = ChatUseCase(llm_provider=llm, retrieval_use_case=retrieval)
+        from app.infrastructure.cache.chat_context_cache import ChatContextCache
+        _chat_use_case = ChatUseCase(
+            llm_provider=llm,
+            retrieval_use_case=retrieval,
+            intent_classifier=getattr(request.app.state, "intent_classifier", None),
+            context_cache=ChatContextCache()
+        )
 
     return _chat_use_case
 
@@ -121,31 +143,8 @@ ChatUseCaseDep = Annotated[ChatUseCase, Depends(get_chat_use_case)]
 
 # ── RAG Dependencies ─────────────────────────────────────────────────────────
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.application.rag.nlp_operations import NLPOperations
-from app.domain.rag.ports import EmbeddingProvider, LLMGenerationProvider, VectorCollectionStore
 from app.domain.user.ports import UserRepositoryPort
-from app.infrastructure.db.database import AsyncSessionLocal, get_db
-from app.infrastructure.db.repositories.conversation_repository import ConversationRepository
 from app.infrastructure.db.repositories.user_repository import UserRepository
-from app.infrastructure.llm.provider_factory import LLMProviderFactory
-from app.infrastructure.memory.memory_manager import MemoryManager
-from app.infrastructure.rag.template_parser import TemplateParser
-from app.infrastructure.vector.provider_factory import VectorDBProviderFactory
-
-_llm_generation_provider: LLMGenerationProvider | None = None
-
-def get_llm_generation_provider(
-    settings: Settings = Depends(get_settings),
-) -> LLMGenerationProvider:
-    global _llm_generation_provider
-    if _llm_generation_provider is None:
-        factory = LLMProviderFactory(settings=settings)
-        _llm_generation_provider = factory.create(
-            provider=settings.GENERATION_PROVIDER if hasattr(settings, "GENERATION_PROVIDER") else "OPENAI"
-        )
-    return _llm_generation_provider
 
 
 def get_user_repository(db: AsyncSession = Depends(get_db)) -> UserRepositoryPort:
@@ -155,55 +154,7 @@ def get_user_repository(db: AsyncSession = Depends(get_db)) -> UserRepositoryPor
 UserRepositoryDep = Annotated[UserRepositoryPort, Depends(get_user_repository)]
 
 
-_vector_store: VectorCollectionStore | None = None
 
-def get_vector_collection_store(
-    settings: Settings = Depends(get_settings),
-) -> VectorCollectionStore:
-    global _vector_store
-    if _vector_store is None:
-        # Use AsyncSessionLocal as the session factory since PGVectorCollectionProvider uses `async with self.db_client():`
-        factory = VectorDBProviderFactory(settings=settings, db_client=AsyncSessionLocal)
-        _vector_store = factory.create()
-    return _vector_store
-
-
-def get_memory_manager(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    llm_provider: LLMGenerationProvider = Depends(get_llm_generation_provider)
-) -> MemoryManager:
-    from app.infrastructure.memory.semantic_memory_store import SemanticMemoryStore
-    repo = ConversationRepository(db=db)
-    semantic_store = SemanticMemoryStore(embedder=request.app.state.embedder, llm_provider=llm_provider)
-    return MemoryManager(conversation_repo=repo, semantic_store=semantic_store)
-
-
-_template_parser: TemplateParser | None = None
-
-def get_nlp_operations(
-    request: Request,
-    vector_store: VectorCollectionStore = Depends(get_vector_collection_store),
-    llm_provider: LLMGenerationProvider = Depends(get_llm_generation_provider),
-    memory_manager: MemoryManager = Depends(get_memory_manager),
-) -> NLPOperations:
-    global _template_parser
-    if _template_parser is None:
-        _template_parser = TemplateParser()
-
-    # Get embedding provider from app state just like get_chat_use_case
-    embedding_provider: EmbeddingProvider = request.app.state.embedder
-
-    return NLPOperations(
-        vector_store=vector_store,
-        llm_provider=llm_provider,
-        embedding_provider=embedding_provider,
-        template_parser=cast("Any", _template_parser),
-        memory_manager=memory_manager,
-    )
-
-
-NLPOperationsDep = Annotated[NLPOperations, Depends(get_nlp_operations)]
 
 from datetime import datetime, timezone
 

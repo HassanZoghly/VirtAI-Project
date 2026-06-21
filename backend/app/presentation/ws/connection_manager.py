@@ -72,6 +72,14 @@ class WSConnectionManager:
                 self._active.pop(session_id, None)
         await self._cleanup_websocket(websocket)
 
+    async def cleanup_session(self, session_id: str) -> None:
+        """Completely clean up memory tracking for a session when it is permanently destroyed."""
+        async with self._lock:
+            self._active.pop(session_id, None)
+            self._history.pop(session_id, None)
+            self._seq.pop(session_id, None)
+            self._acked.pop(session_id, None)
+
     async def _cleanup_websocket(self, websocket: WebSocket) -> None:
         async with self._lock:
             meta = self._ws_metadata.pop(websocket, None)

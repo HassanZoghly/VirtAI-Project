@@ -140,7 +140,7 @@ class IngestDocumentUseCase:
 
         for i in range(0, total_chunks, batch_size):
             if await cancellation_check():
-                await self.cleanup_failed_job(doc_id, storage_key)
+                await self.cleanup_failed_job(doc_id, next_version, storage_key)
                 raise IngestionCancelledException()
 
             batch_texts = chunks_text[i : i + batch_size]
@@ -152,7 +152,7 @@ class IngestDocumentUseCase:
 
             # Index batch in short transaction
             chunks_to_store = []
-            for j, (text, emb) in enumerate(zip(batch_texts, embeddings)):
+            for j, (text, emb) in enumerate(zip(batch_texts, embeddings, strict=False)):
                 chunk = DocumentChunk(
                     id=None,
                     document_id=doc_uuid,
@@ -191,7 +191,7 @@ class IngestDocumentUseCase:
         await progress_callback("INDEXING", 90, processed, total_chunks)
 
         if await cancellation_check():
-            await self.cleanup_failed_job(doc_id, storage_key)
+            await self.cleanup_failed_job(doc_id, next_version, storage_key)
             raise IngestionCancelledException()
 
         async with self.db_session_factory() as db:
@@ -199,7 +199,7 @@ class IngestDocumentUseCase:
             rows = await repo.activate_chunk_version(doc_id, next_version, total_chunks)
             if rows == 0:
                 # Activation aborted (e.g. document was CANCELLED mid-activation)
-                await self.cleanup_failed_job(doc_id, storage_key)
+                await self.cleanup_failed_job(doc_id, next_version, storage_key)
                 raise IngestionCancelledException()
             await db.commit()
 
@@ -220,12 +220,14 @@ class IngestDocumentUseCase:
             await repo.mark_completed(doc_id)
             await db.commit()
 
-    async def cleanup_failed_job(self, doc_id: str, storage_key: str) -> None:
+    async def cleanup_failed_job(self, doc_id: str, version: int, storage_key: str) -> None:
         """Cleans up completely on cancellation or permanent failure (zero retrieval pollution)."""
+        has_other_chunks = False
         async with self.db_session_factory() as db:
             repo = self.document_repo_factory(db)
-            await repo.delete_all_chunks(doc_id)
+            await repo.delete_chunks_by_version(doc_id, version)
+            has_other_chunks = await repo.has_any_chunks(doc_id)
             await db.commit()
 
-        if await self.storage.exists(storage_key):
+        if not has_other_chunks and await self.storage.exists(storage_key):
             await self.storage.delete(storage_key)

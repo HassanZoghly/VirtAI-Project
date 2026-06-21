@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import sys
 import os
-from types import ModuleType
+import sys
 from pathlib import Path
+from types import ModuleType
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:

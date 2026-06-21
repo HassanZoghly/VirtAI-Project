@@ -7,12 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi import Path as PathParam
 from fastapi.responses import FileResponse
 from loguru import logger
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.user.entities import UserEntity
-from app.infrastructure.db.database import get_db
-from app.infrastructure.db.repositories.chat_repository import ChatRepository
-from app.presentation.http.v1.dependencies import _current_user
+from app.presentation.http.v1.dependencies import ChatRepositoryDep, _current_user
 from app.shared.audio_ids import is_safe_path_component, is_valid_audio_message_id
 from app.shared.config import get_settings
 from app.shared.ids import parse_uuid
@@ -34,8 +31,8 @@ AUDIO_STORAGE_PATH = Path(get_settings().AUDIO_STORAGE_PATH)
 async def get_audio_file(
     session_id: Annotated[str, PathParam(description="Session identifier")],
     message_id: Annotated[str, PathParam(description="Message identifier")],
+    repo: ChatRepositoryDep,
     user: UserEntity = Depends(_current_user),
-    db: AsyncSession = Depends(get_db),
 ) -> FileResponse:
     if not is_valid_audio_message_id(message_id):
         logger.warning(f"Invalid message_id attempted: {message_id}")
@@ -49,7 +46,6 @@ async def get_audio_file(
             logger.warning(f"Invalid session_id attempted: {session_id}")
             raise HTTPException(status_code=400, detail=f"Invalid session_id format: {session_id}")
 
-        repo = ChatRepository(db)
         db_session = await repo.get_chat_session(session_id)
         if db_session is None or db_session.get("user_id") != str(user.id):
             logger.warning(f"Session not found or unauthorized for session {session_id}")
@@ -76,7 +72,7 @@ async def get_audio_file(
             raise HTTPException(status_code=400, detail="Invalid file path")
     except Exception as e:
         logger.error(f"Error resolving path {file_path}: {e}")
-        raise HTTPException(status_code=400, detail="Invalid file path")
+        raise HTTPException(status_code=400, detail="Invalid file path") from e
 
     logger.info(f"Serving audio file: {file_path}")
     return FileResponse(path=str(file_path), media_type="audio/mpeg", filename=f"{message_id}.mp3")

@@ -1,6 +1,9 @@
 import { useRef, useCallback, useEffect } from 'react';
 import { useAuthStore } from '@/features/auth/store/authStore';
 
+const IMMEDIATE_STOP_TIME = 0;
+const WATCHDOG_TIMEOUT_MS = 2000;
+
 export interface Viseme {
   start: number;
   end: number;
@@ -39,7 +42,7 @@ export function useGaplessAudioQueue() {
 
     scheduledNodesRef.current.forEach((node) => {
       try {
-        node.stop(0);
+        node.stop(IMMEDIATE_STOP_TIME);
         node.disconnect();
       } catch (e) {}
     });
@@ -105,6 +108,9 @@ export function useGaplessAudioQueue() {
           source.onended = () => {
             try {
               source.disconnect();
+              // Defensive GC: Nullify buffer to prevent memory leaks from retained audio buffers
+              // @ts-ignore - intentional memory release
+              source.buffer = null;
             } catch (e) {}
             scheduledNodesRef.current = scheduledNodesRef.current.filter((n) => n !== source);
           };
@@ -131,6 +137,25 @@ export function useGaplessAudioQueue() {
 
   useEffect(() => {
     return () => flushQueue();
+  }, [flushQueue]);
+
+  useEffect(() => {
+    // DEFENSIVE: Stalled Audio Queue Watchdog
+    // Polls the AudioContext state. If suspended while nodes are scheduled, forces resume.
+    // If playback is irreparably desynced (stuck 2000ms past intended end), flushes queue to recover.
+    const watchdog = window.setInterval(() => {
+      const ctx = audioContextRef.current;
+      if (!ctx || scheduledNodesRef.current.length === 0) return;
+      
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      } else if (ctx.state === 'running' && ctx.currentTime > nextPlaybackTimeRef.current + (WATCHDOG_TIMEOUT_MS / 1000)) {
+        console.warn('[GaplessAudio] Watchdog triggered: Audio context stalled. Flushing queue.');
+        flushQueue();
+      }
+    }, WATCHDOG_TIMEOUT_MS);
+
+    return () => window.clearInterval(watchdog);
   }, [flushQueue]);
 
   return {

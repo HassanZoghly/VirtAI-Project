@@ -24,15 +24,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from app.infrastructure.db.database import Base
 from app.infrastructure.db.models import (
-    Asset,  # noqa: F401
     Avatar,  # noqa: F401
     ChatSession,  # noqa: F401
-    Conversation,  # noqa: F401
-    DataChunk,  # noqa: F401
     Document,  # noqa: F401
     DocumentChunk,  # noqa: F401
     Message,  # noqa: F401
-    Project,  # noqa: F401
     User,  # noqa: F401
 )
 from app.shared.config import get_settings

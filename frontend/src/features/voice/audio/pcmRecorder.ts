@@ -64,7 +64,6 @@ export class PCMRecorder {
           await ctx.suspend();
         }
         
-        // @ts-expect-error Vite worker import
         const workletUrlModule = await import('./pcmWorklet.ts?url');
         this.cachedWorkletUrl = workletUrlModule.default;
         await ctx.audioWorklet.addModule(this.cachedWorkletUrl);

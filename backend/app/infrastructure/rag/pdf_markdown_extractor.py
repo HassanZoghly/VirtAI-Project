@@ -54,17 +54,6 @@ class ExtractedPage:
     metadata: dict = field(default_factory=dict)
 
 
-def _run_extract(file_path: str) -> list[ExtractedPage]:
-    """Top-level helper to allow safe pickling for ProcessPoolExecutor."""
-    extractor = PDFMarkdownExtractor()
-    return extractor.extract(file_path)
-
-
-import concurrent.futures
-# Global process pool to completely bypass the GIL for heavy C-extension/OCR tasks
-_PROCESS_POOL = concurrent.futures.ProcessPoolExecutor(max_workers=4)
-
-
 class PDFMarkdownExtractor(DocumentParser):
     """
     Extracts structured Markdown from PDF files using PyMuPDF.
@@ -123,10 +112,9 @@ class PDFMarkdownExtractor(DocumentParser):
         return pages
 
     async def parse(self, file_path: str, file_type: str) -> str:
-        """Implements DocumentParser.parse"""
-        import asyncio
-        loop = asyncio.get_running_loop()
-        pages = await loop.run_in_executor(_PROCESS_POOL, _run_extract, file_path)
+        """Implements DocumentParser.parse — offloads blocking extraction to a thread."""
+        import anyio
+        pages = await anyio.to_thread.run_sync(self.extract, file_path)
         return "\n\n".join(page.page_content for page in pages)
 
     async def parse_bytes(self, data: bytes, file_type: str) -> str:

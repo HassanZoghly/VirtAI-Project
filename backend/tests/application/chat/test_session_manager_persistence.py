@@ -37,6 +37,9 @@ def _make_manager(get_session=None, create_session=None) -> SessionManager:
         async def delete_chat_session(self, session_id: str) -> bool:
             return True
 
+        async def update_chat_session_title(self, session_id: str, title: str) -> bool:
+            return True
+
         async def save_message(self, session_id: str, role: str, content: str, input_type: str = "text", tts_cache_key: str | None = None, sources: list[dict] | None = None) -> dict:
             return {}
 

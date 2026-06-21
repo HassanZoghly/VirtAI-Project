@@ -157,7 +157,7 @@ class OpenAITTSProvider(BaseTTSProvider):
                     timeout=get_settings().TTS_TIMEOUT_SEC,
                 )
             except asyncio.TimeoutError:
-                raise TTSException("TTS synthesis timed out (wait_for trigger)")
+                raise TTSException("TTS synthesis timed out (wait_for trigger)") from None
             await cache_audio(text=sanitized_text, voice=api_voice, audio_bytes=result.audio_bytes)
 
         storage_base = Path(get_settings().AUDIO_STORAGE_PATH)
@@ -171,7 +171,7 @@ class OpenAITTSProvider(BaseTTSProvider):
             logger.success(f"Audio saved | path={audio_file_path}")
         except Exception as e:
             logger.error(f"Failed to save audio: {e}")
-            raise TTSException(f"Failed to save audio: {e!s}")
+            raise TTSException(f"Failed to save audio: {e!s}") from e
 
         result.audio_ref = str(audio_file_path)
         return result
@@ -204,7 +204,7 @@ class OpenAITTSProvider(BaseTTSProvider):
             audio_bytes = response.content
         except Exception as e:
             logger.error(f"TTS synthesis failed: {e} | trace_id={trace_id}")
-            raise TTSException(f"TTS failed: {e!s}")
+            raise TTSException(f"TTS failed: {e!s}") from e
 
         if not audio_bytes:
             raise TTSException("TTS returned empty audio")
@@ -253,7 +253,7 @@ class OpenAITTSProvider(BaseTTSProvider):
                 if attempt < max_retries - 1:
                     await asyncio.sleep(2**attempt)
                 else:
-                    raise TTSException(f"TTS streaming failed: {e!s}")
+                    raise TTSException(f"TTS streaming failed: {e!s}") from e
 
     async def get_available_voices(self) -> list[dict]:
         return [

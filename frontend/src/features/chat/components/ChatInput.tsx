@@ -31,7 +31,7 @@ export default function ChatInput({
   onBeforeVoiceStart,
   onStop,
 }: ChatInputProps) {
-  const requestRef = useRef<number>();
+  const requestRef = useRef<number>(0);
 
   useEffect(() => {
     return () => {

@@ -127,7 +127,7 @@ async def run_ingestion_task(
             if isinstance(e, httpx.HTTPStatusError) and e.response.status_code in (429, 503):
                 retry_after = e.response.headers.get("retry-after")
                 defer = int(retry_after) if retry_after and retry_after.isdigit() else 30
-                raise Retry(defer=defer)
+                raise Retry(defer=defer) from e
             raise  # ARQ will retry
     finally:
         # Only release if we own the lock
@@ -141,16 +141,18 @@ async def run_ingestion_task(
 
 async def sweep_stalled_jobs(ctx: dict) -> None:
     """Cron task to identify and clean up orphaned jobs from ungracefully killed workers."""
+    from datetime import datetime, timedelta, timezone
+
     from sqlalchemy import select
+
     from app.infrastructure.db.models import Document
-    from datetime import datetime, timezone, timedelta
-    
+
     threshold = datetime.now(timezone.utc) - timedelta(seconds=LOCK_TTL)
     terminal = ["COMPLETE", "FAILED", "CANCELLED"]
-    
+
     async with AsyncSessionLocal() as db:
         repo = DocumentRepository(db)
-        
+
         # Find all documents that are processing but haven't completed within TTL
         stmt = select(Document.id, Document.storage_key).where(
             Document.current_stage.notin_(terminal),
@@ -158,7 +160,7 @@ async def sweep_stalled_jobs(ctx: dict) -> None:
         )
         result = await db.execute(stmt)
         stalled_docs = result.all()
-        
+
         for doc_id, storage_key in stalled_docs:
             logger.info(f"Sweeping stalled job for document {doc_id}")
             # Mark as failed
@@ -169,7 +171,7 @@ async def sweep_stalled_jobs(ctx: dict) -> None:
             )
             # Clean up vector DB chunks to prevent orphaned vectors
             await repo.delete_all_chunks(str(doc_id))
-            
+
         await db.commit()
 
 

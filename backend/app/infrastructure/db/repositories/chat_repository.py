@@ -24,11 +24,15 @@ def _derive_session_title(content: str, max_len: int = 30) -> str:
     return content.strip()[:max_len]
 
 
+from app.domain.storage.ports import StorageProvider
+
+
 class ChatRepository(ChatRepositoryPort):
     """SQLAlchemy implementation of chat repository."""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, storage_provider: StorageProvider):
         self.db = db
+        self.storage_provider = storage_provider
 
     async def create_chat_session(
         self, user_id: str, title: str = "New Chat", session_id: str | None = None
@@ -121,9 +125,21 @@ class ChatRepository(ChatRepositoryPort):
         # Delete scoped documents associated with this session
         from app.infrastructure.db.models import Document
 
+        stmt_docs = select(Document.storage_key).where(Document.retrieval_scope == "SESSION", Document.scope_id == sid)
+        result_docs = await self.db.execute(stmt_docs)
+        storage_keys = result_docs.scalars().all()
+
         await self.db.execute(
             delete(Document).where(Document.retrieval_scope == "SESSION", Document.scope_id == sid)
         )
+
+        for key in storage_keys:
+            if key:
+                try:
+                    await self.storage_provider.delete(key)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Failed to delete orphaned file {key}: {e}")
 
         # Delete messages first
         await self.db.execute(delete(Message).where(Message.session_id == sid))
@@ -157,11 +173,25 @@ class ChatRepository(ChatRepositoryPort):
         # We also need to delete scoped documents because they are linked to the session
         from app.infrastructure.db.models import Document
 
+        stmt_docs = select(Document.storage_key).where(
+            Document.retrieval_scope == "SESSION", Document.scope_id.in_(session_ids)
+        )
+        result_docs = await self.db.execute(stmt_docs)
+        storage_keys = result_docs.scalars().all()
+
         await self.db.execute(
             delete(Document).where(
                 Document.retrieval_scope == "SESSION", Document.scope_id.in_(session_ids)
             )
         )
+
+        for key in storage_keys:
+            if key:
+                try:
+                    await self.storage_provider.delete(key)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Failed to delete orphaned file {key}: {e}")
 
         await self.db.flush()
 
@@ -220,12 +250,12 @@ class ChatRepository(ChatRepositoryPort):
         stmt = (
             select(Message)
             .where(Message.session_id == require_uuid(session_id, field_name="session_id"))
-            .order_by(Message.timestamp.asc())
+            .order_by(Message.timestamp.desc())
             .limit(limit)
         )
         result = await self.db.execute(stmt)
         messages = result.scalars().all()
-        return [self._serialize_message(m) for m in messages]
+        return [self._serialize_message(m) for m in reversed(messages)]
 
     async def get_message_count(self, session_id: str) -> int:
         """Get total message count for a session."""

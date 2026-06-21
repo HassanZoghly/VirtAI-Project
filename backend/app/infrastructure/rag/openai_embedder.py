@@ -25,7 +25,7 @@ class OpenAIEmbedder(EmbeddingProvider):
             return response.data[0].embedding
         except Exception as e:
             logger.error(f"OpenAI embedding failed: {e}")
-            raise RuntimeError(f"Embedding generation failed: {e}")
+            raise RuntimeError(f"Embedding generation failed: {e}") from e
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         if not texts:
@@ -38,4 +38,7 @@ class OpenAIEmbedder(EmbeddingProvider):
             return [data.embedding for data in response.data]
         except Exception as e:
             logger.error(f"OpenAI batch embedding failed: {e}")
-            raise RuntimeError(f"Batch embedding generation failed: {e}")
+            raise RuntimeError(f"Batch embedding generation failed: {e}") from e
+
+    async def close(self) -> None:
+        await self.client.close()

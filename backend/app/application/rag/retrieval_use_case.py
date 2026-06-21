@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from loguru import logger
 
 from app.application.rag.token_budget import TokenBudgetManager
@@ -44,7 +46,7 @@ class RetrievalUseCase:
         self.budget_manager = budget_manager
 
     async def retrieve(
-        self, query: str, top_k: int = 5, session_id: str | None = None
+        self, query: str, top_k: int = 5, session_id: str | None = None, user_id: str | UUID | None = None
     ) -> RetrievalResult:
         """Retrieves relevant chunks via hybrid search and optional reranking."""
         if not query.strip():
@@ -56,6 +58,12 @@ class RetrievalUseCase:
             scope_uuid = parse_uuid(session_id) if session_id else None
             scope = "SESSION" if scope_uuid else "GLOBAL"
 
+            user_uuid = parse_uuid(user_id) if user_id else None
+
+            if not user_uuid:
+                logger.warning("RAG retrieval aborted: user_id is required for all scopes.")
+                return RetrievalResult(status=RetrievalStatus.NO_RESULTS)
+
             # 1. Hybrid Search
             results = await self.vector_store.hybrid_search(
                 query_text=query,
@@ -63,6 +71,7 @@ class RetrievalUseCase:
                 limit=top_k * 3,  # fetch more for diversity and reranking
                 scope=scope,
                 scope_id=scope_uuid,
+                user_id=user_uuid,
             )
 
             if not results:
@@ -70,37 +79,45 @@ class RetrievalUseCase:
 
             chunks = [chunk for chunk, _ in results]
 
-            # 2. Reranking
+            used_reranker = False
             if self.reranker:
                 try:
                     ranked_results = await self.reranker.rerank(query=query, chunks=chunks, top_k=top_k * 2)
                     results = ranked_results
+                    used_reranker = True
                 except Exception as e:
-                    logger.error(f"Reranker failed: {e}. Falling back to un-reranked results.")
+                    logger.error(f"Reranker failed (Query: {query[:50]}): {e}", exc_info=True)
+                    # Fallback to un-reranked results
+                    # (results is already set to the hybrid search chunks)
 
-            # 3. Apply max chunks per source diversity
-            final_chunks = []
+            # 3. Apply dynamic decay for source diversity
             source_counts = {}
-            max_per_source = 3
-
+            decayed_results = []
             for chunk, score in results:
                 source = _source_name(chunk.metadata)
-                if source_counts.get(source, 0) < max_per_source:
-                    source_counts[source] = source_counts.get(source, 0) + 1
-                    final_chunks.append(RetrievedDocument(
-                        text=chunk.chunk_text,
-                        score=score,
-                        metadata=chunk.metadata,
-                        id=str(chunk.id)
-                    ))
-                if len(final_chunks) >= top_k:
-                    break
+                count = source_counts.get(source, 0)
+                decayed_score = score * (0.85 ** count)
+                source_counts[source] = count + 1
+                decayed_results.append((chunk, score, decayed_score))
+
+            decayed_results.sort(key=lambda x: x[2], reverse=True)
+
+            final_chunks = []
+            for chunk, original_score, _ in decayed_results[:top_k]:
+                final_chunks.append(RetrievedDocument(
+                    text=chunk.chunk_text,
+                    score=original_score,
+                    metadata=chunk.metadata,
+                    id=str(chunk.id)
+                ))
 
             status = RetrievalStatus.SUCCESS
             if len(final_chunks) == 0:
                 status = RetrievalStatus.NO_RESULTS
-            elif final_chunks[0].score < 0.2:
-                status = RetrievalStatus.LOW_CONFIDENCE
+            else:
+                threshold = 0.2 if used_reranker else 0.01
+                if final_chunks[0].score < threshold:
+                    status = RetrievalStatus.LOW_CONFIDENCE
 
             return RetrievalResult(status=status, documents=final_chunks)
 
@@ -108,63 +125,21 @@ class RetrievalUseCase:
             logger.error(f"Retrieval failed: {e}")
             return RetrievalResult(status=RetrievalStatus.FAILED)
 
-    async def inject_context(
+    async def get_formatted_context(
         self,
         query: str,
-        system_prompt: str,
         top_k: int = 5,
         session_id: str | None = None,
         max_context_tokens: int = 4000,
+        user_id: str | UUID | None = None,
+        history_tokens: int = 0,
+        system_prompt: str = "",
     ) -> str:
-        """Retrieves relevant chunks and injects them into the system prompt."""
+        """Retrieves and formats context chunks, respecting token budgets."""
         try:
-            retrieval_result = await self.retrieve(query, top_k=top_k, session_id=session_id)
-        except RetrievalError as e:
-            logger.warning(f"Retrieval error: {e}", extra={"query": query})
-            return system_prompt
-
-        if retrieval_result.status in (RetrievalStatus.NO_RESULTS, RetrievalStatus.FAILED):
-            return system_prompt
-
-        chunks = retrieval_result.documents
-
-        if self.budget_manager:
-            chunks = self.budget_manager.fit_chunks_to_budget(
-                chunks=chunks,
-                system_prompt=system_prompt,
-                user_query=query,
-                max_context_tokens=max_context_tokens,
-            )
-
-        context_parts = []
-        for chunk in chunks:
-            source = _source_name(chunk.metadata)
-            context_parts.append(f"--- Document: {source} ---\n{_get_chunk_text(chunk)}")
-
-        context_block = "\n\n".join(context_parts)
-
-        injected = (
-            f"{system_prompt}\n\n"
-            f"### Retrieved Context ###\n"
-            f"{context_block}\n"
-            f"### End Context ###\n\n"
-            f"Use the above context to answer the user's question accurately. "
-            f"Ground your answer in the provided context."
-        )
-        return injected
-
-    async def execute(self, query: str, limit: int = 5, session_id: str | None = None) -> str:
-        """Retrieves relevant chunks and formats them as a context string."""
-        if not query.strip():
-            return ""
-
-        try:
-            logger.info(f"Retrieving context for query: {query[:50]}")
-            retrieval_result = await self.retrieve(query, top_k=limit, session_id=session_id)
-
+            retrieval_result = await self.retrieve(query, top_k=top_k, session_id=session_id, user_id=user_id)
             if retrieval_result.status in (RetrievalStatus.NO_RESULTS, RetrievalStatus.FAILED):
                 return ""
-
             chunks = retrieval_result.documents
         except RetrievalError as e:
             logger.warning(f"Retrieval error: {e}", extra={"query": query})
@@ -173,15 +148,58 @@ class RetrievalUseCase:
         if self.budget_manager and chunks:
             chunks = self.budget_manager.fit_chunks_to_budget(
                 chunks=chunks,
-                system_prompt="",
+                system_prompt=system_prompt,
                 user_query=query,
-                max_context_tokens=3000,
+                max_context_tokens=max_context_tokens,
+                history_tokens=history_tokens,
             )
 
-        # Format chunks into a single context string
         context_parts = []
         for chunk in chunks:
             source = _source_name(chunk.metadata)
             context_parts.append(f"--- Document: {source} ---\n{_get_chunk_text(chunk)}\n")
 
         return "\n".join(context_parts)
+
+    async def inject_context(
+        self,
+        query: str,
+        system_prompt: str,
+        top_k: int = 5,
+        session_id: str | None = None,
+        max_context_tokens: int = 4000,
+        user_id: str | UUID | None = None,
+        history_tokens: int = 0,
+    ) -> str:
+        """Retrieves relevant chunks and injects them into the system prompt."""
+        context_block = await self.get_formatted_context(
+            query=query,
+            top_k=top_k,
+            session_id=session_id,
+            max_context_tokens=max_context_tokens,
+            user_id=user_id,
+            history_tokens=history_tokens,
+            system_prompt=system_prompt,
+        )
+        if not context_block:
+            return system_prompt
+
+        return (
+            f"{system_prompt}\n\n"
+            f"### Retrieved Context ###\n"
+            f"{context_block.strip()}\n"
+            f"### End Context ###\n\n"
+            f"Use the above context to answer the user's question accurately. "
+            f"Ground your answer in the provided context."
+        )
+
+    async def execute(self, query: str, limit: int = 5, session_id: str | None = None, user_id: str | UUID | None = None, history_tokens: int = 0) -> str:
+        """Retrieves relevant chunks and formats them as a context string."""
+        return await self.get_formatted_context(
+            query=query,
+            top_k=limit,
+            session_id=session_id,
+            max_context_tokens=3000,
+            user_id=user_id,
+            history_tokens=history_tokens,
+        )

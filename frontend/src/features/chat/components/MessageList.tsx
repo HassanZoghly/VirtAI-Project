@@ -5,11 +5,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import MessageBubble from './MessageBubble';
 import { IMessage } from '../../session/types';
-import { IOutboxMessage } from '../hooks/useConversationReducer';
 
 interface MessageListProps {
   messages: IMessage[];
-  outboxQueue: IOutboxMessage[];
   currentMessage: string | null;
   interimTranscript?: string;
   error?: string | null;
@@ -21,9 +19,8 @@ interface MessageListProps {
   onScroll: (e: React.UIEvent<HTMLDivElement>) => void;
 }
 
-export default function MessageList({
+const MessageList = React.memo(function MessageList({
   messages,
-  outboxQueue,
   currentMessage,
   interimTranscript,
   avatarName,
@@ -41,7 +38,7 @@ export default function MessageList({
       aria-live="polite"
       aria-label="Chat messages"
     >
-      {messages.length === 0 && outboxQueue.length === 0 ? (
+      {messages.length === 0 ? (
         <div className="welcome-state">
           <PiLightbulbFilament className="welcome-icon" />
           <h2 className="welcome-title">Start a conversation</h2>
@@ -53,25 +50,6 @@ export default function MessageList({
             <MessageBubble key={msg.id} msg={msg} />
           ))}
           
-          {/* Queued / Offline Messages */}
-          {outboxQueue.map((msg) => (
-            <div
-              key={msg.id}
-              className="chat-message-wrapper user-message-wrapper message-enter"
-              style={{ opacity: 0.6 }}
-            >
-              <div className="chat-message user-message items-start">
-                <div className="message-bubble flex items-center gap-2">
-                  <PiClockFill />
-                  <span>{msg.text}</span>
-                </div>
-                <div className="message-avatar user-avatar">
-                  <User size={22} aria-hidden="true" />
-                </div>
-              </div>
-            </div>
-          ))}
-
           {/* Typing indicator when AI is thinking but not yet streaming */}
           {pipelineState === 'thinking' && !currentMessage && (
             <div
@@ -131,4 +109,6 @@ export default function MessageList({
       )}
     </div>
   );
-}
+});
+
+export default MessageList;

@@ -147,7 +147,7 @@ export function useRealtimeASR(
 
   return {
     isListening: voiceMode.isListening,
-    isPaused: voiceMode.isPaused,
+    isPaused: false,
     isProcessing,
     interimText,
     finalText,

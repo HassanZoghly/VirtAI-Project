@@ -230,20 +230,11 @@ def _delete_refresh_cookie(response: Response) -> None:
     )
 
 
-def _first_name_from_full_name(full_name: str) -> str:
-    stripped = full_name.strip()
-    if not stripped:
-        return ""
-    parts = stripped.split()
-    return parts[0] if parts else ""
-
-
 def _user_response(user: UserEntity) -> UserResponse:
     return UserResponse(
         id=str(user.id),
-        first_name=_first_name_from_full_name(user.full_name),
+        full_name=user.full_name,
         email=user.email,
-        is_new_user=not user.setup_complete,
         setup_complete=user.setup_complete,
     )
 
@@ -505,7 +496,7 @@ async def refresh(
                 raise HTTPException(
                     status_code=503,
                     detail="Session refresh failed — please log in again",
-                )
+                ) from redis_err
 
             await invalidate_auth_session(str(user_id))
             _set_refresh_cookie(response, new_refresh)

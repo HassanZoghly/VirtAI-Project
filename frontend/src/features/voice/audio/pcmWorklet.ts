@@ -6,7 +6,11 @@
  *
  * Requirements: 2.1 - Capture raw PCM audio using AudioWorklet
  */
+declare var AudioWorkletProcessor: any;
+declare function registerProcessor(name: string, processorCtor: any): void;
+
 class PCMWorkletProcessor extends AudioWorkletProcessor {
+  port: any;
   targetChunkSize: number;
   buffer: number[];
 

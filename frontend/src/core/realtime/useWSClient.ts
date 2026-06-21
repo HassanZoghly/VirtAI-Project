@@ -8,7 +8,7 @@ import { ConnectionState, WS_CLOSE_NORMAL } from './wsConstants';
 
 export { ConnectionState } from './wsConstants';
 
-export default function useWSClient(url: string | null, currentSessionId?: string | null) {
+export default function useWSClient(url: string | null) {
   const wsRef = useRef<WebSocket | null>(null);
   const urlRef = useRef<string | null>(url);
   const accessToken = useAuthStore((state) => state.accessToken);
@@ -82,13 +82,21 @@ export default function useWSClient(url: string | null, currentSessionId?: strin
   // Mount / unmount lifecycle.
   useEffect(() => {
     mount();
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    
     if (!url) {
       clearReconnectTimer();
       unmount();
       return;
     }
-    connect(url);
+    
+    // Debounce the connection attempt to handle React Strict Mode double-mounts
+    timerId = setTimeout(() => {
+      connect(url);
+    }, 500);
+    
     return () => {
+      if (timerId) clearTimeout(timerId);
       unmount();
     };
   }, [url, mount, unmount, connect, clearReconnectTimer]);

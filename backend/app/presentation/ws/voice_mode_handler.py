@@ -62,11 +62,12 @@ class VoiceModeHandler:
         conversation_pipeline: ConversationPipeline | None = None,
         turn_callback=None,
         outbound_sender: OutboundSender | None = None,
+        audio_pipeline: AudioPipeline | None = None,
         max_buffer_size: int = 10 * 1024 * 1024,
-        max_chunk_size: int = 1 * 1024 * 1024,
+        max_chunk_size: int = 128 * 1024,
         buffer_timeout: float = 30.0,
         max_buffer_duration: float = 25.0,
-        rate_limit_chunks: int = 100,
+        rate_limit_chunks: int = 25,
         rate_limit_window: float = 1.0,
     ):
         """Initialize voice mode handler.
@@ -107,7 +108,7 @@ class VoiceModeHandler:
         self.outbound_sender = outbound_sender
         # turn_callback takes priority; fall back to pipeline.process_text if available
         self.turn_callback = turn_callback
-        self.audio_pipeline = AudioPipeline(
+        self.audio_pipeline = audio_pipeline or AudioPipeline(
             max_buffer_size=max_buffer_size,
             max_chunk_size=max_chunk_size,
             buffer_timeout=buffer_timeout,
@@ -115,6 +116,7 @@ class VoiceModeHandler:
         )
 
         self._transcription_tasks: set[asyncio.Task] = set()
+        self.max_concurrent_transcriptions = 3
 
         # Rate limiting configuration
         self.rate_limit_chunks = rate_limit_chunks
@@ -367,6 +369,35 @@ class VoiceModeHandler:
             audio_data = self.audio_pipeline.get_audio_for_asr()
             self.audio_pipeline.clear_buffer()
 
+            import numpy as np
+
+            # Strict Server-Side VAD (RMS energy analysis)
+            rms = float(np.sqrt(np.mean(np.square(audio_data))))
+            if rms < 0.005:
+                logger.warning(
+                    f"Server-Side VAD rejected buffer | session={self.session_id} | "
+                    f"rms={rms:.4f} < 0.005"
+                )
+                return
+
+            if len(self._transcription_tasks) >= self.max_concurrent_transcriptions:
+                logger.warning(
+                    f"Dropping audio chunk | session={self.session_id} | "
+                    f"reason=backpressure (max {self.max_concurrent_transcriptions} tasks)"
+                )
+                self.audio_pipeline.clear_buffer()
+                error_message = {
+                    "type": "error",
+                    "code": "SERVER_OVERLOADED",
+                    "message": "The server is processing too much audio. Please wait a moment.",
+                    "session_id": self.session_id,
+                }
+                if self.outbound_sender:
+                    await self.outbound_sender.safe_send_raw(error_message, self.session_id)
+                else:
+                    await self.websocket.send_json(error_message)
+                return
+
             task = asyncio.create_task(
                 self._transcribe_and_send(audio_data, total_size),
                 name=f"voice_asr_{self.session_id}",
@@ -516,18 +547,22 @@ class VoiceModeHandler:
             - Message includes session_id, text, confidence, language, and is_final flag
         """
         try:
-            payload = {
-                "type": "transcript",
-                "session_id": self.session_id,
-                "text": text,
-                "confidence": confidence,
-                "language": language,
-                "is_final": True,
-            }
+            from app.schemas.ws_messages import TranscriptMessage
+            transcript_msg = TranscriptMessage(
+                session_id=self.session_id,
+                text=text,
+                is_final=True,
+                confidence=confidence,
+                language=language
+            )
             if self.outbound_sender:
-                await self.outbound_sender.safe_send_raw(payload, self.session_id)
+                await self.outbound_sender.send_protocol_message(
+                    transcript_msg, self.session_id, False, True
+                )
             else:
-                await self.websocket.send_json(payload)
+                await self.websocket.send_text(
+                    f'{{"type": "transcript", "data": {transcript_msg.model_dump_json()}}}'
+                )
 
             logger.debug(
                 f"Transcript sent | "

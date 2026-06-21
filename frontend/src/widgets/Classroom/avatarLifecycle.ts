@@ -9,7 +9,9 @@ export const AVATAR_STATUS = {
   SCENE_READY: 'scene-ready',
   VISIBLE: 'visible',
   FAILED: 'failed',
-};
+} as const;
+
+export type AvatarStatus = typeof AVATAR_STATUS[keyof typeof AVATAR_STATUS];
 
 export const AVATAR_LIFECYCLE_EVENTS = {
   SCENE_MOUNTED: 'scene-mounted',
@@ -17,9 +19,11 @@ export const AVATAR_LIFECYCLE_EVENTS = {
   VISIBLE: 'visible',
   FAILED: 'failed',
   RETRY: 'retry',
-};
+} as const;
 
-export function resolveAvatarLifecycleTransition(currentStatus, event) {
+export type AvatarLifecycleEvent = typeof AVATAR_LIFECYCLE_EVENTS[keyof typeof AVATAR_LIFECYCLE_EVENTS];
+
+export function resolveAvatarLifecycleTransition(currentStatus: AvatarStatus, event: AvatarLifecycleEvent) {
   if (event === AVATAR_LIFECYCLE_EVENTS.RETRY) {
     return {
       status: AVATAR_STATUS.LOADING,
@@ -80,6 +84,20 @@ export function resolveAvatarLifecycleTransition(currentStatus, event) {
   return { status: currentStatus, changed: false, rejected: true, reason: `Unknown event or invalid transition from ${currentStatus} via ${event}` };
 }
 
+export interface AvatarLifecycleTelemetryPayload {
+  avatarId?: string | null;
+  lifecycleState?: AvatarStatus | null;
+  event?: AvatarLifecycleEvent | null;
+  source?: string | null;
+  previousStatus?: AvatarStatus | null;
+  nextStatus?: AvatarStatus | null;
+  changed?: boolean;
+  rejected?: boolean;
+  stale?: boolean;
+  failureReason?: string | null;
+  timestamp?: string;
+}
+
 export function createAvatarLifecycleTelemetry({
   avatarId = null,
   lifecycleState = null,
@@ -92,7 +110,7 @@ export function createAvatarLifecycleTelemetry({
   stale = false,
   failureReason = null,
   timestamp = new Date().toISOString(),
-} = {}) {
+}: AvatarLifecycleTelemetryPayload = {}) {
   return {
     avatarId,
     lifecycleState,
@@ -108,11 +126,17 @@ export function createAvatarLifecycleTelemetry({
   };
 }
 
-export function emitAvatarLifecycleTelemetry(payload, {
+export interface EmitTelemetryOptions {
+  env?: Record<string, unknown>;
+  logger?: typeof defaultLogger;
+  target?: any;
+}
+
+export function emitAvatarLifecycleTelemetry(payload: AvatarLifecycleTelemetryPayload, {
   env = import.meta.env,
   logger = defaultLogger,
   target = typeof window !== 'undefined' ? window : null,
-} = {}) {
+}: EmitTelemetryOptions = {}) {
   if (!isAvatarDebugEnabled(env)) {
     return null;
   }
@@ -129,11 +153,17 @@ export function emitAvatarLifecycleTelemetry(payload, {
   return record;
 }
 
+export interface InstallDebugControlsOptions {
+  onRetry?: () => void;
+  env?: Record<string, unknown>;
+  target?: any;
+}
+
 export function installAvatarLifecycleDebugControls({
   onRetry,
   env = import.meta.env,
   target = typeof window !== 'undefined' ? window : null,
-} = {}) {
+}: InstallDebugControlsOptions = {}) {
   if (!isAvatarDebugEnabled(env) || !target || typeof onRetry !== 'function') {
     return null;
   }

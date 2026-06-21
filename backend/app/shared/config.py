@@ -180,6 +180,7 @@ class Settings(BaseSettings):
 
     RERANKER_PROVIDER: Literal["cohere"] = "cohere"
     RERANKER_MODEL: str = "rerank-english-v3.0"
+    CROSS_ENCODER_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     USE_DUMMY_RERANKER: bool = False
 
     OPENAI_API_KEY: str = ""

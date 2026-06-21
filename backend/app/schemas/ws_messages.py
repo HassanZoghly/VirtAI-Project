@@ -105,6 +105,12 @@ class ChatAbort(BaseModel):
         return _normalize_required_identifier(v)
 
 
+class ClientSpeechStopped(BaseModel):
+    """Client signals that speech has stopped (VAD silence)."""
+
+    session_id: str | None = Field(None, description="Session identifier")
+
+
 class TTSRequest(BaseModel):
     """
     Client requests TTS generation for specific text.
@@ -135,6 +141,16 @@ class TTSRequest(BaseModel):
 
 
 # ── Server Messages (Backend -> Frontend) ─────────────────────────────────────
+class TranscriptMessage(BaseModel):
+    """Server sends ASR transcript to client."""
+
+    session_id: str = Field(..., description="Session UUID")
+    text: str = Field(..., description="Transcript text")
+    is_final: bool = Field(..., description="Whether this is a final transcript")
+    confidence: float = Field(..., description="Confidence score")
+    language: str = Field(..., description="Detected language")
+
+
 class ChatDelta(BaseModel):
     """
     Server streams LLM tokens as they are generated.
@@ -183,6 +199,7 @@ class PipelineState(BaseModel):
     """
 
     session_id: str = Field(..., description="Session UUID")
+    message_id: str | None = Field(None, description="Message UUID")
     state: Literal["idle", "thinking", "speaking", "error"] = Field(
         ..., description="Current pipeline state"
     )
@@ -369,10 +386,10 @@ def make_user_message_echo(
 
 
 def make_pipeline_state(
-    session_id: str, state: Literal["idle", "thinking", "speaking", "error"]
+    session_id: str, state: Literal["idle", "thinking", "speaking", "error"], message_id: str | None = None
 ) -> PipelineState:
     """Create a PipelineState message."""
-    return PipelineState(session_id=session_id, state=state)
+    return PipelineState(session_id=session_id, state=state, message_id=message_id)
 
 
 def make_tts_ready(session_id: str, message_id: str, audio_url: str, duration_ms: int) -> TTSReady:

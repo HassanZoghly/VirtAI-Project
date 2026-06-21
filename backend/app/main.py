@@ -116,9 +116,7 @@ async def lifespan(app: FastAPI):
             # CrossEncoderReranker is now lazy: __init__ does NOT import
             # sentence_transformers, so this line is safe even if torchaudio
             # native libs are broken.  The heavy import happens on first rerank().
-            app.state.reranker = CrossEncoderReranker(
-                model_name="cross-encoder/ms-marco-MiniLM-L-6-v2"
-            )
+            app.state.reranker = CrossEncoderReranker()
             logger.info("[Reranker] Aggressively warming up CrossEncoderReranker...")
             # Preload the model into RAM asynchronously to avoid blocking startup or first chat request
             loop = asyncio.get_running_loop()
@@ -130,6 +128,15 @@ async def lifespan(app: FastAPI):
                 "Falling back to DummyCrossEncoderReranker for this session."
             )
             app.state.reranker = DummyCrossEncoderReranker()
+
+    # ── Intent Classifier Preload ───────────────────────────────────────────
+    try:
+        from app.application.rag.intent_classifier import IntentClassifier
+        logger.info("[IntentClassifier] Preloading Semantic Router V2.0...")
+        await asyncio.to_thread(IntentClassifier.preload)
+    except Exception as e:
+        logger.error(f"[IntentClassifier] CRITICAL FAIL: Preload crashed ({type(e).__name__}: {e}). "
+                     f"Falling back to standard retrieval.")
 
     redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
     app.state.arq_pool = await create_pool(redis_settings)

@@ -77,7 +77,7 @@ export function createEventRouter(): EventRouter {
         const ignoredTypes = ['chat.abort'];
 
         if (typeHandlers && typeHandlers.size > 0) {
-          const data: EventRouterPayload = message.data ?? message;
+          const data: EventRouterPayload = message.data || ({} as EventRouterPayload);
           typeHandlers.forEach((handler) => handler(data));
         } else if (import.meta.env.DEV && !ignoredTypes.includes(message.type)) {
           console.warn('[WS] Unknown message type:', message.type);

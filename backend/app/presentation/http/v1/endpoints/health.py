@@ -71,7 +71,7 @@ async def health_check(request: Request) -> dict:
     # TTS container readiness
     try:
         async with httpx.AsyncClient(timeout=2.0) as client:
-            response = await client.get("http://tts:8000/health")
+            response = await client.get("http://virtai-tts:8000/health")
             response.raise_for_status()
         status["services"]["tts"] = "ok"
     except Exception as e:

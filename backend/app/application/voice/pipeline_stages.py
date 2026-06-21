@@ -2,9 +2,14 @@ import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+import collections
+
 from loguru import logger
 
+from app.application.animation.audio_analysis import analyze_tts_for_animation
 from app.application.chat.prompt_builder import PromptBuilder
+from app.application.rag.intent_classifier import IntentClassifier
+from app.domain.voice.entities import TTSResult
 from app.application.voice.pipeline_context import TurnContext
 from app.domain.chat.ports import BaseLLMProvider
 from app.domain.voice.ports import BaseTTSProvider
@@ -60,9 +65,12 @@ class LLMStage(BaseStage):
 
         if self._retrieval:
             try:
-                retrieved = await self._retrieval.execute(
-                    context.text_input, session_id=context.session_id
-                )
+                if await IntentClassifier.async_is_casual_chat(context.text_input):
+                    retrieved = ""
+                else:
+                    retrieved = await self._retrieval.execute(
+                        context.text_input, session_id=context.session_id
+                    )
                 context.history.system_prompt = PromptBuilder.build_system_prompt_with_context(
                     original_sys_prompt, retrieved
                 )
@@ -101,7 +109,13 @@ class LLMStage(BaseStage):
                     if sentence:
                         # Bug 1 Fix: strip all bracketed metadata before TTS
                         clean_sentence = re.sub(r"\[.*?\]", "", sentence).strip()
-                        await context.sentence_queue.put(clean_sentence)
+                        while not context.cancel_event.is_set():
+                            try:
+                                import asyncio
+                                await asyncio.wait_for(context.sentence_queue.put(clean_sentence), timeout=0.1)
+                                break
+                            except asyncio.TimeoutError:
+                                continue
                 if chunk.is_done:
                     break
         except LLMException as e:
@@ -120,7 +134,14 @@ class LLMStage(BaseStage):
         finally:
             context.history.system_prompt = original_sys_prompt
             # Ensure the audio consumer task unblocks when LLM finishes or fails
-            await context.sentence_queue.put(None)
+            if not context.cancel_event.is_set():
+                while not context.cancel_event.is_set():
+                    try:
+                        import asyncio
+                        await asyncio.wait_for(context.sentence_queue.put(None), timeout=0.1)
+                        break
+                    except asyncio.TimeoutError:
+                        continue
 
         if context.aborted:
             return
@@ -215,7 +236,6 @@ class AnimationStage(BaseStage):
         self._animation_service = animation_service
         self._viseme_generator = viseme_generator
         self._recent_animation_assets: list[str] = []
-        import collections
         self._profile_usage: dict[str, int] = collections.defaultdict(int)
         self._intent_history: list[str] = []
 
@@ -236,9 +256,6 @@ class AnimationStage(BaseStage):
         else:
             mouth_cues = []
         context.mouth_cues = mouth_cues
-
-        from app.application.animation.audio_analysis import analyze_tts_for_animation
-        from app.domain.voice.entities import TTSResult
 
         safe_tts_result = context.tts_result or TTSResult(
             audio_bytes=b"",

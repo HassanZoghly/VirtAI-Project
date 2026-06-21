@@ -7,7 +7,7 @@
 
 export interface WSOutgoingMessage {
   type: string;
-  data?: Record<string, unknown>;
+  data?: unknown;
   [key: string]: unknown;
 }
 
@@ -48,7 +48,7 @@ export interface SessionResumePayload {
 // ─── Event router ─────────────────────────────────────────────────────────────
 
 /** The payload delivered to registered `onMessage` handlers. */
-export type EventRouterPayload = WSIncomingMessageData | WSIncomingMessage;
+export type EventRouterPayload = WSIncomingMessageData;
 
 /** Minimal logger interface used by the realtime layer. */
 export interface RealtimeLogger {

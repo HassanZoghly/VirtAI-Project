@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isAxiosError } from 'axios';
 import { documentApi } from './documentApi';
 import { Document, RAGStage } from './types';
 
@@ -12,6 +13,7 @@ export function useDocumentList(sessionId: string | null = null) {
 
   const consecutiveFailures = useRef(0);
   const isPolling = useRef(false);
+  const uploadAbortControllersRef = useRef<Map<string, AbortController>>(new Map());
 
   const addOptimisticDocument = useCallback((file: File, temp_id: string) => {
     setDocuments(prev => {
@@ -50,8 +52,8 @@ export function useDocumentList(sessionId: string | null = null) {
         return [...optimisticDocs, ...data];
       });
       setError(null);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to fetch documents');
+    } catch (err: unknown) {
+      setError(isAxiosError(err) ? err.response?.data?.detail || 'Failed to fetch documents' : 'Failed to fetch documents');
     } finally {
       setIsLoading(false);
     }
@@ -64,7 +66,7 @@ export function useDocumentList(sessionId: string | null = null) {
       if (!isPolling.current) return;
 
       try {
-        const activeDocs = await documentApi.listActive();
+        const activeDocs = await documentApi.listActive(sessionId);
         consecutiveFailures.current = 0;
         let needsFullRefresh = false;
 
@@ -111,7 +113,7 @@ export function useDocumentList(sessionId: string | null = null) {
           timeoutId = setTimeout(pollActive, 3000);
         }
 
-      } catch (err) {
+      } catch {
         consecutiveFailures.current++;
         const maxDelay = 12000;
         const baseDelay = 3000;
@@ -130,7 +132,16 @@ export function useDocumentList(sessionId: string | null = null) {
       isPolling.current = false;
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [fetchDocuments]);
+  }, [fetchDocuments, sessionId]);
+
+  // Clear upload queue and abort active uploads implicitly when session changes
+  useEffect(() => {
+    setUploadQueue([]);
+    
+    // Abort all active uploads to prevent them from completing in the background
+    uploadAbortControllersRef.current.forEach(controller => controller.abort());
+    uploadAbortControllersRef.current.clear();
+  }, [sessionId]);
 
   useEffect(() => {
     const processQueue = async () => {
@@ -143,6 +154,7 @@ export function useDocumentList(sessionId: string | null = null) {
       setActiveUploads(prev => prev + 1);
 
       const abortController = new AbortController();
+      uploadAbortControllersRef.current.set(nextItem.tempId, abortController);
       const timeoutId = setTimeout(() => abortController.abort(), 60000);
 
       try {
@@ -155,18 +167,19 @@ export function useDocumentList(sessionId: string | null = null) {
         const response = await documentApi.upload(nextItem.file, sessionId, abortController.signal, nextItem.fileHash);
 
         replaceOptimisticDocument(nextItem.tempId, response.id, response.current_stage);
-      } catch (err: any) {
+      } catch (err: unknown) {
         removeOptimisticDocument(nextItem.tempId);
 
-        if (err.response?.status === 400 || err.response?.status === 403) {
+        if (isAxiosError(err) && (err.response?.status === 400 || err.response?.status === 403)) {
           setError('Session document limit (10) reached or upload forbidden.');
-        } else if (err.name === 'AbortError' || err.name === 'CanceledError') {
-          setError(`Upload timed out for ${nextItem.file.name}`);
+        } else if (err instanceof Error && (err.name === 'AbortError' || err.name === 'CanceledError')) {
+          setError(`Upload cancelled for ${nextItem.file.name}`);
         } else {
-          setError(err.response?.data?.detail || `Failed to upload ${nextItem.file.name}`);
+          setError(isAxiosError(err) ? err.response?.data?.detail || `Failed to upload ${nextItem.file.name}` : `Failed to upload ${nextItem.file.name}`);
         }
       } finally {
         clearTimeout(timeoutId);
+        uploadAbortControllersRef.current.delete(nextItem.tempId);
         setActiveUploads(prev => prev - 1);
       }
     };
@@ -184,8 +197,8 @@ export function useDocumentList(sessionId: string | null = null) {
       await documentApi.delete(id);
       setDocuments((prev) => prev.filter((doc) => doc.id !== id));
       setError(null);
-    } catch (err: any) {
-      throw new Error(err.response?.data?.detail || 'Failed to delete document');
+    } catch (err: unknown) {
+      throw new Error(isAxiosError(err) ? err.response?.data?.detail || 'Failed to delete document' : 'Failed to delete document');
     }
   }, []);
 

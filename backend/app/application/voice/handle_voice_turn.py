@@ -29,6 +29,17 @@ if TYPE_CHECKING:
     from app.application.rag.retrieval_use_case import RetrievalUseCase
 
 
+async def _safe_task(coro: Awaitable[None], name: str = "task") -> None:
+    """Wrapper to ensure TaskGroup child exceptions are logged immediately."""
+    try:
+        await coro
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        logger.error(f"TaskGroup child '{name}' failed with non-fatal error: {e}")
+        # Do not raise to prevent sibling cancellation.
+
+
 class ConversationPipeline:
     """Manages the full conversation pipeline for one WebSocket session."""
 
@@ -136,13 +147,12 @@ class ConversationPipeline:
                         self._history.add_assistant_message(msg["content"])
 
             self._history.add_user_message(text)
-            await send_callback(make_pipeline_state(session_id, "thinking"))
+            await send_callback(make_pipeline_state(session_id, "thinking", message_id))
 
             # Execute pipeline stages concurrently for streaming
             # LLMStage pushes to sentence_queue.
             # Audio task pulls from sentence_queue and runs TTS+Animation sequentially per chunk.
-            llm_task = asyncio.create_task(self.llm_stage.process(context))
-
+            
             async def filler_task_fn():
                 await asyncio.sleep(0.4)
                 if context.aborted or context.sentence_index > 0 or not self._tts:
@@ -156,7 +166,7 @@ class ConversationPipeline:
                     from pathlib import Path
 
                     from app.schemas.ws_messages import make_tts_ready
-                    assert filler_tts.audio_ref is not None  # narrowed by the getattr check above
+                    assert filler_tts.audio_ref is not None
                     audio_file_id = Path(filler_tts.audio_ref).stem
                     audio_url = f"/api/v1/audio/system/{audio_file_id}.mp3"
                     await send_callback(
@@ -169,13 +179,7 @@ class ConversationPipeline:
                     )
 
             from app.shared.config import get_settings
-
             settings = get_settings()
-            filler_task = (
-                asyncio.create_task(filler_task_fn())
-                if settings.ENABLE_FILLER_AUDIO
-                else None
-            )
 
             async def process_audio():
                 while not context.aborted:
@@ -190,19 +194,15 @@ class ConversationPipeline:
                     await self.animation_stage.process(context)
                     context.sentence_index += 1
 
-            audio_task = asyncio.create_task(process_audio())
-
-            tasks = [llm_task, audio_task]
-            if filler_task is not None:
-                tasks.append(filler_task)
+            # 2. TaskGroup Stability Execution
             try:
-                await asyncio.gather(*tasks)
+                async with asyncio.TaskGroup() as tg:
+                    tg.create_task(_safe_task(self.llm_stage.process(context), "llm_stage"))
+                    tg.create_task(_safe_task(process_audio(), "audio_stage"))
+                    if settings.ENABLE_FILLER_AUDIO:
+                        tg.create_task(_safe_task(filler_task_fn(), "filler_task"))
             except Exception:
                 context.abort()
-                for task in tasks:
-                    if not task.done():
-                        task.cancel()
-                await asyncio.gather(*tasks, return_exceptions=True)
                 raise
 
         except asyncio.CancelledError:
@@ -242,7 +242,6 @@ class ConversationPipeline:
                     )
 
                 if self._context_cache:
-                    # ensure we only yield control inside async if possible
                     with suppress(Exception):
                         await self._context_cache.push_message(
                             session_id,
@@ -252,7 +251,7 @@ class ConversationPipeline:
                         )
 
             with suppress(Exception):
-                await send_callback(make_pipeline_state(session_id, "idle"))
+                await send_callback(make_pipeline_state(session_id, "idle", message_id))
             self._current_message_id = None
             self._current_context = None
             logger.info(

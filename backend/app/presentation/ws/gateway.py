@@ -99,7 +99,8 @@ class WebSocketHandler:
 
         if self._voice_mode_handler:
             await self._voice_mode_handler.shutdown()
-            self._voice_mode_handler.audio_pipeline.clear_buffer()
+            # We do NOT clear the audio_pipeline here. It remains in the Session
+            # so that a reconnecting WS client can append audio seamlessly.
 
         try:
             from starlette.websockets import WebSocketState
@@ -241,6 +242,8 @@ class WebSocketHandler:
                         self._session_pending,
                         self._connected,
                     )
+                    self._connected = False
+                    break
         finally:
             await self._cleanup()
 
@@ -282,6 +285,7 @@ class WebSocketHandler:
                 asr_service=asr_service,
                 turn_callback=self._run_text_turn,
                 outbound_sender=self.outbound_sender,
+                audio_pipeline=getattr(self.session, "audio_pipeline", None),
             )
         return self._voice_mode_handler
 
@@ -296,6 +300,7 @@ class WebSocketHandler:
             raise RuntimeError("Pipeline not initialized")
 
         message_id = str(uuid.uuid4())
+        self._current_message_id = message_id
         session_id = self.session.session_id
         trace_id = str(uuid.uuid4())
 
@@ -329,10 +334,13 @@ class WebSocketHandler:
             voice_handler = await self._get_voice_mode_handler()
 
             is_final = False
-            if len(pcm_bytes) >= 3:
+            # Deterministic binary frame format:
+            # - If length is odd, the last byte is the marker (0x00=continue, 0x01=final)
+            # - If length is even, there is no marker (legacy/raw PCM from frontend)
+            if len(pcm_bytes) % 2 != 0 and len(pcm_bytes) > 0:
                 marker = pcm_bytes[-1]
                 pcm_data = pcm_bytes[:-1]
-                if len(pcm_data) % 2 == 0 and marker in (0x00, 0x01):
+                if marker in (0x00, 0x01):
                     is_final = marker == 0x01
                 else:
                     pcm_data = pcm_bytes

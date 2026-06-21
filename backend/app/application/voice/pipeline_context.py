@@ -36,10 +36,18 @@ class TurnContext:
     send_binary_callback: Callable[[bytes], asyncio.Future] | None = None
     aborted: bool = False
 
-    # A queue to handle streaming items between LLM and TTS if needed
-    sentence_queue: asyncio.Queue[str | None] = field(default_factory=lambda: asyncio.Queue(maxsize=5))
+    # 3. Backpressure: Strict LLM-to-TTS pacing using maxsize=3
+    sentence_queue: asyncio.Queue[str | None] = field(default_factory=lambda: asyncio.Queue(maxsize=3))
     current_sentence: str | None = None
     sentence_index: int = 0
+    cancel_event: asyncio.Event = field(default_factory=asyncio.Event)
 
     def abort(self) -> None:
         self.aborted = True
+        self.cancel_event.set()
+        while not self.sentence_queue.empty():
+            try:
+                self.sentence_queue.get_nowait()
+                self.sentence_queue.task_done()
+            except asyncio.QueueEmpty:
+                break

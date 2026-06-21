@@ -139,6 +139,40 @@ async def run_ingestion_task(
             logger.error({**log_ctx, "event": "lock_release_failed", "error": str(e)})
 
 
+async def sweep_stalled_jobs(ctx: dict) -> None:
+    """Cron task to identify and clean up orphaned jobs from ungracefully killed workers."""
+    from sqlalchemy import select
+    from app.infrastructure.db.models import Document
+    from datetime import datetime, timezone, timedelta
+    
+    threshold = datetime.now(timezone.utc) - timedelta(seconds=LOCK_TTL)
+    terminal = ["COMPLETE", "FAILED", "CANCELLED"]
+    
+    async with AsyncSessionLocal() as db:
+        repo = DocumentRepository(db)
+        
+        # Find all documents that are processing but haven't completed within TTL
+        stmt = select(Document.id, Document.storage_key).where(
+            Document.current_stage.notin_(terminal),
+            Document.started_at < threshold
+        )
+        result = await db.execute(stmt)
+        stalled_docs = result.all()
+        
+        for doc_id, storage_key in stalled_docs:
+            logger.info(f"Sweeping stalled job for document {doc_id}")
+            # Mark as failed
+            await repo.mark_failed(
+                str(doc_id),
+                error_msg="Job stalled and timed out (Worker crash/OOM).",
+                is_retryable=False
+            )
+            # Clean up vector DB chunks to prevent orphaned vectors
+            await repo.delete_all_chunks(str(doc_id))
+            
+        await db.commit()
+
+
 async def _run_ingestion(
     ctx: dict,
     doc_id: str,

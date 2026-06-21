@@ -1,0 +1,373 @@
+import { z } from 'zod';
+import { PCMRecorder } from '@/features/voice/audio/pcmRecorder';
+import { ConnectionState } from '@/core/realtime/useWSClient';
+import { ChatInput, MessageList } from '@/features/chat';
+import { DocumentsDrawer } from '@/features/documents/components/DocumentsDrawer';
+import { SettingsDrawer, useSessionManager } from '@/features/session';
+import { toast } from '@/shared/utils/toast';
+import { useCallback, useEffect, useRef } from 'react';
+import { Helmet } from 'react-helmet-async';
+import { PiGearFill, PiWifiSlashFill } from 'react-icons/pi';
+import { useNavigate, useParams } from 'react-router-dom';
+import { SCROLL_STICK_THRESHOLD_PX } from './constants';
+import { AvatarCanvasWrapper } from './AvatarCanvasWrapper';
+import { useClassroomState } from './hooks/useClassroomState';
+import { useClassroomAudio } from './hooks/useClassroomAudio';
+import { useClassroomChat } from './hooks/useClassroomChat';
+
+export interface AudioVisemePacket {
+  id: string;
+  url: string;
+  mouthCues: Viseme[];
+}
+
+export const VisemeSchema = z.object({
+  start: z.number().catch(0),
+  end: z.number().catch(0),
+  value: z.string().catch(''),
+}).passthrough();
+
+export type Viseme = z.infer<typeof VisemeSchema>;
+
+export interface PendingFirstMessage {
+  message_id: string;
+  text: string;
+}
+
+export const WSPayloadSchema = z.object({
+  session_id: z.string().optional().catch(undefined),
+  message_id: z.string().optional().catch(undefined),
+  text: z.string().optional().catch(undefined),
+  delta: z.string().optional().catch(undefined),
+  is_final: z.boolean().optional().catch(undefined),
+  audio: z.object({
+    url: z.string().optional().catch(undefined),
+    duration_ms: z.number().optional().catch(undefined)
+  }).passthrough().optional().catch(undefined),
+  mouthCues: z.array(VisemeSchema).optional().catch(undefined),
+  message: z.string().optional().catch(undefined),
+}).passthrough();
+
+export type WSPayload = z.infer<typeof WSPayloadSchema>;
+
+export default function ClassroomShell() {
+  const { sessionId: urlSessionId } = useParams();
+  const navigate = useNavigate();
+
+  // Phase 1: Isolated State
+  const {
+    activeAvatarId,
+    activeVoiceId,
+    movementEnabled,
+    avatarName,
+    isSettingsOpen,
+    isDocumentsOpen,
+    openSettings,
+    closeSettings,
+    toggleDocuments,
+  } = useClassroomState();
+
+  const session = useSessionManager(urlSessionId, navigate);
+  const currentSessionId = session.currentSessionId;
+  const currentSession = session.currentSession;
+  const status = session.status;
+
+  // Phase 2: Isolated Audio Pipeline
+  const {
+    mouthCuesRef,
+    getAudioContext,
+    playbackStartTimeRef,
+    handleTtsReady,
+    handleVisemesReady,
+    resetAvatarAudio,
+  } = useClassroomAudio();
+
+  // Phase 1: Isolated Chat Logic
+  const {
+    conversationState,
+    connectionState,
+    isConnected,
+    reconnect,
+    reconnectError,
+    disconnect,
+    safeSend,
+    commitAndSend,
+    inputValue,
+    setInputValue,
+    interimTranscript,
+    onMessage
+  } = useClassroomChat({
+    wsAvatarId: activeAvatarId,
+    activeVoiceId,
+    session,
+    onTtsReady: handleTtsReady,
+    onVisemesReady: handleVisemesReady,
+    resetAvatarAudio,
+    getAudioContext
+  });
+
+  const handleClearAllSessions = useCallback(async () => {
+    disconnect();
+    await session.clearAllSessions();
+  }, [disconnect, session]);
+
+  const handleDeleteSession = useCallback(async (sessionId: string) => {
+    if (sessionId === currentSessionId) {
+      disconnect();
+    }
+    await session.deleteSession(sessionId);
+  }, [disconnect, session, currentSessionId]);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const shouldStickToBottom = useRef<boolean>(true);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const scrollPositionsRef = useRef<Map<string | null, number>>(new Map());
+  const prevSessionIdRef = useRef<string | null>(currentSessionId);
+
+  // Save / restore scroll position on session switch
+  useEffect(() => {
+    const prevId = prevSessionIdRef.current;
+    const nextId = currentSessionId;
+    if (prevId !== nextId) {
+      resetAvatarAudio();
+      
+      if (chatScrollRef.current) {
+        scrollPositionsRef.current.set(prevId, chatScrollRef.current.scrollTop);
+      }
+      requestAnimationFrame(() => {
+        const saved = scrollPositionsRef.current.get(nextId);
+        if (chatScrollRef.current && saved !== null && saved !== undefined) {
+          chatScrollRef.current.scrollTop = saved;
+          shouldStickToBottom.current = false;
+        } else {
+          shouldStickToBottom.current = true;
+        }
+      });
+      prevSessionIdRef.current = nextId;
+    }
+  }, [currentSessionId, resetAvatarAudio]);
+
+  const handleChatScroll = useCallback(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    shouldStickToBottom.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight <= SCROLL_STICK_THRESHOLD_PX;
+  }, []);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [currentSession?.messages, conversationState.currentMessage, interimTranscript]);
+
+  const handleStop = useCallback(() => {
+    safeSend({ type: 'client.barge_in' });
+    resetAvatarAudio();
+  }, [safeSend, resetAvatarAudio]);
+
+  const handleSendMessage = useCallback(() => {
+    const text = inputValue.trim();
+    if (!text) return;
+    
+    commitAndSend(text);
+    setInputValue('');
+    
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+    if (!isConnected && currentSessionId !== null) {
+      toast.warning('Offline', 'Message queued. Will send when connected.', 3000);
+    }
+  }, [inputValue, isConnected, currentSessionId, commitAndSend, setInputValue]);
+
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSendMessage();
+      }
+    },
+    [handleSendMessage]
+  );
+
+  const ensureVoiceSession = useCallback(async () => {
+    PCMRecorder.preWarmWorklet();
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+    
+    if (currentSessionId) return true;
+    
+    const activeId = await session.createPersistedSession();
+    if (!activeId) {
+      toast.error('Error', 'Failed to initialize voice session');
+      return false;
+    }
+    return true;
+  }, [currentSessionId, session, getAudioContext]);
+
+  const statusBadgeClass =
+    !currentSessionId ? 'idle' :
+    {
+      [ConnectionState.OFFLINE]: 'offline',
+      [ConnectionState.RECONNECTING]: 'reconnecting',
+      [ConnectionState.INITIALIZING]: 'initializing',
+      [ConnectionState.ONLINE]: 'online',
+    }[connectionState] || 'offline';
+
+  const statusLabel =
+    !currentSessionId ? `${avatarName} — Ready` :
+    reconnectError ||
+    {
+      [ConnectionState.OFFLINE]: `${avatarName} — Offline`,
+      [ConnectionState.RECONNECTING]: 'Reconnecting…',
+      [ConnectionState.INITIALIZING]: 'Starting up…',
+      [ConnectionState.ONLINE]: `${avatarName} Online`,
+    }[connectionState] ||
+    `${avatarName} — Offline`;
+
+  if (status === 'error') {
+    return (
+      <div
+        className="classroom-error"
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100vh',
+          color: '#ff6b6b',
+          fontSize: '1.2rem',
+        }}
+      >
+        Failed to load sessions. Please refresh the page.
+      </div>
+    );
+  }
+
+  const isSidebarOpen = isSettingsOpen || isDocumentsOpen;
+
+  return (
+    <>
+      <Helmet>
+        <title>{avatarName} — VirtAI Classroom</title>
+      </Helmet>
+      <div className="classroom-shell">
+        <h1
+          className="classroom-watermark"
+          style={{
+            position: 'absolute',
+            bottom: '1.5rem',
+            left: '1.5rem',
+            fontSize: 'var(--h1)',
+            fontWeight: '700',
+            letterSpacing: '-0.02em',
+            color: 'var(--text-primary)',
+            opacity: 0.05,
+            pointerEvents: 'none',
+            zIndex: 10,
+            margin: 0,
+          }}
+        >
+          VirtAI
+        </h1>
+        <SettingsDrawer
+          isOpen={isSettingsOpen}
+          onClose={closeSettings}
+          sessions={session.sessions}
+          currentSessionId={currentSessionId}
+          onSessionSelect={session.switchSession}
+          onNewSession={session.createNewSession}
+          onDeleteSession={handleDeleteSession}
+          onRenameSession={session.renameSession}
+          onClearAllSessions={handleClearAllSessions}
+        />
+        <DocumentsDrawer isOpen={isDocumentsOpen} onClose={toggleDocuments} sessionId={currentSessionId} />
+
+        <div className="classroom-top-controls">
+          <button
+            className="avatar-settings-btn"
+            onClick={openSettings}
+            title="Settings"
+            aria-label="Open settings"
+          >
+            <PiGearFill />
+          </button>
+
+          <div
+            className={`avatar-status-badge ${statusBadgeClass}`}
+            role="status"
+            aria-live="polite"
+          >
+            {connectionState === ConnectionState.OFFLINE && currentSessionId !== null ? (
+              <PiWifiSlashFill className="status-icon-offline" />
+            ) : (
+              <span
+                className={`status-dot${connectionState === ConnectionState.RECONNECTING
+                  ? ' status-dot-reconnecting'
+                  : connectionState === ConnectionState.INITIALIZING
+                    ? ' status-dot-initializing'
+                    : currentSessionId === null
+                      ? ' status-dot-idle'
+                      : ''
+                  }`}
+              />
+            )}
+            <span key={statusLabel} className="status-text">
+              {statusLabel}
+            </span>
+            {reconnectError ? (
+              <button type="button" onClick={reconnect} className="status-reconnect-btn">
+                Reconnect
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        <div
+          className="split-container"
+          id="main-content"
+          style={{
+            width: isSidebarOpen ? 'calc(100% - 320px)' : '100%'
+          }}
+        >
+          <AvatarCanvasWrapper 
+            avatarId={activeAvatarId}
+            pipelineState={conversationState.pipelineState}
+            movementEnabled={movementEnabled}
+            mouthCuesRef={mouthCuesRef}
+            audioContext={getAudioContext()}
+            playbackStartTimeRef={playbackStartTimeRef}
+          />
+
+          <div className="chat-panel" key={currentSessionId || 'empty'}>
+            <MessageList
+              messages={currentSession?.messages || []}
+              outboxQueue={conversationState.outboxQueue || []}
+              currentMessage={conversationState.currentMessage}
+              interimTranscript={interimTranscript}
+              error={conversationState.error}
+              avatarName={avatarName}
+              chatScrollRef={chatScrollRef}
+              messagesEndRef={messagesEndRef}
+              onScroll={handleChatScroll}
+              pipelineState={conversationState.pipelineState}
+            />
+            <ChatInput
+              inputValue={inputValue}
+              onInputChange={setInputValue}
+              onSend={handleSendMessage}
+              onKeyDown={onKeyDown}
+              textareaRef={textareaRef}
+              backendStatus={connectionState}
+              wsClient={{ connectionState, isConnected, send: safeSend, onMessage }}
+              pipelineState={conversationState.pipelineState}
+              onToggleDocuments={toggleDocuments}
+              onBeforeVoiceStart={ensureVoiceSession}
+              onStop={handleStop}
+            />
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}

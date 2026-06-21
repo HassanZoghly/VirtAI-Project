@@ -79,8 +79,8 @@ export async function generateSmartTitle(sessionId: string, firstUserMessage: st
   try {
     const response = await apiClient.post(`/chat/${sessionId}/title`, { message: firstUserMessage }, options);
     return response.data?.title || `Conversation ${new Date().toLocaleDateString()}`;
-  } catch (error: any) {
-    if (error.name === 'CanceledError' || error.message?.includes('aborted')) {
+  } catch (error: unknown) {
+    if (error instanceof Error && (error.name === 'CanceledError' || error.message?.includes('aborted'))) {
       throw error; // Let react query handle the abort
     }
     console.error('Failed to generate smart title:', error);

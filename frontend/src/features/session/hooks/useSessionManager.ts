@@ -1,4 +1,5 @@
 import { selectIsAuthenticated, useAuthStore } from '@/features/auth/store/authStore';
+import { isAxiosError } from 'axios';
 import { toast } from '@/shared/utils/toast';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -121,8 +122,8 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
       setCurrentSessionId(newSession.id);
       if (navigate) navigate(`/classroom/${newSession.id}`, { replace: true });
       return newSession.id;
-    } catch (error: any) {
-      const msg = error?.response?.data?.detail || error?.message || 'Failed to create new chat session';
+    } catch (error: unknown) {
+      const msg = isAxiosError(error) ? error.response?.data?.detail || error.message : error instanceof Error ? error.message : 'Failed to create new chat session';
       toast.error('Creation Failed', msg);
       return null;
     } finally {
@@ -155,8 +156,8 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
 
       return { prevSessions, prevMsgs, sessionId };
     },
-    onError: (err: any, sessionId, ctx) => {
-      const msg = err?.response?.data?.detail || err?.message || 'Failed to delete chat session';
+    onError: (err: unknown, sessionId, ctx) => {
+      const msg = isAxiosError(err) ? err.response?.data?.detail || err.message : err instanceof Error ? err.message : 'Failed to delete chat session';
       toast.error('Delete Failed', msg);
       if (ctx?.prevSessions) queryClient.setQueryData(['sessions'], ctx.prevSessions);
       if (ctx?.prevMsgs) queryClient.setQueryData(['sessionMessages', ctx.sessionId], ctx.prevMsgs);
@@ -185,8 +186,8 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
       if (navigate) navigate('/classroom', { replace: true });
       void createNewSession();
     },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.detail || err?.message || 'Failed to clear sessions';
+    onError: (err: unknown) => {
+      const msg = isAxiosError(err) ? err.response?.data?.detail || err.message : err instanceof Error ? err.message : 'Failed to clear sessions';
       toast.error('Clear Failed', msg);
     },
   });
@@ -221,9 +222,9 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
       renameMutation.mutate(
         { id: sessionId, title: newTitle },
         {
-          onError: (err: any) => {
+          onError: (err: unknown) => {
             if (original) queryClient.setQueryData(['sessions'], original);
-            const msg = err?.response?.data?.detail || err?.message || 'Failed to rename chat session';
+            const msg = isAxiosError(err) ? err.response?.data?.detail || err.message : err instanceof Error ? err.message : 'Failed to rename chat session';
             toast.error('Rename Failed', msg);
           }
         }
@@ -269,7 +270,7 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
 
   const generateTitleMutation = useMutation({
     mutationFn: ({ id, text, signal }: { id: string; text: string; signal: AbortSignal }) => 
-      sessionService.generateSmartTitle(id, text), // assuming sessionService is modified to take signal or we let it ignore it if not implemented
+      sessionService.generateSmartTitle(id, text, { signal }),
     onSuccess: (generatedTitle, { id }) => {
       queryClient.setQueryData(['sessions'], (old: ISession[] = []) =>
         old.map((s) => {
@@ -315,8 +316,8 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
       generateTitleForSession(newSession.id, text);
 
       return newSession.id;
-    } catch (e: any) {
-      const msg = e?.response?.data?.detail || e?.message || 'Failed to create session for first message';
+    } catch (e: unknown) {
+      const msg = isAxiosError(e) ? e.response?.data?.detail || e.message : e instanceof Error ? e.message : 'Failed to create session for first message';
       toast.error('Creation Failed', msg);
       return null;
     } finally {

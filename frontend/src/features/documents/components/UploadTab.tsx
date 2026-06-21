@@ -134,8 +134,8 @@ export function UploadTab({ onSkip, enqueueUpload, documents }: UploadTabProps) 
         enqueueUpload(file, tempId, hashResult.hash!);
         removeFile(file.name);
 
-      } catch (err: any) {
-        setLocalErrors(prev => ({ ...prev, [file.name]: 'Hashing failed: ' + (err.message || 'Unknown error') }));
+      } catch (err: unknown) {
+        setLocalErrors(prev => ({ ...prev, [file.name]: 'Hashing failed: ' + (err instanceof Error ? err.message : 'Unknown error') }));
         console.error("Hashing error", err);
       }
     }

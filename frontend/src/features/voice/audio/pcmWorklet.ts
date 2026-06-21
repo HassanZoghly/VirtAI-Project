@@ -7,6 +7,9 @@
  * Requirements: 2.1 - Capture raw PCM audio using AudioWorklet
  */
 class PCMWorkletProcessor extends AudioWorkletProcessor {
+  targetChunkSize: number;
+  buffer: number[];
+
   constructor() {
     super();
 
@@ -24,12 +27,12 @@ class PCMWorkletProcessor extends AudioWorkletProcessor {
    * Called by the audio system for each render quantum (128 samples at any sample rate).
    * Accumulates samples until target chunk size is reached, then sends to main thread.
    *
-   * @param {Float32Array[][]} inputs - Input audio data [input][channel][sample]
-   * @param {Float32Array[][]} _outputs - Output audio data (unused)
-   * @param {Object} _parameters - Audio parameters (unused)
-   * @returns {boolean} - true to keep processor alive
+   * @param inputs - Input audio data [input][channel][sample]
+   * @param _outputs - Output audio data (unused)
+   * @param _parameters - Audio parameters (unused)
+   * @returns true to keep processor alive
    */
-  process(inputs) {
+  process(inputs: Float32Array[][], _outputs: Float32Array[][], _parameters: Record<string, Float32Array>): boolean {
     // Get first input (microphone)
     const input = inputs[0];
 

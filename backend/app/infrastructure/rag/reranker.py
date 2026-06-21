@@ -6,16 +6,18 @@ from app.domain.rag.entities import DocumentChunk
 from app.domain.rag.ports import RerankerPort
 
 
+from app.shared.config import get_settings
+
 class DummyCrossEncoderReranker(RerankerPort):
     """
     A mock/lazy reranker to avoid heavy model downloads during refactoring.
     In a real scenario, this would load a CrossEncoder model.
     """
 
-    def __init__(self, model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"):
-        self.model_name = model_name
+    def __init__(self, model_name: str | None = None):
+        self.model_name = model_name or get_settings().CROSS_ENCODER_MODEL
         self.is_loaded = False
-        logger.info(f"[Reranker] Initialized lazy reranker with model={model_name}")
+        logger.info(f"[Reranker] Initialized lazy reranker with model={self.model_name}")
 
     def _load_model(self):
         if not self.is_loaded:
@@ -82,15 +84,15 @@ class CrossEncoderReranker(RerankerPort):
                 cls._executor.shutdown(wait=True)
                 cls._executor = None
 
-    def __init__(self, model_name: str = "BAAI/bge-reranker-base") -> None:
+    def __init__(self, model_name: str | None = None) -> None:
         """
         Cheap constructor — no imports, no model download.
         The model is loaded on the first call to rerank().
         """
-        self.model_name = model_name
+        self.model_name = model_name or get_settings().CROSS_ENCODER_MODEL
         self.model = None  # populated lazily by _ensure_model()
         logger.info(
-            f"[Reranker] CrossEncoderReranker registered (model will be loaded on first use: {model_name})"
+            f"[Reranker] CrossEncoderReranker registered (model will be loaded on first use: {self.model_name})"
         )
 
     def _ensure_model(self) -> bool:

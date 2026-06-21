@@ -40,8 +40,12 @@ export const documentApi = {
   /**
    * Get the status of all active documents (processing, queued, etc)
    */
-  listActive: async (): Promise<Document[]> => {
-    const response = await api.get('/documents/status?active_only=true');
+  listActive: async (sessionId: string | null = null): Promise<Document[]> => {
+    let url = '/documents/status?active_only=true';
+    if (sessionId) {
+      url += `&session_id=${sessionId}`;
+    }
+    const response = await api.get(url);
     return response.data;
   },
 

@@ -1,4 +1,4 @@
-import React, { useCallback, KeyboardEvent } from 'react';
+import React, { useCallback, KeyboardEvent, useRef, useEffect } from 'react';
 import { PiPaperclipFill, PiPaperPlaneTiltFill } from 'react-icons/pi';
 import VoiceModeButton from '../../voice/components/VoiceModeButton';
 
@@ -12,9 +12,10 @@ interface ChatInputProps {
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   backendStatus: 'online' | 'offline' | 'checking';
   wsClient: any;
-  pipelineState: string;
+  pipelineState: 'idle' | 'thinking' | 'speaking' | 'error';
   onToggleDocuments: () => void;
   onBeforeVoiceStart?: () => Promise<boolean> | boolean;
+  onStop?: () => void;
 }
 
 export default function ChatInput({
@@ -28,7 +29,18 @@ export default function ChatInput({
   pipelineState,
   onToggleDocuments,
   onBeforeVoiceStart,
+  onStop,
 }: ChatInputProps) {
+  const requestRef = useRef<number>();
+
+  useEffect(() => {
+    return () => {
+      if (requestRef.current) {
+        cancelAnimationFrame(requestRef.current);
+      }
+    };
+  }, []);
+
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const el = e.target;
@@ -36,14 +48,19 @@ export default function ChatInput({
       
       const hardcodedMaxHeight = 150;
       
-      el.style.height = 'auto';
-      const nextHeight = Math.min(el.scrollHeight, hardcodedMaxHeight);
-      
-      el.style.height = `${nextHeight}px`;
+      if (requestRef.current) {
+        cancelAnimationFrame(requestRef.current);
+      }
+      requestRef.current = requestAnimationFrame(() => {
+        el.style.height = 'auto';
+        const nextHeight = Math.min(el.scrollHeight, hardcodedMaxHeight);
+        
+        el.style.height = `${nextHeight}px`;
 
-      const shouldScroll = el.scrollHeight > hardcodedMaxHeight + 1;
-      el.classList.toggle('is-scrollable', shouldScroll);
-      el.style.overflowY = shouldScroll ? 'auto' : 'hidden';
+        const shouldScroll = el.scrollHeight > hardcodedMaxHeight + 1;
+        el.classList.toggle('is-scrollable', shouldScroll);
+        el.style.overflowY = shouldScroll ? 'auto' : 'hidden';
+      });
     },
     [onInputChange]
   );
@@ -71,6 +88,18 @@ export default function ChatInput({
             onBeforeStart={onBeforeVoiceStart}
           />
         </div>
+
+        {pipelineState === 'speaking' && (
+          <button
+            className="stop-btn flex items-center gap-2 bg-red-500/20 text-red-500 hover:bg-red-500/30 rounded-full px-4 py-1.5 font-medium text-sm transition-colors mr-2"
+            onClick={onStop}
+            title="Stop Generating"
+            type="button"
+          >
+            <div className="w-2.5 h-2.5 bg-red-500 rounded-sm" />
+            Stop
+          </button>
+        )}
 
         <textarea
           ref={textareaRef}

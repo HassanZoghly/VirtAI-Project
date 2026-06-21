@@ -103,38 +103,30 @@ class AgentOrchestrator:
             logger.info(f"[Orchestrator] Skipping router, explicit action: {input_data.action}")
 
         # ── step 2: retrieve ──────────────────────────────────────────
-        retriever_output = await self.retriever.run(routed_input)
-        trace.add_step(retriever_output)
+        from app.application.rag.intent_classifier import IntentClassifier
+        if await IntentClassifier.async_is_casual_chat(routed_input.query):
+            logger.info(f"[Orchestrator] Detected CASUAL_CHAT for query '{routed_input.query}'. Bypassing retrieval.")
+            retrieved_docs = []
+        else:
+            retriever_output = await self.retriever.run(routed_input)
+            trace.add_step(retriever_output)
 
-        retrieved_docs = retriever_output.result or []
+            retrieved_docs = retriever_output.result or []
 
-        if isinstance(retrieved_docs, RetrievalResult) and retrieved_docs.status == RetrievalStatus.FAILED:
-            logger.warning("[Orchestrator] Retrieval failed. Passing generic fallback context.")
-            retrieved_docs = RetrievalResult(
-                status=RetrievalStatus.SUCCESS,
-                documents=[
-                    RetrievedDocument(
-                        text="[System Note: Memory retrieval is temporarily unavailable. Please continue the conversation smoothly using your general knowledge.]",
-                        score=1.0,
-                        metadata={"fallback": True}
-                    )
-                ]
-            )
-
-        if not retrieved_docs or (isinstance(retrieved_docs, RetrievalResult) and retrieved_docs.status == RetrievalStatus.NO_RESULTS):
-            trace.success = False
-            trace.add_step(
-                AgentOutput(
-                    input_id=routed_input.input_id,
-                    agent_name="orchestrator",
-                    success=False,
-                    error=(
-                        "No documents found in vector collection. "
-                        "Please index your documents first."
-                    ),
+            if isinstance(retrieved_docs, RetrievalResult) and retrieved_docs.status == RetrievalStatus.FAILED:
+                logger.warning("[Orchestrator] Retrieval failed. Passing generic fallback context.")
+                retrieved_docs = RetrievalResult(
+                    status=RetrievalStatus.SUCCESS,
+                    documents=[
+                        RetrievedDocument(
+                            text="[System Note: Memory retrieval is temporarily unavailable. Please continue the conversation smoothly using your general knowledge.]",
+                            score=1.0,
+                            metadata={"fallback": True}
+                        )
+                    ]
                 )
-            )
-            return trace
+
+
 
         # ── step 3: specialist agent ──────────────────────────────────
         if routed_input.action == AgentAction.ANSWER:

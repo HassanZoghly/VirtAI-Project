@@ -1,9 +1,10 @@
+import asyncio
 import hashlib
 import re
 from typing import Any
 
 import filetype  # type: ignore[import-not-found]
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from loguru import logger
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,12 +13,28 @@ from app.domain.rag.stage_machine import IngestionStage
 from app.domain.user.entities import UserEntity
 from app.infrastructure.db.database import get_db
 from app.infrastructure.db.repositories.document_repository import DocumentRepository
+from app.infrastructure.db.repositories.chat_repository import ChatRepository
 from app.presentation.http.v1.dependencies import StorageDep, _current_user
 from app.shared.config import get_settings
 from app.shared.ids import parse_uuid
 
 router = APIRouter()
 settings = get_settings()
+
+async def _verify_session_ownership(
+    session_id_query: str | None = Query(None, alias="session_id"),
+    session_id_form: str | None = Form(None, alias="session_id"),
+    user: UserEntity = Depends(_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> str | None:
+    session_id = session_id_query or session_id_form
+        
+    if session_id:
+        session_repo = ChatRepository(db)
+        session_obj = await session_repo.get_chat_session(str(session_id))
+        if not session_obj or str(session_obj["user_id"]) != str(user.id):
+            raise HTTPException(status_code=403, detail="Forbidden")
+    return str(session_id) if session_id else None
 
 def sanitize_filename(filename: str | None) -> str:
     """Strip path traversal sequences and special characters."""
@@ -75,7 +92,7 @@ async def upload_document(
     storage: StorageDep,
     response: Response,
     file: UploadFile = File(...),
-    session_id: str | None = Form(None),
+    session_id: str | None = Depends(_verify_session_ownership),
     user: UserEntity = Depends(_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -107,15 +124,19 @@ async def upload_document(
 
     # 3. Read file bytes with chunked size limits to prevent memory exhaustion
     file_bytes_array = bytearray()
-    while True:
-        chunk = await file.read(65536)  # 64KB chunks
-        if not chunk:
-            break
-        file_bytes_array.extend(chunk)
-        if len(file_bytes_array) > max_upload_bytes:
-            raise HTTPException(
-                status_code=413, detail=f"File exceeds maximum size of {settings.MAX_UPLOAD_SIZE_MB}MB"
-            )
+    try:
+        while True:
+            chunk = await file.read(65536)  # 64KB chunks
+            if not chunk:
+                break
+            file_bytes_array.extend(chunk)
+            if len(file_bytes_array) > max_upload_bytes:
+                raise HTTPException(
+                    status_code=413, detail=f"File exceeds maximum size of {settings.MAX_UPLOAD_SIZE_MB}MB"
+                )
+    except asyncio.CancelledError:
+        logger.warning(f"Client disconnected during file upload")
+        raise
 
     file_bytes = bytes(file_bytes_array)
     if not file_bytes:
@@ -222,6 +243,11 @@ async def upload_document(
     storage_key = f"{user.id}/{doc.id}.{ext}"
     try:
         await storage.save(storage_key, file_bytes)
+    except asyncio.CancelledError:
+        logger.warning(f"Client disconnected while saving file {doc.id}")
+        # Let FastAPI's dependency teardown handle the session rollback if necessary.
+        # Periodic tasks will clean up the orphaned DB record if it remains QUEUED.
+        raise
     except Exception as e:
         logger.error(f"Storage failed for {doc.id}: {e}")
         await repo.mark_failed(str(doc.id), f"Storage error: {e!s}", is_retryable=False)
@@ -243,6 +269,14 @@ async def upload_document(
         )
         if not job:
             raise RuntimeError("Job enqueue returned None")
+    except asyncio.CancelledError:
+        logger.warning(f"Client disconnected while enqueueing job for {doc.id}")
+        # Attempt to delete the file from storage if possible, do not commit db deletions here
+        try:
+            await storage.delete(storage_key)
+        except Exception:
+            pass
+        raise
     except Exception as e:
         logger.error(f"Failed to enqueue job for {doc.id}: {e}")
         await repo.mark_failed(str(doc.id), f"Queue error: {e!s}", is_retryable=False)
@@ -256,6 +290,7 @@ async def upload_document(
 @router.get("/status", response_model=list[dict[str, Any]])
 async def list_statuses(
     active_only: bool = False,
+    session_id: str | None = Depends(_verify_session_ownership),
     user: UserEntity = Depends(_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
@@ -263,10 +298,11 @@ async def list_statuses(
     from app.infrastructure.cache.redis_client import get_redis_or_none
 
     repo = DocumentRepository(db)
+            
     if active_only:
-        docs = await repo.list_active(str(user.id))
+        docs = await repo.list_active(str(user.id), session_id=session_id)
     else:
-        docs = await repo.list_by_user(str(user.id))
+        docs = await repo.list_by_user(str(user.id), session_id=session_id)
 
     redis_client = get_redis_or_none()
 

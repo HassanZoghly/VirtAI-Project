@@ -32,9 +32,9 @@ class FastEmbedProvider(EmbeddingProvider):
                 cls._executor.shutdown(wait=True)
                 cls._executor = None
 
-    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5", cache_dir: str | None = None):
-        self.model_name = model_name
+    def __init__(self, model_name: str | None = None, cache_dir: str | None = None):
         settings = get_settings()
+        self.model_name = model_name or settings.EMBEDDING_MODEL
         self.cache_dir = cache_dir or settings.FASTEMBED_CACHE_DIR
         Path(self.cache_dir).mkdir(parents=True, exist_ok=True)
 

@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from app.application.voice.handle_voice_turn import ConversationPipeline
+from app.infrastructure.asr.audio_pipeline import AudioPipeline
 from app.shared.ids import parse_uuid
 
 if TYPE_CHECKING:
@@ -58,6 +59,12 @@ class ConversationSession:
             context_cache=context_cache,
             avatar_id=avatar_id,
             tts_voice=tts_voice,
+        )
+        self.audio_pipeline = AudioPipeline(
+            max_buffer_size=10 * 1024 * 1024,
+            max_chunk_size=128 * 1024,
+            buffer_timeout=30.0,
+            max_buffer_duration=25.0,
         )
         self.created_at: datetime = datetime.now(timezone.utc)
         self.last_activity: datetime = datetime.now(timezone.utc)

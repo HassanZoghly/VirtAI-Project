@@ -245,13 +245,17 @@ class DocumentRepository(DocumentRepositoryPort):
             "error_message": doc.error_message,
         }
 
-    async def list_active(self, user_id: str) -> list[Document]:
+    async def list_active(self, user_id: str, session_id: str | None = None) -> list[Document]:
         terminal = ["COMPLETE", "FAILED", "CANCELLED"]
         stmt = (
             select(Document)
             .where(Document.user_id == require_uuid(user_id, field_name="user_id"))
             .where(Document.current_stage.notin_(terminal))
         )
+        if session_id:
+            s_id = require_uuid(session_id, field_name="session_id")
+            stmt = stmt.where(Document.retrieval_scope == "SESSION", Document.scope_id == s_id)
+        
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 

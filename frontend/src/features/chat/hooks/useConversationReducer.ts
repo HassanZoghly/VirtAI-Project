@@ -25,7 +25,7 @@ const initialState: ConversationState = {
 type Action =
   | { type: 'CHAT_DELTA'; payload: { delta: string } }
   | { type: 'CHAT_FINAL'; payload?: any }
-  | { type: 'PIPELINE_STATE'; payload: { state: ConversationState['pipelineState'] } }
+  | { type: 'PIPELINE_STATE'; payload: { state: ConversationState['pipelineState']; message_id?: string } }
   | { type: 'USER_MESSAGE'; payload: { message_id: string; text: string } }
   | { type: 'ERROR'; payload: { message: string } }
   | { type: 'CLEAR_ERROR' }
@@ -48,6 +48,13 @@ function conversationReducer(state: ConversationState, action: Action): Conversa
         activeMessageId: null,
       };
     case 'PIPELINE_STATE':
+      if (
+        action.payload.message_id &&
+        state.activeMessageId &&
+        action.payload.message_id !== state.activeMessageId
+      ) {
+        return state;
+      }
       return {
         ...state,
         pipelineState: action.payload.state,

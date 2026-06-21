@@ -8,11 +8,11 @@ from pydantic import ValidationError
 
 from app.presentation.ws.pipeline_bridge import _pipeline_task_done_callback
 from app.schemas.ws_messages import (
-    AvatarStatus,
     ChatAbort,
     ChatUserMessage,
     ClientMessageType,
-    make_status_msg,
+    ClientSpeechStopped,
+    make_pipeline_state,
 )
 
 
@@ -28,6 +28,8 @@ def validate_message(raw_message: dict) -> ChatUserMessage | ChatAbort:
             return ChatUserMessage(**msg_data)
         case "chat.abort":
             return ChatAbort(**msg_data)
+        case "client.speech_stopped":
+            return ClientSpeechStopped(**msg_data)
         case _:
             raise ValueError(f"Unknown message type: {msg_type}")
 
@@ -96,7 +98,9 @@ class ProtocolRouter:
             case ClientMessageType.VOICE_MODE_STOP:
                 await self._handle_voice_mode_stop(data)
             case ClientMessageType.AUDIO_CHUNK:
-                pass  # Handled via binary frames, ignore JSON control message
+                if data and data.get("is_final"):
+                    voice_handler = await self.ctx._get_voice_mode_handler()
+                    await voice_handler.handle_audio_chunk(b"\x00\x00", is_final=True)
             case _:
                 await self.ctx.outbound_sender.safe_send_error(
                     code="UNKNOWN_TYPE",
@@ -134,6 +138,8 @@ class ProtocolRouter:
                 await self._handle_chat_user_message(validated_msg)
             elif isinstance(validated_msg, ChatAbort):
                 await self._handle_chat_abort(validated_msg)
+            elif isinstance(validated_msg, ClientSpeechStopped):
+                await self._handle_voice_mode_stop(None)
         except Exception as e:
             logger.error(f"Error handling message: {e}")
             await self.ctx.outbound_sender.safe_send_error(
@@ -156,8 +162,8 @@ class ProtocolRouter:
 
     async def _handle_abort(self, data: dict | None = None) -> None:
         await self.ctx.pipeline_bridge.cancel_pipeline()
-        await self.ctx.outbound_sender.safe_send(
-            make_status_msg(AvatarStatus.IDLE),
+        await self.ctx.outbound_sender.send_protocol_message(
+            make_pipeline_state(self.ctx.session.session_id, "idle", getattr(self.ctx, "_current_message_id", None)),
             self.ctx.session.session_id,
             self.ctx._session_pending,
             self.ctx._connected,
@@ -179,8 +185,12 @@ class ProtocolRouter:
             pass
 
     async def _handle_chat_user_message(self, msg: ChatUserMessage) -> None:
+        if not msg.text or not msg.text.strip():
+            logger.warning("[WS] Received empty user message")
+            return
+
+        self.ctx._current_message_id = msg.message_id
         await self.ctx._ensure_session()
-        await self.ctx.pipeline_bridge.cancel_pipeline()
         session_id = msg.session_id or self.ctx.session.session_id
         trace_id = str(uuid.uuid4())
 
@@ -208,8 +218,8 @@ class ProtocolRouter:
 
     async def _handle_chat_abort(self, msg: ChatAbort) -> None:
         await self.ctx.pipeline_bridge.cancel_pipeline()
-        await self.ctx.outbound_sender.safe_send(
-            make_status_msg(AvatarStatus.IDLE),
+        await self.ctx.outbound_sender.send_protocol_message(
+            make_pipeline_state(self.ctx.session.session_id, "idle", getattr(self.ctx, "_current_message_id", None)),
             self.ctx.session.session_id,
             self.ctx._session_pending,
             self.ctx._connected,

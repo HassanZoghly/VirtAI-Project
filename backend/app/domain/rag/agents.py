@@ -291,17 +291,8 @@ class AnswerAgent(BaseAgent):
 
             if isinstance(retrieved_documents, RetrievalResult):
                 docs = retrieved_documents.documents
-                if retrieved_documents.status in (RetrievalStatus.NO_RESULTS, RetrievalStatus.FAILED):
-                    return self._make_output(
-                        input_data, success=False, error="No relevant documents found or low confidence."
-                    )
             else:
                 docs = retrieved_documents or []
-
-            if not docs:
-                return self._make_output(
-                    input_data, success=False, error="No relevant documents found."
-                )
 
             base_system_prompt = self.template_parser.get(category="rag", key="system_prompt")
 

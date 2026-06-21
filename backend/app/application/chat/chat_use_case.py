@@ -1,4 +1,5 @@
 from app.application.chat.prompt_builder import PromptBuilder
+from app.application.rag.intent_classifier import IntentClassifier
 from app.application.rag.retrieval_use_case import RetrievalUseCase
 from app.domain.chat.policies import build_conversation
 from app.domain.chat.ports import BaseLLMProvider
@@ -13,7 +14,10 @@ class ChatUseCase:
 
     async def execute_rag_query(self, query: str, user_id: str) -> str:
         # Retrieve context
-        context = await self.retrieval.execute(query)
+        if await IntentClassifier.async_is_casual_chat(query):
+            context = ""
+        else:
+            context = await self.retrieval.execute(query)
 
         # Build prompt
         prompt = PromptBuilder.build_user_prompt_with_context(query, context)

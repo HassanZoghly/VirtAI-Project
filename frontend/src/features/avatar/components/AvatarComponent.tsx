@@ -17,6 +17,8 @@ export interface AvatarComponentProps {
   mouthCuesRef?: React.MutableRefObject<Viseme[]>;
   getAudioContext?: () => AudioContext;
   playbackStartTimeRef?: React.MutableRefObject<number | null>;
+  getIsAudioPlaying?: () => boolean;
+  getNextPlaybackTime?: () => number;
 }
 
 interface GLTFResult {
@@ -30,7 +32,9 @@ export function AvatarComponent({
   movementEnabled = true,
   mouthCuesRef,
   getAudioContext,
-  playbackStartTimeRef
+  playbackStartTimeRef,
+  getIsAudioPlaying,
+  getNextPlaybackTime
 }: AvatarComponentProps) {
   const groupRef = useRef<THREE.Group>(null);
   const avatarUrl = `/models/${avatarId}.glb`;
@@ -44,7 +48,7 @@ export function AvatarComponent({
   }, [clone]);
 
   // Hook 1: Animation Mixer, Tracks, and State Machine
-  useAvatarAnimations(avatarRoot as THREE.Group, pipelineState, movementEnabled, getAudioContext, playbackStartTimeRef, mouthCuesRef);
+  useAvatarAnimations(avatarRoot as THREE.Group, pipelineState, movementEnabled, getAudioContext, playbackStartTimeRef, mouthCuesRef, getIsAudioPlaying, getNextPlaybackTime);
 
   const toastShownRef = useRef(false);
 
@@ -82,8 +86,29 @@ export function AvatarComponent({
     mouthCuesRef,
     getAudioContext,
     playbackStartTimeRef,
+    getIsAudioPlaying,
+    getNextPlaybackTime,
     groupRef
   });
+
+  useEffect(() => {
+    if (clone && groupRef.current) {
+      const box = new THREE.Box3().setFromObject(clone);
+      const evidence = {
+        box: {
+          minY: box.min.y, maxY: box.max.y, height: box.max.y - box.min.y, centerY: (box.min.y + box.max.y) / 2
+        },
+        modelTransform: {
+          position: groupRef.current.position.toArray(),
+          scale: groupRef.current.scale.toArray(),
+          rotation: groupRef.current.rotation.toArray()
+        }
+      };
+      console.log('[Runtime Evidence] Avatar Mount:', evidence);
+      (window as any).__AVATAR_EVIDENCE = evidence;
+      (window as any).__AVATAR_CLONE = clone;
+    }
+  }, [clone]);
 
   return (
     <group position={[0, -0.2, 0]}>

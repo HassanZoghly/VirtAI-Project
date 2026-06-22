@@ -57,6 +57,7 @@ export function useClassroomChat({
   const currentSessionIdRef = useRef<string | null>(currentSessionId);
   const sessionRef = useRef(session);
   const isCreatingSessionRef = useRef<boolean>(false);
+  const conversationStateRef = useRef(conversationState);
 
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
@@ -65,6 +66,10 @@ export function useClassroomChat({
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
+
+  useEffect(() => {
+    conversationStateRef.current = conversationState;
+  }, [conversationState]);
 
   // Relying on core useWSMessageQueue for offline-queue delivery instead of custom manual queue.
 
@@ -88,7 +93,8 @@ export function useClassroomChat({
         isCreatingSessionRef.current = true;
 
         const message_id = crypto.randomUUID();
-        resetAvatarAudio();
+        const prevMsgId = conversationStateRef.current.activeMessageId;
+        resetAvatarAudio(prevMsgId);
         dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
         dispatch({ type: 'PIPELINE_STATE', payload: { state: 'thinking' } });
         sessionRef.current.handleFirstMessage(text).then((newId: string | null) => {
@@ -108,7 +114,8 @@ export function useClassroomChat({
         });
       } else {
         const message_id = crypto.randomUUID();
-        resetAvatarAudio();
+        const prevMsgId = conversationStateRef.current.activeMessageId;
+        resetAvatarAudio(prevMsgId);
         dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
         dispatch({ type: 'PIPELINE_STATE', payload: { state: 'thinking' } });
         sessionRef.current.addUserMessage(

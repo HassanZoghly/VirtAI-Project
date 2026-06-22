@@ -35,7 +35,9 @@ export function useAvatarAnimations(
   movementEnabled: boolean,
   getAudioContext?: () => AudioContext,
   playbackStartTimeRef?: React.MutableRefObject<number | null>,
-  mouthCuesRef?: React.MutableRefObject<Viseme[]>
+  mouthCuesRef?: React.MutableRefObject<Viseme[]>,
+  getIsAudioPlaying?: () => boolean,
+  getNextPlaybackTime?: () => number
 ) {
   const idleFbx = useFBX(IDLE_URL);
   const talkFbx1 = useFBX(TALK_MANIFEST[0]);
@@ -47,6 +49,24 @@ export function useAvatarAnimations(
 
     const renameTracks = (clip: THREE.AnimationClip) => {
       const clonedClip = clip.clone();
+      
+      const beforeCount = clonedClip.tracks.length;
+      
+      // DEFENSIVE FIX: Strip root motion tracks to prevent the "Explosion / Collapse" bug.
+      // Mixamo FBX animations often contain Armature rotation/scale tracks that conflict with GLB root transforms.
+      clonedClip.tracks = clonedClip.tracks.filter(track => {
+        const cleanName = track.name.replace(/mixamorig:|Armature\|/gi, '');
+        if (cleanName.startsWith('Armature.')) return false;
+        // DEFENSIVE: Prevent Mixamo Z-up / Y-up offset bugs forcing the avatar hips to the floor (Y=-0.21)
+        if (cleanName === 'Hips.position') return false;
+        // DEFENSIVE: Prevent Mixamo Z-up rotation offset forcing the avatar to bend 90 degrees forward
+        if (cleanName === 'Hips.quaternion') return false;
+        return true;
+      });
+
+      const afterCount = clonedClip.tracks.length;
+      console.log(`[Runtime Evidence] Animation Clip "${clip.name}" filtering: Kept ${afterCount}/${beforeCount} tracks. Removed Armature root tracks. First 5 retained:`, clonedClip.tracks.slice(0, 5).map(t => t.name));
+
       clonedClip.tracks = clonedClip.tracks.map(track => {
         const clonedTrack = track.clone();
         // ASSET_MANIFEST dictates using /mixamorig:|Armature\|/gi strictly to mirror the ground truth GLB naming
@@ -75,7 +95,7 @@ export function useAvatarAnimations(
 
   const { actions, mixer } = useAnimations(animations, scene);
   const currentActionNameRef = useRef<string | null>(null);
-  const stopTimeoutRef = useRef<number | null>(null);
+  const stopTimeoutsRef = useRef<Set<number>>(new Set());
   const talkActionNames = useMemo(() => Object.keys(actions).filter(k => k.startsWith('Talk_')), [actions]);
 
   const timelineStateRef = useRef<TimelineState>({
@@ -129,17 +149,16 @@ export function useAvatarAnimations(
         // Schedule a hard .stop() to prevent the Three.js mixer from evaluating invisible, zero-weight actions indefinitely.
         prevAction.crossFadeTo(nextAction, fadeTime, true);
 
-        // DEFENSIVE: Use clearable timeout for React hook safety
-        if (stopTimeoutRef.current !== null) {
-          window.clearTimeout(stopTimeoutRef.current);
-        }
-        stopTimeoutRef.current = window.setTimeout(() => {
+        // DEFENSIVE: Use multiple clearable timeouts for React hook safety during rapid crossfades
+        const timeoutId = window.setTimeout(() => {
+          stopTimeoutsRef.current.delete(timeoutId);
           if (currentActionNameRef.current !== prevAction.getClip().name) {
             prevAction.stop();
           }
         }, fadeTime * MS_PER_SECOND);
+        stopTimeoutsRef.current.add(timeoutId);
 
-        // Note: Timeout is cleared on unmount.
+        // Note: Timeouts are cleared on unmount.
       } else {
         nextAction.fadeIn(fadeTime);
       }
@@ -185,10 +204,17 @@ export function useAvatarAnimations(
       // @ts-expect-error Three.js AnimationAction event typing is loose
       const finishedName = e.action?.getClip()?.name;
 
+      // DEFENSIVE: Stale callback prevention
+      // Ignore 'finished' events from previous animations that were stopped during a crossfade.
+      if (currentActionNameRef.current !== finishedName) return;
+
       let isAudioPlaying = false;
-      if (playbackStartTimeRef?.current != null) {
-        const audioContext = getAudioContext?.();
-        if (audioContext?.state === 'running' && audioContext.currentTime >= playbackStartTimeRef.current) {
+      const audioContext = getAudioContext?.();
+      
+      if (getIsAudioPlaying) {
+        isAudioPlaying = getIsAudioPlaying();
+      } else if (playbackStartTimeRef?.current != null && audioContext) {
+        if (audioContext.state === 'running' && audioContext.currentTime >= playbackStartTimeRef.current) {
           isAudioPlaying = true;
           if (pipelineStateRef.current !== 'speaking') {
             if (mouthCuesRef?.current && mouthCuesRef.current.length > 0) {
@@ -208,10 +234,13 @@ export function useAvatarAnimations(
 
       if (finishedName && typeof finishedName === 'string' && finishedName.startsWith('Talk_') && isEffectivelySpeaking) {
         let remainingAudio = 0;
-        if (mouthCuesRef?.current && mouthCuesRef.current.length > 0 && playbackStartTimeRef?.current != null && audioContext) {
+        if (getNextPlaybackTime && audioContext) {
+          const audioEndTime = getNextPlaybackTime();
+          if (Number.isFinite(audioEndTime)) {
+            remainingAudio = Math.max(0, audioEndTime - audioContext.currentTime);
+          }
+        } else if (mouthCuesRef?.current && mouthCuesRef.current.length > 0 && playbackStartTimeRef?.current != null && audioContext) {
           const lastCue = mouthCuesRef.current[mouthCuesRef.current.length - 1];
-          
-          // Defend against corrupted viseme data
           const validEnd = Number.isFinite(lastCue?.end) ? Number(lastCue.end) : 0;
           const audioEndTime = playbackStartTimeRef.current + validEnd;
           
@@ -243,9 +272,8 @@ export function useAvatarAnimations(
   useEffect(() => {
     return () => {
       if (mixer) mixer.stopAllAction();
-      if (stopTimeoutRef.current !== null) {
-        window.clearTimeout(stopTimeoutRef.current);
-      }
+      stopTimeoutsRef.current.forEach(id => window.clearTimeout(id));
+      stopTimeoutsRef.current.clear();
     };
   }, [mixer]);
 
@@ -274,7 +302,9 @@ export function useAvatarAnimations(
     const currentState = pipelineStateRef.current;
     
     let isAudioPlaying = false;
-    if (playbackStartTimeRef?.current != null) {
+    if (getIsAudioPlaying) {
+      isAudioPlaying = getIsAudioPlaying();
+    } else if (playbackStartTimeRef?.current != null) {
       const audioContext = getAudioContext?.();
       if (audioContext?.state === 'running' && audioContext.currentTime >= playbackStartTimeRef.current) {
         isAudioPlaying = true;

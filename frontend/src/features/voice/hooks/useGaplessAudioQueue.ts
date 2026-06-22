@@ -30,6 +30,16 @@ export function useGaplessAudioQueue() {
     return audioContextRef.current;
   }, []);
 
+  const getIsAudioPlaying = useCallback(() => {
+    const ctx = audioContextRef.current;
+    if (!ctx || ctx.state !== 'running') return false;
+    return ctx.currentTime >= (visemeBaseStartTimeRef.current ?? Infinity) && ctx.currentTime < nextPlaybackTimeRef.current;
+  }, []);
+
+  const getNextPlaybackTime = useCallback(() => {
+    return nextPlaybackTimeRef.current;
+  }, []);
+
   const flushQueue = useCallback(() => {
     flushTokenRef.current += 1;
 
@@ -119,10 +129,17 @@ export function useGaplessAudioQueue() {
           nextPlaybackTimeRef.current = scheduleTime + audioBuffer.duration;
 
           if (visemes.length > 0 && mouthCuesRef) {
+            console.log(`[Runtime Evidence] Raw Visemes Payload. Count: ${visemes.length}, First: ${JSON.stringify(visemes[0])}, Last: ${JSON.stringify(visemes[visemes.length - 1])}, Audio Duration: ${audioBuffer.duration}`);
+            // DEFENSIVE FIX: Automatically normalize viseme timestamps.
+            // Some TTS backends output visemes in milliseconds while Web Audio uses seconds.
+            // If the last viseme ends at a time > 100, it is safely assumed to be in milliseconds.
+            const isMilliseconds = visemes[visemes.length - 1].end > 100;
+            const timeScale = isMilliseconds ? 1000 : 1;
+
             const shiftedVisemes = visemes.map((v) => ({
               ...v,
-              start: v.start + chunkOffset,
-              end: v.end + chunkOffset,
+              start: (v.start / timeScale) + chunkOffset,
+              end: (v.end / timeScale) + chunkOffset,
             }));
             mouthCuesRef.current = [...mouthCuesRef.current, ...shiftedVisemes];
           }
@@ -163,5 +180,7 @@ export function useGaplessAudioQueue() {
     flushQueue,
     getAudioContext,
     playbackStartTimeRef: visemeBaseStartTimeRef,
+    getIsAudioPlaying,
+    getNextPlaybackTime,
   };
 }

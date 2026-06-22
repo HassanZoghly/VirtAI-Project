@@ -81,6 +81,8 @@ export default function ClassroomShell() {
     handleTtsReady,
     handleVisemesReady,
     resetAvatarAudio,
+    getIsAudioPlaying,
+    getNextPlaybackTime
   } = useClassroomAudio();
 
   // Phase 1: Isolated Chat Logic
@@ -361,6 +363,8 @@ export default function ClassroomShell() {
             mouthCuesRef={mouthCuesRef}
             getAudioContext={getAudioContext}
             playbackStartTimeRef={playbackStartTimeRef}
+            getIsAudioPlaying={getIsAudioPlaying}
+            getNextPlaybackTime={getNextPlaybackTime}
           />
 
           <div className="chat-panel" key={currentSessionId || 'empty'}>

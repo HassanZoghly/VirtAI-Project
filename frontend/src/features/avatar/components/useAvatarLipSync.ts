@@ -55,6 +55,8 @@ export interface UseAvatarLipSyncProps {
   mouthCuesRef?: React.MutableRefObject<Viseme[]>;
   getAudioContext?: () => AudioContext;
   playbackStartTimeRef?: React.MutableRefObject<number | null>;
+  getIsAudioPlaying?: () => boolean;
+  getNextPlaybackTime?: () => number;
   groupRef: React.RefObject<THREE.Group | null>;
 }
 
@@ -64,6 +66,8 @@ export function useAvatarLipSync({
   mouthCuesRef,
   getAudioContext,
   playbackStartTimeRef,
+  getIsAudioPlaying,
+  getNextPlaybackTime,
   groupRef,
 }: UseAvatarLipSyncProps) {
   const visemeKeysList = useMemo(() => [
@@ -124,6 +128,20 @@ export function useAvatarLipSync({
   }, [targetMeshes, visemeKeysList]);
 
   useFrame((state, delta) => {
+    // ONE-TIME CAMERA LOGGING
+    if (!(window as any).__LOGGED_CAMERA) {
+      console.log('[Runtime Evidence] Active Camera Frame:', {
+        position: state.camera.position.toArray(),
+        rotation: state.camera.rotation.toArray(),
+        fov: (state.camera as any).fov
+      });
+      (window as any).__LOGGED_CAMERA = {
+        position: state.camera.position.toArray(),
+        rotation: state.camera.rotation.toArray(),
+        fov: (state.camera as any).fov
+      };
+    }
+
     if (targetMeshes.length > ORIGIN_ZERO) {
       // 1. Calculate Target Values
       const t = state.clock.elapsedTime;
@@ -151,7 +169,9 @@ export function useAvatarLipSync({
 
       const currentPipelineState = pipelineStateRef.current;
       let isAudioPlaying = false;
-      if (playbackStartTimeRef?.current != null) {
+      if (getIsAudioPlaying) {
+        isAudioPlaying = getIsAudioPlaying();
+      } else if (playbackStartTimeRef?.current != null) {
         const audioContext = getAudioContext?.();
         if (audioContext?.state === 'running' && audioContext.currentTime >= playbackStartTimeRef.current) {
           isAudioPlaying = true;
@@ -221,8 +241,16 @@ export function useAvatarLipSync({
         currentCueIndexRef.current = index;
 
         if (index < cues.length && currentTime >= cues[index].start) {
-          const cueValue = cues[index].value.toUpperCase();
-          activeVisemeName = VISEME_MAP[cueValue] || FALLBACK_VISEME;
+          const rawValue = cues[index].value;
+          const cueValue = rawValue.toUpperCase();
+          const nextViseme = VISEME_MAP[cueValue] || (rawValue.toLowerCase().startsWith('viseme_') ? rawValue : FALLBACK_VISEME);
+          
+          if (activeVisemeName !== nextViseme) {
+            if (Math.random() < 0.05) { // Sample logs to avoid flooding
+                console.log(`[Runtime Evidence] Lip-Sync Update - Time: ${currentTime.toFixed(3)}s, Viseme: ${nextViseme}, Index: ${index}`);
+            }
+          }
+          activeVisemeName = nextViseme;
         }
       }
 
@@ -270,7 +298,9 @@ export function useAvatarLipSync({
     } else if (targetMeshes.length === ORIGIN_ZERO && groupRef.current) {
       const currentPipelineState = pipelineStateRef.current;
       let isAudioPlaying = false;
-      if (playbackStartTimeRef?.current != null) {
+      if (getIsAudioPlaying) {
+        isAudioPlaying = getIsAudioPlaying();
+      } else if (playbackStartTimeRef?.current != null) {
         const audioContext = getAudioContext?.();
         if (audioContext?.state === 'running' && audioContext.currentTime >= playbackStartTimeRef.current) {
           isAudioPlaying = true;

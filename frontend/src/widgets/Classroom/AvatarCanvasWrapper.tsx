@@ -6,11 +6,11 @@ import { Viseme } from '@/features/voice/hooks/useGaplessAudioQueue';
 import * as THREE from 'three';
 
 const CAMERA_POS_X = 0;
-const CAMERA_POS_Y = 1.2;
-const CAMERA_POS_Z = 3.2;
+const CAMERA_POS_Y = 1.5;
+const CAMERA_POS_Z = 2.2;
 const CAMERA_FOV = 45;
 const TARGET_POS_X = 0;
-const TARGET_POS_Y = 1.0;
+const TARGET_POS_Y = 1.4;
 const TARGET_POS_Z = 0;
 const AMBIENT_INTENSITY = 0.5;
 const DIR_LIGHT_POS_X = 1;
@@ -28,6 +28,8 @@ interface AvatarCanvasWrapperProps {
   mouthCuesRef: React.MutableRefObject<Viseme[]>;
   getAudioContext: () => AudioContext;
   playbackStartTimeRef: React.MutableRefObject<number | null>;
+  getIsAudioPlaying: () => boolean;
+  getNextPlaybackTime: () => number;
 }
 
 // DEFENSIVE: WebGL Context Watcher with strict cleanup
@@ -58,7 +60,9 @@ export const AvatarCanvasWrapper = memo(function AvatarCanvasWrapper({
   movementEnabled,
   mouthCuesRef,
   getAudioContext,
-  playbackStartTimeRef
+  playbackStartTimeRef,
+  getIsAudioPlaying,
+  getNextPlaybackTime
 }: AvatarCanvasWrapperProps) {
   const [isContextLost, setIsContextLost] = useState(false);
 
@@ -79,7 +83,21 @@ export const AvatarCanvasWrapper = memo(function AvatarCanvasWrapper({
           <p style={{ color: '#fff' }}>Recovering Avatar Graphics...</p>
         </div>
       )}
-      <Canvas>
+      <Canvas onCreated={(state) => {
+        const evidence = {
+          camera: {
+            position: state.camera.position.toArray(),
+            fov: (state.camera as THREE.PerspectiveCamera).fov,
+            aspect: (state.camera as THREE.PerspectiveCamera).aspect
+          },
+          gl: {
+            size: state.size,
+            viewport: state.viewport
+          }
+        };
+        console.log('[Runtime Evidence] Canvas Created:', evidence);
+        (window as any).__CAMERA_EVIDENCE = evidence;
+      }}>
         <WebGLContextWatcher onLost={handleContextLost} onRestored={handleContextRestored} />
         <PerspectiveCamera makeDefault position={[CAMERA_POS_X, CAMERA_POS_Y, CAMERA_POS_Z]} fov={CAMERA_FOV} />
         <OrbitControls target={[TARGET_POS_X, TARGET_POS_Y, TARGET_POS_Z]} enablePan={false} enableZoom={false} enableRotate={false} />
@@ -92,6 +110,8 @@ export const AvatarCanvasWrapper = memo(function AvatarCanvasWrapper({
           mouthCuesRef={mouthCuesRef}
           getAudioContext={getAudioContext}
           playbackStartTimeRef={playbackStartTimeRef}
+          getIsAudioPlaying={getIsAudioPlaying}
+          getNextPlaybackTime={getNextPlaybackTime}
         />
       </Canvas>
     </div>
@@ -104,6 +124,8 @@ export const AvatarCanvasWrapper = memo(function AvatarCanvasWrapper({
     // Refs generally don't change, but check them just in case
     prevProps.mouthCuesRef === nextProps.mouthCuesRef &&
     prevProps.getAudioContext === nextProps.getAudioContext &&
-    prevProps.playbackStartTimeRef === nextProps.playbackStartTimeRef
+    prevProps.playbackStartTimeRef === nextProps.playbackStartTimeRef &&
+    prevProps.getIsAudioPlaying === nextProps.getIsAudioPlaying &&
+    prevProps.getNextPlaybackTime === nextProps.getNextPlaybackTime
   );
 });

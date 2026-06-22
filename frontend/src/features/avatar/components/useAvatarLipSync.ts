@@ -53,7 +53,7 @@ export interface UseAvatarLipSyncProps {
   targetMeshes: THREE.SkinnedMesh[];
   pipelineState: 'idle' | 'thinking' | 'speaking' | 'error';
   mouthCuesRef?: React.MutableRefObject<Viseme[]>;
-  audioContext?: AudioContext | null;
+  getAudioContext?: () => AudioContext;
   playbackStartTimeRef?: React.MutableRefObject<number | null>;
   groupRef: React.RefObject<THREE.Group | null>;
 }
@@ -62,7 +62,7 @@ export function useAvatarLipSync({
   targetMeshes,
   pipelineState,
   mouthCuesRef,
-  audioContext,
+  getAudioContext,
   playbackStartTimeRef,
   groupRef,
 }: UseAvatarLipSyncProps) {
@@ -75,6 +75,11 @@ export function useAvatarLipSync({
   const blinkStateRef = useRef({ nextBlinkTime: INITIAL_BLINK_TIME, duration: BLINK_DURATION, isBlinking: false });
   const fallbackTimeRef = useRef(ORIGIN_ZERO);
   const lastCuesRef = useRef<Viseme[] | null>(null);
+
+  const pipelineStateRef = useRef(pipelineState);
+  useEffect(() => {
+    pipelineStateRef.current = pipelineState;
+  }, [pipelineState]);
 
   useEffect(() => {
     if (pipelineState === 'speaking') {
@@ -144,15 +149,36 @@ export function useAvatarLipSync({
       let targetFrown = TARGET_ZERO;
       let targetSmile = TARGET_ZERO;
 
-      if (pipelineState === 'thinking') {
+      const currentPipelineState = pipelineStateRef.current;
+      let isAudioPlaying = false;
+      if (playbackStartTimeRef?.current != null) {
+        const audioContext = getAudioContext?.();
+        if (audioContext?.state === 'running' && audioContext.currentTime >= playbackStartTimeRef.current) {
+          isAudioPlaying = true;
+          if (currentPipelineState !== 'speaking') {
+            if (mouthCuesRef?.current && mouthCuesRef.current.length > 0) {
+              const lastCue = mouthCuesRef.current[mouthCuesRef.current.length - 1];
+              const validEnd = Number.isFinite(lastCue?.end) ? Number(lastCue.end) : 0;
+              if (audioContext.currentTime > playbackStartTimeRef.current + validEnd) {
+                isAudioPlaying = false;
+              }
+            } else {
+              isAudioPlaying = false;
+            }
+          }
+        }
+      }
+      const isEffectivelySpeaking = currentPipelineState === 'speaking' || isAudioPlaying;
+
+      if (currentPipelineState === 'thinking') {
         targetBrow = BROW_THINKING;
         targetFrown = FROWN_THINKING;
-      } else if (pipelineState === 'speaking') {
+      } else if (isEffectivelySpeaking) {
         targetSmile = SMILE_SPEAKING;
       }
 
       let activeVisemeName: string | null = null;
-      if (pipelineState === 'speaking' && mouthCuesRef?.current) {
+      if (isEffectivelySpeaking && mouthCuesRef?.current) {
         const cues = mouthCuesRef.current;
         
         if (cues !== lastCuesRef.current) {
@@ -162,6 +188,8 @@ export function useAvatarLipSync({
         }
 
         let currentTime = ORIGIN_ZERO;
+        
+        const audioContext = getAudioContext?.();
 
         if (audioContext && audioContext.state === 'running' && playbackStartTimeRef?.current != null) {
           currentTime = audioContext.currentTime - playbackStartTimeRef.current;
@@ -240,7 +268,28 @@ export function useAvatarLipSync({
         safelySetInfluence('jawOpen', jawTarget, DEFAULT_DAMP_SPEED);
       });
     } else if (targetMeshes.length === ORIGIN_ZERO && groupRef.current) {
-      if (pipelineState === 'speaking') {
+      const currentPipelineState = pipelineStateRef.current;
+      let isAudioPlaying = false;
+      if (playbackStartTimeRef?.current != null) {
+        const audioContext = getAudioContext?.();
+        if (audioContext?.state === 'running' && audioContext.currentTime >= playbackStartTimeRef.current) {
+          isAudioPlaying = true;
+          if (currentPipelineState !== 'speaking') {
+            if (mouthCuesRef?.current && mouthCuesRef.current.length > 0) {
+              const lastCue = mouthCuesRef.current[mouthCuesRef.current.length - 1];
+              const validEnd = Number.isFinite(lastCue?.end) ? Number(lastCue.end) : 0;
+              if (audioContext.currentTime > playbackStartTimeRef.current + validEnd) {
+                isAudioPlaying = false;
+              }
+            } else {
+              isAudioPlaying = false;
+            }
+          }
+        }
+      }
+      const isEffectivelySpeaking = currentPipelineState === 'speaking' || isAudioPlaying;
+
+      if (isEffectivelySpeaking) {
         fallbackTimeRef.current = (fallbackTimeRef.current + delta) % HEAD_BOB_PERIOD;
         groupRef.current.position.y = Math.sin(fallbackTimeRef.current * HEAD_BOB_FREQUENCY) * HEAD_BOB_AMPLITUDE;
       } else {

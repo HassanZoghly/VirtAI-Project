@@ -359,7 +359,7 @@ export default function ClassroomShell() {
             pipelineState={conversationState.pipelineState}
             movementEnabled={movementEnabled}
             mouthCuesRef={mouthCuesRef}
-            audioContext={getAudioContext()}
+            getAudioContext={getAudioContext}
             playbackStartTimeRef={playbackStartTimeRef}
           />
 

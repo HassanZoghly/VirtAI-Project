@@ -26,7 +26,7 @@ interface AvatarCanvasWrapperProps {
   pipelineState: 'idle' | 'thinking' | 'speaking' | 'error';
   movementEnabled: boolean;
   mouthCuesRef: React.MutableRefObject<Viseme[]>;
-  audioContext: AudioContext;
+  getAudioContext: () => AudioContext;
   playbackStartTimeRef: React.MutableRefObject<number | null>;
 }
 
@@ -57,7 +57,7 @@ export const AvatarCanvasWrapper = memo(function AvatarCanvasWrapper({
   pipelineState,
   movementEnabled,
   mouthCuesRef,
-  audioContext,
+  getAudioContext,
   playbackStartTimeRef
 }: AvatarCanvasWrapperProps) {
   const [isContextLost, setIsContextLost] = useState(false);
@@ -90,7 +90,7 @@ export const AvatarCanvasWrapper = memo(function AvatarCanvasWrapper({
           pipelineState={pipelineState} 
           movementEnabled={movementEnabled}
           mouthCuesRef={mouthCuesRef}
-          audioContext={audioContext}
+          getAudioContext={getAudioContext}
           playbackStartTimeRef={playbackStartTimeRef}
         />
       </Canvas>
@@ -103,7 +103,7 @@ export const AvatarCanvasWrapper = memo(function AvatarCanvasWrapper({
     prevProps.movementEnabled === nextProps.movementEnabled &&
     // Refs generally don't change, but check them just in case
     prevProps.mouthCuesRef === nextProps.mouthCuesRef &&
-    prevProps.audioContext === nextProps.audioContext &&
+    prevProps.getAudioContext === nextProps.getAudioContext &&
     prevProps.playbackStartTimeRef === nextProps.playbackStartTimeRef
   );
 });

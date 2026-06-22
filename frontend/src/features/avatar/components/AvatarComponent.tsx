@@ -15,7 +15,7 @@ export interface AvatarComponentProps {
   pipelineState: 'idle' | 'thinking' | 'speaking' | 'error';
   movementEnabled?: boolean;
   mouthCuesRef?: React.MutableRefObject<Viseme[]>;
-  audioContext?: AudioContext | null;
+  getAudioContext?: () => AudioContext;
   playbackStartTimeRef?: React.MutableRefObject<number | null>;
 }
 
@@ -29,7 +29,7 @@ export function AvatarComponent({
   pipelineState, 
   movementEnabled = true,
   mouthCuesRef,
-  audioContext,
+  getAudioContext,
   playbackStartTimeRef
 }: AvatarComponentProps) {
   const groupRef = useRef<THREE.Group>(null);
@@ -44,7 +44,7 @@ export function AvatarComponent({
   }, [clone]);
 
   // Hook 1: Animation Mixer, Tracks, and State Machine
-  useAvatarAnimations(avatarRoot as THREE.Group, pipelineState, movementEnabled, audioContext, playbackStartTimeRef, mouthCuesRef);
+  useAvatarAnimations(avatarRoot as THREE.Group, pipelineState, movementEnabled, getAudioContext, playbackStartTimeRef, mouthCuesRef);
 
   const toastShownRef = useRef(false);
 
@@ -80,7 +80,7 @@ export function AvatarComponent({
     targetMeshes,
     pipelineState,
     mouthCuesRef,
-    audioContext,
+    getAudioContext,
     playbackStartTimeRef,
     groupRef
   });

@@ -11,8 +11,6 @@ const TALK_MANIFEST = [
 ];
 
 const FADE_DURATION = 0.5;
-const IDLE_BREAK_MULTIPLIER = 2;
-const IDLE_BREAK_OFFSET = 2;
 
 const ANIMATION_LOOP_ONCE_COUNT = 1;
 const NORMAL_TIME_SCALE = 1;
@@ -35,7 +33,7 @@ export function useAvatarAnimations(
   scene: THREE.Group,
   pipelineState: 'idle' | 'thinking' | 'speaking' | 'error',
   movementEnabled: boolean,
-  audioContext?: AudioContext | null,
+  getAudioContext?: () => AudioContext,
   playbackStartTimeRef?: React.MutableRefObject<number | null>,
   mouthCuesRef?: React.MutableRefObject<Viseme[]>
 ) {
@@ -187,7 +185,28 @@ export function useAvatarAnimations(
       // @ts-expect-error Three.js AnimationAction event typing is loose
       const finishedName = e.action?.getClip()?.name;
 
-      if (finishedName && typeof finishedName === 'string' && finishedName.startsWith('Talk_') && pipelineStateRef.current === 'speaking') {
+      let isAudioPlaying = false;
+      if (playbackStartTimeRef?.current != null) {
+        const audioContext = getAudioContext?.();
+        if (audioContext?.state === 'running' && audioContext.currentTime >= playbackStartTimeRef.current) {
+          isAudioPlaying = true;
+          if (pipelineStateRef.current !== 'speaking') {
+            if (mouthCuesRef?.current && mouthCuesRef.current.length > 0) {
+              const lastCue = mouthCuesRef.current[mouthCuesRef.current.length - 1];
+              const validEnd = Number.isFinite(lastCue?.end) ? Number(lastCue.end) : 0;
+              if (audioContext.currentTime > playbackStartTimeRef.current + validEnd) {
+                isAudioPlaying = false;
+              }
+            } else {
+              isAudioPlaying = false;
+            }
+          }
+        }
+      }
+        
+      const isEffectivelySpeaking = pipelineStateRef.current === 'speaking' || isAudioPlaying;
+
+      if (finishedName && typeof finishedName === 'string' && finishedName.startsWith('Talk_') && isEffectivelySpeaking) {
         let remainingAudio = 0;
         if (mouthCuesRef?.current && mouthCuesRef.current.length > 0 && playbackStartTimeRef?.current != null && audioContext) {
           const lastCue = mouthCuesRef.current[mouthCuesRef.current.length - 1];
@@ -219,7 +238,7 @@ export function useAvatarAnimations(
     return () => {
       mixer.removeEventListener('finished', onFinished);
     };
-  }, [mixer, playAnimation, audioContext, playbackStartTimeRef, mouthCuesRef]);
+  }, [mixer, playAnimation, getAudioContext, playbackStartTimeRef, mouthCuesRef]);
 
   useEffect(() => {
     return () => {
@@ -239,9 +258,7 @@ export function useAvatarAnimations(
       return;
     }
 
-    if (pipelineState === 'speaking') {
-      // Defer starting talk until audio is actually playing (handled in useFrame)
-    } else {
+    if (pipelineState === 'thinking' || pipelineState === 'error') {
       timelineStateRef.current = {
         phase: 'idle',
         timeInPhase: INITIAL_TIME,
@@ -255,12 +272,29 @@ export function useAvatarAnimations(
   useFrame((state, delta) => {
     const timeline = timelineStateRef.current;
     const currentState = pipelineStateRef.current;
+    
+    let isAudioPlaying = false;
+    if (playbackStartTimeRef?.current != null) {
+      const audioContext = getAudioContext?.();
+      if (audioContext?.state === 'running' && audioContext.currentTime >= playbackStartTimeRef.current) {
+        isAudioPlaying = true;
+        if (currentState !== 'speaking') {
+          if (mouthCuesRef?.current && mouthCuesRef.current.length > 0) {
+            const lastCue = mouthCuesRef.current[mouthCuesRef.current.length - 1];
+            const validEnd = Number.isFinite(lastCue?.end) ? Number(lastCue.end) : 0;
+            if (audioContext.currentTime > playbackStartTimeRef.current + validEnd) {
+              isAudioPlaying = false;
+            }
+          } else {
+            isAudioPlaying = false;
+          }
+        }
+      }
+    }
 
-    const isAudioPlaying = playbackStartTimeRef?.current != null
-      && audioContext?.state === 'running'
-      && audioContext.currentTime >= playbackStartTimeRef.current;
+    const isEffectivelySpeaking = currentState === 'speaking' || isAudioPlaying;
 
-    if (currentState === 'speaking' && isAudioPlaying) {
+    if (isEffectivelySpeaking && isAudioPlaying) {
       if (timeline.phase === 'idle') {
         startRandomTalk();
       } else if (timeline.phase === 'idle_break') {
@@ -269,6 +303,9 @@ export function useAvatarAnimations(
           startRandomTalk();
         }
       }
+    } else if (!isEffectivelySpeaking && timeline.phase !== 'idle') {
+      timeline.phase = 'idle';
+      playAnimation('Idle');
     }
   });
 

@@ -27,7 +27,7 @@ interface UseClassroomChatProps {
   session: any; // Using the type from useSessionManager
   onTtsReady: (messageId: string | undefined, url: string) => void;
   onVisemesReady: (messageId: string, cues: Viseme[]) => void;
-  resetAvatarAudio: () => void;
+  resetAvatarAudio: (messageId?: string | null) => void;
   getAudioContext: () => AudioContext;
 }
 

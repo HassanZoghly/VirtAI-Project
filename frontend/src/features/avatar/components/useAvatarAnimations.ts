@@ -6,8 +6,7 @@ import { Viseme } from './useAvatarLipSync';
 
 const IDLE_URL = '/models/animations/Idle/Idle.fbx';
 const TALK_MANIFEST = [
-  '/models/animations/Talk/Talk_1.fbx',
-  '/models/animations/Talk/Talk_2.fbx'
+  '/models/animations/Talk/Talk_1.fbx'
 ];
 
 const FADE_DURATION = 0.4;
@@ -41,28 +40,28 @@ export function useAvatarAnimations(
 ) {
   const idleFbx = useFBX(IDLE_URL);
   const talkFbx1 = useFBX(TALK_MANIFEST[0]);
-  const talkFbx2 = useFBX(TALK_MANIFEST[1]);
-  const talkFbxs = useMemo(() => [talkFbx1, talkFbx2], [talkFbx1, talkFbx2]);
 
   const animations = useMemo(() => {
-    // 1. Capture rig rest pose from the GLB skeleton
-    function captureRestPose(root: THREE.Object3D): Map<string, THREE.Quaternion> {
+    function captureSkeletonSpace(root: THREE.Object3D): Map<string, THREE.Quaternion> {
       const m = new Map<string, THREE.Quaternion>();
       root.traverse(o => {
-        if ((o as any).isBone) m.set(o.name, (o as THREE.Bone).quaternion.clone());
+        if ((o as any).isBone) {
+          const cleanName = o.name.replace(/mixamorig:|Armature\|/gi, '').split('.')[0];
+          m.set(cleanName, (o as THREE.Bone).quaternion.clone());
+        }
       });
       return m;
     }
 
-    // 2. Rebase all quaternion tracks so frame-0 == rig rest pose
-    function rebaseClipToRig(clip: THREE.AnimationClip, rest: Map<string, THREE.Quaternion>) {
+    function retargetClipToSpace(clip: THREE.AnimationClip, sourceSpace: Map<string, THREE.Quaternion>, targetSpace: Map<string, THREE.Quaternion>) {
       for (const track of clip.tracks) {
         if (!(track instanceof THREE.QuaternionKeyframeTrack)) continue;
         const boneName = track.name.split('.')[0];
-        const restQ = rest.get(boneName);
-        if (!restQ) continue;
-        const firstQ = new THREE.Quaternion().fromArray(track.values, 0);
-        const delta = restQ.clone().multiply(firstQ.clone().invert());
+        const sourceQ = sourceSpace.get(boneName);
+        const targetQ = targetSpace.get(boneName);
+        if (!sourceQ || !targetQ) continue;
+        
+        const delta = targetQ.clone().multiply(sourceQ.clone().invert());
         const tmp = new THREE.Quaternion();
         for (let i = 0; i < track.values.length; i += 4) {
           tmp.fromArray(track.values, i).premultiply(delta);
@@ -71,7 +70,6 @@ export function useAvatarAnimations(
       }
     }
 
-    // 3. Strip all position, scale, and problematic Hips rotation tracks
     function sanitizeClip(clip: THREE.AnimationClip) {
       clip.tracks = clip.tracks.filter(t => {
         if (t.name.endsWith('.scale')) return false;
@@ -81,7 +79,6 @@ export function useAvatarAnimations(
       });
     }
 
-    // 4. Pick the right stack by name suffix
     function pickStack(anims: THREE.AnimationClip[], preferredSuffixes: string[]): THREE.AnimationClip {
       for (const suffix of preferredSuffixes) {
         const hit = anims.find(c => c.name === suffix || c.name.endsWith(suffix));
@@ -90,12 +87,26 @@ export function useAvatarAnimations(
       return anims.slice().sort((a, b) => b.duration - a.duration)[0];
     }
 
-    if (!scene) return [] as THREE.AnimationClip[];
-    const rest = captureRestPose(scene);
+    if (!scene || !idleFbx || !talkFbx1) return [] as THREE.AnimationClip[];
+
+    const glbSpace = captureSkeletonSpace(scene);
+    const talk1Space = captureSkeletonSpace(talkFbx1);
 
     const idleSrc = pickStack(idleFbx.animations, ['mixamo.com']);
+    if (!idleSrc) return [];
+    
     const idle = idleSrc.clone();
     idle.name = 'Idle';
+
+    // Idle is pristine; it only needs sanitization
+    idle.tracks = idle.tracks
+      .map(t => {
+        const c = t.clone();
+        c.name = c.name.replace(/mixamorig:|Armature\|/gi, '');
+        return c;
+      })
+      .filter(t => !t.name.startsWith('Armature.'));
+    sanitizeClip(idle);
 
     const clips = [idle];
     let talkIndex = 0;
@@ -104,31 +115,21 @@ export function useAvatarAnimations(
     if (talk1Src) {
       const talk1 = talk1Src.clone();
       talk1.name = `Talk_${talkIndex++}`;
-      clips.push(talk1);
-    }
-
-    // Unleash all valid gesture variations hidden in Talk_2.fbx for massive conversational variety
-    talkFbx2.animations.forEach(a => {
-      if (a.duration > 1.0) {
-        const c = a.clone();
-        c.name = `Talk_${talkIndex++}`;
-        clips.push(c);
-      }
-    });
-    for (const clip of clips) {
-      clip.tracks = clip.tracks
+      talk1.tracks = talk1.tracks
         .map(t => {
           const c = t.clone();
           c.name = c.name.replace(/mixamorig:|Armature\|/gi, '');
           return c;
         })
         .filter(t => !t.name.startsWith('Armature.'));
-      sanitizeClip(clip);
-      rebaseClipToRig(clip, rest);
+      sanitizeClip(talk1);
+      // Retarget mathematically using the skeleton embedded in Talk_1.fbx
+      retargetClipToSpace(talk1, talk1Space, glbSpace);
+      clips.push(talk1);
     }
 
     return clips;
-  }, [scene, idleFbx, talkFbx1, talkFbx2]);
+  }, [scene, idleFbx, talkFbx1]);
 
   const { actions, mixer } = useAnimations(animations, scene);
   const currentActionNameRef = useRef<string | null>(null);

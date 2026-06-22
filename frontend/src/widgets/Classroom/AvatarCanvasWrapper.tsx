@@ -6,11 +6,11 @@ import { Viseme } from '@/features/voice/hooks/useGaplessAudioQueue';
 import * as THREE from 'three';
 
 const CAMERA_POS_X = 0;
-const CAMERA_POS_Y = 1.5;
-const CAMERA_POS_Z = 2.2;
+const CAMERA_POS_Y = 1.4;
+const CAMERA_POS_Z = 1.8;
 const CAMERA_FOV = 45;
 const TARGET_POS_X = 0;
-const TARGET_POS_Y = 1.4;
+const TARGET_POS_Y = 1.25;
 const TARGET_POS_Z = 0;
 const AMBIENT_INTENSITY = 0.5;
 const DIR_LIGHT_POS_X = 1;

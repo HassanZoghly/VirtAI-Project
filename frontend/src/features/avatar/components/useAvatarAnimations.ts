@@ -65,7 +65,10 @@ export function useAvatarAnimations(
       });
 
       const afterCount = clonedClip.tracks.length;
-      console.log(`[Runtime Evidence] Animation Clip "${clip.name}" filtering: Kept ${afterCount}/${beforeCount} tracks. Removed Armature root tracks. First 5 retained:`, clonedClip.tracks.slice(0, 5).map(t => t.name));
+      console.log(`[Runtime Evidence] Animation Clip "${clip.name}" filtering: Kept ${afterCount}/${beforeCount} tracks.`);
+      if (clip.name === 'Idle') {
+        (window as any).__IDLE_TRACKS = clonedClip.tracks.map(t => t.name);
+      }
 
       clonedClip.tracks = clonedClip.tracks.map(track => {
         const clonedTrack = track.clone();
@@ -78,9 +81,10 @@ export function useAvatarAnimations(
     };
 
     if (idleFbx.animations.length > ARRAY_EMPTY_LENGTH) {
-      const idleClip = idleFbx.animations[FIRST_INDEX].clone();
-      idleClip.name = 'Idle';
-      clips.push(renameTracks(idleClip));
+      const idleClipRaw = idleFbx.animations[FIRST_INDEX].clone();
+      idleClipRaw.name = 'Idle';
+      const idleClip = renameTracks(idleClipRaw);
+      clips.push(idleClip);
     }
 
     talkFbxs.forEach((fbx, index) => {

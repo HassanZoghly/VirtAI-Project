@@ -10,7 +10,7 @@ const TALK_MANIFEST = [
   '/models/animations/Talk/Talk_2.fbx'
 ];
 
-const FADE_DURATION = 0.5;
+const FADE_DURATION = 0.4;
 
 const ANIMATION_LOOP_ONCE_COUNT = 1;
 const NORMAL_TIME_SCALE = 1;
@@ -45,57 +45,90 @@ export function useAvatarAnimations(
   const talkFbxs = useMemo(() => [talkFbx1, talkFbx2], [talkFbx1, talkFbx2]);
 
   const animations = useMemo(() => {
-    const clips: THREE.AnimationClip[] = [];
-
-    const renameTracks = (clip: THREE.AnimationClip) => {
-      const clonedClip = clip.clone();
-      
-      const beforeCount = clonedClip.tracks.length;
-      
-      // DEFENSIVE FIX: Strip root motion tracks to prevent the "Explosion / Collapse" bug.
-      // Mixamo FBX animations often contain Armature rotation/scale tracks that conflict with GLB root transforms.
-      clonedClip.tracks = clonedClip.tracks.filter(track => {
-        const cleanName = track.name.replace(/mixamorig:|Armature\|/gi, '');
-        if (cleanName.startsWith('Armature.')) return false;
-        // DEFENSIVE: Prevent Mixamo Z-up / Y-up offset bugs forcing the avatar hips to the floor (Y=-0.21)
-        if (cleanName === 'Hips.position') return false;
-        // DEFENSIVE: Prevent Mixamo Z-up rotation offset forcing the avatar to bend 90 degrees forward
-        if (cleanName === 'Hips.quaternion') return false;
-        return true;
+    // 1. Capture rig rest pose from the GLB skeleton
+    function captureRestPose(root: THREE.Object3D): Map<string, THREE.Quaternion> {
+      const m = new Map<string, THREE.Quaternion>();
+      root.traverse(o => {
+        if ((o as any).isBone) m.set(o.name, (o as THREE.Bone).quaternion.clone());
       });
-
-      const afterCount = clonedClip.tracks.length;
-      console.log(`[Runtime Evidence] Animation Clip "${clip.name}" filtering: Kept ${afterCount}/${beforeCount} tracks.`);
-      if (clip.name === 'Idle') {
-        (window as any).__IDLE_TRACKS = clonedClip.tracks.map(t => t.name);
-      }
-
-      clonedClip.tracks = clonedClip.tracks.map(track => {
-        const clonedTrack = track.clone();
-        // ASSET_MANIFEST dictates using /mixamorig:|Armature\|/gi strictly to mirror the ground truth GLB naming
-        const cleanName = clonedTrack.name.replace(/mixamorig:|Armature\|/gi, '');
-        clonedTrack.name = cleanName;
-        return clonedTrack;
-      });
-      return clonedClip;
-    };
-
-    if (idleFbx.animations.length > ARRAY_EMPTY_LENGTH) {
-      const idleClipRaw = idleFbx.animations[FIRST_INDEX].clone();
-      idleClipRaw.name = 'Idle';
-      const idleClip = renameTracks(idleClipRaw);
-      clips.push(idleClip);
+      return m;
     }
 
-    talkFbxs.forEach((fbx, index) => {
-      if (fbx.animations.length > ARRAY_EMPTY_LENGTH) {
-        const talkClip = fbx.animations[FIRST_INDEX].clone();
-        talkClip.name = `Talk_${index}`;
-        clips.push(renameTracks(talkClip));
+    // 2. Rebase all quaternion tracks so frame-0 == rig rest pose
+    function rebaseClipToRig(clip: THREE.AnimationClip, rest: Map<string, THREE.Quaternion>) {
+      for (const track of clip.tracks) {
+        if (!(track instanceof THREE.QuaternionKeyframeTrack)) continue;
+        const boneName = track.name.split('.')[0];
+        const restQ = rest.get(boneName);
+        if (!restQ) continue;
+        const firstQ = new THREE.Quaternion().fromArray(track.values, 0);
+        const delta = restQ.clone().multiply(firstQ.clone().invert());
+        const tmp = new THREE.Quaternion();
+        for (let i = 0; i < track.values.length; i += 4) {
+          tmp.fromArray(track.values, i).premultiply(delta);
+          tmp.toArray(track.values, i);
+        }
+      }
+    }
+
+    // 3. Strip all position, scale, and problematic Hips rotation tracks
+    function sanitizeClip(clip: THREE.AnimationClip) {
+      clip.tracks = clip.tracks.filter(t => {
+        if (t.name.endsWith('.scale')) return false;
+        if (t.name.endsWith('.position')) return false;
+        if (t.name === 'Hips.quaternion') return false;
+        return true;
+      });
+    }
+
+    // 4. Pick the right stack by name suffix
+    function pickStack(anims: THREE.AnimationClip[], preferredSuffixes: string[]): THREE.AnimationClip {
+      for (const suffix of preferredSuffixes) {
+        const hit = anims.find(c => c.name === suffix || c.name.endsWith(suffix));
+        if (hit) return hit;
+      }
+      return anims.slice().sort((a, b) => b.duration - a.duration)[0];
+    }
+
+    if (!scene) return [] as THREE.AnimationClip[];
+    const rest = captureRestPose(scene);
+
+    const idleSrc = pickStack(idleFbx.animations, ['mixamo.com']);
+    const idle = idleSrc.clone();
+    idle.name = 'Idle';
+
+    const clips = [idle];
+    let talkIndex = 0;
+
+    const talk1Src = pickStack(talkFbx1.animations, ['Armature|Armature|Scene', 'mixamo.com']);
+    if (talk1Src) {
+      const talk1 = talk1Src.clone();
+      talk1.name = `Talk_${talkIndex++}`;
+      clips.push(talk1);
+    }
+
+    // Unleash all valid gesture variations hidden in Talk_2.fbx for massive conversational variety
+    talkFbx2.animations.forEach(a => {
+      if (a.duration > 1.0) {
+        const c = a.clone();
+        c.name = `Talk_${talkIndex++}`;
+        clips.push(c);
       }
     });
+    for (const clip of clips) {
+      clip.tracks = clip.tracks
+        .map(t => {
+          const c = t.clone();
+          c.name = c.name.replace(/mixamorig:|Armature\|/gi, '');
+          return c;
+        })
+        .filter(t => !t.name.startsWith('Armature.'));
+      sanitizeClip(clip);
+      rebaseClipToRig(clip, rest);
+    }
+
     return clips;
-  }, [idleFbx, talkFbxs]);
+  }, [scene, idleFbx, talkFbx1, talkFbx2]);
 
   const { actions, mixer } = useAnimations(animations, scene);
   const currentActionNameRef = useRef<string | null>(null);
@@ -123,8 +156,10 @@ export function useAvatarAnimations(
     });
   }, [actions]);
 
+  const inFlightFadeRef = useRef<{ to: string; until: number } | null>(null);
+
   const playAnimation = useCallback(
-    (name: string, fadeTime = FADE_DURATION) => {
+    (name: string, customFadeTime?: number) => {
       let targetName = name;
 
       // CRITICAL FIX: The 'Idle' animation is immune to movementEnabled.
@@ -133,36 +168,43 @@ export function useAvatarAnimations(
         targetName = 'Idle';
       }
 
+      // Human-like transition timing: fast excitation (0.3s), slow relaxation (0.6s)
+      const fadeTime = customFadeTime !== undefined ? customFadeTime : (targetName === 'Idle' ? 0.6 : 0.3);
+
+      const now = performance.now() / MS_PER_SECOND;
+      const inflight = inFlightFadeRef.current;
+
+      // If a fade is already running, COLLAPSE: just retarget the upcoming clip,
+      // don't start a second concurrent crossfade.
+      if (inflight && inflight.until > now) {
+        if (inflight.to === targetName) return; // already heading there
+        // Cancel any pending setTimeouts that would .stop() actions mid-blend.
+        stopTimeoutsRef.current.forEach(id => clearTimeout(id));
+        stopTimeoutsRef.current.clear();
+        // The prevAction here is the action currently *rising*; treat it as the new "from"
+        // and crossfade from it to the new target.
+      }
+
       const nextAction = actions[targetName];
       if (!nextAction) return;
 
-      if (currentActionNameRef.current === targetName) {
-        if (!nextAction.isRunning()) nextAction.reset().fadeIn(fadeTime).play();
-        return;
-      }
+      if (currentActionNameRef.current === targetName && nextAction.isRunning()) return;
 
       const prevAction = currentActionNameRef.current ? actions[currentActionNameRef.current] : null;
 
-      nextAction.reset();
-      nextAction.setEffectiveTimeScale(NORMAL_TIME_SCALE);
+      if (targetName !== 'Idle') {
+        nextAction.reset();
+        // Subtly randomize gesture tempo for human-like imperfection
+        const timeScale = 0.85 + Math.random() * 0.25;
+        nextAction.setEffectiveTimeScale(timeScale);
+      } else {
+        nextAction.setEffectiveTimeScale(NORMAL_TIME_SCALE);
+      }
       nextAction.setEffectiveWeight(FULL_WEIGHT);
 
-      if (prevAction) {
-        // DEFENSIVE: Animation Memory Leak Fix
-        // Crossfade strictly manages weight transition.
-        // Schedule a hard .stop() to prevent the Three.js mixer from evaluating invisible, zero-weight actions indefinitely.
-        prevAction.crossFadeTo(nextAction, fadeTime, true);
-
-        // DEFENSIVE: Use multiple clearable timeouts for React hook safety during rapid crossfades
-        const timeoutId = window.setTimeout(() => {
-          stopTimeoutsRef.current.delete(timeoutId);
-          if (currentActionNameRef.current !== prevAction.getClip().name) {
-            prevAction.stop();
-          }
-        }, fadeTime * MS_PER_SECOND);
-        stopTimeoutsRef.current.add(timeoutId);
-
-        // Note: Timeouts are cleared on unmount.
+      if (prevAction && prevAction !== nextAction) {
+        // warp=false prevents time-scale distortion during blending
+        prevAction.crossFadeTo(nextAction, fadeTime, false);
       } else {
         nextAction.fadeIn(fadeTime);
       }
@@ -170,6 +212,20 @@ export function useAvatarAnimations(
       nextAction.play();
 
       currentActionNameRef.current = targetName;
+      inFlightFadeRef.current = { to: targetName, until: now + fadeTime };
+
+      // Single deterministic cleanup: stop *every* non-current action after the fade.
+      const id = window.setTimeout(() => {
+        stopTimeoutsRef.current.delete(id);
+        Object.entries(actions).forEach(([k, a]) => {
+          if (k !== currentActionNameRef.current && a && a.getEffectiveWeight() < 0.01) {
+            // Preserve Idle's continuous timeline to avoid breathing rhythm reset pops
+            if (k !== 'Idle') a.stop();
+          }
+        });
+        inFlightFadeRef.current = null;
+      }, fadeTime * MS_PER_SECOND);
+      stopTimeoutsRef.current.add(id);
     },
     [actions, movementEnabled]
   );
@@ -236,34 +292,46 @@ export function useAvatarAnimations(
         
       const isEffectivelySpeaking = pipelineStateRef.current === 'speaking' || isAudioPlaying;
 
-      if (finishedName && typeof finishedName === 'string' && finishedName.startsWith('Talk_') && isEffectivelySpeaking) {
-        let remainingAudio = 0;
-        if (getNextPlaybackTime && audioContext) {
-          const audioEndTime = getNextPlaybackTime();
-          if (Number.isFinite(audioEndTime)) {
-            remainingAudio = Math.max(0, audioEndTime - audioContext.currentTime);
+      if (finishedName && typeof finishedName === 'string' && finishedName.startsWith('Talk_')) {
+        if (isEffectivelySpeaking) {
+          let remainingAudio = 0;
+          if (getNextPlaybackTime && audioContext) {
+            const audioEndTime = getNextPlaybackTime();
+            if (Number.isFinite(audioEndTime)) {
+              remainingAudio = Math.max(0, audioEndTime - audioContext.currentTime);
+            }
+          } else if (mouthCuesRef?.current && mouthCuesRef.current.length > 0 && playbackStartTimeRef?.current != null && audioContext) {
+            const lastCue = mouthCuesRef.current[mouthCuesRef.current.length - 1];
+            const validEnd = Number.isFinite(lastCue?.end) ? Number(lastCue.end) : 0;
+            const audioEndTime = playbackStartTimeRef.current + validEnd;
+            
+            if (Number.isFinite(audioEndTime)) {
+              remainingAudio = Math.max(0, audioEndTime - audioContext.currentTime);
+            }
           }
-        } else if (mouthCuesRef?.current && mouthCuesRef.current.length > 0 && playbackStartTimeRef?.current != null && audioContext) {
-          const lastCue = mouthCuesRef.current[mouthCuesRef.current.length - 1];
-          const validEnd = Number.isFinite(lastCue?.end) ? Number(lastCue.end) : 0;
-          const audioEndTime = playbackStartTimeRef.current + validEnd;
-          
-          if (Number.isFinite(audioEndTime)) {
-            remainingAudio = Math.max(0, audioEndTime - audioContext.currentTime);
-          }
+
+          // Add subtle random jitter so breathing pauses don't feel perfectly mathematical
+          const jitter = 0.8 + Math.random() * 0.4; // 0.8x to 1.2x
+          let breakDuration = Number.isFinite(remainingAudio) && remainingAudio > 0 ? (remainingAudio * 0.2) * jitter : 0;
+          breakDuration = Math.min(1.5, Math.max(0.4, breakDuration));
+
+          timelineStateRef.current = {
+            ...timelineStateRef.current,
+            phase: 'idle_break',
+            timeInPhase: INITIAL_TIME,
+            targetBreakDuration: breakDuration,
+          };
+          playAnimation('Idle');
+        } else {
+          // No freeze: Audio has already stopped, so transition to Idle immediately
+          timelineStateRef.current = {
+            ...timelineStateRef.current,
+            phase: 'idle',
+            timeInPhase: INITIAL_TIME,
+            targetBreakDuration: INITIAL_TIME,
+          };
+          playAnimation('Idle');
         }
-
-        // Validate finite, non-negative, and strictly clamp [0.3, 2.0]
-        let breakDuration = Number.isFinite(remainingAudio) && remainingAudio > 0 ? remainingAudio * 0.2 : 0;
-        breakDuration = Math.min(2, Math.max(0.3, breakDuration));
-
-        timelineStateRef.current = {
-          ...timelineStateRef.current,
-          phase: 'idle_break',
-          timeInPhase: INITIAL_TIME,
-          targetBreakDuration: breakDuration,
-        };
-        playAnimation('Idle');
       }
     };
 
@@ -271,7 +339,7 @@ export function useAvatarAnimations(
     return () => {
       mixer.removeEventListener('finished', onFinished);
     };
-  }, [mixer, playAnimation, getAudioContext, playbackStartTimeRef, mouthCuesRef]);
+  }, [mixer, playAnimation, getAudioContext, playbackStartTimeRef, mouthCuesRef, getIsAudioPlaying, getNextPlaybackTime]);
 
   useEffect(() => {
     return () => {
@@ -338,8 +406,12 @@ export function useAvatarAnimations(
         }
       }
     } else if (!isEffectivelySpeaking && timeline.phase !== 'idle') {
-      timeline.phase = 'idle';
-      playAnimation('Idle');
+      // Debounce: only force-return to Idle after 0.5s of confirmed silence
+      timeline.timeInPhase += delta;
+      if (timeline.timeInPhase > 0.5) {
+        timeline.phase = 'idle';
+        playAnimation('Idle');
+      }
     }
   });
 

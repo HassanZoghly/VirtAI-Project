@@ -26,9 +26,9 @@ interface GLTFResult {
   nodes: Record<string, THREE.Object3D | THREE.Mesh>;
 }
 
-export function AvatarComponent({ 
+export function AvatarComponent({
   avatarId,
-  pipelineState, 
+  pipelineState,
   movementEnabled = true,
   mouthCuesRef,
   getAudioContext,
@@ -39,11 +39,31 @@ export function AvatarComponent({
   const groupRef = useRef<THREE.Group>(null);
   const avatarUrl = `/models/${avatarId}.glb`;
   const { scene } = useGLTF(avatarUrl) as unknown as GLTFResult;
-  
+
   const clone = useMemo(() => SkeletonUtils.clone(scene), [scene]);
   const { nodes } = useGraph(clone) as unknown as GLTFResult;
-  
+
   const avatarRoot = useMemo(() => {
+    // SHARED BASELINE POSTURE LAYER
+    // Apply the exact same relaxation logic used in the clips directly to the bind pose.
+    // Since sanitizeClip strips arms from Idle and shoulders from all clips, they fall back
+    // to this baseline permanently. By relaxing the baseline, we eliminate the robotic
+    // stance at the start, end, and rest states without breaking animations.
+    const qDropArm = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), THREE.MathUtils.degToRad(20));
+    const qDropShoulder = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), THREE.MathUtils.degToRad(1));
+
+    clone.traverse((node) => {
+      if ((node as THREE.Bone).isBone) {
+        const bone = node as THREE.Bone;
+        if (bone.name.startsWith('LeftArm') || bone.name.startsWith('RightArm')) {
+          bone.quaternion.premultiply(qDropArm);
+        }
+        if (bone.name.startsWith('LeftShoulder') || bone.name.startsWith('RightShoulder')) {
+          bone.quaternion.premultiply(qDropShoulder);
+        }
+      }
+    });
+
     return clone;
   }, [clone]);
 

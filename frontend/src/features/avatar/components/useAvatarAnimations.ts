@@ -53,28 +53,47 @@ export function useAvatarAnimations(
       return m;
     }
 
-    function retargetClipToSpace(clip: THREE.AnimationClip, sourceSpace: Map<string, THREE.Quaternion>, targetSpace: Map<string, THREE.Quaternion>) {
+    function relaxArmPosture(clip: THREE.AnimationClip) {
+      // Gently drop upper arms and shoulders to reduce robotic T-pose abduction
+      const qDropArm = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), THREE.MathUtils.degToRad(-15));
+      const qDropShoulder = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), THREE.MathUtils.degToRad(-5));
+
       for (const track of clip.tracks) {
         if (!(track instanceof THREE.QuaternionKeyframeTrack)) continue;
-        const boneName = track.name.split('.')[0];
-        const sourceQ = sourceSpace.get(boneName);
-        const targetQ = targetSpace.get(boneName);
-        if (!sourceQ || !targetQ) continue;
         
-        const delta = targetQ.clone().multiply(sourceQ.clone().invert());
-        const tmp = new THREE.Quaternion();
-        for (let i = 0; i < track.values.length; i += 4) {
-          tmp.fromArray(track.values, i).premultiply(delta);
-          tmp.toArray(track.values, i);
+        let qOffset: THREE.Quaternion | null = null;
+        if (track.name.startsWith('LeftArm') || track.name.startsWith('RightArm')) qOffset = qDropArm;
+        if (track.name.startsWith('LeftShoulder') || track.name.startsWith('RightShoulder')) qOffset = qDropShoulder;
+
+        if (qOffset) {
+          const tmp = new THREE.Quaternion();
+          for (let i = 0; i < track.values.length; i += 4) {
+            tmp.fromArray(track.values, i);
+            tmp.premultiply(qOffset); // Clean local rotation, avoids Mixamo/RPM cross-axis twisting
+            tmp.toArray(track.values, i);
+          }
         }
       }
     }
 
-    function sanitizeClip(clip: THREE.AnimationClip) {
+    function sanitizeClip(clip: THREE.AnimationClip, isIdle: boolean) {
       clip.tracks = clip.tracks.filter(t => {
         if (t.name.endsWith('.scale')) return false;
         if (t.name.endsWith('.position')) return false;
         if (t.name === 'Hips.quaternion') return false;
+        
+        // STRIP SHARED BASELINE OFFENDERS:
+        // Removing Spine fixes the "chest-forward and robotic" posture.
+        if (t.name === 'Spine.quaternion') return false;
+        
+        // Removing Shoulders fixes "clavicles are elevated / open and stiff".
+        // They will fall back to the natural GLB rest pose permanently.
+        if (t.name.startsWith('LeftShoulder') || t.name.startsWith('RightShoulder')) return false;
+        
+        // Removing Arms from Idle forces the avatar to rest its arms in the pure GLB A-pose
+        // completely eliminating the robotic T-pose width at the start and end of movement.
+        if (isIdle && (t.name.startsWith('LeftArm') || t.name.startsWith('RightArm'))) return false;
+
         return true;
       });
     }
@@ -89,8 +108,9 @@ export function useAvatarAnimations(
 
     if (!scene || !idleFbx || !talkFbx1) return [] as THREE.AnimationClip[];
 
-    const glbSpace = captureSkeletonSpace(scene);
-    const talk1Space = captureSkeletonSpace(talkFbx1);
+    // GLB space capture no longer needed for complex retargeting
+    // const glbSpace = captureSkeletonSpace(scene);
+    // const talk1Space = captureSkeletonSpace(talkFbx1);
 
     const idleSrc = pickStack(idleFbx.animations, ['mixamo.com']);
     if (!idleSrc) return [];
@@ -106,7 +126,8 @@ export function useAvatarAnimations(
         return c;
       })
       .filter(t => !t.name.startsWith('Armature.'));
-    sanitizeClip(idle);
+    sanitizeClip(idle, true);
+    relaxArmPosture(idle);
 
     const clips = [idle];
     let talkIndex = 0;
@@ -122,9 +143,8 @@ export function useAvatarAnimations(
           return c;
         })
         .filter(t => !t.name.startsWith('Armature.'));
-      sanitizeClip(talk1);
-      // Retarget mathematically using the skeleton embedded in Talk_1.fbx
-      retargetClipToSpace(talk1, talk1Space, glbSpace);
+      sanitizeClip(talk1, false);
+      relaxArmPosture(talk1);
       clips.push(talk1);
     }
 

@@ -2,7 +2,6 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 
-const MORPH_TARGET_DAMPING = 10;
 const HEAD_BOB_FREQUENCY = 2;
 const HEAD_BOB_AMPLITUDE = 0.05;
 const TWO_PI = Math.PI * 2;

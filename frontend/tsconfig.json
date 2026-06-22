@@ -24,8 +24,7 @@
       "@components/*": [
         "./src/components/*"
       ]
-    },
-    "types": ["vite/client"]
+    }
   },
   "include": [
     "src"

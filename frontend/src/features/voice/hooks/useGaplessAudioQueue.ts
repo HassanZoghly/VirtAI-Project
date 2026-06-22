@@ -124,7 +124,7 @@ export function useGaplessAudioQueue() {
               start: v.start + chunkOffset,
               end: v.end + chunkOffset,
             }));
-            mouthCuesRef.current.push(...shiftedVisemes);
+            mouthCuesRef.current = [...mouthCuesRef.current, ...shiftedVisemes];
           }
         })
         .catch((err) => {

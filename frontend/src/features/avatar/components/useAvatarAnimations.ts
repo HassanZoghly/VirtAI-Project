@@ -2,6 +2,7 @@ import { useAnimations, useFBX } from '@react-three/drei';
 import React, { useEffect, useMemo, useRef, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { Viseme } from './useAvatarLipSync';
 
 const IDLE_URL = '/models/animations/Idle/Idle.fbx';
 const TALK_MANIFEST = [
@@ -31,9 +32,12 @@ interface TimelineState {
 }
 
 export function useAvatarAnimations(
-  scene: THREE.Group, 
+  scene: THREE.Group,
   pipelineState: 'idle' | 'thinking' | 'speaking' | 'error',
-  movementEnabled: boolean
+  movementEnabled: boolean,
+  audioContext?: AudioContext | null,
+  playbackStartTimeRef?: React.MutableRefObject<number | null>,
+  mouthCuesRef?: React.MutableRefObject<Viseme[]>
 ) {
   const idleFbx = useFBX(IDLE_URL);
   const talkFbx1 = useFBX(TALK_MANIFEST[0]);
@@ -60,7 +64,7 @@ export function useAvatarAnimations(
       idleClip.name = 'Idle';
       clips.push(renameTracks(idleClip));
     }
-    
+
     talkFbxs.forEach((fbx, index) => {
       if (fbx.animations.length > ARRAY_EMPTY_LENGTH) {
         const talkClip = fbx.animations[FIRST_INDEX].clone();
@@ -87,7 +91,7 @@ export function useAvatarAnimations(
     if (actions['Idle']) {
       actions['Idle'].setLoop(THREE.LoopRepeat, Infinity);
     }
-    
+
     Object.keys(actions).forEach(key => {
       const action = actions[key];
       if (key.startsWith('Talk_') && action) {
@@ -100,7 +104,7 @@ export function useAvatarAnimations(
   const playAnimation = useCallback(
     (name: string, fadeTime = FADE_DURATION) => {
       let targetName = name;
-      
+
       // CRITICAL FIX: The 'Idle' animation is immune to movementEnabled.
       // If movement is disabled, we MUST fallback to 'Idle' to prevent bind-pose mesh collapse.
       if (!movementEnabled && targetName !== 'Idle') {
@@ -120,13 +124,13 @@ export function useAvatarAnimations(
       nextAction.reset();
       nextAction.setEffectiveTimeScale(NORMAL_TIME_SCALE);
       nextAction.setEffectiveWeight(FULL_WEIGHT);
-      
+
       if (prevAction) {
         // DEFENSIVE: Animation Memory Leak Fix
-        // Crossfade strictly manages weight transition. 
+        // Crossfade strictly manages weight transition.
         // Schedule a hard .stop() to prevent the Three.js mixer from evaluating invisible, zero-weight actions indefinitely.
         prevAction.crossFadeTo(nextAction, fadeTime, true);
-        
+
         // DEFENSIVE: Use clearable timeout for React hook safety
         if (stopTimeoutRef.current !== null) {
           window.clearTimeout(stopTimeoutRef.current);
@@ -136,12 +140,12 @@ export function useAvatarAnimations(
             prevAction.stop();
           }
         }, fadeTime * MS_PER_SECOND);
-        
+
         // Note: Timeout is cleared on unmount.
       } else {
         nextAction.fadeIn(fadeTime);
       }
-      
+
       nextAction.play();
 
       currentActionNameRef.current = targetName;
@@ -184,11 +188,28 @@ export function useAvatarAnimations(
       const finishedName = e.action?.getClip()?.name;
 
       if (finishedName && typeof finishedName === 'string' && finishedName.startsWith('Talk_') && pipelineStateRef.current === 'speaking') {
+        let remainingAudio = 0;
+        if (mouthCuesRef?.current && mouthCuesRef.current.length > 0 && playbackStartTimeRef?.current != null && audioContext) {
+          const lastCue = mouthCuesRef.current[mouthCuesRef.current.length - 1];
+          
+          // Defend against corrupted viseme data
+          const validEnd = Number.isFinite(lastCue?.end) ? Number(lastCue.end) : 0;
+          const audioEndTime = playbackStartTimeRef.current + validEnd;
+          
+          if (Number.isFinite(audioEndTime)) {
+            remainingAudio = Math.max(0, audioEndTime - audioContext.currentTime);
+          }
+        }
+
+        // Validate finite, non-negative, and strictly clamp [0.3, 2.0]
+        let breakDuration = Number.isFinite(remainingAudio) && remainingAudio > 0 ? remainingAudio * 0.2 : 0;
+        breakDuration = Math.min(2, Math.max(0.3, breakDuration));
+
         timelineStateRef.current = {
           ...timelineStateRef.current,
           phase: 'idle_break',
           timeInPhase: INITIAL_TIME,
-          targetBreakDuration: Math.random() * IDLE_BREAK_MULTIPLIER + IDLE_BREAK_OFFSET,
+          targetBreakDuration: breakDuration,
         };
         playAnimation('Idle');
       }
@@ -198,7 +219,7 @@ export function useAvatarAnimations(
     return () => {
       mixer.removeEventListener('finished', onFinished);
     };
-  }, [mixer, playAnimation]);
+  }, [mixer, playAnimation, audioContext, playbackStartTimeRef, mouthCuesRef]);
 
   useEffect(() => {
     return () => {
@@ -219,9 +240,7 @@ export function useAvatarAnimations(
     }
 
     if (pipelineState === 'speaking') {
-      if (timelineStateRef.current.phase === 'idle') {
-        startRandomTalk();
-      }
+      // Defer starting talk until audio is actually playing (handled in useFrame)
     } else {
       timelineStateRef.current = {
         phase: 'idle',
@@ -231,14 +250,24 @@ export function useAvatarAnimations(
       };
       playAnimation('Idle');
     }
-  }, [pipelineState, movementEnabled, playAnimation, startRandomTalk]);
+  }, [pipelineState, movementEnabled, playAnimation]);
 
   useFrame((state, delta) => {
     const timeline = timelineStateRef.current;
-    if (pipelineState === 'speaking' && timeline.phase === 'idle_break') {
-      timeline.timeInPhase += delta;
-      if (timeline.timeInPhase >= timeline.targetBreakDuration) {
+    const currentState = pipelineStateRef.current;
+
+    const isAudioPlaying = playbackStartTimeRef?.current != null
+      && audioContext?.state === 'running'
+      && audioContext.currentTime >= playbackStartTimeRef.current;
+
+    if (currentState === 'speaking' && isAudioPlaying) {
+      if (timeline.phase === 'idle') {
         startRandomTalk();
+      } else if (timeline.phase === 'idle_break') {
+        timeline.timeInPhase += delta;
+        if (timeline.timeInPhase >= timeline.targetBreakDuration) {
+          startRandomTalk();
+        }
       }
     }
   });

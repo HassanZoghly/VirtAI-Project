@@ -65,7 +65,7 @@ export function useClassroomState() {
   
   const activeAvatarId = setupConfig.avatarId || 'avatar1';
   const activeVoiceId = setupConfig.voiceId || getDefaultVoiceId();
-  const movementEnabled = setupConfig.movementEnabled ?? false;
+  const movementEnabled = setupConfig.movementEnabled ?? true;
   const avatarName = setupConfig.avatarName || 'AI Tutor';
 
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);

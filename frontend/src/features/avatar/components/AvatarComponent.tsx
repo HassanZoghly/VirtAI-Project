@@ -44,7 +44,7 @@ export function AvatarComponent({
   }, [clone]);
 
   // Hook 1: Animation Mixer, Tracks, and State Machine
-  useAvatarAnimations(avatarRoot as THREE.Group, pipelineState, movementEnabled);
+  useAvatarAnimations(avatarRoot as THREE.Group, pipelineState, movementEnabled, audioContext, playbackStartTimeRef, mouthCuesRef);
 
   const toastShownRef = useRef(false);
 

@@ -1,11 +1,9 @@
-import { useRef, useCallback, useState, useEffect } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import { useGaplessAudioQueue, Viseme } from '@/features/voice/hooks/useGaplessAudioQueue';
 
 const EMPTY_LENGTH = 0;
 
 export function useClassroomAudio() {
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  
   // DEFENSIVE: Use arrays to queue sequential streaming chunks for a single messageId
   // This solves the Race Condition (P0) where TTS and Visemes arrive out of order.
   const pendingTtsRef = useRef<Record<string, string[]>>({});
@@ -36,7 +34,6 @@ export function useClassroomAudio() {
       const url = ttsList.shift()!;
       const cues = visemeList.shift()!;
       
-      setAudioUrl(url);
       const ctx = getAudioContext();
       if (ctx.state === 'suspended') {
         ctx.resume();
@@ -69,7 +66,6 @@ export function useClassroomAudio() {
     if (abortedMessageId) {
       abortedMessageIdsRef.current.add(abortedMessageId);
     }
-    setAudioUrl(null);
     pendingTtsRef.current = {};
     pendingVisemesRef.current = {};
     mouthCuesRef.current = [];
@@ -78,7 +74,6 @@ export function useClassroomAudio() {
   }, [flushQueue]);
 
   return {
-    audioUrl,
     mouthCuesRef,
     getAudioContext,
     playbackStartTimeRef,

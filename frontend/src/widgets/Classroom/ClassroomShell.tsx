@@ -35,18 +35,18 @@ export interface PendingFirstMessage {
 }
 
 export const WSPayloadSchema = z.object({
-  session_id: z.string().optional().catch(undefined),
-  message_id: z.string().optional().catch(undefined),
-  text: z.string().optional().catch(undefined),
-  delta: z.string().optional().catch(undefined),
-  is_final: z.boolean().optional().catch(undefined),
+  session_id: z.string().optional(),
+  message_id: z.string().optional(),
+  text: z.string().optional(),
+  delta: z.string().optional(),
+  is_final: z.boolean().optional(),
   audio: z.object({
-    url: z.string().optional().catch(undefined),
-    duration_ms: z.number().optional().catch(undefined)
-  }).passthrough().optional().catch(undefined),
-  mouthCues: z.array(VisemeSchema).optional().catch(undefined),
-  message: z.string().optional().catch(undefined),
-  state: z.enum(['idle', 'thinking', 'speaking', 'error']).optional().catch(undefined),
+    url: z.string().optional(),
+    duration_ms: z.number().optional()
+  }).passthrough().optional(),
+  mouthCues: z.array(VisemeSchema).optional(),
+  message: z.string().optional(),
+  state: z.enum(['idle', 'thinking', 'speaking', 'error']).optional(),
 }).passthrough();
 
 export type WSPayload = z.infer<typeof WSPayloadSchema>;
@@ -80,6 +80,7 @@ export default function ClassroomShell() {
     playbackStartTimeRef,
     handleTtsReady,
     handleVisemesReady,
+    forceAdvanceSequence,
     resetAvatarAudio,
     getIsAudioPlaying,
     getNextPlaybackTime
@@ -106,6 +107,7 @@ export default function ClassroomShell() {
     session,
     onTtsReady: handleTtsReady,
     onVisemesReady: handleVisemesReady as any,
+    forceAdvanceSequence,
     resetAvatarAudio,
     getAudioContext
   });

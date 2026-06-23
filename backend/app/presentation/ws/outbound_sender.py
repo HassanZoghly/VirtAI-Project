@@ -12,7 +12,18 @@ from app.schemas.ws_messages import ServerMessage, ServerMessageType, make_error
 class OutboundSender:
     """Handles sending outbound messages via WebSocket."""
 
-    _PROTOCOL_MESSAGE_TYPES: dict[str, str] = {}
+    _PROTOCOL_MESSAGE_TYPES: dict[str, str] = {
+        "TranscriptMessage": "transcript",
+        "ErrorMessage": "error",
+        "ChatDelta": "chat.delta",
+        "ChatFinal": "chat.final",
+        "PipelineState": "pipeline.state",
+        "TTSReady": "tts.ready",
+        "VisemesReady": "visemes.ready",
+        "AnimationTimeline": "animation.timeline",
+        "AnimationTimelineV2": "animation.timeline.v2",
+        "UserMessageEcho": "user.message.echo",
+    }
 
     def __init__(self, websocket: WebSocket, connection_manager: WSConnectionManager):
         self.ws = websocket
@@ -97,9 +108,7 @@ class OutboundSender:
             class_name = message.__class__.__name__
 
             if class_name not in self._PROTOCOL_MESSAGE_TYPES:
-                snake_case = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", class_name)
-                snake_case = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", snake_case)
-                self._PROTOCOL_MESSAGE_TYPES[class_name] = snake_case.lower().replace("_", ".")
+                raise ValueError(f"Unmapped protocol message type: {class_name}")
 
             message_type = self._PROTOCOL_MESSAGE_TYPES[class_name]
 
@@ -117,4 +126,15 @@ class OutboundSender:
             await self.ws.send_text(serialized)
 
         except Exception as e:
-            logger.error(f"Failed to send protocol message: {e}")
+            logger.error(f"Transport layer serialization failure: {e}")
+            error_payload = {
+                "type": "error",
+                "data": {
+                    "code": "PROTOCOL_ROUTING_ERROR",
+                    "message": f"Critical backend serialization failure: {str(e)}"
+                }
+            }
+            try:
+                await self.ws.send_text(json.dumps(error_payload))
+            except Exception as inner_e:
+                logger.error(f"Failed to transmit error payload: {inner_e}")

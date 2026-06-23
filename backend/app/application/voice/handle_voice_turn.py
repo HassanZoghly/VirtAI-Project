@@ -203,20 +203,32 @@ class ConversationPipeline:
             settings = get_settings()
 
             async def process_audio():
-                while not context.aborted:
-                    try:
-                        sentence = await asyncio.wait_for(context.sentence_queue.get(), timeout=60.0)
-                    except asyncio.TimeoutError:
-                        break
-                    if sentence is None:
-                        break
+                try:
+                    while not context.aborted:
+                        try:
+                            sentence = await asyncio.wait_for(context.sentence_queue.get(), timeout=60.0)
+                        except asyncio.TimeoutError:
+                            break
+                        if sentence is None:
+                            break
 
-                    context.current_sentence = sentence
-                    await self.tts_stage.process(context)
-                    if context.aborted:
-                        break
-                    await self.animation_stage.process(context)
-                    context.sentence_index += 1
+                        context.current_sentence = sentence
+                        await self.tts_stage.process(context)
+                        if context.aborted:
+                            break
+                        await self.animation_stage.process(context)
+                        context.sentence_index += 1
+                except Exception as e:
+                    logger.error(f"process_audio crashed: {e} | trace_id={trace_id}")
+                    await send_callback(
+                        make_error(
+                            code="PIPELINE_AUDIO_ERROR",
+                            message=f"Audio pipeline failed: {str(e)}",
+                            session_id=session_id,
+                            message_id=message_id,
+                        )
+                    )
+                    context.abort()
 
             # 2. TaskGroup Stability Execution
             try:

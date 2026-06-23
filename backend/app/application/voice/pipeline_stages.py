@@ -228,7 +228,6 @@ class TTSStage(BaseStage):
                 )
             context.tts_result = None
 
-
 class AnimationStage(BaseStage):
     def __init__(self, animation_service, viseme_generator):
         self._animation_service = animation_service
@@ -244,15 +243,18 @@ class AnimationStage(BaseStage):
 
         chunk_message_id = f"{context.message_id}_{context.sentence_index}"
 
-        if context.tts_result and getattr(context.tts_result, "audio_ref", None):
-            mouth_cues = await self._viseme_generator.generate_from_audio(
-                audio_path=context.tts_result.audio_ref,
-                text=text_to_animate,
-                session_id=context.session_id,
-                message_id=chunk_message_id,
-            )
-        else:
-            mouth_cues = []
+        mouth_cues = []
+        try:
+            if context.tts_result and getattr(context.tts_result, "audio_ref", None):
+                mouth_cues = await self._viseme_generator.generate_from_audio(
+                    audio_path=context.tts_result.audio_ref,
+                    text=text_to_animate,
+                    session_id=context.session_id,
+                    message_id=chunk_message_id,
+                )
+        except Exception as e:
+            logger.warning(f"Viseme generation failed, falling back to empty cues: {e} | trace_id={context.trace_id}")
+
         context.mouth_cues = mouth_cues
 
         safe_tts_result = context.tts_result or TTSResult(

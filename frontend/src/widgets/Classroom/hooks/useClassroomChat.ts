@@ -27,6 +27,7 @@ interface UseClassroomChatProps {
   session: any; // Using the type from useSessionManager
   onTtsReady: (messageId: string | undefined, url: string) => void;
   onVisemesReady: (messageId: string, cues: Viseme[]) => void;
+  forceAdvanceSequence: (baseId: string) => void;
   resetAvatarAudio: (messageId?: string | null) => void;
   getAudioContext: () => AudioContext;
 }
@@ -37,6 +38,7 @@ export function useClassroomChat({
   session,
   onTtsReady,
   onVisemesReady,
+  forceAdvanceSequence,
   resetAvatarAudio,
   getAudioContext
 }: UseClassroomChatProps) {
@@ -78,6 +80,19 @@ export function useClassroomChat({
     dispatch({ type: 'RESET' });
     resetAvatarAudio();
   }, [currentSessionId, dispatch, resetAvatarAudio]);
+
+  useEffect(() => {
+    if (connectionState === 2 || connectionState === 3) { // RECONNECTING or OFFLINE
+      if (conversationState.pipelineState === 'thinking' || conversationState.pipelineState === 'speaking') {
+        dispatch({ type: 'ERROR', payload: { message: 'Connection interrupted' } });
+        resetAvatarAudio(conversationState.activeMessageId);
+      }
+    } else if (connectionState === 1) { // ONLINE
+      if (conversationState.pipelineState === 'error') {
+        dispatch({ type: 'CLEAR_ERROR' });
+      }
+    }
+  }, [connectionState, conversationState.pipelineState, conversationState.activeMessageId, dispatch, resetAvatarAudio]);
 
   const commitAndSend = useCallback(
     (text: string) => {
@@ -146,7 +161,12 @@ export function useClassroomChat({
       if (!result.success) {
         if (import.meta.env.DEV) {
           console.warn('[WS] Payload validation failed:', result.error);
+        } else {
+          console.error('[WS] Payload validation failed:', result.error);
         }
+        const message = 'Network protocol mismatch detected. Please refresh.';
+        dispatch({ type: 'ERROR', payload: { message } });
+        toast.error('Connection Error', message, TOAST_DURATION_MS);
         return null;
       }
       return result.data;
@@ -182,12 +202,19 @@ export function useClassroomChat({
         if (safePayload.text) {
           sessionRef.current.addAssistantMessage(`${d.message_id}-assistant`, safePayload.text, d.session_id);
         }
+        if (d.message_id) {
+          forceAdvanceSequence(d.message_id);
+        }
       }),
       onMessage('pipeline.state', (rawData: unknown) => {
         const d = validatePayload(rawData);
         if (!d || !checkSession(d)) return;
         const state = (d.state as 'idle' | 'thinking' | 'speaking' | 'error') || 'idle';
         dispatch({ type: 'PIPELINE_STATE', payload: { state, message_id: d.message_id } });
+        
+        if (state === 'idle' && d.message_id) {
+          forceAdvanceSequence(d.message_id);
+        }
       }),
       onMessage('tts.ready', (rawData: unknown) => {
         const d = validatePayload(rawData);

@@ -4,10 +4,10 @@ import { useGaplessAudioQueue, Viseme } from '@/features/voice/hooks/useGaplessA
 const EMPTY_LENGTH = 0;
 
 export function useClassroomAudio() {
-  // DEFENSIVE: Use arrays to queue sequential streaming chunks for a single messageId
-  // This solves the Race Condition (P0) where TTS and Visemes arrive out of order.
-  const pendingTtsRef = useRef<Record<string, string[]>>({});
-  const pendingVisemesRef = useRef<Record<string, Viseme[][]>>({});
+  // Structure: { baseId: { chunkIndex: { url, cues } } }
+  const chunksRef = useRef<Record<string, Record<string, { url?: string; cues?: Viseme[] }>>>({});
+  const expectedChunkRef = useRef<Record<string, number>>({});
+  const missingChunkTimeoutsRef = useRef<Record<string, NodeJS.Timeout>>({});
   
   const mouthCuesRef = useRef<Viseme[]>([]);
   const playedAudioIdsRef = useRef<Set<string>>(new Set());
@@ -18,56 +18,151 @@ export function useClassroomAudio() {
 
   const { enqueueAudioUrl, flushQueue, getAudioContext, playbackStartTimeRef, getIsAudioPlaying, getNextPlaybackTime } = useGaplessAudioQueue();
 
-  const tryPlayChunk = useCallback((messageId: string) => {
-    if (abortedMessageIdsRef.current.has(messageId)) {
-      delete pendingTtsRef.current[messageId];
-      delete pendingVisemesRef.current[messageId];
+  const tryPlayChunk = useCallback((baseId: string) => {
+    if (abortedMessageIdsRef.current.has(baseId)) {
+      delete chunksRef.current[baseId];
       return;
     }
     
-    const ttsList = pendingTtsRef.current[messageId] || [];
-    const visemeList = pendingVisemesRef.current[messageId] || [];
+    const sessionChunks = chunksRef.current[baseId];
+    if (!sessionChunks) return;
 
-    // DEFENSIVE: Synchronization Barrier. 
-    // Do not enqueue audio until BOTH the audio binary and viseme array for this chunk are ready.
-    while (ttsList.length > EMPTY_LENGTH && visemeList.length > EMPTY_LENGTH) {
-      const url = ttsList.shift()!;
-      const cues = visemeList.shift()!;
-      
+    // Handle filler separately (no sequence waiting)
+    const fillerChunk = sessionChunks['filler'];
+    if (fillerChunk && fillerChunk.url && fillerChunk.cues) {
       const ctx = getAudioContext();
-      if (ctx.state === 'suspended') {
-        ctx.resume();
+      if (ctx.state === 'suspended') ctx.resume();
+      enqueueAudioUrl(fillerChunk.url, fillerChunk.cues, mouthCuesRef);
+      delete sessionChunks['filler'];
+    }
+
+    // Process sequential chunks
+    let expected = expectedChunkRef.current[baseId] || 0;
+    let playedAny = false;
+    while (true) {
+      const nextChunk = sessionChunks[expected.toString()];
+      if (nextChunk && nextChunk.url && nextChunk.cues) {
+        const ctx = getAudioContext();
+        if (ctx.state === 'suspended') ctx.resume();
+        enqueueAudioUrl(nextChunk.url, nextChunk.cues, mouthCuesRef);
+        
+        if (chunksRef.current[baseId]?.[expected.toString()]) {
+          delete chunksRef.current[baseId][expected.toString()];
+        }
+        
+        expected++;
+        playedAny = true;
+      } else {
+        break;
       }
-      
-      enqueueAudioUrl(url, cues, mouthCuesRef);
+    }
+    expectedChunkRef.current[baseId] = expected;
+
+    if (playedAny && missingChunkTimeoutsRef.current[baseId]) {
+      clearTimeout(missingChunkTimeoutsRef.current[baseId]);
+      delete missingChunkTimeoutsRef.current[baseId];
+    }
+
+    // Sequence Deadlock Fallback: If we have future chunks but are blocked on 'expected'
+    const hasFutureChunks = Object.keys(sessionChunks).some(k => {
+      const idx = parseInt(k, 10);
+      return !isNaN(idx) && idx > expected;
+    });
+
+    if (hasFutureChunks && !missingChunkTimeoutsRef.current[baseId]) {
+      missingChunkTimeoutsRef.current[baseId] = setTimeout(() => {
+        console.warn(`[AudioSequence] Timeout waiting for chunk ${expected}. Skipping.`);
+        expectedChunkRef.current[baseId]++;
+        delete missingChunkTimeoutsRef.current[baseId];
+        tryPlayChunk(baseId);
+      }, 3000);
     }
   }, [getAudioContext, enqueueAudioUrl]);
 
   const handleTtsReady = useCallback((messageId: string | undefined, url: string) => {
     if (!messageId) return;
-    if (abortedMessageIdsRef.current.has(messageId)) return;
+    const isChunked = messageId.includes('_');
+    const baseId = isChunked ? messageId.split('_')[0] : messageId;
+    const chunkIdx = isChunked ? messageId.split('_')[1] : '0';
+
+    if (abortedMessageIdsRef.current.has(baseId)) return;
     
-    if (!pendingTtsRef.current[messageId]) pendingTtsRef.current[messageId] = [];
-    pendingTtsRef.current[messageId].push(url);
+    if (!chunksRef.current[baseId]) chunksRef.current[baseId] = {};
+    if (!chunksRef.current[baseId][chunkIdx]) chunksRef.current[baseId][chunkIdx] = {};
     
-    tryPlayChunk(messageId);
+    chunksRef.current[baseId][chunkIdx].url = url;
+
+    // Fix filler deadlock: provide empty visemes automatically if it's a filler
+    if (chunkIdx === 'filler' && !chunksRef.current[baseId][chunkIdx].cues) {
+      chunksRef.current[baseId][chunkIdx].cues = [];
+    }
+    
+    tryPlayChunk(baseId);
   }, [tryPlayChunk]);
 
   const handleVisemesReady = useCallback((messageId: string, cues: Viseme[]) => {
-    if (abortedMessageIdsRef.current.has(messageId)) return;
+    const isChunked = messageId.includes('_');
+    const baseId = isChunked ? messageId.split('_')[0] : messageId;
+    const chunkIdx = isChunked ? messageId.split('_')[1] : '0';
+
+    if (abortedMessageIdsRef.current.has(baseId)) return;
     
-    if (!pendingVisemesRef.current[messageId]) pendingVisemesRef.current[messageId] = [];
-    pendingVisemesRef.current[messageId].push(cues);
+    if (!chunksRef.current[baseId]) chunksRef.current[baseId] = {};
+    if (!chunksRef.current[baseId][chunkIdx]) chunksRef.current[baseId][chunkIdx] = {};
     
-    tryPlayChunk(messageId);
+    chunksRef.current[baseId][chunkIdx].cues = cues;
+    
+    tryPlayChunk(baseId);
   }, [tryPlayChunk]);
+
+  const forceAdvanceSequence = useCallback((baseId: string) => {
+    setTimeout(() => {
+      if (abortedMessageIdsRef.current.has(baseId)) return;
+      const sessionChunks = chunksRef.current[baseId];
+      if (!sessionChunks) return;
+      
+      const keys = Object.keys(sessionChunks)
+        .map(k => parseInt(k, 10))
+        .filter(k => !isNaN(k));
+
+      if (keys.length === 0) return;
+
+      keys.sort((a, b) => a - b);
+      
+      let maxIndex = expectedChunkRef.current[baseId] || 0;
+      
+      keys.forEach(idx => {
+        const chunk = sessionChunks[idx.toString()];
+        if (chunk && chunk.url && chunk.cues) {
+          const ctx = getAudioContext();
+          if (ctx.state === 'suspended') ctx.resume();
+          console.warn(`[AudioSequence] Eager reconciliation flush. Pushing out-of-order chunk ${idx}`);
+          enqueueAudioUrl(chunk.url, chunk.cues, mouthCuesRef);
+          
+          if (chunksRef.current[baseId]?.[idx.toString()]) {
+            delete chunksRef.current[baseId][idx.toString()];
+          }
+        }
+        if (idx >= maxIndex) maxIndex = idx + 1;
+      });
+
+      expectedChunkRef.current[baseId] = maxIndex;
+
+      if (missingChunkTimeoutsRef.current[baseId]) {
+        clearTimeout(missingChunkTimeoutsRef.current[baseId]);
+        delete missingChunkTimeoutsRef.current[baseId];
+      }
+    }, 300);
+  }, [getAudioContext, enqueueAudioUrl]);
 
   const resetAvatarAudio = useCallback((abortedMessageId?: string | null) => {
     if (abortedMessageId) {
       abortedMessageIdsRef.current.add(abortedMessageId);
     }
-    pendingTtsRef.current = {};
-    pendingVisemesRef.current = {};
+    chunksRef.current = {};
+    expectedChunkRef.current = {};
+    Object.values(missingChunkTimeoutsRef.current).forEach(clearTimeout);
+    missingChunkTimeoutsRef.current = {};
     mouthCuesRef.current = [];
     flushQueue();
     playedAudioIdsRef.current.clear();
@@ -79,6 +174,7 @@ export function useClassroomAudio() {
     playbackStartTimeRef,
     handleTtsReady,
     handleVisemesReady,
+    forceAdvanceSequence,
     resetAvatarAudio,
     flushQueue,
     playedAudioIdsRef,

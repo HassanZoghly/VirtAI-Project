@@ -391,9 +391,10 @@ def create_app() -> FastAPI:
     app.include_router(api_v1_router)
 
     # ── Prometheus Metrics ────────────────────────────────────────────────────
-    from prometheus_fastapi_instrumentator import Instrumentator  # type: ignore[import-not-found]
+    from prometheus_client import make_asgi_app
 
-    Instrumentator().instrument(app).expose(app, endpoint="/metrics")
+    metrics_app = make_asgi_app()
+    app.mount("/metrics", metrics_app)
 
     return app
 

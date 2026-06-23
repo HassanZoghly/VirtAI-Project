@@ -32,6 +32,7 @@ router = APIRouter()
 settings = get_settings()
 
 async def _verify_session_ownership(
+    request: Request,
     session_id_query: str | None = Query(None, alias="session_id"),
     session_id_form: str | None = Form(None, alias="session_id"),
     user: UserEntity = Depends(_current_user),
@@ -40,7 +41,9 @@ async def _verify_session_ownership(
     session_id = session_id_query or session_id_form
 
     if session_id:
-        session_repo = ChatRepository(db)
+        from app.presentation.http.v1.dependencies import get_storage
+        storage = get_storage(request)
+        session_repo = ChatRepository(db, storage_provider=storage)
         session_obj = await session_repo.get_chat_session(str(session_id))
         if not session_obj or str(session_obj["user_id"]) != str(user.id):
             raise HTTPException(status_code=403, detail="Forbidden")

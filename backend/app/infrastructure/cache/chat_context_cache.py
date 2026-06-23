@@ -134,9 +134,13 @@ async def rebuild_context(session_id: str) -> list[dict]:
     try:
         from app.infrastructure.db.database import AsyncSessionLocal
         from app.infrastructure.db.repositories.chat_repository import ChatRepository
+        from app.infrastructure.storage.local_storage import LocalStorageProvider
+        from app.shared.config import get_settings
 
         async with AsyncSessionLocal() as db:
-            repo = ChatRepository(db)
+            settings = get_settings()
+            storage = LocalStorageProvider(base_path=settings.UPLOAD_BASE_PATH)
+            repo = ChatRepository(db, storage_provider=storage)
             messages = await repo.get_session_messages(session_id, limit=MAX_MESSAGES)
             if not messages:
                 return []

@@ -56,6 +56,7 @@ class PGVectorStore(VectorStore):
         scope_id: UUID | None = None,
         min_dense_score: float | None = None,
         user_id: UUID | None = None,
+        metadata_filter: dict | None = None,
     ) -> list[tuple[DocumentChunk, float]]:
         if min_dense_score is None:
             min_dense_score = settings.RAG_MIN_DENSE_SCORE
@@ -79,6 +80,12 @@ class PGVectorStore(VectorStore):
 
         if document_id:
             stmt = stmt.where(ChunkModel.document_id == document_id)
+
+        if metadata_filter:
+            if "slide_index" in metadata_filter:
+                stmt = stmt.where(ChunkModel.chunk_order == metadata_filter["slide_index"])
+            else:
+                stmt = stmt.where(ChunkModel.chunk_metadata.contains(metadata_filter))
 
         from sqlalchemy import or_
 
@@ -141,6 +148,7 @@ class PGVectorStore(VectorStore):
         min_hybrid_score: float | None = None,
         min_dense_score: float | None = None,
         user_id: UUID | None = None,
+        metadata_filter: dict | None = None,
     ) -> list[tuple[DocumentChunk, float]]:
         if min_hybrid_score is None:
             min_hybrid_score = settings.RAG_MIN_HYBRID_SCORE
@@ -164,6 +172,11 @@ class PGVectorStore(VectorStore):
         )
         if document_id:
             stmt_dense = stmt_dense.where(ChunkModel.document_id == document_id)
+        if metadata_filter:
+            if "slide_index" in metadata_filter:
+                stmt_dense = stmt_dense.where(ChunkModel.chunk_order == metadata_filter["slide_index"])
+            else:
+                stmt_dense = stmt_dense.where(ChunkModel.chunk_metadata.contains(metadata_filter))
         from sqlalchemy import or_
 
         if scope == "SESSION" and scope_id:
@@ -196,6 +209,11 @@ class PGVectorStore(VectorStore):
         )
         if document_id:
             stmt_lexical = stmt_lexical.where(ChunkModel.document_id == document_id)
+        if metadata_filter:
+            if "slide_index" in metadata_filter:
+                stmt_lexical = stmt_lexical.where(ChunkModel.chunk_order == metadata_filter["slide_index"])
+            else:
+                stmt_lexical = stmt_lexical.where(ChunkModel.chunk_metadata.contains(metadata_filter))
         if scope == "SESSION" and scope_id:
             stmt_lexical = stmt_lexical.where(
                 or_(
@@ -293,10 +311,11 @@ class SessionManagedPGVectorStore(VectorStore):
         scope_id: UUID | None = None,
         min_dense_score: float | None = None,
         user_id: UUID | None = None,
+        metadata_filter: dict | None = None,
     ) -> list[tuple[DocumentChunk, float]]:
         async with AsyncSessionLocal() as db:
             store = PGVectorStore(db)
-            return await store.search(query_vector, limit, document_id, scope, scope_id, min_dense_score, user_id=user_id)
+            return await store.search(query_vector, limit, document_id, scope, scope_id, min_dense_score, user_id=user_id, metadata_filter=metadata_filter)
 
     async def hybrid_search(
         self,
@@ -309,9 +328,10 @@ class SessionManagedPGVectorStore(VectorStore):
         min_hybrid_score: float | None = None,
         min_dense_score: float | None = None,
         user_id: UUID | None = None,
+        metadata_filter: dict | None = None,
     ) -> list[tuple[DocumentChunk, float]]:
         async with AsyncSessionLocal() as db:
             store = PGVectorStore(db)
             return await store.hybrid_search(
-                query_text, query_vector, limit, document_id, scope, scope_id, min_hybrid_score, min_dense_score, user_id=user_id
+                query_text, query_vector, limit, document_id, scope, scope_id, min_hybrid_score, min_dense_score, user_id=user_id, metadata_filter=metadata_filter
             )

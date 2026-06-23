@@ -13,11 +13,11 @@ from typing import Any, Union
 from loguru import logger
 from openai import AsyncOpenAI
 
-from app.domain.rag.ports import LLMGenerationProvider
+from app.domain.chat.ports import BaseLLMProvider
 from app.infrastructure.llm.enums import OpenAIRole
 
 
-class OpenAIGenerationProvider(LLMGenerationProvider):
+class OpenAIGenerationProvider(BaseLLMProvider):
     """
     OpenAI-compatible provider for the agentic RAG pipeline.
 

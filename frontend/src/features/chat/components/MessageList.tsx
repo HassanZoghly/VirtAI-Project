@@ -46,8 +46,12 @@ const MessageList = React.memo(function MessageList({
         </div>
       ) : (
         <div className="chat-stream">
-          {messages.map((msg) => (
-            <MessageBubble key={msg.id} msg={msg} />
+          {messages.map((msg, index) => (
+            <MessageBubble 
+              key={msg.id} 
+              msg={msg} 
+              isLast={index === messages.length - 1} 
+            />
           ))}
           
           {/* Typing indicator when AI is thinking but not yet streaming */}

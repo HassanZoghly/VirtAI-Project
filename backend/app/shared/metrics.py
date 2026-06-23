@@ -1,6 +1,4 @@
-"""Prometheus metrics registry for tracking business and infrastructure health."""
-
-from prometheus_client import Counter, Gauge, Histogram  # type: ignore[import-not-found]
+from prometheus_client import Counter, Histogram, Gauge
 
 # Auth & Session Metrics
 auth_login_attempts = Counter(
@@ -39,4 +37,31 @@ db_query_duration = Histogram(
 
 redis_operation_duration = Histogram(
     "virtai_redis_operation_duration_seconds", "Redis operation latency", ["operation"]
+)
+# Counters
+RAG_REQUESTS_TOTAL = Counter(
+    "rag_requests_total",
+    "Total number of RAG requests",
+    ["task_type", "locale"]
+)
+
+RAG_ERRORS_TOTAL = Counter(
+    "rag_errors_total",
+    "Total number of RAG errors",
+    ["task_type", "locale"]
+)
+
+# Histograms
+RAG_LATENCY_SECONDS = Histogram(
+    "rag_latency_seconds",
+    "Latency of RAG requests in seconds",
+    ["task_type", "locale"],
+    buckets=[0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0]
+)
+
+# Gauges
+RAG_ACTIVE_REQUESTS = Gauge(
+    "rag_active_requests",
+    "Currently active RAG requests",
+    ["task_type", "locale"]
 )

@@ -3,6 +3,7 @@ from app.application.rag.intent_classifier import IntentClassifier
 from app.application.rag.retrieval_use_case import RetrievalUseCase
 from app.domain.chat.policies import build_conversation
 from app.domain.chat.ports import BaseLLMProvider, ChatContextCachePort, ChatRepositoryPort
+from app.domain.rag.task_types import TaskType, classify_task_type
 
 
 class ChatUseCase:
@@ -14,7 +15,7 @@ class ChatUseCase:
         self.intent_classifier = intent_classifier
         self.context_cache = context_cache
 
-    async def execute_rag_query(self, query: str, user_id: str, session_id: str | None = None) -> str:
+    async def execute_rag_query(self, query: str, user_id: str, session_id: str | None = None, document_id: str | None = None, metadata_filter: dict | None = None) -> str:
         # Retrieve context
         low_confidence = False
         context = ""
@@ -24,7 +25,8 @@ class ChatUseCase:
 
         if not is_casual:
             from app.domain.rag.entities import RetrievalStatus
-            result = await self.retrieval.retrieve(query, user_id=user_id)
+            task_type = classify_task_type(query)
+            result = await self.retrieval.retrieve(query, user_id=user_id, task_type=task_type, document_id=document_id, metadata_filter=metadata_filter)
             if result.status not in (RetrievalStatus.NO_RESULTS, RetrievalStatus.FAILED):
                 if result.status == RetrievalStatus.LOW_CONFIDENCE:
                     low_confidence = True

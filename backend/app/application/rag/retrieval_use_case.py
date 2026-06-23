@@ -10,8 +10,8 @@ from app.domain.rag.entities import (
     RetrievedDocument,
 )
 from app.domain.rag.ports import EmbeddingProvider, RerankerPort, VectorStore
+from app.domain.rag.task_types import TaskType, TASK_RETRIEVAL_SIZES
 from app.shared.ids import parse_uuid
-
 
 def _get_chunk_text(chunk: DocumentChunk | RetrievedDocument) -> str:
     """Return the text content regardless of whether chunk is a DocumentChunk or RetrievedDocument."""
@@ -46,7 +46,8 @@ class RetrievalUseCase:
         self.budget_manager = budget_manager
 
     async def retrieve(
-        self, query: str, top_k: int = 5, session_id: str | None = None, user_id: str | UUID | None = None
+        self, query: str, top_k: int = 5, session_id: str | None = None, user_id: str | UUID | None = None, task_type: TaskType = TaskType.SIMPLE_QA,
+        document_id: str | UUID | None = None, metadata_filter: dict | None = None
     ) -> RetrievalResult:
         """Retrieves relevant chunks via hybrid search and optional reranking."""
         if not query.strip():
@@ -59,19 +60,26 @@ class RetrievalUseCase:
             scope = "SESSION" if scope_uuid else "GLOBAL"
 
             user_uuid = parse_uuid(user_id) if user_id else None
+            doc_uuid = parse_uuid(document_id) if document_id else None
 
             if not user_uuid:
                 logger.warning("RAG retrieval aborted: user_id is required for all scopes.")
                 return RetrievalResult(status=RetrievalStatus.NO_RESULTS)
 
+            sizing = TASK_RETRIEVAL_SIZES.get(task_type, TASK_RETRIEVAL_SIZES[TaskType.SIMPLE_QA])
+            actual_fetch_limit = sizing.fetch_limit
+            actual_top_k = max(top_k, sizing.top_n)
+
             # 1. Hybrid Search
             results = await self.vector_store.hybrid_search(
                 query_text=query,
                 query_vector=query_vector,
-                limit=top_k * 3,  # fetch more for diversity and reranking
+                limit=actual_fetch_limit,
                 scope=scope,
                 scope_id=scope_uuid,
                 user_id=user_uuid,
+                document_id=doc_uuid,
+                metadata_filter=metadata_filter,
             )
 
             if not results:
@@ -82,7 +90,8 @@ class RetrievalUseCase:
             used_reranker = False
             if self.reranker:
                 try:
-                    ranked_results = await self.reranker.rerank(query=query, chunks=chunks, top_k=top_k * 2)
+                    # Note: Reranker execution uses run_in_executor safely under the hood
+                    ranked_results = await self.reranker.rerank(query=query, chunks=chunks, top_k=actual_top_k)
                     results = ranked_results
                     used_reranker = True
                 except Exception as e:
@@ -103,7 +112,7 @@ class RetrievalUseCase:
             decayed_results.sort(key=lambda x: x[2], reverse=True)
 
             final_chunks = []
-            for chunk, original_score, _ in decayed_results[:top_k]:
+            for chunk, original_score, _ in decayed_results[:actual_top_k]:
                 final_chunks.append(RetrievedDocument(
                     text=chunk.chunk_text,
                     score=original_score,
@@ -115,7 +124,7 @@ class RetrievalUseCase:
             if len(final_chunks) == 0:
                 status = RetrievalStatus.NO_RESULTS
             else:
-                threshold = 0.2 if used_reranker else 0.01
+                threshold = sizing.score_threshold if not used_reranker else max(sizing.score_threshold, 0.01)
                 if final_chunks[0].score < threshold:
                     status = RetrievalStatus.LOW_CONFIDENCE
 
@@ -134,10 +143,13 @@ class RetrievalUseCase:
         user_id: str | UUID | None = None,
         history_tokens: int = 0,
         system_prompt: str = "",
+        task_type: TaskType = TaskType.SIMPLE_QA,
+        document_id: str | UUID | None = None,
+        metadata_filter: dict | None = None,
     ) -> str:
         """Retrieves and formats context chunks, respecting token budgets."""
         try:
-            retrieval_result = await self.retrieve(query, top_k=top_k, session_id=session_id, user_id=user_id)
+            retrieval_result = await self.retrieve(query, top_k=top_k, session_id=session_id, user_id=user_id, task_type=task_type, document_id=document_id, metadata_filter=metadata_filter)
             if retrieval_result.status in (RetrievalStatus.NO_RESULTS, RetrievalStatus.FAILED):
                 return ""
             chunks = retrieval_result.documents
@@ -170,6 +182,9 @@ class RetrievalUseCase:
         max_context_tokens: int = 4000,
         user_id: str | UUID | None = None,
         history_tokens: int = 0,
+        task_type: TaskType = TaskType.SIMPLE_QA,
+        document_id: str | UUID | None = None,
+        metadata_filter: dict | None = None,
     ) -> str:
         """Retrieves relevant chunks and injects them into the system prompt."""
         context_block = await self.get_formatted_context(
@@ -180,6 +195,9 @@ class RetrievalUseCase:
             user_id=user_id,
             history_tokens=history_tokens,
             system_prompt=system_prompt,
+            task_type=task_type,
+            document_id=document_id,
+            metadata_filter=metadata_filter,
         )
         if not context_block:
             return system_prompt
@@ -193,7 +211,7 @@ class RetrievalUseCase:
             f"Ground your answer in the provided context."
         )
 
-    async def execute(self, query: str, limit: int = 5, session_id: str | None = None, user_id: str | UUID | None = None, history_tokens: int = 0) -> str:
+    async def execute(self, query: str, limit: int = 5, session_id: str | None = None, user_id: str | UUID | None = None, history_tokens: int = 0, task_type: TaskType = TaskType.SIMPLE_QA, document_id: str | UUID | None = None, metadata_filter: dict | None = None) -> str:
         """Retrieves relevant chunks and formats them as a context string."""
         return await self.get_formatted_context(
             query=query,
@@ -202,4 +220,7 @@ class RetrievalUseCase:
             max_context_tokens=3000,
             user_id=user_id,
             history_tokens=history_tokens,
+            task_type=task_type,
+            document_id=document_id,
+            metadata_filter=metadata_filter,
         )

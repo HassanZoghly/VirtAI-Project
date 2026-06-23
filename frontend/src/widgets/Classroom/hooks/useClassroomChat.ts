@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
-import useWSClient from '@/core/realtime/useWSClient';
+import useWSClient, { ConnectionState } from '@/core/realtime/useWSClient';
 import useConversationReducer from '@/features/chat/hooks/useConversationReducer';
 import { toast } from '@/shared/utils/toast';
 import { WSPayloadSchema, WSPayload, Viseme } from '../ClassroomShell';
@@ -82,12 +82,12 @@ export function useClassroomChat({
   }, [currentSessionId, dispatch, resetAvatarAudio]);
 
   useEffect(() => {
-    if (connectionState === 2 || connectionState === 3) { // RECONNECTING or OFFLINE
+    if (connectionState === ConnectionState.RECONNECTING || connectionState === ConnectionState.OFFLINE) { // RECONNECTING or OFFLINE
       if (conversationState.pipelineState === 'thinking' || conversationState.pipelineState === 'speaking') {
         dispatch({ type: 'ERROR', payload: { message: 'Connection interrupted' } });
         resetAvatarAudio(conversationState.activeMessageId);
       }
-    } else if (connectionState === 1) { // ONLINE
+    } else if (connectionState === ConnectionState.ONLINE) { // ONLINE
       if (conversationState.pipelineState === 'error') {
         dispatch({ type: 'CLEAR_ERROR' });
       }

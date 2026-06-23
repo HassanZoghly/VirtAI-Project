@@ -13,11 +13,11 @@ from typing import Any, Union
 import cohere  # type: ignore[import-not-found]
 from loguru import logger
 
-from app.domain.rag.ports import LLMGenerationProvider
+from app.domain.chat.ports import BaseLLMProvider
 from app.infrastructure.llm.enums import CoHereRole, DocumentTypeEnum
 
 
-class CoHereProvider(LLMGenerationProvider):
+class CoHereProvider(BaseLLMProvider):
     """
     Cohere provider implementing generation, embedding, and reranking.
 

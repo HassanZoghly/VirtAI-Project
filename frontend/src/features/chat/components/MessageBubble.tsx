@@ -3,13 +3,15 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Bot, User } from 'lucide-react';
 import CopyButton from '../../../shared/components/CopyButton';
+import { VisualizeButton } from './VisualizeButton';
 import { IMessage } from '../../session/types';
 
 interface MessageBubbleProps {
   msg: IMessage;
+  isLast?: boolean;
 }
 
-const MessageBubble: React.FC<MessageBubbleProps> = memo(function MessageBubble({ msg }) {
+const MessageBubble: React.FC<MessageBubbleProps> = memo(function MessageBubble({ msg, isLast }) {
   const isUser = msg.role === 'user';
 
   return (
@@ -32,8 +34,11 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(function MessageBubble(
                   {msg.content}
                 </ReactMarkdown>
               </div>
-              <div className="flex justify-start mt-2">
+              <div className="flex justify-start gap-2 mt-2 items-center">
                 <CopyButton content={msg.content} />
+                {isLast && msg.id && (
+                  <VisualizeButton messageId={msg.id} locale="en" />
+                )}
               </div>
             </>
           )}

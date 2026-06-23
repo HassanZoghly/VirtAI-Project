@@ -16,14 +16,17 @@ from app.infrastructure.cache.jwt_blacklist import is_blacklisted
 from app.infrastructure.cache.rate_limiter import check_rate_limit
 from app.infrastructure.db.database import get_db
 from app.infrastructure.db.repositories.user_repository import UserRepository
-from app.presentation.http.v1.dependencies import get_session_manager, get_ws_connection_manager
+from app.application.chat.chat_use_case import ChatUseCase
+from app.presentation.http.v1.dependencies import get_session_manager, get_ws_connection_manager, get_chat_use_case
 from app.presentation.http.v1.endpoints.audio import router as audio_router
 from app.presentation.http.v1.endpoints.auth import router as auth_router
 from app.presentation.http.v1.endpoints.chat import router as chat_router
 from app.presentation.http.v1.endpoints.documents import router as documents_router
 from app.presentation.http.v1.endpoints.health import router as health_router
+from app.presentation.http.v1.endpoints.rag import router as rag_router
 from app.presentation.ws.connection_manager import WSConnectionManager
 from app.presentation.ws.gateway import WebSocketHandler
+from app.presentation.ws.explain_handler import ExplainHandler
 from app.shared.config import get_settings
 from app.shared.errors import (
     ExpiredTokenError,
@@ -44,6 +47,7 @@ router.include_router(audio_router)
 router.include_router(chat_router, prefix="/chat", tags=["chat"])
 router.include_router(auth_router, prefix="/auth", tags=["auth"])
 router.include_router(documents_router, prefix="/documents", tags=["documents"])
+router.include_router(rag_router, prefix="/rag", tags=["rag"])
 
 
 
@@ -243,3 +247,49 @@ async def websocket_endpoint(
             logger.info(
                 f"[WS] Session disconnected (kept for resume) | id={handler.session.session_id}"
             )
+
+
+@router.websocket("/rag/explain/{document_id}")
+async def explain_websocket_endpoint(
+    websocket: WebSocket,
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    chat_use_case: ChatUseCase = Depends(get_chat_use_case),
+):
+    """
+    WebSocket endpoint for Slide-by-Slide Explanation.
+    URL: ws://localhost:8000/api/v1/rag/explain/{document_id}
+    """
+    
+    # Session Guard: Check if user has already sent a message on this document's session
+    from app.infrastructure.db.models import Document, ChatSession
+    from sqlalchemy import select
+    from app.shared.ids import parse_uuid
+    
+    doc_uuid = parse_uuid(document_id)
+    if doc_uuid:
+        doc = await db.scalar(select(Document).where(Document.id == doc_uuid))
+        if doc and doc.retrieval_scope == "SESSION" and doc.scope_id:
+            session_model = await db.scalar(select(ChatSession).where(ChatSession.id == doc.scope_id))
+            if session_model and session_model.message_count > 0:
+                await websocket.close(code=1008, reason="Cannot present document: chat already started.")
+                return
+
+    # Accept the websocket
+    await websocket.accept()
+    user_id = "test_user" # Mocked for simplicity since this is an isolated route for the assignment
+    
+    handler = ExplainHandler(
+        websocket=websocket,
+        document_id=document_id,
+        db=db,
+        user_id=user_id,
+        chat_use_case=chat_use_case
+    )
+    
+    try:
+        await handler.run()
+    except Exception as e:
+        logger.error(f"[ExplainWS] Handler error: {e}")
+    finally:
+        pass

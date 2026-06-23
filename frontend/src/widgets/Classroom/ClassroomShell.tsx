@@ -5,7 +5,7 @@ import { ChatInput, MessageList } from '@/features/chat';
 import { DocumentsDrawer } from '@/features/documents/components/DocumentsDrawer';
 import { SettingsDrawer, useSessionManager } from '@/features/session';
 import { toast } from '@/shared/utils/toast';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { PiGearFill, PiWifiSlashFill } from 'react-icons/pi';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -14,6 +14,13 @@ import { AvatarCanvasWrapper } from './AvatarCanvasWrapper';
 import { useClassroomState } from './hooks/useClassroomState';
 import { useClassroomAudio } from './hooks/useClassroomAudio';
 import { useClassroomChat } from './hooks/useClassroomChat';
+import { AvatarTopBar } from './AvatarTopBar';
+import { useDocumentList } from '@/features/documents/useDocumentList';
+import { useQuizSession } from '@/features/quiz/hooks/useQuizSession';
+import { QuizDrawer } from '@/features/quiz/components/QuizDrawer';
+import { DiagramContainer } from '@/features/diagrams/components/DiagramContainer';
+import { useExplainWS, PresentationState } from '@/features/explain/hooks/useExplainWS';
+import { ExplainSession } from '@/features/explain/components/ExplainSession';
 
 export interface AudioVisemePacket {
   id: string;
@@ -73,6 +80,22 @@ export default function ClassroomShell() {
   const currentSession = session.currentSession;
   const status = session.status;
 
+  const { documents } = useDocumentList(currentSessionId);
+  const quizSession = useQuizSession();
+  const [isQuizOpen, setIsQuizOpen] = useState(false);
+  const [isDiagramOpen, setIsDiagramOpen] = useState(false);
+
+  const handleTakeQuiz = () => {
+    if (documents.length > 0 && documents[0].id) {
+      quizSession.startQuiz(documents[0].id, 'en');
+      setIsQuizOpen(true);
+    }
+  };
+
+  const handleGenerateDiagram = () => {
+    setIsDiagramOpen(true);
+  };
+
   // Phase 2: Isolated Audio Pipeline
   const {
     mouthCuesRef,
@@ -85,6 +108,41 @@ export default function ClassroomShell() {
     getIsAudioPlaying,
     getNextPlaybackTime
   } = useClassroomAudio();
+
+  const [isExplainActive, setIsExplainActive] = useState(false);
+  const [explainContent, setExplainContent] = useState('');
+  const [explainState, setExplainState] = useState<PresentationState>('EXPLAINING');
+  const [explainSlide, setExplainSlide] = useState(0);
+  const [explainTotalSlides, setExplainTotalSlides] = useState(0);
+
+  const {
+    isConnected: isExplainConnected,
+    sendQuestion: explainSendQuestion,
+    sendContinue: explainSendContinue,
+    sendPauseOrStop: explainSendPauseOrStop,
+    disconnect: explainDisconnect
+  } = useExplainWS({
+    documentId: isExplainActive && documents.length > 0 ? documents[0].id : null,
+    onTokens: (tokens) => {
+      setExplainContent(prev => prev + tokens);
+    },
+    onStateChange: (state) => {
+      setExplainState(state);
+    },
+    onSlideChange: (index, total) => {
+      setExplainSlide(index);
+      setExplainTotalSlides(total);
+      setExplainContent(''); // clear text for new slide
+    },
+    onEnd: () => {
+      setIsExplainActive(false);
+    }
+  });
+
+  const handleStartExplain = useCallback(() => {
+    setIsExplainActive(true);
+    setExplainContent('');
+  }, []);
 
   // Phase 1: Isolated Chat Logic
   const {
@@ -311,45 +369,32 @@ export default function ClassroomShell() {
         />
         <DocumentsDrawer isOpen={isDocumentsOpen} onClose={toggleDocuments} sessionId={currentSessionId} />
 
-        <div className="classroom-top-controls">
-          <button
-            className="avatar-settings-btn"
-            onClick={openSettings}
-            title="Settings"
-            aria-label="Open settings"
-          >
-            <PiGearFill />
-          </button>
+        <AvatarTopBar
+          avatarName={avatarName}
+          connectionState={connectionState}
+          currentSessionId={currentSessionId}
+          reconnectError={reconnectError}
+          openSettings={openSettings}
+          reconnect={reconnect}
+          hasDocuments={documents.length > 0}
+          hasMessages={currentSession?.messages?.length ? currentSession.messages.length > 0 : false}
+          onTakeQuiz={handleTakeQuiz}
+          onGenerateDiagram={handleGenerateDiagram}
+          onStartExplain={handleStartExplain}
+        />
 
-          <div
-            className={`avatar-status-badge ${statusBadgeClass}`}
-            role="status"
-            aria-live="polite"
-          >
-            {connectionState === ConnectionState.OFFLINE && currentSessionId !== null ? (
-              <PiWifiSlashFill className="status-icon-offline" />
-            ) : (
-              <span
-                className={`status-dot${connectionState === ConnectionState.RECONNECTING
-                  ? ' status-dot-reconnecting'
-                  : connectionState === ConnectionState.INITIALIZING
-                    ? ' status-dot-initializing'
-                    : currentSessionId === null
-                      ? ' status-dot-idle'
-                      : ''
-                  }`}
-              />
-            )}
-            <span key={statusLabel} className="status-text">
-              {statusLabel}
-            </span>
-            {reconnectError ? (
-              <button type="button" onClick={reconnect} className="status-reconnect-btn">
-                Reconnect
-              </button>
-            ) : null}
-          </div>
-        </div>
+        <QuizDrawer
+          isOpen={isQuizOpen}
+          onClose={() => setIsQuizOpen(false)}
+          documentId={documents.length > 0 ? documents[0].id : null}
+          quizSession={quizSession}
+        />
+
+        <DiagramContainer
+          isOpen={isDiagramOpen}
+          onClose={() => setIsDiagramOpen(false)}
+          sessionId={currentSessionId}
+        />
 
         <div
           className="split-container"
@@ -369,32 +414,62 @@ export default function ClassroomShell() {
             getNextPlaybackTime={getNextPlaybackTime}
           />
 
-          <div className="chat-panel" key={currentSessionId || 'empty'}>
-            <MessageList
-              messages={currentSession?.messages || []}
-              currentMessage={conversationState.currentMessage}
-              interimTranscript={interimTranscript}
-              error={conversationState.error}
-              avatarName={avatarName}
-              chatScrollRef={chatScrollRef}
-              messagesEndRef={messagesEndRef}
-              onScroll={handleChatScroll}
-              pipelineState={conversationState.pipelineState}
-            />
-            <ChatInput
-              inputValue={inputValue}
-              onInputChange={setInputValue}
-              onSend={handleSendMessage}
-              onKeyDown={onKeyDown}
-              textareaRef={textareaRef}
-              backendStatus={connectionState as any}
-              wsClient={wsClient}
-              pipelineState={conversationState.pipelineState}
-              onToggleDocuments={toggleDocuments}
-              onBeforeVoiceStart={ensureVoiceSession}
-              onStop={handleStop}
-            />
-          </div>
+          {isExplainActive ? (
+            <div className="chat-panel explain-panel-active">
+              <ExplainSession
+                documentId={documents[0].id}
+                currentState={explainState}
+                currentSlide={explainSlide}
+                totalSlides={explainTotalSlides}
+                content={explainContent}
+                onQuestion={(text) => {
+                  explainSendQuestion(text);
+                  setExplainContent(prev => prev + `\n\n**You:** ${text}\n\n`);
+                  resetAvatarAudio();
+                }}
+                onContinue={() => {
+                  explainSendContinue();
+                  resetAvatarAudio();
+                }}
+                onPauseOrStop={() => {
+                  explainSendPauseOrStop();
+                  resetAvatarAudio();
+                }}
+                onClose={() => {
+                  setIsExplainActive(false);
+                  explainDisconnect();
+                  resetAvatarAudio();
+                }}
+              />
+            </div>
+          ) : (
+            <div className="chat-panel" key={currentSessionId || 'empty'}>
+              <MessageList
+                messages={currentSession?.messages || []}
+                currentMessage={conversationState.currentMessage}
+                interimTranscript={interimTranscript}
+                error={conversationState.error}
+                avatarName={avatarName}
+                chatScrollRef={chatScrollRef}
+                messagesEndRef={messagesEndRef}
+                onScroll={handleChatScroll}
+                pipelineState={conversationState.pipelineState}
+              />
+              <ChatInput
+                inputValue={inputValue}
+                onInputChange={setInputValue}
+                onSend={handleSendMessage}
+                onKeyDown={onKeyDown}
+                textareaRef={textareaRef}
+                backendStatus={connectionState as any}
+                wsClient={wsClient}
+                pipelineState={conversationState.pipelineState}
+                onToggleDocuments={toggleDocuments}
+                onBeforeVoiceStart={ensureVoiceSession}
+                onStop={handleStop}
+              />
+            </div>
+          )}
         </div>
       </div>
     </>

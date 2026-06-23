@@ -8,8 +8,10 @@ from pathlib import Path
 from loguru import logger
 
 from app.application.animation.audio_analysis import analyze_tts_for_animation
-from app.application.chat.prompt_builder import PromptBuilder
 from app.application.rag.intent_classifier import IntentClassifier
+from app.application.rag.response_formatter import ResponseFormatterService
+from app.application.rag.token_budget import TokenBudgetManager
+from app.domain.rag.task_types import TaskType, detect_locale
 from app.application.voice.pipeline_context import TurnContext
 from app.domain.chat.ports import BaseLLMProvider
 from app.domain.voice.entities import TTSResult
@@ -71,16 +73,37 @@ class LLMStage(BaseStage):
                 if self._intent_classifier:
                     is_casual = await self._intent_classifier.async_is_casual_chat(context.text_input)
 
+                locale = detect_locale(context.text_input)
+                formatter = ResponseFormatterService(TokenBudgetManager())
+
                 if is_casual:
-                    retrieved = ""
+                    messages = formatter.format_prompt(
+                        query=context.text_input,
+                        chunks=[],
+                        task_type=TaskType.SIMPLE_QA,
+                        locale=locale,
+                        history_tokens=context.history.get_estimated_tokens(),
+                    )
+                    context.history.system_prompt = messages[0].content
+                    if context.history.message_count > 0:
+                        context.history._messages[-1].content = messages[1].content
                 else:
                     history_tokens = context.history.get_estimated_tokens()
-                    retrieved = await self._retrieval.execute(
-                        context.text_input, session_id=context.session_id, history_tokens=history_tokens
+                    result = await self._retrieval.retrieve(
+                        context.text_input, session_id=context.session_id, user_id=None, task_type=TaskType.SIMPLE_QA
                     )
-                context.history.system_prompt = PromptBuilder.build_system_prompt_with_context(
-                    original_sys_prompt, retrieved
-                )
+                    
+                    messages = formatter.format_prompt(
+                        query=context.text_input,
+                        chunks=result.documents,
+                        task_type=TaskType.SIMPLE_QA,
+                        locale=locale,
+                        history_tokens=history_tokens,
+                    )
+                    context.history.system_prompt = messages[0].content
+                    if context.history.message_count > 0:
+                        context.history._messages[-1].content = messages[1].content
+                    context.retrieved_chunks = result.documents
             except Exception as e:
                 logger.error(f"RAG retrieval failed: {e} | trace_id={context.trace_id}")
 

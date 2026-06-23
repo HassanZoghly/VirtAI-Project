@@ -39,6 +39,7 @@ class VectorStore(ABC):
         scope: str | None = None,
         scope_id: UUID | None = None,
         min_dense_score: float = 0.5,
+        metadata_filter: dict | None = None,
     ) -> list[tuple[DocumentChunk, float]]:
         pass
 
@@ -53,6 +54,7 @@ class VectorStore(ABC):
         scope_id: UUID | None = None,
         min_hybrid_score: float = 0.015,
         min_dense_score: float = 0.5,
+        metadata_filter: dict | None = None,
     ) -> list[tuple[DocumentChunk, float]]:
         pass
 
@@ -133,4 +135,17 @@ class DocumentRepositoryPort(ABC):
 
     @abstractmethod
     async def has_any_chunks(self, document_id: str) -> bool: ...
+
+
+class VisualizationProviderPort(ABC):
+    """Abstract interface for external visual generation APIs (like Napkin)."""
+
+    @abstractmethod
+    async def generate_diagram(self, text: str) -> dict[str, str | bool]:
+        """
+        Takes raw text and generates an image URL.
+        Returns a dictionary implementing the Sentinel pattern:
+        e.g., {"image_url": "https/..."} OR {"unavailable": True, "reason": "timeout"}
+        """
+        pass
 

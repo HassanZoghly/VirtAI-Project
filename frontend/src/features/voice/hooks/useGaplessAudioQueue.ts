@@ -18,6 +18,7 @@ export function useGaplessAudioQueue() {
   const processingQueueRef = useRef<Promise<void>>(Promise.resolve());
   const flushTokenRef = useRef<number>(0);
   const abortControllerRef = useRef<AbortController>(new AbortController());
+  const activeSourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
 
   const getAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
@@ -50,11 +51,40 @@ export function useGaplessAudioQueue() {
       abortControllerRef.current = new AbortController();
     }
 
-    scheduledNodesRef.current.forEach((node) => {
+    if (activeSourceNodeRef.current) {
       try {
-        node.stop(IMMEDIATE_STOP_TIME);
-        node.disconnect();
-      } catch (e) {}
+        if (typeof activeSourceNodeRef.current.stop === 'function') {
+          try {
+            activeSourceNodeRef.current.stop(IMMEDIATE_STOP_TIME);
+          } catch (stopErr: any) {
+            if (stopErr.name !== 'InvalidStateError') throw stopErr;
+          }
+        }
+        if (typeof activeSourceNodeRef.current.disconnect === 'function') {
+          activeSourceNodeRef.current.disconnect();
+        }
+      } catch (e) {
+        console.warn('[GaplessAudio] Failed to disconnect activeSourceNode:', e);
+      }
+      activeSourceNodeRef.current = null;
+    }
+
+    scheduledNodesRef.current.forEach((node) => {
+      if (!node) return;
+      try {
+        if (typeof node.stop === 'function') {
+          try {
+            node.stop(IMMEDIATE_STOP_TIME);
+          } catch (stopErr: any) {
+            if (stopErr.name !== 'InvalidStateError') throw stopErr;
+          }
+        }
+        if (typeof node.disconnect === 'function') {
+          node.disconnect();
+        }
+      } catch (e) {
+        console.warn('[GaplessAudio] Failed to disconnect scheduled node:', e);
+      }
     });
 
     scheduledNodesRef.current = [];
@@ -111,17 +141,26 @@ export function useGaplessAudioQueue() {
           const chunkOffset = scheduleTime - visemeBaseStartTimeRef.current;
 
           const source = ctx.createBufferSource();
+          activeSourceNodeRef.current = source;
           source.buffer = audioBuffer;
           source.connect(ctx.destination);
           scheduledNodesRef.current.push(source);
 
           source.onended = () => {
+            if (!source) return;
             try {
-              source.disconnect();
+              if (typeof source.disconnect === 'function') {
+                source.disconnect();
+              }
               // Defensive GC: Nullify buffer to prevent memory leaks from retained audio buffers
               // @ts-ignore - intentional memory release
               source.buffer = null;
-            } catch (e) {}
+            } catch (e) {
+              console.warn('[GaplessAudio] Failed to cleanup activeSourceNode onended:', e);
+            }
+            if (activeSourceNodeRef.current === source) {
+              activeSourceNodeRef.current = null;
+            }
             scheduledNodesRef.current = scheduledNodesRef.current.filter((n) => n !== source);
           };
 

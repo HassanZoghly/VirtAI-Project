@@ -79,6 +79,10 @@ export function useAvatarLipSync({
   const blinkStateRef = useRef({ nextBlinkTime: INITIAL_BLINK_TIME, duration: BLINK_DURATION, isBlinking: false });
   const fallbackTimeRef = useRef(ORIGIN_ZERO);
   const lastCuesRef = useRef<Viseme[] | null>(null);
+  const hardwareClockSyncRef = useRef<{ lastAudioTime: number; lastFrameTime: number; }>({
+    lastAudioTime: 0,
+    lastFrameTime: 0,
+  });
 
   const pipelineStateRef = useRef(pipelineState);
   useEffect(() => {
@@ -211,12 +215,24 @@ export function useAvatarLipSync({
         
         const audioContext = getAudioContext?.();
 
-        if (audioContext && audioContext.state === 'running' && playbackStartTimeRef?.current != null) {
-          currentTime = audioContext.currentTime - playbackStartTimeRef.current;
+        if (audioContext && audioContext.state !== 'suspended' && playbackStartTimeRef?.current != null) {
+          const currentAudioTime = audioContext.currentTime;
+          
+          // Hardware Clock Synchronization Fix: smooth out AudioContext's resolution using RAF's high-frequency clock
+          if (hardwareClockSyncRef.current.lastAudioTime !== currentAudioTime) {
+            hardwareClockSyncRef.current.lastAudioTime = currentAudioTime;
+            hardwareClockSyncRef.current.lastFrameTime = t;
+          }
+          
+          const timeSinceLastAudioUpdate = t - hardwareClockSyncRef.current.lastFrameTime;
+          // Extrapolate time to prevent stuttering, capped to 100ms to prevent runaway drift
+          const smoothedAudioTime = currentAudioTime + Math.min(timeSinceLastAudioUpdate, 0.1);
+
+          currentTime = smoothedAudioTime - playbackStartTimeRef.current;
           fallbackTimeRef.current = currentTime;
         } else {
           // DEFENSIVE: Viseme Pre-Fire Jitter Fix
-          // Do NOT advance fallback clock if we are waiting for audio context to start.
+          // Do NOT advance fallback clock if we are waiting for audio context to start or if suspended.
           // This keeps the mouth closed until audio actually begins.
           currentTime = ORIGIN_ZERO;
         }

@@ -1,5 +1,5 @@
 import uuid
-from typing import Dict, Any
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,7 +20,7 @@ class VisualizationUseCase:
 
     async def get_visualization(
         self, db: AsyncSession, message_id: str, user_id: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         msg_uuid = uuid.UUID(message_id)
         user_uuid = uuid.UUID(user_id)
 
@@ -57,7 +57,7 @@ class VisualizationUseCase:
 
         # 4. Save Cache
         is_unavailable = result.get("unavailable", False)
-        
+
         cache_entry = VisualizationCache(
             message_id=msg_uuid,
             image_url=result.get("image_url"),

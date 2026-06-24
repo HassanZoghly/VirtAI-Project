@@ -1,62 +1,49 @@
-# VirtAI Project
+# **VirtAI**
 
-VirtAI is an advanced web-based classroom and learning environment powered by a 3D avatar, real-time speech interaction, and cutting-edge RAG architecture.
+Welcome to VirtAI! This is the central repository for the VirtAI project. We utilize a strict Clean Architecture pattern to ensure maintainability, testability, and stability across our real-time generation features.
 
-## Features
+<div style="width: 100%; height: 15px; background: linear-gradient(to right, rgb(235, 238, 212), rgb(235, 238, 212));"></div>
 
-- **3D Avatar & Real-time Voice**: Interact seamlessly with a real-time lip-synced 3D avatar using WebSockets.
-- **Document-Augmented RAG**: Upload documents and interact naturally to ask questions, explore topics, or seek summaries.
-- **NotebookLM-Style Quiz Generation**: Automatically generated interactive quizzes drawn directly from uploaded documents, complete with citations.
-- **Dynamic Diagramming**: Powered by Mermaid.js, generate flowchart diagrams instantly from complex text.
-- **Slide-by-Slide Explain Mode**: A specialized WebSocket Presentation state machine. Let the Avatar teach you the document slide-by-slide, allowing for pausing and contextual mid-presentation questions.
-- **Napkin Visualization**: Automatically render complex code ideas or structures into beautiful visual graphics via Napkin API, handled gracefully using the Sentinel Pattern if unavailable.
+## **📚 Developer Documentation Network**
 
-## Setup & Configuration
+To understand how VirtAI is built and operated, please refer to our world-class documentation network:
 
-Configure the following environment variables in your backend `.env` file:
-```env
-GROQ_API_KEY=your_groq_api_key
-NAPKIN_API_KEY=your_napkin_api_key
+- **[Visual Architecture](backend/docs/ARCHITECTURE.md)**: Explore the Database ERD, WebSocket Flows, and RAG Task pipelines via Mermaid diagrams.
+- **[The Developer Code Tour](backend/docs/CODE_TOUR.md)**: A narrative guide to onboarding, explaining our Clean Architecture layers and request flows.
+- **[The DevOps Runbook](backend/docs/RUNBOOK.md)**: Operational guides, Environment Variables, Alembic DB Commands, and Troubleshooting.
+- **[Historical Refactor Decisions](backend/docs/refactor/README.md)**: Architecture Decision Records (ADRs) that guided our development.
+
+<div style="width: 100%; height: 15px; background: linear-gradient(to right, rgb(235, 238, 212), rgb(235, 238, 212));"></div>
+
+## **🚀 Quickstart Guide**
+
+### 1. Prerequisites
+- Docker & Docker Compose
+- Python 3.11+
+- PostgreSQL & Redis (if running locally without Docker)
+
+### 2. Setup
+Clone the repository and set up your environment variables:
+```bash
+cp .env.example .env
+# Edit .env with your specific OPENAI_API_KEY and connection strings
 ```
 
-## Running the Project
-
-### Backend
-Navigate to the `backend` directory and install dependencies:
+### 3. Running the Application
+Using Docker Compose is the easiest way to get started:
 ```bash
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
+This will spin up the database, Redis, the backend FastAPI server, and the frontend.
 
-### Frontend
-Navigate to the `frontend` directory and start the Vite development server:
+### 4. Running Tests
+To ensure the system is healthy and everything is working, run the test suite using our provided script:
 ```bash
-npm install
-npm run dev
+./scripts/run_tests.sh
 ```
+*Note: You may safely ignore `locust` module errors during standard test runs, as they are designated for specific load testing environments.*
 
-## Testing
-
-The project uses robust testing mechanisms to ensure production reliability.
-
-### Running Backend Tests (Pytest)
-Execute the unit and integration tests (including the database testing layer):
+To run the tests, you need to install locust. You can do this by running the following command:
 ```bash
-pytest backend/tests/
-```
-
-### Running E2E UI Tests (Playwright)
-Execute the Playwright end-to-end user flows targeting the UI:
-```bash
-cd frontend
-npx playwright install
-npx playwright test
-```
-
-### Running Load Tests (Locust)
-Validate backend throughput and Map-Reduce concurrency capabilities:
-```bash
-cd backend
-locust -f tests/load/test_rag_throughput.py --headless -u 10 -r 2 -t 1m
-locust -f tests/load/test_summary_concurrent.py --headless -u 5 -r 1 -t 1m
+pip install locust
 ```

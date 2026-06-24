@@ -1,13 +1,12 @@
-import asyncio
+import uuid
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from app.application.rag.summary_use_case import SummaryUseCase
-from app.domain.chat.entities import LLMResult, LLMChunk
+from app.domain.chat.entities import LLMChunk
 from app.domain.rag.task_types import Locale
 from app.infrastructure.db.models import DocumentChunk, SummaryCache
-import uuid
 
 
 class MockLLMProvider:
@@ -32,7 +31,7 @@ async def test_summary_use_case_no_chunks():
     mock_result.scalar_one_or_none.return_value = None
     mock_result.scalars.return_value.all.return_value = []
     db.execute.return_value = mock_result
-    
+
     llm = MockLLMProvider()
     use_case = SummaryUseCase(llm)
 
@@ -68,14 +67,14 @@ async def test_summary_use_case_map_reduce_single_batch():
     db.add = MagicMock()
     # No cache
     db.execute.return_value.scalar_one_or_none.return_value = None
-    
+
     # 2 chunks => fits in single batch
     chunk1 = DocumentChunk(chunk_text="Intro", chunk_order=1)
     chunk2 = DocumentChunk(chunk_text="Details", chunk_order=2)
-    
+
     # Needs a custom mock for the chained .scalars().all() calls since we use the same db.execute
     # We can mock side_effect for execute to return different things for cache vs chunks
-    
+
     class ExecResult:
         def __init__(self, scalar=None, all_res=None):
             self._scalar = scalar
@@ -84,9 +83,11 @@ async def test_summary_use_case_map_reduce_single_batch():
             return self._scalar
         def scalars(self):
             class Scalars:
-                def all(s):
-                    return self._all_res
-            return Scalars()
+                def __init__(self, items):
+                    self.items = items
+                def all(self):
+                    return self.items
+            return Scalars(self._all_res)
 
     def db_execute_mock(query):
         # super hacky way to differentiate queries
@@ -94,9 +95,9 @@ async def test_summary_use_case_map_reduce_single_batch():
         if "summary_cache" in q_str:
             return ExecResult(scalar=None)
         return ExecResult(all_res=[chunk1, chunk2])
-    
+
     db.execute = AsyncMock(side_effect=db_execute_mock)
-    
+
     llm = MockLLMProvider()
     llm.stream_chunks = [LLMChunk(token="Final "), LLMChunk(token="Summary")]
     use_case = SummaryUseCase(llm)

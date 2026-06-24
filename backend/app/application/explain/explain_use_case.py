@@ -1,15 +1,22 @@
 import asyncio
 import json
 import uuid
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
+from typing import Any
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.rag.explain_entities import PresentationState, SlideStartEvent, SlideContentTokens, SlideEndEvent, AwaitInputEvent
 from app.application.chat.chat_use_case import ChatUseCase
-from app.infrastructure.db.models import DocumentChunk
+from app.domain.rag.explain_entities import (
+    AwaitInputEvent,
+    PresentationState,
+    SlideContentTokens,
+    SlideEndEvent,
+    SlideStartEvent,
+)
 from app.infrastructure.cache.redis_client import get_redis
+from app.infrastructure.db.models import DocumentChunk
 from app.shared.config import get_settings
 
 
@@ -21,7 +28,7 @@ class ExplainUseCase:
         self.settings = get_settings()
         self.session_ttl = 3600  # 1 hour
 
-    async def _get_state(self, session_key: str) -> dict:
+    async def _get_state(self, session_key: str) -> dict[str, Any]:
         raw = await self.redis.get(session_key)
         if raw:
             return json.loads(raw)
@@ -42,7 +49,7 @@ class ExplainUseCase:
     async def start_or_resume(self, user_id: str, document_id: str) -> AsyncGenerator[dict, None]:
         session_key = f"explain_{user_id}_{document_id}"
         state_data = await self._get_state(session_key)
-        
+
         chunks = await self._load_chunks(document_id)
         if not chunks:
             yield {"type": "error", "message": "No document content."}
@@ -78,7 +85,7 @@ class ExplainUseCase:
     async def handle_user_input(self, user_id: str, document_id: str, text: str) -> AsyncGenerator[dict, None]:
         session_key = f"explain_{user_id}_{document_id}"
         state_data = await self._get_state(session_key)
-        
+
         if "continue" in text.lower() or "next" in text.lower():
             state_data["current_slide_index"] += 1
             await self._save_state(session_key, state_data)
@@ -90,7 +97,7 @@ class ExplainUseCase:
         await self._save_state(session_key, state_data)
 
         metadata_filter = {"slide_index": state_data["current_slide_index"]}
-        
+
         response_text = await self.chat_use_case.execute_rag_query(
             query=text,
             user_id=user_id,
@@ -98,7 +105,7 @@ class ExplainUseCase:
             document_id=document_id,
             metadata_filter=metadata_filter
         )
-        
+
         yield SlideContentTokens(tokens=response_text).model_dump()
 
         state_data["state"] = PresentationState.AWAITING.value

@@ -1,6 +1,5 @@
 import asyncio
 import json
-import uuid
 from typing import Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -8,6 +7,7 @@ from loguru import logger
 
 from app.application.chat.chat_use_case import ChatUseCase
 from app.application.explain.explain_use_case import ExplainUseCase
+
 
 class ExplainHandler:
     def __init__(self, websocket: WebSocket, document_id: str, db, user_id: str, chat_use_case: ChatUseCase):
@@ -20,7 +20,7 @@ class ExplainHandler:
     async def run(self):
         # Start the presentation
         self._main_task = asyncio.create_task(self._start_presentation())
-        
+
         try:
             while True:
                 raw = await self.websocket.receive_text()
@@ -36,7 +36,7 @@ class ExplainHandler:
         finally:
             if self._main_task and not self._main_task.done():
                 self._main_task.cancel()
-                
+
     async def _start_presentation(self):
         try:
             async for event in self.explain_use_case.start_or_resume(self.user_id, self.document_id):
@@ -47,15 +47,15 @@ class ExplainHandler:
     async def _handle_interruption(self, data: dict):
         if self._main_task and not self._main_task.done():
             self._main_task.cancel()
-            
+
         user_text = data.get("data", {}).get("text", "")
-        
+
         async def _process_input():
             try:
                 async for event in self.explain_use_case.handle_user_input(self.user_id, self.document_id, user_text):
                     await self.websocket.send_json(event)
             except asyncio.CancelledError:
                 pass
-                
+
         self._main_task = asyncio.create_task(_process_input())
 

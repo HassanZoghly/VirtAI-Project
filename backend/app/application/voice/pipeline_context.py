@@ -28,8 +28,8 @@ class TurnContext:
     llm_emotion: str | None = None
     tts_voice: str | None = None
     tts_result: TTSResult | None = None
-    mouth_cues: list = field(default_factory=list)
-    timeline: list = field(default_factory=list)
+    mouth_cues: list[Any] = field(default_factory=list)
+    timeline: list[Any] = field(default_factory=list)
 
     # Orchestration & Callbacks
     send_callback: Callable[[Any], asyncio.Future] | None = None

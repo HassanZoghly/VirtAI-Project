@@ -426,7 +426,7 @@ class SessionManager:
         """Count all sessions (connected + resumable)."""
         return len(self._sessions)
 
-    async def get_stats(self) -> dict:
+    async def get_stats(self) -> dict[str, Any]:
         async with self._lock:
             sessions_info = [
                 {

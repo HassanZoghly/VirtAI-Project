@@ -1,22 +1,20 @@
 """Chat session management endpoints."""
 
-import re
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.chat.entities import ConversationHistory
 from app.domain.user.entities import UserEntity
 from app.infrastructure.db.database import get_db
+from app.infrastructure.workers.background_chat_worker import save_conversation_background_task
 from app.presentation.http.v1.dependencies import (
     ChatRepositoryDep,
     ChatUseCaseDep,
     _current_user,
     get_session_manager,
 )
-from app.infrastructure.workers.background_chat_worker import save_conversation_background_task
 from app.shared.ids import parse_uuid
 
 router = APIRouter()
@@ -249,7 +247,7 @@ async def query_rag(
     """REST endpoint to perform a one-off RAG query."""
     try:
         response = await chat_use_case.execute_rag_query(payload.query, str(user.id), session_id=payload.session_id)
-        
+
         if payload.session_id:
             background_tasks.add_task(
                 save_conversation_background_task,

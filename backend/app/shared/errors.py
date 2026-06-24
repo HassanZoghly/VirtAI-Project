@@ -1,11 +1,6 @@
-from datetime import datetime
 from typing import Any
 
-from fastapi import Request, status
-from fastapi.responses import JSONResponse
-from loguru import logger
-
-from app.shared.config import get_settings
+from fastapi import status
 
 
 class AvatarBaseException(Exception):

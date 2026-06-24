@@ -4,14 +4,14 @@ SYSTEM HEALTHCHECK
 Validates all critical runtime components. Fails loudly on any error.
 
 Checks:
-  1. Environment variables correctness
-  2. PostgreSQL connectivity
-  3. pgvector extension installed
-  4. Migrations applied (alembic_version + expected tables)
-  5. Embedding provider (FastEmbed) — dimension validation
-  6. Vector insertion into document_chunks
-  7. Vector retrieval (cosine search)
-  8. Redis connectivity
+    1. Environment variables correctness
+    2. PostgreSQL connectivity
+    3. pgvector extension installed
+    4. Migrations applied (alembic_version + expected tables)
+    5. Embedding provider (FastEmbed) — dimension validation
+    6. Vector insertion into document_chunks
+    7. Vector retrieval (cosine search)
+    8. Redis connectivity
 """
 
 import asyncio

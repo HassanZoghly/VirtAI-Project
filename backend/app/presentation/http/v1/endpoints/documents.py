@@ -16,7 +16,6 @@ from fastapi import (
     UploadFile,
 )
 from loguru import logger
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.rag.stage_machine import IngestionStage
@@ -181,7 +180,7 @@ async def upload_document(
 
     from app.application.rag.start_ingestion_use_case import StartIngestionUseCase
     use_case = StartIngestionUseCase(db, storage, request.app.state.arq_pool)
-    
+
     try:
         result = await use_case.execute(
             user_id=str(user.id),

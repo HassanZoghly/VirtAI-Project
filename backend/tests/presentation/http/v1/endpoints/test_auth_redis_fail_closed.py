@@ -1,18 +1,20 @@
 import asyncio
-import pytest
-from fastapi import Request, HTTPException
 from unittest.mock import AsyncMock, patch
 
-import redis.asyncio as aioredis
+import pytest
+from fastapi import HTTPException, Request
+
 from app.presentation.http.v1.dependencies import _current_user
 from app.shared.errors import RevokedTokenError
+
 
 class DummyCreds:
     credentials = "dummy-token"
 
 def mock_decode_auth_token(token, expected_type):
-    from app.shared.security import AuthTokenPayload
     import uuid
+
+    from app.shared.security import AuthTokenPayload
     return AuthTokenPayload(
         user_id=uuid.uuid4(),
         token_type="access",
@@ -63,9 +65,10 @@ async def test_cache_write_failure_does_not_block_valid_token():
     with patch("app.presentation.http.v1.dependencies.decode_auth_token", mock_decode_auth_token):
         with patch("app.infrastructure.cache.jwt_blacklist.is_blacklisted", AsyncMock(return_value=False)):
             with patch("app.infrastructure.cache.auth_session_cache.get_cached_auth_session", AsyncMock(return_value=None)):
-                from app.domain.user.entities import UserEntity, AuthProvider
                 import uuid
                 from datetime import datetime, timezone
+
+                from app.domain.user.entities import AuthProvider, UserEntity
                 user = UserEntity(
                     id=uuid.uuid4(),
                     email="test@example.com",

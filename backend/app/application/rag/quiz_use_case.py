@@ -1,9 +1,8 @@
-import json
-import re
 import uuid
-from typing import List, Dict, Any
+from typing import Any
 
 from loguru import logger
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,10 +11,8 @@ from app.domain.chat.ports import BaseLLMProvider
 from app.domain.rag.task_types import Locale, TaskType
 from app.infrastructure.db.models import DocumentChunk, Quiz, QuizQuestion
 from app.infrastructure.rag.prompts.registry import get_prompt_set
-
-
-from pydantic import BaseModel
 from app.shared.errors import RAGException
+
 
 class QuizQuestionModel(BaseModel):
     question_text: str
@@ -129,16 +126,16 @@ class QuizUseCase:
         logger.info("Generating quiz via structured output")
         history = ConversationHistory(system_prompt=sys_prompt)
         history.add_user_message(user_text)
-        
+
         quiz_data = None
         for attempt in range(3):
             logger.info(f"Generating quiz via structured output, attempt {attempt + 1}")
             try:
                 res = await self.llm.complete(history, response_format=QUIZ_SCHEMA)
                 response_text = res.full_text.strip()
-                
+
                 quiz_data = QuizModel.model_validate_json(response_text)
-                
+
                 if not quiz_data.questions:
                     raise ValueError("LLM returned an empty questions list")
                 break
@@ -165,23 +162,23 @@ class QuizUseCase:
                 citations=q_data.citations,
             )
             db.add(question)
-        
+
         await db.commit()
         return str(quiz.id)
 
-    async def get_quiz(self, db: AsyncSession, quiz_id: str, user_id: str) -> Dict[str, Any]:
+    async def get_quiz(self, db: AsyncSession, quiz_id: str, user_id: str) -> dict[str, Any]:
         """Fetch a generated quiz for replay."""
         quiz_uuid = uuid.UUID(quiz_id)
         user_uuid = uuid.UUID(user_id)
-        
+
         quiz_query = await db.execute(select(Quiz).where(Quiz.id == quiz_uuid, Quiz.user_id == user_uuid))
         quiz = quiz_query.scalar_one_or_none()
         if not quiz:
             raise QuizDomainException("Quiz not found or unauthorized.")
-            
+
         questions_query = await db.execute(select(QuizQuestion).where(QuizQuestion.quiz_id == quiz.id))
         questions = questions_query.scalars().all()
-        
+
         return {
             "id": str(quiz.id),
             "document_id": str(quiz.document_id),

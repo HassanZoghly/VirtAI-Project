@@ -41,7 +41,6 @@ def _normalize_required_identifier(value: str) -> str:
 
 
 from typing import Annotated, Union
-from pydantic import Field, BaseModel
 
 # ── Message Envelope ──────────────────────────────────────────────────────────
 

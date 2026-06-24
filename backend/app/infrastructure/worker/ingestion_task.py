@@ -14,8 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domain.rag.stage_machine import IngestionStage
 from app.infrastructure.db.database import AsyncSessionLocal
 from app.infrastructure.db.repositories.document_crud_repository import DocumentCrudRepository
-from app.infrastructure.db.repositories.ingestion_state_repository import IngestionStateRepository
 from app.infrastructure.db.repositories.document_integrity_service import DocumentIntegrityService
+from app.infrastructure.db.repositories.ingestion_state_repository import IngestionStateRepository
 from app.infrastructure.vector.pgvector_store import PGVectorStore
 from app.infrastructure.worker.retry_classifier import classify
 from app.shared.errors import IngestionCancelledException
@@ -202,7 +202,7 @@ async def _run_ingestion(
 
     async with get_short_session() as db:
         crud_repo = DocumentCrudRepository(db)
-        state_repo = IngestionStateRepository(db)
+        IngestionStateRepository(db)
         doc = await crud_repo.get(doc_id)
         if not doc:
             logger.warning({**log_ctx, "event": "document_not_found"})

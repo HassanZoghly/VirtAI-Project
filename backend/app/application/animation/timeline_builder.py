@@ -19,14 +19,14 @@ class TimelineBuilder:
         emotion: str | None = None,
         profile_usage: dict[str, int] | None = None,
         intent_history: list[str] | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         if profile_usage is None:
             profile_usage = defaultdict(int)
         if intent_history is None:
             intent_history = []
         recent = recent_assets or []
         segments = self.intent_scorer.segment_text(text)
-        timeline: list[dict] = []
+        timeline: list[dict[str, Any]] = []
         recent_window = list(recent[-6:])
         previous_intent = intent_history[-1] if intent_history else None
         intent_trace: list[str] = []

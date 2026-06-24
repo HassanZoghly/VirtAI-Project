@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator, AsyncIterable
+from collections.abc import AsyncIterable, AsyncIterator
 from typing import Protocol
 
 

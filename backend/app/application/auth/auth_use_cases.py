@@ -7,6 +7,7 @@ All persistence is done through SQLAlchemy async repositories.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
@@ -139,7 +140,7 @@ def build_google_auth_url(state: str = "") -> str:
     return f"https://accounts.google.com/o/oauth2/v2/auth?{params}"
 
 
-async def exchange_google_code(code: str) -> dict:
+async def exchange_google_code(code: str) -> dict[str, Any]:
     """Exchange the Google authorisation code for user info."""
     settings = get_settings()
     async with httpx.AsyncClient(timeout=10) as client:

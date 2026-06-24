@@ -4,10 +4,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.application.rag.quiz_use_case import QuizUseCase, QuizDomainException
-from app.domain.chat.entities import LLMChunk, LLMResult
-from app.domain.rag.task_types import Locale
-from app.infrastructure.db.models import DocumentChunk, Quiz, QuizQuestion
+from app.application.rag.quiz_use_case import QuizDomainException, QuizUseCase
+from app.domain.chat.entities import LLMResult
+from app.infrastructure.db.models import DocumentChunk
 
 
 class MockLLMProvider:
@@ -37,22 +36,24 @@ async def test_quiz_use_case_no_chunks():
 async def test_quiz_use_case_json_parsing_success():
     db = AsyncMock()
     db.add = MagicMock()
-    
+
     chunk = DocumentChunk(chunk_text="Some facts", chunk_order=1)
-    
+
     class ExecResult:
         def __init__(self, all_res=None):
             self._all_res = all_res
         def scalars(self):
             class Scalars:
-                def all(s):
-                    return self._all_res
-            return Scalars()
-            
+                def __init__(self, items):
+                    self.items = items
+                def all(self):
+                    return self.items
+            return Scalars(self._all_res)
+
     db.execute.return_value = ExecResult(all_res=[chunk])
-    
+
     llm = MockLLMProvider()
-    
+
     good_json = {
         "questions": [
             {
@@ -81,22 +82,24 @@ async def test_quiz_use_case_json_parsing_success():
 async def test_quiz_use_case_json_parsing_retry_success():
     db = AsyncMock()
     db.add = MagicMock()
-    
+
     chunk = DocumentChunk(chunk_text="Some facts", chunk_order=1)
-    
+
     class ExecResult:
         def __init__(self, all_res=None):
             self._all_res = all_res
         def scalars(self):
             class Scalars:
-                def all(s):
-                    return self._all_res
-            return Scalars()
-            
+                def __init__(self, items):
+                    self.items = items
+                def all(self):
+                    return self.items
+            return Scalars(self._all_res)
+
     db.execute.return_value = ExecResult(all_res=[chunk])
-    
+
     llm = MockLLMProvider()
-    
+
     bad_output = "I couldn't generate a quiz."
     good_json = {
         "questions": [
@@ -104,7 +107,7 @@ async def test_quiz_use_case_json_parsing_retry_success():
         ]
     }
     good_output = json.dumps(good_json)
-    
+
     # First fails, second succeeds
     llm.complete_mock.side_effect = [
         LLMResult(full_text=bad_output),
@@ -123,22 +126,24 @@ async def test_quiz_use_case_json_parsing_retry_success():
 async def test_quiz_use_case_json_parsing_failure():
     db = AsyncMock()
     db.add = MagicMock()
-    
+
     chunk = DocumentChunk(chunk_text="Some facts", chunk_order=1)
-    
+
     class ExecResult:
         def __init__(self, all_res=None):
             self._all_res = all_res
         def scalars(self):
             class Scalars:
-                def all(s):
-                    return self._all_res
-            return Scalars()
-            
+                def __init__(self, items):
+                    self.items = items
+                def all(self):
+                    return self.items
+            return Scalars(self._all_res)
+
     db.execute.return_value = ExecResult(all_res=[chunk])
-    
+
     llm = MockLLMProvider()
-    
+
     bad_output = "I couldn't generate a quiz."
     llm.complete_mock.return_value = LLMResult(full_text=bad_output)
 

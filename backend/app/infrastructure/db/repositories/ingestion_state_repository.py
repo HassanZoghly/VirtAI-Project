@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-from typing import Any
-
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domain.rag.stage_machine import IngestionStage, assert_transition
-from app.infrastructure.db.models import Document, DocumentChunk
-from app.shared.ids import require_uuid
-from app.infrastructure.db.repositories.document_crud_repository import _now, _to_domain, DomainDocument
 from app.domain.rag.entities import DocumentStatusDict
+from app.domain.rag.stage_machine import IngestionStage, assert_transition
+from app.infrastructure.db.models import Document
+from app.infrastructure.db.repositories.document_crud_repository import (
+    DomainDocument,
+    _now,
+    _to_domain,
+)
+from app.shared.ids import require_uuid
+
 
 class IngestionStateRepository:
     def __init__(self, db: AsyncSession):

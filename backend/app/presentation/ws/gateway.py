@@ -16,7 +16,7 @@ from app.presentation.ws.pipeline_bridge import PipelineBridge, _pipeline_task_d
 from app.presentation.ws.protocol_router import ProtocolRouter
 from app.presentation.ws.session_bootstrap import SessionBootstrap
 from app.presentation.ws.voice_mode_handler import VoiceModeHandler
-from app.schemas.ws_messages import ServerReady, ServerPong, make_error
+from app.schemas.ws_messages import ServerReady
 from app.shared.config import get_settings
 
 
@@ -80,7 +80,7 @@ class WebSocketHandler:
         self.session_bootstrap = SessionBootstrap(self._session_manager, self.connection_manager)
         self.pipeline_bridge = PipelineBridge(self)
         self.protocol_router = ProtocolRouter(self)
-        
+
         from app.presentation.ws.connection_lifecycle import ConnectionLifecycle
         from app.presentation.ws.frame_dispatcher import FrameDispatcher
         self.connection_lifecycle = ConnectionLifecycle(self)
@@ -213,7 +213,7 @@ class WebSocketHandler:
                     logger.error(f"[WS] Validation error: {e}")
                     await self.outbound_sender.safe_send_error(
                         code="INVALID_MESSAGE",
-                        message=f"Message validation failed: {str(e)}",
+                        message=f"Message validation failed: {e!s}",
                         session_id=self.session.session_id,
                         session_pending=self._session_pending,
                         connected=self._connected,

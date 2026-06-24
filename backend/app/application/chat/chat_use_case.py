@@ -1,9 +1,11 @@
+from typing import Any
+
 from app.application.chat.prompt_builder import PromptBuilder
 from app.application.rag.intent_classifier import IntentClassifier
 from app.application.rag.retrieval_use_case import RetrievalUseCase
 from app.domain.chat.policies import build_conversation
-from app.domain.chat.ports import BaseLLMProvider, ChatContextCachePort, ChatRepositoryPort
-from app.domain.rag.task_types import TaskType, classify_task_type
+from app.domain.chat.ports import BaseLLMProvider, ChatContextCachePort
+from app.domain.rag.task_types import classify_task_type
 
 
 class ChatUseCase:
@@ -15,7 +17,7 @@ class ChatUseCase:
         self.intent_classifier = intent_classifier
         self.context_cache = context_cache
 
-    async def execute_rag_query(self, query: str, user_id: str, session_id: str | None = None, document_id: str | None = None, metadata_filter: dict | None = None) -> str:
+    async def execute_rag_query(self, query: str, user_id: str, session_id: str | None = None, document_id: str | None = None, metadata_filter: dict[str, Any] | None = None) -> str:
         # Retrieve context
         low_confidence = False
         context = ""

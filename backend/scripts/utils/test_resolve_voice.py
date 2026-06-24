@@ -1,7 +1,10 @@
 import os
 import sys
+from pathlib import Path
 
-sys.path.append(os.path.abspath("backend"))
+# Ensure the backend directory is in the path
+backend_dir = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(backend_dir))
 
 from app.infrastructure.tts.openai_tts_provider import OpenAITTSProvider
 

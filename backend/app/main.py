@@ -18,9 +18,6 @@ from app.presentation.http.v1.dependencies import init_session_manager, init_ws_
 from app.presentation.http.v1.router import router as api_v1_router
 from app.presentation.ws.connection_manager import WSConnectionManager
 from app.shared.config import get_settings
-from app.shared.errors import (
-    AvatarBaseException,
-)
 from app.shared.log_config import setup_logging
 
 settings = get_settings()

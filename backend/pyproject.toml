@@ -73,6 +73,8 @@ dev = [
     "pytest-cov==6.0.0",
     "hypothesis==6.122.3",
     "requests>=2.31.0",
+    "bandit>=1.7.7",
+    "pip-audit>=2.7.2",
 ]
 
 [tool.ruff]
@@ -173,6 +175,7 @@ warn_no_return = true
 warn_unreachable = true
 strict_equality = true
 show_error_codes = true
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = [
@@ -184,6 +187,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+norecursedirs = ["load_tests", ".git", "venv", ".venv", "build", "__pycache__"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

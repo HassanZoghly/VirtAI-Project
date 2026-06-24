@@ -1,15 +1,18 @@
-from fastapi import Request
-from fastapi.responses import JSONResponse
-from pydantic import ValidationError
-from starlette.exceptions import HTTPException as StarletteHTTPException
-from fastapi.exceptions import RequestValidationError
-from loguru import logger
 import traceback
 from datetime import datetime
+
+from fastapi import Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from loguru import logger
+from pydantic import ValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
 from app.shared.config import get_settings
 from app.shared.errors import AvatarBaseException
 
-def standard_error_response(status_code: int, code: str, message: str, details: dict = None) -> JSONResponse:
+
+def standard_error_response(status_code: int, code: str, message: str, details: dict | None = None) -> JSONResponse:
     content = {
         "error": {
             "code": code,

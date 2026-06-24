@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import base64
 import logging
-import re
-import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any, ClassVar, TypedDict
+from typing import Any, TypedDict
 
 _logger = logging.getLogger(__name__)
 
@@ -91,7 +88,7 @@ class ConversationHistory:
     _tokenizer: Any = field(init=False, default=None)
     _tokenizer_failed: bool = field(init=False, default=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         try:
             import tiktoken
             self._tokenizer = tiktoken.get_encoding("cl100k_base")
@@ -220,7 +217,7 @@ class PipelineEventType(Enum):
 @dataclass
 class PipelineEvent:
     type: PipelineEventType
-    data: dict = field(default_factory=dict)
+    data: dict[str, Any] = field(default_factory=dict)
     session_id: str | None = None  # for tracking
     trace_id: str | None = None  # for distributed tracing
 
@@ -229,7 +226,7 @@ def ev(
     event_type: PipelineEventType,
     session_id: str | None = None,
     trace_id: str | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> PipelineEvent:
     """Shorthand to create a PipelineEvent."""
     return PipelineEvent(type=event_type, data=kwargs, session_id=session_id, trace_id=trace_id)

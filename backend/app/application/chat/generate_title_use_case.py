@@ -1,7 +1,10 @@
 import re
+
 from loguru import logger
+
 from app.domain.chat.entities import ConversationHistory
 from app.domain.chat.ports import LLMProvider
+
 
 class GenerateTitleUseCase:
     def __init__(self, llm: LLMProvider):

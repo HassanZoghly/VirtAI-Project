@@ -11,8 +11,8 @@ from datetime import datetime, timezone
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.chat.entities import ChatMessageDict, ChatSessionDict
 from app.domain.chat.ports import ChatRepositoryPort
-from app.domain.chat.entities import ChatSessionDict, ChatMessageDict
 from app.infrastructure.db.models import ChatSession, Message
 from app.shared.ids import require_uuid
 

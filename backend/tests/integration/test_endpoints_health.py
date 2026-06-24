@@ -1,16 +1,19 @@
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import MagicMock, AsyncMock
 
-from app.main import app
 from app.infrastructure.db.database import get_db
+from app.main import app
 from app.presentation.http.v1.dependencies import _current_user, get_session_manager
+
 
 @pytest.fixture
 def mock_user():
     user = MagicMock()
     user.id = "test-user-id"
     return user
+
 
 @pytest.fixture
 def client(mock_user):
@@ -20,7 +23,7 @@ def client(mock_user):
     app.state.embedder = MagicMock()
     app.state.reranker = MagicMock()
     app.state.intent_classifier = MagicMock()
-    
+
     # Override dependencies
     async def override_get_db():
         mock_db = AsyncMock()
@@ -39,16 +42,24 @@ def client(mock_user):
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[_current_user] = override_current_user
     app.dependency_overrides[get_session_manager] = override_get_session_manager
-    
+
     test_client = TestClient(app)
     yield test_client
-    
+
     app.dependency_overrides.clear()
 
+
 def test_documents_status_health(client):
-    response = client.get("/api/v1/documents/status?session_id=123e4567-e89b-12d3-a456-426614174000")
-    assert response.status_code != 500, f"Expected non-500 status, got {response.status_code}. Response: {response.text}"
+    response = client.get(
+        "/api/v1/documents/status?session_id=123e4567-e89b-12d3-a456-426614174000"
+    )
+    assert (
+        response.status_code != 500
+    ), f"Expected non-500 status, got {response.status_code}. Response: {response.text}"
+
 
 def test_chat_messages_health(client):
     response = client.get("/api/v1/chat/123e4567-e89b-12d3-a456-426614174000/messages")
-    assert response.status_code != 500, f"Expected non-500 status, got {response.status_code}. Response: {response.text}"
+    assert (
+        response.status_code != 500
+    ), f"Expected non-500 status, got {response.status_code}. Response: {response.text}"

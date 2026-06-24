@@ -1,4 +1,3 @@
-from string import Template
 
 from app.application.rag.token_budget import TokenBudgetManager
 from app.domain.chat.entities import ChatMessage, MessageRole
@@ -31,12 +30,12 @@ class ResponseFormatterService:
         max_tokens = TASK_MAX_TOKENS.get(task_type, 1500)
 
         # Build system and footer strings safely
-        kwargs = {}
+        kwargs: dict[str, str | int] = {}
         if task_type == TaskType.QUIZ:
             kwargs["num_questions"] = 10
-            
+
         system_str = prompt_set.system.safe_substitute(**kwargs)
-        
+
         kwargs["query"] = query
         footer_str = prompt_set.footer.safe_substitute(**kwargs)
 
@@ -84,11 +83,11 @@ class ResponseFormatterService:
         # but let's append based on task type.
         if task_type in (TaskType.QUIZ, TaskType.SUMMARY):
             return response_text
-            
+
         citations = build_citations(chunks)
         sources_str = format_sources_block(citations, locale)
-        
+
         if not sources_str:
             return response_text
-            
+
         return f"{response_text}\n\n{sources_str}"

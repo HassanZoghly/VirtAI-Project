@@ -12,8 +12,6 @@ Architecture:
 from __future__ import annotations
 
 import asyncio
-import time
-from collections import deque
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -21,13 +19,12 @@ from loguru import logger
 from app.domain.voice.ports import StreamingASRService
 from app.infrastructure.asr.audio_pipeline import (
     AudioPipeline,
+    AudioSilencedError,
     BufferOverflowError,
     BufferTimeoutError,
     ChunkSizeError,
     RateLimitError,
-    AudioSilencedError,
 )
-
 from app.presentation.ws.outbound_sender import OutboundSender
 
 if TYPE_CHECKING:

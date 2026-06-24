@@ -10,8 +10,8 @@ from typing import Literal
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.infrastructure.db.models import Avatar
 from app.domain.user.entities import AvatarDict
+from app.infrastructure.db.models import Avatar
 from app.shared.ids import require_uuid
 
 Language = Literal["ar", "en"]

@@ -21,7 +21,7 @@ class AnimationIntelligenceService:
         emotion: str | None = None,
         profile_usage: dict[str, int] | None = None,
         intent_history: list[str] | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """
         Build animation timeline from response text.
 

@@ -4,9 +4,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.application.rag.diagram_use_case import DiagramUseCase, DiagramDomainException
-from app.domain.chat.entities import LLMChunk, LLMResult
-from app.domain.rag.task_types import Locale
+from app.application.rag.diagram_use_case import DiagramDomainException, DiagramUseCase
+from app.domain.chat.entities import LLMResult
 from app.infrastructure.db.models import DocumentChunk
 
 
@@ -46,7 +45,7 @@ async def test_diagram_use_case_mermaid_sanitizer():
     assert "flowchart TD" in sanitized
     assert "User Admin" in sanitized
     assert "Settings" in sanitized
-    assert "\"" not in sanitized
+    assert '"' not in sanitized
     assert "(" not in sanitized
     assert ")" not in sanitized
     assert "'" not in sanitized
@@ -63,7 +62,7 @@ async def test_diagram_use_case_node_limit():
 
     # 65 lines of mermaid code
     big_mermaid = "flowchart TD\n" + "\n".join([f"  A{i} --> B{i}" for i in range(65)])
-    
+
     with pytest.raises(DiagramDomainException, match="too complex"):
         use_case._check_node_limit(big_mermaid)
 
@@ -72,37 +71,35 @@ async def test_diagram_use_case_node_limit():
 async def test_diagram_use_case_json_parsing_success():
     db = AsyncMock()
     db.add = MagicMock()
-    
+
     chunk = DocumentChunk(chunk_text="Some facts", chunk_order=1)
-    
+
     class ExecResult:
         def __init__(self, scalar_val=None, all_res=None):
             self._scalar_val = scalar_val
             self._all_res = all_res
+
         def scalar_one_or_none(self):
             return self._scalar_val
+
         def scalars(self):
             class Scalars:
-                def all(s):
-                    return self._all_res
-            return Scalars()
-            
+                def __init__(self, items):
+                    self.items = items
+
+                def all(self):
+                    return self.items
+
+            return Scalars(self._all_res)
+
     # First call: cache miss, second call: chunks
-    db.execute.side_effect = [
-        ExecResult(scalar_val=None),
-        ExecResult(all_res=[chunk])
-    ]
-    
+    db.execute.side_effect = [ExecResult(scalar_val=None), ExecResult(all_res=[chunk])]
+
     llm = MockLLMProvider()
-    
-    good_json = {
-        "mermaid_code": "flowchart TD\n  A[Concept 1] --> B[Concept 2]",
-        "citations": [1]
-    }
-    
-    llm.complete_mock.return_value = LLMResult(
-        full_text=json.dumps(good_json)
-    )
+
+    good_json = {"mermaid_code": "flowchart TD\n  A[Concept 1] --> B[Concept 2]", "citations": [1]}
+
+    llm.complete_mock.return_value = LLMResult(full_text=json.dumps(good_json))
 
     use_case = DiagramUseCase(llm)
     diagram_id = await use_case.generate_diagram(db, str(uuid.uuid4()), str(uuid.uuid4()))

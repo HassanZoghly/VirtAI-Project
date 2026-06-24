@@ -50,6 +50,8 @@ from app.schemas.ws_messages import (
     ErrorMessage,
     MouthCue,
     PipelineState,
+    ServerPong,
+    ServerReady,
     TranscriptMessage,
     TTSReady,
     TTSRequest,
@@ -65,8 +67,6 @@ from app.schemas.ws_messages import (
     make_transcript_message,
     make_tts_ready,
     make_visemes_ready,
-    ServerReady,
-    ServerPong,
 )
 
 __all__ = [

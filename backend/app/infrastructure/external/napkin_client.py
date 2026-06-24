@@ -23,13 +23,13 @@ class NapkinClient(VisualizationProviderPort):
             return {"unavailable": True, "reason": "empty_text"}
 
         start_time = time.time()
-        
+
         async with httpx.AsyncClient() as client:
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json"
             }
-            
+
             # Step 1: Submit job
             try:
                 # We need to assume the API creates a generation task.
@@ -41,20 +41,20 @@ class NapkinClient(VisualizationProviderPort):
                     headers=headers,
                     timeout=10.0
                 )
-                
+
                 if response.status_code == 429:
                     return {"unavailable": True, "reason": "quota_exceeded"}
-                
+
                 response.raise_for_status()
                 task_data = response.json()
                 task_id = task_data.get("id") or task_data.get("task_id")
-                
+
                 if not task_id:
                     # Maybe it's synchronous?
                     if "image_url" in task_data:
                         return {"image_url": task_data["image_url"]}
                     return {"unavailable": True, "reason": "unknown_format"}
-                    
+
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429:
                     return {"unavailable": True, "reason": "quota_exceeded"}
@@ -72,13 +72,13 @@ class NapkinClient(VisualizationProviderPort):
                         headers=headers,
                         timeout=5.0
                     )
-                    
+
                     if poll_res.status_code == 429:
                         return {"unavailable": True, "reason": "quota_exceeded"}
-                        
+
                     poll_res.raise_for_status()
                     poll_data = poll_res.json()
-                    
+
                     status = poll_data.get("status")
                     if status == "completed" or status == "succeeded":
                         img_url = poll_data.get("image_url") or poll_data.get("url")
@@ -87,14 +87,14 @@ class NapkinClient(VisualizationProviderPort):
                         return {"unavailable": True, "reason": "missing_image_url"}
                     elif status in ("failed", "error"):
                         return {"unavailable": True, "reason": "generation_failed"}
-                        
+
                 except httpx.HTTPStatusError as e:
                     if e.response.status_code == 429:
                         return {"unavailable": True, "reason": "quota_exceeded"}
                     logger.error(f"Napkin polling error: {e}")
                 except Exception as e:
                     logger.error(f"Napkin polling failed: {e}")
-                
+
                 # CRITICAL: non-blocking sleep
                 await asyncio.sleep(3)
 

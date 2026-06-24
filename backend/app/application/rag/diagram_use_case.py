@@ -1,21 +1,19 @@
-import json
 import re
 import uuid
-from typing import Dict, Any
+from typing import Any
 
 from loguru import logger
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.chat.entities import ConversationHistory
 from app.domain.chat.ports import BaseLLMProvider
 from app.domain.rag.task_types import Locale, TaskType
-from app.infrastructure.db.models import DocumentChunk, DiagramCache
+from app.infrastructure.db.models import DiagramCache, DocumentChunk
 from app.infrastructure.rag.prompts.registry import get_prompt_set
-
-
-from pydantic import BaseModel
 from app.shared.errors import RAGException
+
 
 class DiagramModel(BaseModel):
     mermaid_code: str
@@ -82,7 +80,7 @@ class DiagramUseCase:
         # Regex to find [...], but we must be careful not to match too broadly.
         # Match anything between [ and ] that doesn't contain [ or ].
         code = re.sub(r'\[([^\[\]]+)\]', replace_brackets, code)
-        
+
         return code
 
     def _check_node_limit(self, mermaid_code: str):
@@ -104,7 +102,7 @@ class DiagramUseCase:
         sanitizes mermaid, and saves to DB. Returns diagram_id.
         """
         doc_uuid = uuid.UUID(document_id)
-        user_uuid = uuid.UUID(user_id)
+        uuid.UUID(user_id)
 
         # Check if already exists
         existing_query = await db.execute(select(DiagramCache).where(DiagramCache.document_id == doc_uuid))
@@ -156,11 +154,11 @@ class DiagramUseCase:
             logger.info(f"Generating diagram, attempt {attempt + 1}")
             history = ConversationHistory(system_prompt=sys_prompt)
             history.add_user_message(user_text)
-            
+
             try:
                 res = await self.llm.complete(history, response_format=DIAGRAM_SCHEMA)
                 response_text = res.full_text.strip()
-                
+
                 diagram_data = DiagramModel.model_validate_json(response_text)
                 break # Success
             except Exception as e:
@@ -186,14 +184,14 @@ class DiagramUseCase:
         await db.commit()
         return str(diagram.id)
 
-    async def get_diagram(self, db: AsyncSession, diagram_id: str, user_id: str) -> Dict[str, Any]:
+    async def get_diagram(self, db: AsyncSession, diagram_id: str, user_id: str) -> dict[str, Any]:
         """Fetch a generated diagram."""
         diag_uuid = uuid.UUID(diagram_id)
         user_uuid = uuid.UUID(user_id)
-        
+
         # Verify access via document
         from app.infrastructure.db.models import Document
-        
+
         diag_query = await db.execute(
             select(DiagramCache, Document)
             .join(Document, Document.id == DiagramCache.document_id)
@@ -202,9 +200,9 @@ class DiagramUseCase:
         row = diag_query.first()
         if not row:
             raise DiagramDomainException("Diagram not found or unauthorized.")
-            
+
         diag = row[0]
-        
+
         return {
             "id": str(diag.id),
             "document_id": str(diag.document_id),

@@ -16,7 +16,7 @@ async def save_conversation_background_task(session_id: str, query: str, respons
             settings = get_settings()
             storage = LocalStorageProvider(settings.UPLOAD_DIR)
             bg_repo = ChatRepository(db_session, storage)
-            
+
             await bg_repo.save_message(session_id, "user", query)
             await bg_repo.save_message(session_id, "assistant", response)
             await db_session.commit()

@@ -1,6 +1,8 @@
 import asyncio
 import uuid
+from collections.abc import AsyncIterable
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from loguru import logger
 from sqlalchemy import update
@@ -14,8 +16,6 @@ from app.infrastructure.db.repositories.document_crud_repository import Document
 from app.infrastructure.db.repositories.ingestion_state_repository import IngestionStateRepository
 from app.shared.ids import parse_uuid
 
-
-from collections.abc import AsyncIterable
 
 class StartIngestionUseCase:
     def __init__(self, db: AsyncSession, storage: StorageProvider, arq_pool):
@@ -32,7 +32,7 @@ class StartIngestionUseCase:
         safe_filename: str,
         ext: str,
         file_stream: AsyncIterable[bytes],
-    ) -> dict:
+    ) -> dict[str, Any]:
         crud_repo = DocumentCrudRepository(self.db)
         state_repo = IngestionStateRepository(self.db)
 

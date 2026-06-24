@@ -1,8 +1,6 @@
 import asyncio
 import json
-
 import websockets
-
 
 async def main():
     uri = "ws://localhost:8000/api/v1/chat/ws/test-session"

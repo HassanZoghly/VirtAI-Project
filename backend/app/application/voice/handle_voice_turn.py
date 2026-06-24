@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -95,7 +95,7 @@ class ConversationPipeline:
         text: str,
         session_id: str,
         send_callback: Callable,
-        send_binary_callback: Callable | None = None,
+        send_binary_callback: Callable[..., Any] | None = None,
         trace_id: str | None = None,
     ) -> None:
         """Sequential processing using decoupled stages."""
@@ -143,14 +143,14 @@ class ConversationPipeline:
             self._history.add_user_message(text)
             await send_callback(make_pipeline_state(session_id, "thinking", message_id))
 
-            async def _llm_with_sentinel():
+            async def _llm_with_sentinel() -> None:
                 try:
                     await self.llm_stage.process(context)
                 finally:
                     with suppress(Exception):
                         await context.sentence_queue.put(None)
 
-            async def process_audio():
+            async def process_audio() -> None:
                 try:
                     while not context.aborted:
                         try:
@@ -171,7 +171,7 @@ class ConversationPipeline:
                     await send_callback(
                         make_error(
                             code="PIPELINE_AUDIO_ERROR",
-                            message=f"Audio pipeline failed: {str(e)}",
+                            message=f"Audio pipeline failed: {e!s}",
                             session_id=session_id,
                             message_id=message_id,
                         )
@@ -181,7 +181,7 @@ class ConversationPipeline:
             settings = get_settings()
 
             try:
-                async with asyncio.TaskGroup() as tg:
+                async with asyncio.TaskGroup() as tg:  # type: ignore
                     t1 = tg.create_task(_safe_task(_llm_with_sentinel(), "llm_stage"))
                     t2 = tg.create_task(_safe_task(process_audio(), "audio_stage"))
                     self._running_tasks.extend([t1, t2])

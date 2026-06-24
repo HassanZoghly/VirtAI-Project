@@ -1,7 +1,9 @@
 import asyncio
 import time
 from typing import TYPE_CHECKING
+
 from loguru import logger
+
 from app.shared.config import get_settings
 
 if TYPE_CHECKING:

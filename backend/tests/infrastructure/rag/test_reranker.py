@@ -1,7 +1,9 @@
+from unittest.mock import patch
+
 import pytest
+
 from app.domain.rag.entities import DocumentChunk
 from app.infrastructure.rag.reranker import CrossEncoderReranker
-from unittest.mock import patch
 
 
 @pytest.mark.asyncio
@@ -14,8 +16,12 @@ async def test_reranker_graceful_fallback():
     reranker = CrossEncoderReranker()
 
     chunks = [
-        DocumentChunk(id="chunk1", chunk_text="text1", chunk_order=1, document_id="doc1", embedding=[]),
-        DocumentChunk(id="chunk2", chunk_text="text2", chunk_order=2, document_id="doc2", embedding=[]),
+        DocumentChunk(
+            id="chunk1", chunk_text="text1", chunk_order=1, document_id="doc1", embedding=[]
+        ),
+        DocumentChunk(
+            id="chunk2", chunk_text="text2", chunk_order=2, document_id="doc2", embedding=[]
+        ),
     ]
 
     with patch.object(reranker, "_ensure_model", return_value=False):

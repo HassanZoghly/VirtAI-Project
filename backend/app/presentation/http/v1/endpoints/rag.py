@@ -1,21 +1,23 @@
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.application.rag.diagram_use_case import DiagramDomainException, DiagramUseCase
+from app.application.rag.quiz_use_case import QuizDomainException, QuizUseCase
 from app.application.rag.summary_use_case import SummaryUseCase
-from app.application.rag.quiz_use_case import QuizUseCase, QuizDomainException
-from app.application.rag.diagram_use_case import DiagramUseCase, DiagramDomainException
-from app.application.rag.visualization_use_case import VisualizationUseCase, VisualizationDomainException
+from app.application.rag.visualization_use_case import (
+    VisualizationDomainException,
+    VisualizationUseCase,
+)
+from app.domain.rag.task_types import Locale
 from app.domain.user.entities import UserEntity
 from app.infrastructure.db.database import get_db
-from app.infrastructure.llm.groq_provider import GroqLLMProvider
-from app.infrastructure.external.napkin_client import NapkinClient
 from app.infrastructure.db.repositories.ingestion_state_repository import IngestionStateRepository
+from app.infrastructure.external.napkin_client import NapkinClient
+from app.infrastructure.llm.groq_provider import GroqLLMProvider
 from app.presentation.http.v1.dependencies import _current_user
 from app.shared.ids import parse_uuid
-from app.domain.rag.task_types import Locale
 
 router = APIRouter()
 
@@ -41,7 +43,7 @@ async def summarize_document(
             async for chunk in use_case.summarize_document(db, document_id, locale):
                 yield chunk
         except Exception as e:
-            yield f"Error: {str(e)}"
+            yield f"Error: {e!s}"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

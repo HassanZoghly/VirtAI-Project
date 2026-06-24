@@ -1,5 +1,4 @@
 import json
-import re
 
 from fastapi import WebSocket
 from loguru import logger
@@ -103,7 +102,7 @@ class OutboundSender:
                 "type": "error",
                 "data": {
                     "code": "PROTOCOL_ROUTING_ERROR",
-                    "message": f"Critical backend serialization failure: {str(e)}"
+                    "message": f"Critical backend serialization failure: {e!s}"
                 }
             }
             try:

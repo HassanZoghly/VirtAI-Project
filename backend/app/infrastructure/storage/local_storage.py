@@ -1,5 +1,5 @@
 import os
-from collections.abc import AsyncIterator, AsyncIterable
+from collections.abc import AsyncIterable, AsyncIterator
 from pathlib import Path
 
 import aiofiles  # type: ignore[import-untyped]

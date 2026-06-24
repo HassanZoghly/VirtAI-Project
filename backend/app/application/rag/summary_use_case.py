@@ -1,7 +1,6 @@
 import asyncio
 import uuid
 from collections.abc import AsyncGenerator
-from typing import Optional
 
 from loguru import logger
 from sqlalchemy import select
@@ -109,7 +108,7 @@ class SummaryUseCase:
                     combined = reduce_batches[j] + "\n\n---\n\n" + reduce_batches[j + 1]
                 else:
                     combined = reduce_batches[j]
-                
+
                 # Intermediate merge
                 sys_prompt = prompt_set.system.safe_substitute()
                 user_text = (

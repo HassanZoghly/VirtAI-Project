@@ -21,7 +21,9 @@ def _make_manager(get_session=None, create_session=None) -> SessionManager:
     from app.domain.chat.ports import ChatRepositoryPort
 
     class FakeRepo(ChatRepositoryPort):
-        async def create_chat_session(self, user_id: str, title: str = "New Chat", session_id: str | None = None) -> dict:
+        async def create_chat_session(
+            self, user_id: str, title: str = "New Chat", session_id: str | None = None
+        ) -> dict:
             if create_session:
                 return await create_session(user_id=user_id, title=title, session_id=session_id)
             return {"id": session_id}
@@ -40,7 +42,15 @@ def _make_manager(get_session=None, create_session=None) -> SessionManager:
         async def update_chat_session_title(self, session_id: str, title: str) -> bool:
             return True
 
-        async def save_message(self, session_id: str, role: str, content: str, input_type: str = "text", tts_cache_key: str | None = None, sources: list[dict] | None = None) -> dict:
+        async def save_message(
+            self,
+            session_id: str,
+            role: str,
+            content: str,
+            input_type: str = "text",
+            tts_cache_key: str | None = None,
+            sources: list[dict] | None = None,
+        ) -> dict:
             return {}
 
         async def get_session_messages(self, session_id: str, limit: int = 50) -> list[dict]:

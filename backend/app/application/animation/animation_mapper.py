@@ -18,6 +18,7 @@ class AnimationMappingDecision:
 
 from app.domain.animation.intent_definitions import INTENT_KEYWORDS
 
+
 class AnimationMapper:
     """Maps text segments to animation intents using weighted keyword signals."""
 

@@ -73,7 +73,7 @@ class AudioPipeline:
         self.max_buffer_duration = max_buffer_duration
         self.rate_limit_chunks = rate_limit_chunks
         self.rate_limit_window = rate_limit_window
-        
+
         self._buffer: bytearray = bytearray()
         self._is_final: bool = False
         self._started_at: float | None = None
@@ -176,7 +176,7 @@ class AudioPipeline:
             )
 
         audio_data = pcm_bytes_to_float32(bytes(self._buffer))
-        
+
         rms = float(np.sqrt(np.mean(np.square(audio_data))))
         if rms < 0.005:
             raise AudioSilencedError(f"rms={rms:.4f} < 0.005")

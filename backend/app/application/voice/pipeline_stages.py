@@ -11,9 +11,9 @@ from app.application.animation.audio_analysis import analyze_tts_for_animation
 from app.application.rag.intent_classifier import IntentClassifier
 from app.application.rag.response_formatter import ResponseFormatterService
 from app.application.rag.token_budget import TokenBudgetManager
-from app.domain.rag.task_types import TaskType, detect_locale
 from app.application.voice.pipeline_context import TurnContext
 from app.domain.chat.ports import BaseLLMProvider
+from app.domain.rag.task_types import TaskType, detect_locale
 from app.domain.voice.entities import TTSResult
 from app.domain.voice.ports import BaseTTSProvider
 from app.schemas.ws_messages import (
@@ -92,7 +92,7 @@ class LLMStage(BaseStage):
                     result = await self._retrieval.retrieve(
                         context.text_input, session_id=context.session_id, user_id=None, task_type=TaskType.SIMPLE_QA
                     )
-                    
+
                     messages = formatter.format_prompt(
                         query=context.text_input,
                         chunks=result.documents,

@@ -1,5 +1,6 @@
 from typing import Any
 
+
 class AudioFeatureFuser:
     @staticmethod
     def clamp(value: float, low: float, high: float) -> float:
@@ -16,7 +17,7 @@ class AudioFeatureFuser:
 
             start = item.get("start_time")
             end = item.get("end_time")
-            if not isinstance(start, (float, int)) or not isinstance(end, (float, int)):
+            if not isinstance(start, float | int) or not isinstance(end, float | int):
                 continue
 
             s = self.clamp(float(start), 0.0, duration_s)
@@ -38,7 +39,7 @@ class AudioFeatureFuser:
                 continue
             t = point.get("time")
             v = point.get("value")
-            if not isinstance(t, (float, int)) or not isinstance(v, (float, int)):
+            if not isinstance(t, float | int) or not isinstance(v, float | int):
                 continue
 
             normalized.append(
@@ -57,7 +58,7 @@ class AudioFeatureFuser:
 
         marks: list[float] = []
         for mark in raw_marks:
-            if not isinstance(mark, (float, int)):
+            if not isinstance(mark, float | int):
                 continue
             marks.append(round(self.clamp(float(mark), 0.0, duration_s), 3))
         marks.sort()

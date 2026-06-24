@@ -1,3 +1,4 @@
+from typing import Any
 from uuid import UUID
 
 from loguru import logger
@@ -10,8 +11,9 @@ from app.domain.rag.entities import (
     RetrievedDocument,
 )
 from app.domain.rag.ports import EmbeddingProvider, RerankerPort, VectorStore
-from app.domain.rag.task_types import TaskType, TASK_RETRIEVAL_SIZES
+from app.domain.rag.task_types import TASK_RETRIEVAL_SIZES, TaskType
 from app.shared.ids import parse_uuid
+
 
 def _get_chunk_text(chunk: DocumentChunk | RetrievedDocument) -> str:
     """Return the text content regardless of whether chunk is a DocumentChunk or RetrievedDocument."""
@@ -24,7 +26,7 @@ class RetrievalError(Exception):
     pass
 
 
-def _source_name(metadata: dict | None) -> str:
+def _source_name(metadata: dict[str, Any] | None) -> str:
     if not metadata:
         return "Unknown"
     return metadata.get("filename") or metadata.get("source") or "Unknown"
@@ -47,7 +49,7 @@ class RetrievalUseCase:
 
     async def retrieve(
         self, query: str, top_k: int = 5, session_id: str | None = None, user_id: str | UUID | None = None, task_type: TaskType = TaskType.SIMPLE_QA,
-        document_id: str | UUID | None = None, metadata_filter: dict | None = None
+        document_id: str | UUID | None = None, metadata_filter: dict[str, Any] | None = None
     ) -> RetrievalResult:
         """Retrieves relevant chunks via hybrid search and optional reranking."""
         if not query.strip():
@@ -100,7 +102,7 @@ class RetrievalUseCase:
                     # (results is already set to the hybrid search chunks)
 
             # 3. Apply dynamic decay for source diversity
-            source_counts = {}
+            source_counts: dict[str, int] = {}
             decayed_results = []
             for chunk, score in results:
                 source = _source_name(chunk.metadata)
@@ -145,7 +147,7 @@ class RetrievalUseCase:
         system_prompt: str = "",
         task_type: TaskType = TaskType.SIMPLE_QA,
         document_id: str | UUID | None = None,
-        metadata_filter: dict | None = None,
+        metadata_filter: dict[str, Any] | None = None,
     ) -> str:
         """Retrieves and formats context chunks, respecting token budgets."""
         try:
@@ -158,7 +160,8 @@ class RetrievalUseCase:
             return ""
 
         if self.budget_manager and chunks:
-            chunks = self.budget_manager.fit_chunks_to_budget(
+            # Type ignore because fit_chunks_to_budget expects RetrievedDocument but returns sequence
+            chunks = self.budget_manager.fit_chunks_to_budget(  # type: ignore
                 chunks=chunks,
                 system_prompt=system_prompt,
                 user_query=query,
@@ -184,7 +187,7 @@ class RetrievalUseCase:
         history_tokens: int = 0,
         task_type: TaskType = TaskType.SIMPLE_QA,
         document_id: str | UUID | None = None,
-        metadata_filter: dict | None = None,
+        metadata_filter: dict[str, Any] | None = None,
     ) -> str:
         """Retrieves relevant chunks and injects them into the system prompt."""
         context_block = await self.get_formatted_context(
@@ -211,7 +214,7 @@ class RetrievalUseCase:
             f"Ground your answer in the provided context."
         )
 
-    async def execute(self, query: str, limit: int = 5, session_id: str | None = None, user_id: str | UUID | None = None, history_tokens: int = 0, task_type: TaskType = TaskType.SIMPLE_QA, document_id: str | UUID | None = None, metadata_filter: dict | None = None) -> str:
+    async def execute(self, query: str, limit: int = 5, session_id: str | None = None, user_id: str | UUID | None = None, history_tokens: int = 0, task_type: TaskType = TaskType.SIMPLE_QA, document_id: str | UUID | None = None, metadata_filter: dict[str, Any] | None = None) -> str:
         """Retrieves relevant chunks and formats them as a context string."""
         return await self.get_formatted_context(
             query=query,

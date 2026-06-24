@@ -1,15 +1,12 @@
 import asyncio
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from loguru import logger
 
 from app.domain.rag.entities import DocumentChunk
 from app.domain.rag.ports import RerankerPort
 from app.shared.config import get_settings
-
-
-
-import threading
-from concurrent.futures import ThreadPoolExecutor
 
 
 class CrossEncoderReranker(RerankerPort):

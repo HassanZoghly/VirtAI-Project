@@ -4,19 +4,16 @@ import time
 import uuid
 
 from loguru import logger
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from app.presentation.ws.pipeline_bridge import _pipeline_task_done_callback
 from app.schemas.ws_messages import (
     ChatAbort,
     ChatUserMessage,
     ClientSpeechStopped,
+    WSMessageEnvelope,
     make_pipeline_state,
 )
-
-
-from pydantic import TypeAdapter
-from app.schemas.ws_messages import WSMessageEnvelope
 
 envelope_adapter = TypeAdapter(WSMessageEnvelope)
 
@@ -25,7 +22,7 @@ def validate_message(raw_message: dict) -> ChatUserMessage | ChatAbort | ClientS
         raise ValueError("Message must be a dictionary")
     if "type" not in raw_message:
         raise ValueError("Message missing 'type' field")
-    
+
     # Use discriminated union to validate payload structure
     try:
         envelope = envelope_adapter.validate_python(raw_message)

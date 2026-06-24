@@ -32,6 +32,7 @@ backend/.env
 htmlcov/
 coverage.xml
 __tests__/
+*_reports
 
 # ═══════════════════════════════════════════
 #  Linting & Type Checking

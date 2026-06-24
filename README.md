@@ -39,7 +39,7 @@ This will spin up the database, Redis, the backend FastAPI server, and the front
 ### 4. Running Tests
 To ensure the system is healthy and everything is working, run the test suite using our provided script:
 ```bash
-./scripts/run_tests.sh
+./backend/scripts/run_tests.sh
 ```
 *Note: You may safely ignore `locust` module errors during standard test runs, as they are designated for specific load testing environments.*
 

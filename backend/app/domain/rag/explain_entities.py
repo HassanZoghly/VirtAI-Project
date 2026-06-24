@@ -11,6 +11,7 @@ class PresentationState(str, Enum):
 class SlideStartEvent(BaseModel):
     type: str = "SlideStartEvent"
     slide_index: int
+    total_slides: int | None = None
 
 class SlideContentTokens(BaseModel):
     type: str = "SlideContentTokens"
@@ -18,6 +19,7 @@ class SlideContentTokens(BaseModel):
 
 class SlideEndEvent(BaseModel):
     type: str = "SlideEndEvent"
+    slide_index: int | None = None
 
 class AwaitInputEvent(BaseModel):
     type: str = "AwaitInputEvent"

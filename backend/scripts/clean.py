@@ -129,16 +129,16 @@ def perform_cleanup(mode: str, dry_run: bool = False):
     # 1. Identify directories/files to clean
     for root, dirs, files in os.walk(BACKEND_DIR, topdown=False):
         root_path = Path(root)
-        
+
         # Check files
         for name in files:
             file_path = root_path / name
             ext = file_path.suffix.lower()
-            
+
             # Determine if file should be cleaned
             is_cache = ext in DEFAULT_CACHE_FILES_EXT
             is_temp = ext in FULL_EXTRA_FILES_EXT or name == ".coverage"
-            
+
             if mode == "nuclear":
                 # Nuclear mode cleans anything not in the exclusions list
                 if not should_keep(file_path):
@@ -153,7 +153,7 @@ def perform_cleanup(mode: str, dry_run: bool = False):
         # Check directories
         for name in dirs:
             dir_path = root_path / name
-            
+
             if mode == "nuclear":
                 if not should_keep(dir_path):
                     clean_item(dir_path, dry_run)
@@ -170,28 +170,28 @@ def main():
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--full", action="store_true", help="Clean caches, build artifacts, logs, and report directories")
     group.add_argument("--nuclear", action="store_true", help="Wipe all untracked files/folders except sources and configuration files")
-    
+
     args = parser.parse_args()
-    
+
     mode = "default"
     if args.full:
         mode = "full"
     elif args.nuclear:
         mode = "nuclear"
-        
+
     start_time = time.perf_counter()
-    
+
     print("========================================")
     print(f" Starting VirtAI Cleanup ({mode.upper()} mode)")
     if args.dry_run:
         print(" *** DRY RUN - No files will be deleted ***")
     print(f" Working Directory: {BACKEND_DIR}")
     print("========================================")
-    
+
     perform_cleanup(mode, args.dry_run)
-    
+
     elapsed = time.perf_counter() - start_time
-    
+
     print("\n========================================")
     print(" Cleanup Summary")
     print("========================================")
@@ -201,21 +201,21 @@ def main():
             print(f"   - {d}")
         if len(dirs_removed) > 10:
             print(f"   ... and {len(dirs_removed) - 10} more")
-            
+
     print(f" Files Removed:       {len(files_removed)}")
     if files_removed:
         for f in sorted(files_removed)[:10]:
             print(f"   - {f}")
         if len(files_removed) > 10:
             print(f"   ... and {len(files_removed) - 10} more")
-            
+
     print(f" Skipped/Protected:   {len(skipped_items)}")
     if skipped_items and mode == "nuclear":
         for s in sorted(skipped_items)[:10]:
             print(f"   - {s}")
         if len(skipped_items) > 10:
             print(f"   ... and {len(skipped_items) - 10} more")
-            
+
     print(f" Time Elapsed:        {elapsed:.4f} seconds")
     print("========================================")
 

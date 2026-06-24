@@ -121,10 +121,6 @@ class VoiceModeStop(BaseModel):
 
 # ── Server Messages (Backend -> Frontend) ─────────────────────────────────────
 
-
-
-
-
 class VoiceModeError(BaseModel):
     """
     Server reports voice mode specific errors to client.

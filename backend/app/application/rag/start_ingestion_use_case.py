@@ -18,7 +18,7 @@ from app.shared.ids import parse_uuid
 
 
 class StartIngestionUseCase:
-    def __init__(self, db: AsyncSession, storage: StorageProvider, arq_pool):
+    def __init__(self, db: AsyncSession, storage: StorageProvider, arq_pool: Any) -> None:
         self.db = db
         self.storage = storage
         self.arq_pool = arq_pool

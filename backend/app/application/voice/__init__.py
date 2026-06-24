@@ -1,7 +1,10 @@
 __all__ = ["ConversationPipeline"]
 
 
-def __getattr__(name: str):
+from typing import Any
+
+
+def __getattr__(name: str) -> Any:
     if name == "ConversationPipeline":
         from app.application.voice.handle_voice_turn import ConversationPipeline
 

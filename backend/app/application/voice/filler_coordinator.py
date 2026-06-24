@@ -19,7 +19,7 @@ class FillerCoordinator:
         context: TurnContext,
         history: Any,
         tts_voice: str | None,
-        send_callback: Callable[[dict[str, Any]], Awaitable[None]],
+        send_callback: Callable[[Any], Awaitable[None]],
     ) -> None:
         """Handles the 400ms gate and filler generation without blocking the event loop."""
         await asyncio.sleep(0.4)

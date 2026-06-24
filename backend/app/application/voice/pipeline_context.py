@@ -30,10 +30,11 @@ class TurnContext:
     tts_result: TTSResult | None = None
     mouth_cues: list[Any] = field(default_factory=list)
     timeline: list[Any] = field(default_factory=list)
+    retrieved_chunks: list[Any] | None = None
 
     # Orchestration & Callbacks
-    send_callback: Callable[[Any], asyncio.Future] | None = None
-    send_binary_callback: Callable[[bytes], asyncio.Future] | None = None
+    send_callback: Callable[[Any], asyncio.Future[Any]] | None = None
+    send_binary_callback: Callable[[bytes], asyncio.Future[Any]] | None = None
     aborted: bool = False
 
     # 3. Backpressure: Strict LLM-to-TTS pacing using maxsize=3

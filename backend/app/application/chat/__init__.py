@@ -1,7 +1,10 @@
 __all__ = ["Session", "ConversationSession", "SessionManager", "handle_text_turn", "handle_message"]
 
 
-def __getattr__(name: str):
+from typing import Any
+
+
+def __getattr__(name: str) -> Any:
     if name in {"handle_text_turn", "handle_message"}:
         from app.application.chat import handle_text_turn as handle_text_turn_module
 

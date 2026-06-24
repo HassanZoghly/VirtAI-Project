@@ -139,10 +139,10 @@ class SummaryUseCase:
 
         full_summary = []
         try:
-            async for chunk in self.llm.stream(history):
-                if chunk.token:
-                    full_summary.append(chunk.token)
-                    yield chunk.token
+            async for token_chunk in self.llm.stream(history):
+                if token_chunk.token:
+                    full_summary.append(token_chunk.token)
+                    yield token_chunk.token
         except Exception as e:
             logger.error(f"Final reduce stream failed: {e}")
             yield "Error generating final summary."
@@ -161,7 +161,7 @@ class SummaryUseCase:
 
     def _split_into_batches(self, blocks: list[str], max_chars: int) -> list[str]:
         batches = []
-        current_parts = []
+        current_parts: list[str] = []
         current_len = 0
 
         for block in blocks:

@@ -4,6 +4,7 @@ import contextlib
 import re
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
@@ -55,7 +56,7 @@ class BaseStage(ABC):
 
 
 class LLMStage(BaseStage):
-    def __init__(self, llm: BaseLLMProvider | None, retrieval=None, intent_classifier: IntentClassifier | None = None):
+    def __init__(self, llm: BaseLLMProvider | None, retrieval: Any = None, intent_classifier: IntentClassifier | None = None) -> None:
         self._llm = llm
         self._retrieval = retrieval
         self._intent_classifier = intent_classifier
@@ -115,7 +116,7 @@ class LLMStage(BaseStage):
         try:
             async for chunk in self._llm.stream(context.history, trace_id=context.trace_id):
                 if context.aborted:
-                    break
+                    break  # type: ignore[unreachable]
                 if chunk.token:
                     full_response_parts.append(chunk.token)
                     if context.send_callback:
@@ -165,7 +166,7 @@ class LLMStage(BaseStage):
                 await context.sentence_queue.put(None)
 
         if context.aborted:
-            return
+            return  # type: ignore[unreachable]
 
         full_response = "".join(full_response_parts).strip()
         emotion = None
@@ -252,7 +253,7 @@ class TTSStage(BaseStage):
             context.tts_result = None
 
 class AnimationStage(BaseStage):
-    def __init__(self, animation_service, viseme_generator):
+    def __init__(self, animation_service: Any, viseme_generator: Any) -> None:
         self._animation_service = animation_service
         self._viseme_generator = viseme_generator
         self._recent_animation_assets: list[str] = []

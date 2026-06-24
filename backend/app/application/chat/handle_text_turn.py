@@ -31,7 +31,7 @@ async def handle_text_turn(
     import asyncio
     queue: asyncio.Queue[PipelineEvent] = asyncio.Queue()
 
-    async def send_callback(event: PipelineEvent):
+    async def send_callback(event: PipelineEvent) -> None:
         await queue.put(event)
 
     # Run the pipeline in the background
@@ -54,12 +54,15 @@ async def handle_text_turn(
             continue
 
 
+from typing import Any
+
+
 async def handle_message(
     pipeline: ConversationPipeline,
     message_id: str,
     text: str,
     session_id: str,
-    send_callback: Callable,
+    send_callback: Callable[[Any], Any],
 ) -> None:
     """
     Process user message through LLM → TTS → Visemes with callback-based delivery.

@@ -71,7 +71,7 @@ class DiagramUseCase:
         # Sanitize node text inside brackets like A[label]
         # Mermaid doesn't like quotes or parentheses inside the label unless escaped or in quotes (which is sometimes buggy).
         # Best to just remove them defensively.
-        def replace_brackets(match):
+        def replace_brackets(match: Any) -> str:
             inner = match.group(1)
             # Remove quotes and parentheses
             inner_safe = re.sub(r'[\"\'\(\)]', '', inner)
@@ -83,7 +83,7 @@ class DiagramUseCase:
 
         return code
 
-    def _check_node_limit(self, mermaid_code: str):
+    def _check_node_limit(self, mermaid_code: str) -> None:
         """Count lines. If > 60, raise domain exception."""
         lines = mermaid_code.split('\n')
         # A simple approximation for node/edge limit

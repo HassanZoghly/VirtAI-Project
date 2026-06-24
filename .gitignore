@@ -89,12 +89,6 @@ frontend/.nuxt/
 Thumbs.db
 desktop.ini
 .agents/
-skills-lock.json
-.impeccable-live.json
-PRODUCT.md
-mcp.json
-Notes/
-**/avatar_legacy_backup/
 .playwright-cli
 .npm-cache
 reports_frontend/
@@ -103,4 +97,4 @@ reports_frontend/
 #  Obsidian Files
 # ═══════════════════════════════════════════
 VirtAI-Project/
-aiPrompt.json
+

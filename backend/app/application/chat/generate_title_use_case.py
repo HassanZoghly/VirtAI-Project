@@ -3,11 +3,11 @@ import re
 from loguru import logger
 
 from app.domain.chat.entities import ConversationHistory
-from app.domain.chat.ports import LLMProvider
+from app.domain.chat.ports import BaseLLMProvider
 
 
 class GenerateTitleUseCase:
-    def __init__(self, llm: LLMProvider):
+    def __init__(self, llm: BaseLLMProvider):
         self.llm = llm
 
     def _fallback_title(self, message: str, max_chars: int = 48) -> str:

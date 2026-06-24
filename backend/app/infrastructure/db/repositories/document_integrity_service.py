@@ -34,8 +34,8 @@ class DocumentIntegrityService:
                     MAX(chunk_order)                                  AS max_order
                 FROM document_chunks
                 WHERE document_id = :doc_id
-                  AND chunk_version = :version
-                  AND is_active = FALSE
+                    AND chunk_version = :version
+                    AND is_active = FALSE
             """),
             {"doc_id": doc_id, "version": version},
         )

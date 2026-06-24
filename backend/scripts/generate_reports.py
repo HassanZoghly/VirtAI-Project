@@ -79,20 +79,20 @@ def extract_case_issue(testcase):
 def compile_test_reports():
     """Parse test layer XML files and write test_reports/errors.md and error sub-files."""
     ERRORS_DIR.mkdir(parents=True, exist_ok=True)
-    
+
     results = []
     critical_failures = []
     total_passed = 0
     total_failed = 0
     total_skipped = 0
-    
+
     layer_data = []
-    
+
     for layer in LAYERS:
         safe_name = layer.replace("/", "_").replace("\\", "_")
         xml_file = REPORT_DIR / f"{safe_name}.xml"
         log_file = REPORT_DIR / f"{safe_name}.log"
-        
+
         if not xml_file.exists():
             layer_data.append({
                 "layer": layer,
@@ -110,20 +110,20 @@ def compile_test_reports():
             })
             results.append((layer, 0, 0, 0, "SKIPPED"))
             continue
-            
+
         try:
             testsuite, tests, failures, errors, skipped = parse_testsuite(xml_file)
             failed = failures + errors
             passed = max(tests - failed - skipped, 0)
             status = "FAIL" if failed > 0 else ("PASS" if tests > 0 else "EMPTY")
-            
+
             issues = []
             for testcase in testsuite.findall(".//testcase"):
                 issue = extract_case_issue(testcase)
                 if issue is not None:
                     issues.append(issue)
                     critical_failures.append(f"{issue['classname']}::{issue['name']}")
-                    
+
             layer_data.append({
                 "layer": layer,
                 "safe_name": safe_name,
@@ -165,10 +165,10 @@ def compile_test_reports():
             })
             results.append((layer, 0, 0, 0, "ERROR"))
             critical_failures.append(f"{layer}::XML_PARSE_ERROR")
-            
+
     total_tests = total_passed + total_failed
     success_pct = (total_passed / total_tests * 100) if total_tests > 0 else 0.0
-    
+
     # Write errors.md
     master_md = [
         "# VirtAI Test Failures Report",
@@ -184,37 +184,37 @@ def compile_test_reports():
         "| Layer | Passed | Failed | Skipped | Status | Log |",
         "|---|---:|---:|---:|---|---|",
     ]
-    
+
     for item in layer_data:
         log_ref = f"`{item['log_file']}`"
         master_md.append(
             f"| {item['layer']} | {item['passed']} | {item['failures'] + item['errors']} | {item['skipped']} | {item['status']} | {log_ref} |"
         )
-        
+
     master_md.append("")
     master_md.append("## Failed Layers")
     master_md.append("")
-    
+
     any_failures = False
     for item in layer_data:
         layer = item["layer"]
         issues = item["issues"]
         if item["status"] in ("PASS", "EMPTY") and not issues:
             continue
-            
+
         if item["status"] == "SKIPPED" and not item["exists"]:
             master_md.append(f"### {layer}")
             master_md.append("")
             master_md.append("Directory not found. Layer skipped.")
             master_md.append("")
             continue
-            
+
         if not issues:
             continue
-            
+
         any_failures = True
         layer_file = ERRORS_DIR / f"{item['safe_name']}.md"
-        
+
         layer_md = [
             f"# Failures for {layer}",
             "",
@@ -228,7 +228,7 @@ def compile_test_reports():
             "## Issues",
             "",
         ]
-        
+
         master_md.append(f"### {layer}")
         master_md.append("")
         master_md.append(f"- Status: **{item['status']}**")
@@ -236,7 +236,7 @@ def compile_test_reports():
         master_md.append(f"- Failed: **{item['failures'] + item['errors']}**")
         master_md.append(f"- Report: `{layer_file.relative_to(BACKEND_DIR)}`")
         master_md.append("")
-        
+
         for idx, issue in enumerate(issues, start=1):
             test_id = f"{issue['classname']}::{issue['name']}" if (issue["classname"] or issue["name"]) else "Unknown test"
             layer_md.append(f"### {idx}. {test_id}")
@@ -253,24 +253,24 @@ def compile_test_reports():
             else:
                 layer_md.append("_No traceback/details captured in XML._")
                 layer_md.append("")
-                
+
             master_md.append(f"#### {idx}. {test_id}")
             master_md.append("")
             master_md.append(f"- Type: **{issue['kind']}**")
             if issue["message"]:
                 master_md.append(f"- Message: {issue['message']}")
             master_md.append("")
-            
+
         layer_md_content = "\n".join(layer_md).rstrip() + "\n"
         layer_file.write_text(layer_md_content, encoding="utf-8")
-        
+
     master_md.append("")
     if not any_failures:
         master_md.append("No test failures were captured.")
         master_md.append("")
-        
+
     (REPORT_DIR / "errors.md").write_text("\n".join(master_md).rstrip() + "\n", encoding="utf-8")
-    
+
     # Print dashboard to console
     print("\n")
     print("+" + "-"*76 + "+")
@@ -278,11 +278,11 @@ def compile_test_reports():
     print("+" + "-"*76 + "+")
     print(f"| {'Test Layer':<22} | {'Passed':<8} | {'Failed':<8} | {'Skipped':<8} | {'Status':<15} |")
     print("+" + "-"*24 + "+" + "-"*10 + "+" + "-"*10 + "+" + "-"*10 + "+" + "-"*17 + "+")
-    
+
     for r in results:
         layer, passed, failed, skipped, status = r
         print(f"| {layer:<22} | {passed:<8} | {failed:<8} | {skipped:<8} | {status:<15} |")
-        
+
     print("+" + "-"*76 + "+")
     print(f"| TOTAL SUCCESS PERCENTAGE: {success_pct:.2f}%".ljust(77) + "|")
     print("+" + "-"*76 + "+")
@@ -402,7 +402,7 @@ def compile_quality_reports():
     test_skipped = 0
     tests_pass = True
     errors_md_path = REPORT_DIR / "errors.md"
-    
+
     if errors_md_path.exists():
         shutil.copy(errors_md_path, QUALITY_REPORTS_DIR / "test_failures.md")
         content = errors_md_path.read_text(encoding="utf-8")
@@ -416,7 +416,7 @@ def compile_quality_reports():
                 test_passed = int(m_pass.group(1))
             if m_skip:
                 test_skipped = int(m_skip.group(1))
-        
+
         in_summary = False
         for line in content.split("\n"):
             if "| Layer |" in line:
@@ -511,7 +511,7 @@ def main():
     parser = argparse.ArgumentParser(description="VirtAI Report Compiler")
     parser.add_argument("--tests-only", action="store_true", help="Compile only Pytest JUnit reports")
     args = parser.parse_args()
-    
+
     if args.tests_only:
         compile_test_reports()
     else:

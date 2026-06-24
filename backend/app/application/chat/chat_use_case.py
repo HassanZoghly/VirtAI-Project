@@ -33,7 +33,7 @@ class ChatUseCase:
                 if result.status == RetrievalStatus.LOW_CONFIDENCE:
                     low_confidence = True
 
-                chunks = result.documents
+                chunks: list[Any] = result.documents
                 if self.retrieval.budget_manager and chunks:
                     chunks = self.retrieval.budget_manager.fit_chunks_to_budget(
                         chunks=chunks,
@@ -75,9 +75,9 @@ class ChatUseCase:
                 await self.context_cache.push_message(session_id, "user", prompt)
 
         full_response = []
-        async for chunk in self.llm.stream(history):
-            if chunk.token:
-                full_response.append(chunk.token)
+        async for token_chunk in self.llm.stream(history):
+            if token_chunk.token:
+                full_response.append(token_chunk.token)
 
         full_text = "".join(full_response).strip()
 
@@ -87,4 +87,3 @@ class ChatUseCase:
                 await self.context_cache.push_message(session_id, "assistant", full_text)
 
         return full_text
-

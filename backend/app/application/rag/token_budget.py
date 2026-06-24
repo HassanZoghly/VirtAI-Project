@@ -20,13 +20,13 @@ class TokenBudgetManager:
     """Manages the LLM context window by accurately counting tokens and truncating retrieved chunks."""
 
     def __init__(self, model_encoding: str = "cl100k_base"):
+        self.encoding: Any = None
         try:
             self.encoding = tiktoken.get_encoding(model_encoding)
         except Exception as e:
             logger.warning(
                 f"[TokenBudgetManager] Failed to load {model_encoding}: {e}. Falling back to character heuristic."
             )
-            self.encoding = None
 
     def count_tokens(self, text: str) -> int:
         if self.encoding:

@@ -31,10 +31,11 @@ class ExplainUseCase:
     async def _get_state(self, session_key: str) -> dict[str, Any]:
         raw = await self.redis.get(session_key)
         if raw:
-            return json.loads(raw)
+            from typing import cast
+            return cast(dict[str, Any], json.loads(raw))
         return {"current_slide_index": 0, "state": PresentationState.EXPLAINING.value}
 
-    async def _save_state(self, session_key: str, state_data: dict):
+    async def _save_state(self, session_key: str, state_data: dict[str, Any]) -> None:
         await self.redis.setex(session_key, self.session_ttl, json.dumps(state_data))
 
     async def _load_chunks(self, document_id: str) -> list[DocumentChunk]:
@@ -44,7 +45,7 @@ class ExplainUseCase:
             .where(DocumentChunk.document_id == doc_uuid)
             .order_by(DocumentChunk.chunk_order)
         )
-        return chunks_query.scalars().all()
+        return list(chunks_query.scalars().all())
 
     async def start_or_resume(self, user_id: str, document_id: str) -> AsyncGenerator[dict, None]:
         session_key = f"explain_{user_id}_{document_id}"

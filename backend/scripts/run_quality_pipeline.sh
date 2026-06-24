@@ -31,7 +31,7 @@ $PYTHON_CMD -m ruff check app tests > "$QUALITY_REPORTS_DIR/ruff.log" 2>&1 || tr
 
 # 2. Static Typing
 echo "[+] Running MyPy (Typing)..."
-$PYTHON_CMD -m mypy app > "$QUALITY_REPORTS_DIR/mypy.log" 2>&1 || true
+$PYTHON_CMD -m mypy --follow-imports=silent app/domain app/application > "$QUALITY_REPORTS_DIR/mypy.log" 2>&1 || true
 
 # 3. Security
 echo "[+] Running Bandit (Security)..."

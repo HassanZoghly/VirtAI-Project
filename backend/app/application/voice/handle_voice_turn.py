@@ -84,7 +84,7 @@ class ConversationPipeline:
         # State tracking
         self._current_context: TurnContext | None = None
         self._current_message_id: str | None = None
-        self._running_tasks: list[asyncio.Task] = []
+        self._running_tasks: list[asyncio.Task[Any]] = []
         logger.info(f"ConversationPipeline created | avatar={avatar_id}")
 
     # ── Public API ────────────────────────────────────────────────────────────
@@ -94,7 +94,7 @@ class ConversationPipeline:
         message_id: str,
         text: str,
         session_id: str,
-        send_callback: Callable,
+        send_callback: Callable[[Any], Any],
         send_binary_callback: Callable[..., Any] | None = None,
         trace_id: str | None = None,
     ) -> None:
@@ -163,7 +163,7 @@ class ConversationPipeline:
                         context.current_sentence = sentence
                         await self.tts_stage.process(context)
                         if context.aborted:
-                            break
+                            break  # type: ignore[unreachable]
                         await self.animation_stage.process(context)
                         context.sentence_index += 1
                 except Exception as e:

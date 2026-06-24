@@ -7,7 +7,7 @@ All persistence is done through SQLAlchemy async repositories.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import httpx
@@ -162,10 +162,10 @@ async def exchange_google_code(code: str) -> dict[str, Any]:
             headers={"Authorization": f"Bearer {access_token}"},
         )
         info_resp.raise_for_status()
-        return info_resp.json()
+        return cast(dict[str, Any], info_resp.json())
 
 
-async def get_or_create_google_user(repo: UserRepositoryPort, google_info: dict) -> UserEntity:
+async def get_or_create_google_user(repo: UserRepositoryPort, google_info: dict[str, Any]) -> UserEntity:
     """Find or create a user from Google OAuth info."""
     google_id: str = str(google_info["id"])
     email: str = google_info["email"]

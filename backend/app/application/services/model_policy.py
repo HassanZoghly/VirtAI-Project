@@ -48,11 +48,15 @@ class FallbackLLMChain(BaseLLMProvider):
                     )
                     raise e
 
-    async def complete(self, history: ConversationHistory) -> LLMResult:
+    async def complete(
+        self,
+        history: ConversationHistory,
+        response_format: dict[str, Any] | None = None,
+    ) -> LLMResult:
         providers = [self.primary, *self.fallbacks]
         for idx, provider in enumerate(providers):
             try:
-                return await provider.complete(history)
+                return await provider.complete(history, response_format)
             except Exception as e:
                 provider_name = provider.__class__.__name__
                 if idx < len(providers) - 1:

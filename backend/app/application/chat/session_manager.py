@@ -239,7 +239,7 @@ class SessionManager:
                 from sqlalchemy.exc import IntegrityError
                 try:
                     # Wrap the create_chat_session in a nested transaction (savepoint) to make it atomic
-                    async with repo.db.begin_nested():
+                    async with repo.db.begin_nested():  # type: ignore[attr-defined]
                         await repo.create_chat_session(user_id=user_id, session_id=sid)
                 except IntegrityError as e:
                     persisted_check = await repo.get_chat_session(sid)

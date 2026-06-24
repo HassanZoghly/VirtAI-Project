@@ -40,6 +40,7 @@ class VectorStore(ABC):
         scope: str | None = None,
         scope_id: UUID | None = None,
         min_dense_score: float = 0.5,
+        user_id: UUID | None = None,
         metadata_filter: dict[str, Any] | None = None,
     ) -> list[tuple[DocumentChunk, float]]:
         pass
@@ -55,6 +56,7 @@ class VectorStore(ABC):
         scope_id: UUID | None = None,
         min_hybrid_score: float = 0.015,
         min_dense_score: float = 0.5,
+        user_id: UUID | None = None,
         metadata_filter: dict[str, Any] | None = None,
     ) -> list[tuple[DocumentChunk, float]]:
         pass

@@ -57,7 +57,7 @@ class IngestDocumentUseCase:
         storage_key: str,
         progress_callback: Callable[[str, int, int, int], Awaitable[None]],
         cancellation_check: Callable[[], Awaitable[bool]],
-        log_ctx: dict,
+        log_ctx: dict[str, Any],
     ) -> None:
         doc_uuid = require_uuid(doc_id, field_name="document_id")
         require_uuid(user_id, field_name="user_id")

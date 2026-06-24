@@ -12,6 +12,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.chat.ports import ChatRepositoryPort
+from app.domain.chat.entities import ChatSessionDict, ChatMessageDict
 from app.infrastructure.db.models import ChatSession, Message
 from app.shared.ids import require_uuid
 
@@ -36,7 +37,7 @@ class ChatRepository(ChatRepositoryPort):
 
     async def create_chat_session(
         self, user_id: str, title: str = "New Chat", session_id: str | None = None
-    ) -> dict:
+    ) -> ChatSessionDict:
         """Create a new chat session."""
         session_uuid = require_uuid(session_id, field_name="session_id") if session_id else None
         user_uuid = require_uuid(user_id, field_name="user_id")
@@ -50,7 +51,7 @@ class ChatRepository(ChatRepositoryPort):
         await self.db.refresh(session)
         return self._serialize_session(session)
 
-    async def get_chat_session(self, session_id: str) -> dict | None:
+    async def get_chat_session(self, session_id: str) -> ChatSessionDict | None:
         """Get a chat session by ID."""
         sid = require_uuid(session_id, field_name="session_id")
         stmt = select(ChatSession).where(ChatSession.id == sid)
@@ -58,7 +59,7 @@ class ChatRepository(ChatRepositoryPort):
         session = result.scalar_one_or_none()
         return self._serialize_session(session) if session else None
 
-    async def update_chat_session_title(self, session_id: str, title: str) -> dict | None:
+    async def update_chat_session_title(self, session_id: str, title: str) -> ChatSessionDict | None:
         """Update a chat session title."""
         sid = require_uuid(session_id, field_name="session_id")
         cleaned_title = title.strip()[:255]
@@ -73,7 +74,7 @@ class ChatRepository(ChatRepositoryPort):
         await self.db.flush()
         return await self.get_chat_session(session_id)
 
-    async def list_user_sessions(self, user_id: str, limit: int = 50) -> list[dict]:
+    async def list_user_sessions(self, user_id: str, limit: int = 50) -> list[ChatSessionDict]:
         """List sessions for a user, ordered by updated_at desc."""
         stmt = (
             select(ChatSession)
@@ -203,7 +204,7 @@ class ChatRepository(ChatRepositoryPort):
         input_type: str = "text",
         tts_cache_key: str | None = None,
         sources: list[dict] | None = None,
-    ) -> dict:
+    ) -> ChatMessageDict:
         """Save a message and update session counters."""
         sid = require_uuid(session_id, field_name="session_id")
         message = Message(
@@ -245,7 +246,7 @@ class ChatRepository(ChatRepositoryPort):
         await self.db.refresh(message)
         return self._serialize_message(message)
 
-    async def get_session_messages(self, session_id: str, limit: int = 50) -> list[dict]:
+    async def get_session_messages(self, session_id: str, limit: int = 50) -> list[ChatMessageDict]:
         """Get last N messages for a session, ordered by timestamp asc."""
         stmt = (
             select(Message)
@@ -266,7 +267,7 @@ class ChatRepository(ChatRepositoryPort):
         return result.scalar() or 0
 
     # ── Serialization helpers ─────────────────────────────────────────────
-    def _serialize_session(self, session: ChatSession) -> dict:
+    def _serialize_session(self, session: ChatSession) -> ChatSessionDict:
         return {
             "id": str(session.id),
             "user_id": str(session.user_id),
@@ -276,7 +277,7 @@ class ChatRepository(ChatRepositoryPort):
             "message_count": session.message_count,
         }
 
-    def _serialize_message(self, message: Message) -> dict:
+    def _serialize_message(self, message: Message) -> ChatMessageDict:
         return {
             "id": str(message.id),
             "session_id": str(message.session_id),

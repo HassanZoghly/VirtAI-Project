@@ -24,7 +24,10 @@ from app.infrastructure.asr.audio_pipeline import (
     BufferOverflowError,
     BufferTimeoutError,
     ChunkSizeError,
+    RateLimitError,
+    AudioSilencedError,
 )
+
 from app.presentation.ws.outbound_sender import OutboundSender
 
 if TYPE_CHECKING:
@@ -32,28 +35,7 @@ if TYPE_CHECKING:
 
     from app.application.voice.handle_voice_turn import ConversationPipeline
 
-
-class RateLimitError(Exception):
-    """Raised when rate limit for audio chunks is exceeded."""
-
-    pass
-
-
 class VoiceModeHandler:
-    """Handles voice mode audio processing for a WebSocket session.
-
-    This class manages the flow of raw PCM audio data from WebSocket binary frames
-    through ASR to the conversation pipeline. It maintains session-specific audio
-    buffers and coordinates the transcription and conversation processing.
-
-    Attributes:
-        websocket: WebSocket connection for sending messages to client
-        session_id: Unique session identifier
-        asr_service: ASR service for transcribing audio
-        conversation_pipeline: Pipeline for processing transcripts through LLM and TTS
-        audio_pipeline: Pipeline for accumulating PCM audio chunks
-    """
-
     def __init__(
         self,
         websocket: WebSocket,
@@ -63,112 +45,26 @@ class VoiceModeHandler:
         turn_callback=None,
         outbound_sender: OutboundSender | None = None,
         audio_pipeline: AudioPipeline | None = None,
-        max_buffer_size: int = 10 * 1024 * 1024,
-        max_chunk_size: int = 128 * 1024,
-        buffer_timeout: float = 30.0,
-        max_buffer_duration: float = 25.0,
-        rate_limit_chunks: int = 25,
-        rate_limit_window: float = 1.0,
     ):
-        """Initialize voice mode handler.
-
-        Args:
-            websocket: WebSocket connection for this session
-            session_id: Unique session identifier (UUID)
-            asr_service: ASR service instance for transcription
-            conversation_pipeline: Optional conversation pipeline instance (legacy)
-            turn_callback: Optional async callable(text: str) invoked after transcription.
-                If provided, takes priority over conversation_pipeline for text routing.
-            max_buffer_size: Maximum audio buffer size in bytes (default 10MB)
-            max_chunk_size: Maximum single chunk size in bytes (default 1MB)
-            buffer_timeout: Maximum buffer accumulation time in seconds (default 30s)
-            max_buffer_duration: Proactive flush threshold in seconds (default 25s)
-            rate_limit_chunks: Maximum chunks allowed per rate limit window (default 100)
-            rate_limit_window: Rate limit time window in seconds (default 1.0s)
-
-        Preconditions:
-            - websocket is connected and active
-            - session_id is valid UUID string
-            - asr_service is initialized and ready
-            - At least one of conversation_pipeline or turn_callback must be provided
-            - max_buffer_size is positive integer
-            - rate_limit_chunks is positive integer
-            - rate_limit_window is positive float
-
-        Postconditions:
-            - Handler is ready to receive audio chunks
-            - Audio buffer is initialized with size limit
-            - Rate limiting is configured and active
-            - All services are ready for processing
-        """
         self.websocket = websocket
         self.session_id = session_id
         self.asr_service = asr_service
         self.conversation_pipeline = conversation_pipeline
         self.outbound_sender = outbound_sender
-        # turn_callback takes priority; fall back to pipeline.process_text if available
         self.turn_callback = turn_callback
-        self.audio_pipeline = audio_pipeline or AudioPipeline(
-            max_buffer_size=max_buffer_size,
-            max_chunk_size=max_chunk_size,
-            buffer_timeout=buffer_timeout,
-            max_buffer_duration=max_buffer_duration,
-        )
+        self.audio_pipeline = audio_pipeline or AudioPipeline()
 
         self._transcription_tasks: set[asyncio.Task] = set()
         self.max_concurrent_transcriptions = 3
 
-        # Sequence tracking for strict ordering
         self._current_sequence = 0
         self._next_sequence_to_process = 1
         self._completed_transcripts: dict[int, str] = {}
 
-        # Rate limiting configuration
-        self.rate_limit_chunks = rate_limit_chunks
-        self.rate_limit_window = rate_limit_window
-        self._chunk_timestamps: deque = deque()
-
         logger.info(
             f"VoiceModeHandler initialized | "
-            f"session={session_id} | "
-            f"max_buffer_size={max_buffer_size} | "
-            f"max_chunk_size={max_chunk_size} | "
-            f"buffer_timeout={buffer_timeout}s | "
-            f"rate_limit={rate_limit_chunks} chunks/{rate_limit_window}s"
+            f"session={session_id}"
         )
-
-    def _check_rate_limit(self) -> None:
-        """Check if rate limit is exceeded for audio chunks.
-
-        Uses a sliding window approach to track chunk timestamps and enforce
-        the rate limit. Removes timestamps outside the current window.
-
-        Raises:
-            RateLimitError: If rate limit is exceeded
-
-        Postconditions:
-            - Old timestamps outside window are removed
-            - Current timestamp is added to tracking
-            - RateLimitError raised if limit exceeded
-        """
-        current_time = time.time()
-
-        # Remove timestamps outside the current window
-        while (
-            self._chunk_timestamps
-            and current_time - self._chunk_timestamps[0] > self.rate_limit_window
-        ):
-            self._chunk_timestamps.popleft()
-
-        # Check if adding this chunk would exceed the limit
-        if len(self._chunk_timestamps) >= self.rate_limit_chunks:
-            raise RateLimitError(
-                f"Rate limit exceeded: {self.rate_limit_chunks} chunks per "
-                f"{self.rate_limit_window} seconds"
-            )
-
-        # Add current timestamp
-        self._chunk_timestamps.append(current_time)
 
     def _track_transcription_task(self, task: asyncio.Task) -> None:
         self._transcription_tasks.add(task)
@@ -184,39 +80,7 @@ class VoiceModeHandler:
             logger.exception(f"Transcription task failed | session={self.session_id}")
 
     async def handle_audio_chunk(self, pcm_bytes: bytes, is_final: bool = False) -> None:
-        """Handle incoming PCM audio chunk from client binary frame.
-
-        Receives raw PCM audio bytes from WebSocket binary frames, validates them,
-        checks rate limits, and adds them to the buffer. Triggers ASR processing when
-        buffer should be processed (either VAD silence detection or proactive duration-based flush).
-
-        Args:
-            pcm_bytes: Raw PCM audio bytes (16-bit signed integer, little-endian, 16kHz mono)
-            is_final: Boolean indicating VAD detected silence (default False)
-
-        Preconditions:
-            - pcm_bytes is valid bytes object
-            - audio pipeline has not exceeded size limit
-            - rate limit has not been exceeded
-
-        Postconditions:
-            - PCM chunk is added to buffer if valid and within limits
-            - If should_process() returns True, ASR processing is triggered
-            - Error message is sent to client if validation fails
-            - Buffer is cleared after successful transcription
-
-        Raises:
-            BufferOverflowError: If adding chunk would exceed max buffer size
-            ChunkSizeError: If chunk size exceeds max chunk size
-            BufferTimeoutError: If buffer accumulation exceeds timeout
-            RateLimitError: If rate limit is exceeded
-            ValueError: If pcm_bytes validation fails
-        """
         try:
-            # Check rate limit before processing
-            self._check_rate_limit()
-
-            # Validate PCM bytes
             if not isinstance(pcm_bytes, bytes):
                 raise ValueError("Audio data must be bytes")
 
@@ -356,7 +220,6 @@ class VoiceModeHandler:
         """
         total_size = 0
         try:
-            # Get buffer size for logging
             total_size = self.audio_pipeline.get_buffer_size()
 
             if total_size == 0:
@@ -370,20 +233,16 @@ class VoiceModeHandler:
                 f"total_size={total_size} bytes"
             )
 
-            # Convert PCM buffer to float32 numpy array for ASR
-            audio_data = self.audio_pipeline.get_audio_for_asr()
-            self.audio_pipeline.clear_buffer()
-
-            import numpy as np
-
-            # Strict Server-Side VAD (RMS energy analysis)
-            rms = float(np.sqrt(np.mean(np.square(audio_data))))
-            if rms < 0.005:
+            try:
+                audio_data = self.audio_pipeline.get_audio_for_asr()
+            except AudioSilencedError as vad_err:
                 logger.warning(
-                    f"Server-Side VAD rejected buffer | session={self.session_id} | "
-                    f"rms={rms:.4f} < 0.005"
+                    f"Server-Side VAD rejected buffer | session={self.session_id} | {vad_err}"
                 )
+                self.audio_pipeline.clear_buffer()
                 return
+
+            self.audio_pipeline.clear_buffer()
 
             if len(self._transcription_tasks) >= self.max_concurrent_transcriptions:
                 logger.warning(

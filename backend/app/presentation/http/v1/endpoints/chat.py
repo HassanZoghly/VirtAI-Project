@@ -30,25 +30,7 @@ class RenameRequest(BaseModel):
     title: str
 
 
-def _fallback_title(message: str, max_chars: int = 48) -> str:
-    compact = re.sub(r"\s+", " ", message).strip()
-    compact = re.sub(r"^[\"'`]+|[\"'`]+$", "", compact)
-    if not compact:
-        return "New chat"
-    words = compact.split(" ")
-    title = " ".join(words[:7]).strip(" .,:;!?")
-    if len(title) > max_chars:
-        title = title[:max_chars].rsplit(" ", 1)[0].strip()
-    return title or "New chat"
 
-
-def _clean_generated_title(raw_title: str, original_message: str) -> str:
-    title = re.sub(r"\s+", " ", raw_title or "").strip()
-    title = re.sub(r"^[\"'`]+|[\"'`]+$", "", title)
-    title = title.removeprefix("Title:").strip()
-    if not title or len(title) > 80 or "\n" in title:
-        return _fallback_title(original_message)
-    return title[:60].strip(" .,:;!?") or _fallback_title(original_message)
 
 
 @router.get("/", response_model=list[dict])
@@ -134,23 +116,9 @@ async def generate_session_title(
         if not session or session.get("user_id") != str(user.id):
             raise HTTPException(status_code=404, detail="Session not found")
 
-        title = _fallback_title(message)
-        try:
-            history = ConversationHistory(
-                system_prompt=(
-                    "Generate a concise chat title from the user's first message. "
-                    "Return only the title, no quotes, no punctuation at the end, "
-                    "maximum 6 words. Preserve the user's language when possible."
-                ),
-                max_messages=1,
-            )
-            history.add_user_message(message)
-            result = await chat_use_case.llm.complete(history)
-            title = _clean_generated_title(result.full_text, message)
-        except Exception as title_error:
-            logger.warning(
-                f"Falling back to heuristic title for session {session_id}: {title_error}"
-            )
+        from app.application.chat.generate_title_use_case import GenerateTitleUseCase
+        use_case = GenerateTitleUseCase(chat_use_case.llm)
+        title = await use_case.execute(message)
 
         updated = await repo.update_chat_session_title(session_id, title)
         await db.commit()

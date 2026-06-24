@@ -1,10 +1,10 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, AsyncIterable
 from typing import Protocol
 
 
 class StorageProvider(Protocol):
     async def save(
-        self, key: str, data: bytes, content_type: str = "application/octet-stream"
+        self, key: str, data: bytes | AsyncIterable[bytes], content_type: str = "application/octet-stream"
     ) -> str: ...
     async def delete(self, key: str) -> None: ...
     async def exists(self, key: str) -> bool: ...

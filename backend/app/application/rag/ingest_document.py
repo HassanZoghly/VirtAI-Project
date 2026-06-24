@@ -32,7 +32,9 @@ class IngestDocumentUseCase:
         chunker: ChunkingStrategy | None,
         embedder: EmbeddingProvider | None,
         db_session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]],
-        document_repo_factory: Callable[[AsyncSession], Any],
+        crud_repo_factory: Callable[[AsyncSession], Any],
+        state_repo_factory: Callable[[AsyncSession], Any],
+        integrity_repo_factory: Callable[[AsyncSession], Any],
         vector_store_factory: Callable[[AsyncSession], Any],
     ):
         self.storage = storage
@@ -40,7 +42,9 @@ class IngestDocumentUseCase:
         self.chunker = chunker
         self.embedder = embedder
         self.db_session_factory = db_session_factory
-        self.document_repo_factory = document_repo_factory
+        self.crud_repo_factory = crud_repo_factory
+        self.state_repo_factory = state_repo_factory
+        self.integrity_repo_factory = integrity_repo_factory
         self.vector_store_factory = vector_store_factory
         self.settings = get_settings()
 
@@ -61,8 +65,8 @@ class IngestDocumentUseCase:
 
         # 0. Get Scope (in case of retries)
         async with self.db_session_factory() as db:
-            repo = self.document_repo_factory(db)
-            doc = await repo.get(doc_id)
+            crud_repo = self.crud_repo_factory(db)
+            doc = await crud_repo.get(doc_id)
             if doc is None:
                 raise RAGException(f"Document not found: {doc_id}")
             retrieval_scope = getattr(doc, "retrieval_scope", "GLOBAL") or "GLOBAL"
@@ -87,8 +91,8 @@ class IngestDocumentUseCase:
         content_hash = compute_content_hash(normalized)
 
         async with self.db_session_factory() as db:
-            repo = self.document_repo_factory(db)
-            await repo.update_content_hash(doc_id, content_hash)
+            crud_repo = self.crud_repo_factory(db)
+            await crud_repo.update_content_hash(doc_id, content_hash)
             await db.commit()
 
         logger.info(
@@ -132,8 +136,8 @@ class IngestDocumentUseCase:
         await progress_callback("EMBEDDING", 50, 0, total_chunks)
 
         async with self.db_session_factory() as db:
-            repo = self.document_repo_factory(db)
-            next_version = await repo.get_next_chunk_version(doc_id)
+            integrity_repo = self.integrity_repo_factory(db)
+            next_version = await integrity_repo.get_next_chunk_version(doc_id)
 
         processed = 0
         batch_size = self.settings.EMBEDDING_BATCH_SIZE
@@ -195,8 +199,8 @@ class IngestDocumentUseCase:
             raise IngestionCancelledException()
 
         async with self.db_session_factory() as db:
-            repo = self.document_repo_factory(db)
-            rows = await repo.activate_chunk_version(doc_id, next_version, total_chunks)
+            integrity_repo = self.integrity_repo_factory(db)
+            rows = await integrity_repo.activate_chunk_version(doc_id, next_version, total_chunks)
             if rows == 0:
                 # Activation aborted (e.g. document was CANCELLED mid-activation)
                 await self.cleanup_failed_job(doc_id, next_version, storage_key)
@@ -214,19 +218,20 @@ class IngestDocumentUseCase:
 
         # 6. COMPLETE
         async with self.db_session_factory() as db:
-            repo = self.document_repo_factory(db)
-            await repo.delete_inactive_chunks(doc_id, active_version=next_version)
-            await repo.update_progress(doc_id, "COMPLETE", 100, total_chunks, total_chunks)
-            await repo.mark_completed(doc_id)
+            integrity_repo = self.integrity_repo_factory(db)
+            state_repo = self.state_repo_factory(db)
+            await integrity_repo.delete_inactive_chunks(doc_id, active_version=next_version)
+            await state_repo.update_progress(doc_id, "COMPLETE", 100, total_chunks, total_chunks)
+            await state_repo.mark_completed(doc_id)
             await db.commit()
 
     async def cleanup_failed_job(self, doc_id: str, version: int, storage_key: str) -> None:
         """Cleans up completely on cancellation or permanent failure (zero retrieval pollution)."""
         has_other_chunks = False
         async with self.db_session_factory() as db:
-            repo = self.document_repo_factory(db)
-            await repo.delete_chunks_by_version(doc_id, version)
-            has_other_chunks = await repo.has_any_chunks(doc_id)
+            integrity_repo = self.integrity_repo_factory(db)
+            await integrity_repo.delete_chunks_by_version(doc_id, version)
+            has_other_chunks = await integrity_repo.has_any_chunks(doc_id)
             await db.commit()
 
         if not has_other_chunks and await self.storage.exists(storage_key):

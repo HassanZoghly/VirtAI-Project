@@ -40,15 +40,12 @@ def _normalize_required_identifier(value: str) -> str:
     return str(parsed)
 
 
-# ── Message Envelope ──────────────────────────────────────────────────────────
-class WSMessageEnvelope(BaseModel):
-    """
-    Generic WebSocket message envelope.
-    All messages are wrapped in this structure for type-safe routing.
-    """
+from typing import Annotated, Union
+from pydantic import Field, BaseModel
 
-    type: str = Field(..., description="Message type identifier")
-    data: dict[str, Any] = Field(default_factory=dict, description="Message payload")
+# ── Message Envelope ──────────────────────────────────────────────────────────
+
+class BaseEnvelope(BaseModel):
     session_id: str | None = Field(None, description="Session identifier")
     message_id: str | None = Field(None, description="Message identifier")
 
@@ -57,6 +54,32 @@ class WSMessageEnvelope(BaseModel):
     def validate_identifier_format(cls, v: str | None) -> str | None:
         """Validate that optional identifiers are non-empty when provided."""
         return _normalize_optional_identifier(v)
+
+class ChatUserMessageEnvelope(BaseEnvelope):
+    type: Literal["chat.user_message"]
+    data: ChatUserMessage
+
+class ChatAbortEnvelope(BaseEnvelope):
+    type: Literal["chat.abort"]
+    data: ChatAbort
+
+class ClientSpeechStoppedEnvelope(BaseEnvelope):
+    type: Literal["client.speech_stopped"]
+    data: ClientSpeechStopped
+
+class TTSRequestEnvelope(BaseEnvelope):
+    type: Literal["tts.request"]
+    data: TTSRequest
+
+WSMessageEnvelope = Annotated[
+    Union[
+        ChatUserMessageEnvelope,
+        ChatAbortEnvelope,
+        ClientSpeechStoppedEnvelope,
+        TTSRequestEnvelope,
+    ],
+    Field(discriminator="type"),
+]
 
 
 # ── Client Messages (Frontend -> Backend) ─────────────────────────────────────

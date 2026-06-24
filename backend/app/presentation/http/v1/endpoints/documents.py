@@ -23,7 +23,8 @@ from app.domain.rag.stage_machine import IngestionStage
 from app.domain.user.entities import UserEntity
 from app.infrastructure.db.database import get_db
 from app.infrastructure.db.repositories.chat_repository import ChatRepository
-from app.infrastructure.db.repositories.document_repository import DocumentRepository
+from app.infrastructure.db.repositories.document_crud_repository import DocumentCrudRepository
+from app.infrastructure.db.repositories.ingestion_state_repository import IngestionStateRepository
 from app.presentation.http.v1.dependencies import StorageDep, _current_user
 from app.shared.config import get_settings
 from app.shared.ids import parse_uuid
@@ -133,10 +134,10 @@ async def upload_document(
         )
     validate_declared_mime(file.content_type, ext)
 
-    repo = DocumentRepository(db)
+    state_repo = IngestionStateRepository(db)
 
     # 2. Check per-user active job count
-    active_jobs = await repo.count_active_jobs(str(user.id))
+    active_jobs = await state_repo.count_active_jobs(str(user.id))
     if active_jobs >= settings.MAX_ACTIVE_JOBS_PER_USER:
         raise HTTPException(
             status_code=429,
@@ -172,156 +173,32 @@ async def upload_document(
     # 4. Compute sha256
     file_sha256 = file_sha256_hash.hexdigest()
 
-    # 5. Check dedup
-    existing = await repo.find_by_sha256(str(user.id), file_sha256, session_id)
-    if existing:
-        from datetime import datetime, timedelta, timezone
-        is_stale = False
-        if existing.upload_date:
-            # Ensure upload_date is timezone aware for comparison
-            upload_dt = existing.upload_date
-            if upload_dt.tzinfo is None:
-                upload_dt = upload_dt.replace(tzinfo=timezone.utc)
-            if datetime.now(timezone.utc) - upload_dt > timedelta(minutes=5) and existing.current_stage != IngestionStage.COMPLETE:
-                is_stale = True
+    # 5. Execute StartIngestionUseCase
+    async def file_streamer():
+        await file.seek(0)
+        while chunk := await file.read(65536):
+            yield chunk
 
-        if existing.current_stage == IngestionStage.FAILED or is_stale:
-            # Force delete the dead/failed record and proceed to create a new one
-            logger.info(f"Deleting dead/failed document {existing.id} for fresh re-upload")
-            old_storage_key = await repo.delete_with_cascade(str(existing.id), str(user.id))
-            await db.commit()
-            if old_storage_key and await storage.exists(old_storage_key):
-                await storage.delete(old_storage_key)
-            existing = None  # Proceed to create new record below
-        elif existing.current_stage == IngestionStage.COMPLETE:
-            if session_id and str(existing.scope_id) != session_id:
-                from sqlalchemy import update
-
-                from app.infrastructure.db.models import Document, DocumentChunk
-
-                parsed_session_id = parse_uuid(session_id)
-                if parsed_session_id:
-                    await db.execute(
-                        update(Document)
-                        .where(Document.id == existing.id)
-                        .values(scope_id=parsed_session_id, retrieval_scope="SESSION")
-                    )
-                    await db.execute(
-                        update(DocumentChunk)
-                        .where(DocumentChunk.document_id == existing.id)
-                        .values(scope_id=parsed_session_id, retrieval_scope="SESSION")
-                    )
-                    await db.commit()
-
-            response.status_code = 200
-            return {
-                "id": str(existing.id),
-                "status": "COMPLETE",
-                "message": "Document already ingested",
-            }
-        elif existing:
-            # Still active and not stale
-            response.status_code = 202
-            return {
-                "id": str(existing.id),
-                "status": existing.current_stage,
-                "message": "Document currently processing",
-            }
-
-    # 6. Create DB record (QUEUED) ATOMICALLY
-    import uuid
-    doc_id_val = str(uuid.uuid4())
-    storage_key = f"{user.id}/{doc_id_val}.{ext}"
-
+    from app.application.rag.start_ingestion_use_case import StartIngestionUseCase
+    use_case = StartIngestionUseCase(db, storage, request.app.state.arq_pool)
+    
     try:
-        doc = await repo.create(
-            id=doc_id_val,
+        result = await use_case.execute(
             user_id=str(user.id),
-            filename=safe_filename,
-            file_type=ext,
             session_id=session_id,
-            document_sha256=file_sha256,
+            file_sha256=file_sha256,
             file_size=file_size,
-            storage_key=storage_key,
+            safe_filename=safe_filename,
+            ext=ext,
+            file_stream=file_streamer()
         )
-        await db.commit()
-    except IntegrityError as e:
-        await db.rollback()
-        # A concurrent upload of the same file won the race
-        logger.info(f"Concurrent duplicate detected for SHA256 {file_sha256[:12]}…")
-        winner = await repo.find_by_sha256(str(user.id), file_sha256, session_id)
-        if winner:
-            response.status_code = 200
-            return {
-                "id": str(winner.id),
-                "status": winner.current_stage,
-                "message": "Document already exists (concurrent upload resolved)",
-            }
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
-        # If no winner is found (e.g., due to different constraint triggering), gracefully reject
-        raise HTTPException(
-            status_code=409,
-            detail="Conflict: A document with this SHA256 already exists in the requested scope."
-        ) from e
-
-    # 7. Write to storage (uses the same storage_key stored in the DB record)
-    try:
-        if hasattr(storage, "base_path"):
-            import aiofiles
-            import aiofiles.os
-            file_path = storage.base_path / storage_key
-            await aiofiles.os.makedirs(file_path.parent, exist_ok=True)
-            await file.seek(0)
-            async with aiofiles.open(file_path, "wb") as dest:
-                while True:
-                    chunk = await file.read(65536)
-                    if not chunk:
-                        break
-                    await dest.write(chunk)
-        else:
-            raise HTTPException(status_code=500, detail="Storage provider must support streaming")
-    except asyncio.CancelledError:
-        logger.warning(f"Client disconnected while saving file {doc.id}")
-        # Let FastAPI's dependency teardown handle the session rollback if necessary.
-        # Periodic tasks will clean up the orphaned DB record if it remains QUEUED.
-        raise
-    except Exception as e:
-        logger.error(f"Storage failed for {doc.id}: {e}")
-        await repo.mark_failed(str(doc.id), f"Storage error: {e!s}", is_retryable=False)
-        await db.commit()
-        raise HTTPException(status_code=500, detail="Internal server error saving file") from e
-
-    # 8. Enqueue to ARQ
-    arq_pool = request.app.state.arq_pool
-    try:
-        job = await arq_pool.enqueue_job(
-            "run_ingestion_task",
-            _queue_name="ingestion",
-            doc_id=str(doc.id),
-            user_id=str(user.id),
-            filename=safe_filename,
-            file_type=ext,
-            upload_source="SETUP",
-            storage_key=storage_key,
-        )
-        if not job:
-            raise RuntimeError("Job enqueue returned None")
-    except asyncio.CancelledError:
-        logger.warning(f"Client disconnected while enqueueing job for {doc.id}")
-        # Attempt to delete the file from storage if possible, do not commit db deletions here
-        try:
-            await storage.delete(storage_key)
-        except Exception:
-            pass
-        raise
-    except Exception as e:
-        logger.error(f"Failed to enqueue job for {doc.id}: {e}")
-        await repo.mark_failed(str(doc.id), f"Queue error: {e!s}", is_retryable=False)
-        await db.commit()
-        await storage.delete(storage_key)
-        raise HTTPException(status_code=500, detail="Internal server error enqueueing job") from e
-
-    return {"id": str(doc.id), "status": "QUEUED", "message": "Document ingestion started"}
+    response.status_code = result.pop("http_status_code")
+    return result
 
 
 @router.get("/status", response_model=list[dict[str, Any]])
@@ -334,12 +211,12 @@ async def list_statuses(
     """List statuses for all documents."""
     from app.infrastructure.cache.redis_client import get_redis_or_none
 
-    repo = DocumentRepository(db)
+    crud_repo = DocumentCrudRepository(db)
 
     if active_only:
-        docs = await repo.list_active(str(user.id), session_id=session_id)
+        docs = await crud_repo.list_active(str(user.id), session_id=session_id)
     else:
-        docs = await repo.list_by_user(str(user.id), session_id=session_id)
+        docs = await crud_repo.list_by_user(str(user.id), session_id=session_id)
 
     redis_client = get_redis_or_none()
 
@@ -379,8 +256,8 @@ async def get_document_status(
 
     if parse_uuid(document_id) is None:
         raise HTTPException(status_code=400, detail="Invalid document_id")
-    repo = DocumentRepository(db)
-    status = await repo.get_status(document_id, str(user.id))
+    state_repo = IngestionStateRepository(db)
+    status = await state_repo.get_status(document_id, str(user.id))
     if not status:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -405,8 +282,8 @@ async def cancel_document(
     """Cancel document ingestion."""
     if parse_uuid(document_id) is None:
         raise HTTPException(status_code=400, detail="Invalid document_id")
-    repo = DocumentRepository(db)
-    status = await repo.get_status(document_id, str(user.id))
+    state_repo = IngestionStateRepository(db)
+    status = await state_repo.get_status(document_id, str(user.id))
     if not status:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -414,7 +291,7 @@ async def cancel_document(
     if stage in {IngestionStage.COMPLETE, IngestionStage.FAILED, IngestionStage.CANCELLED}:
         raise HTTPException(status_code=400, detail=f"Cannot cancel document in stage {stage}")
 
-    await repo.mark_cancelled(document_id)
+    await state_repo.mark_cancelled(document_id)
     await db.commit()
 
     return {"status": "CANCELLED"}
@@ -427,8 +304,8 @@ async def list_documents(
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     """List all documents for the current user."""
-    repo = DocumentRepository(db)
-    docs = await repo.list_by_user(str(user.id), session_id=session_id)
+    crud_repo = DocumentCrudRepository(db)
+    docs = await crud_repo.list_by_user(str(user.id), session_id=session_id)
     return [
         {
             "id": str(d.id),
@@ -454,8 +331,8 @@ async def delete_document(
     """Delete a document and cascade delete its chunks."""
     if parse_uuid(document_id) is None:
         raise HTTPException(status_code=400, detail="Invalid document_id")
-    repo = DocumentRepository(db)
-    storage_key = await repo.delete_with_cascade(document_id, str(user.id))
+    crud_repo = DocumentCrudRepository(db)
+    storage_key = await crud_repo.delete_with_cascade(document_id, str(user.id))
     if not storage_key:
         raise HTTPException(status_code=404, detail="Document not found")
 

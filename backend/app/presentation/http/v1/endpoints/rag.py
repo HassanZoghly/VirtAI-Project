@@ -12,7 +12,7 @@ from app.domain.user.entities import UserEntity
 from app.infrastructure.db.database import get_db
 from app.infrastructure.llm.groq_provider import GroqLLMProvider
 from app.infrastructure.external.napkin_client import NapkinClient
-from app.infrastructure.db.repositories.document_repository import DocumentRepository
+from app.infrastructure.db.repositories.ingestion_state_repository import IngestionStateRepository
 from app.presentation.http.v1.dependencies import _current_user
 from app.shared.ids import parse_uuid
 from app.domain.rag.task_types import Locale
@@ -58,8 +58,8 @@ async def generate_quiz(
     if not doc_uuid:
         raise HTTPException(status_code=400, detail="Invalid document ID")
 
-    repo = DocumentRepository(db)
-    status = await repo.get_status(document_id, str(user.id))
+    state_repo = IngestionStateRepository(db)
+    status = await state_repo.get_status(document_id, str(user.id))
     if not status:
         raise HTTPException(status_code=403, detail="Forbidden or Document not found")
 
@@ -104,8 +104,8 @@ async def generate_diagram(
     if not doc_uuid:
         raise HTTPException(status_code=400, detail="Invalid document ID")
 
-    repo = DocumentRepository(db)
-    status = await repo.get_status(document_id, str(user.id))
+    state_repo = IngestionStateRepository(db)
+    status = await state_repo.get_status(document_id, str(user.id))
     if not status:
         raise HTTPException(status_code=403, detail="Forbidden or Document not found")
 

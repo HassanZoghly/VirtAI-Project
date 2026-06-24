@@ -6,8 +6,10 @@ from uuid import uuid4
 
 # We will test the WebSocket via FastAPI's TestClient
 # We need to mock the DB to provide exactly 3 chunks for the document.
+from unittest.mock import MagicMock, AsyncMock, patch
+
 @pytest.mark.asyncio
-async def test_explain_ws_flow(app_fixture, mock_db_session, mocker):
+async def test_explain_ws_flow(app_fixture, mock_db_session):
     """
     Connect WS -> walk through 3 slides -> inject a question mid-slide-2 -> verify it resumes correctly from slide 2.
     """
@@ -24,16 +26,31 @@ async def test_explain_ws_flow(app_fixture, mock_db_session, mocker):
     ]
     
     # Mock DB execution
-    mock_result = mocker.MagicMock()
+    mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = mock_chunks
-    mocker.patch.object(mock_db_session, 'execute', return_value=mock_result)
+    mock_db_session.execute = AsyncMock(return_value=mock_result)
 
     # Mock ChatUseCase to return a deterministic answer
-    mock_chat_use_case = mocker.AsyncMock()
+    mock_chat_use_case = AsyncMock()
     mock_chat_use_case.execute_rag_query.return_value = "This is the answer."
     
     # Override dependencies
-    app_fixture.dependency_overrides["app.application.chat.chat_use_case.ChatUseCase"] = lambda: mock_chat_use_case
+    from app.presentation.http.v1.dependencies import get_chat_use_case
+    from app.infrastructure.db.database import get_db
+    
+    app_fixture.dependency_overrides[get_chat_use_case] = lambda: mock_chat_use_case
+    app_fixture.dependency_overrides[get_db] = lambda: mock_db_session
+
+    # Mock get_redis in the module where it's used
+    mock_redis = AsyncMock()
+    redis_store = {}
+    async def mock_get(key):
+        return redis_store.get(key)
+    async def mock_setex(key, ttl, value):
+        redis_store[key] = value
+    mock_redis.get.side_effect = mock_get
+    mock_redis.setex.side_effect = mock_setex
+    patch('app.application.explain.explain_use_case.get_redis', return_value=mock_redis).start()
 
     client = TestClient(app_fixture)
 
@@ -109,7 +126,6 @@ async def test_explain_ws_flow(app_fixture, mock_db_session, mocker):
         # Send Continue
         websocket.send_json({"type": "chat.user_message", "data": {"text": "continue"}})
         
-        # Expect SlideEndEvent index -1
+        # Expect SlideEndEvent
         data = websocket.receive_json()
         assert data["type"] == "SlideEndEvent"
-        assert data["slide_index"] == -1

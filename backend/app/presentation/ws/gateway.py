@@ -79,6 +79,11 @@ class WebSocketHandler:
         self.session_bootstrap = SessionBootstrap(self._session_manager, self.connection_manager)
         self.pipeline_bridge = PipelineBridge(self)
         self.protocol_router = ProtocolRouter(self)
+        
+        from app.presentation.ws.connection_lifecycle import ConnectionLifecycle
+        from app.presentation.ws.frame_dispatcher import FrameDispatcher
+        self.connection_lifecycle = ConnectionLifecycle(self)
+        self.frame_dispatcher = FrameDispatcher(self)
 
         from app.shared.metrics import ws_connections_active
 
@@ -90,33 +95,6 @@ class WebSocketHandler:
             f"avatar={self.session.avatar_id} | "
             f"resumed={resumed} | replay_after_seq={replay_after_seq}"
         )
-
-    async def _cleanup(self) -> None:
-        self._connected = False
-        if self._heartbeat_task and not self._heartbeat_task.done():
-            self._heartbeat_task.cancel()
-
-        await self.pipeline_bridge.cancel_pipeline()
-
-        if self._voice_mode_handler:
-            await self._voice_mode_handler.shutdown()
-            # We do NOT clear the audio_pipeline here. It remains in the Session
-            # so that a reconnecting WS client can append audio seamlessly.
-
-        try:
-            from starlette.websockets import WebSocketState
-
-            if self.ws.client_state == WebSocketState.CONNECTED:
-                await self.ws.send_text('{"type":"chat.abort","data":{}}')
-        except Exception as e:
-            logger.debug(f"[WS] Could not send abort frame during cleanup: {e}")
-
-        if self.session and getattr(self.session, "session_id", None):
-            await self.connection_manager.unregister(self.session.session_id, self.ws)
-
-        from app.shared.metrics import ws_connections_active
-
-        ws_connections_active.dec()
 
     def _normalize_voice(self, voice_id: str) -> str:
         if not voice_id:
@@ -184,7 +162,7 @@ class WebSocketHandler:
                 pass
             return
 
-        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        self._heartbeat_task = asyncio.create_task(self.connection_lifecycle.heartbeat_loop())
 
         try:
             while self._connected:
@@ -199,18 +177,18 @@ class WebSocketHandler:
                     if "text" in message:
                         msg_size = len(message["text"].encode("utf-8"))
                         if msg_size > max_size:
-                            await self._close_for_message_too_large(msg_size, max_size, "text")
+                            await self.frame_dispatcher.close_for_message_too_large(msg_size, max_size, "text")
                             break
                     elif "bytes" in message:
                         msg_size = len(message["bytes"])
                         if msg_size > max_size:
-                            await self._close_for_message_too_large(msg_size, max_size, "binary")
+                            await self.frame_dispatcher.close_for_message_too_large(msg_size, max_size, "binary")
                             break
 
                     if "text" in message:
                         await self.protocol_router.route_message(message["text"])
                     elif "bytes" in message:
-                        await self._handle_binary_frame(message["bytes"])
+                        await self.frame_dispatcher.handle_binary_frame(message["bytes"])
 
                 except asyncio.TimeoutError:
                     continue
@@ -245,30 +223,7 @@ class WebSocketHandler:
                     self._connected = False
                     break
         finally:
-            await self._cleanup()
-
-    async def _heartbeat_loop(self) -> None:
-        self._last_pong_time = time.time()
-        settings = get_settings()
-        while self._connected:
-            await asyncio.sleep(settings.WS_HEARTBEAT_INTERVAL)
-            if not self._connected:
-                break
-
-            if time.time() - self._last_pong_time > settings.WS_HEARTBEAT_TIMEOUT:
-                self._connected = False
-                break
-
-            try:
-                await self.outbound_sender.send_protocol_message(
-                    ServerPong(timestamp=time.time()),
-                    self.session.session_id,
-                    self._session_pending,
-                    self._connected,
-                )
-            except Exception:
-                self._connected = False
-                break
+            await self.connection_lifecycle.cleanup()
 
     async def _get_voice_mode_handler(self) -> VoiceModeHandler:
         await self._ensure_session()
@@ -327,50 +282,3 @@ class WebSocketHandler:
             name=f"pipeline_voice_{session_id}",
         )
         self.pipeline_bridge.pipeline_task.add_done_callback(_pipeline_task_done_callback)
-
-    async def _handle_binary_frame(self, pcm_bytes: bytes) -> None:
-        try:
-            self.session.touch()
-            self._last_pong_time = time.time()
-
-            voice_handler = await self._get_voice_mode_handler()
-
-            is_final = False
-            # Deterministic binary frame format:
-            # - If length is odd, the last byte is the marker (0x00=continue, 0x01=final)
-            # - If length is even, there is no marker (legacy/raw PCM from frontend)
-            if len(pcm_bytes) % 2 != 0 and len(pcm_bytes) > 0:
-                marker = pcm_bytes[-1]
-                pcm_data = pcm_bytes[:-1]
-                if marker in (0x00, 0x01):
-                    is_final = marker == 0x01
-                else:
-                    pcm_data = pcm_bytes
-            else:
-                pcm_data = pcm_bytes
-
-            await voice_handler.handle_audio_chunk(pcm_data, is_final=is_final)
-
-        except Exception as e:
-            logger.error(f"[WS] Error handling binary frame: {e}")
-            await self.outbound_sender.safe_send_error(
-                code="BINARY_FRAME_ERROR",
-                message="Error processing audio data",
-                session_id=self.session.session_id,
-                session_pending=self._session_pending,
-                connected=self._connected,
-            )
-
-    async def _close_for_message_too_large(self, size: int, max_size: int, frame_type: str) -> None:
-        await self.outbound_sender.safe_send_error(
-            code="MESSAGE_TOO_LARGE",
-            message=f"WebSocket frame exceeds max size ({max_size} bytes)",
-            session_id=self.session.session_id,
-            session_pending=self._session_pending,
-            connected=self._connected,
-        )
-        try:
-            await self.ws.close(code=1009)
-        except Exception:
-            pass
-        self._connected = False

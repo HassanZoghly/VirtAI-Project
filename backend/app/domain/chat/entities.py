@@ -9,10 +9,25 @@ import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TypedDict
 
 _logger = logging.getLogger(__name__)
 
+
+class ChatMessageDict(TypedDict):
+    id: str
+    session_id: str
+    role: str
+    content: str
+    created_at: str
+
+
+class ChatSessionDict(TypedDict):
+    id: str
+    user_id: str
+    title: str
+    created_at: str
+    updated_at: str | None
 
 # ── Message Roles ─────────────────────────────────────────────────────────────
 class MessageRole(str, Enum):

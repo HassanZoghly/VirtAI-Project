@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from uuid import UUID
 
-from app.domain.rag.entities import Document, DocumentChunk
+from app.domain.rag.entities import Document, DocumentChunk, DocumentStatusDict
 
 # ── Existing Ingestion Pipeline Ports ────────────────────────────────────────
 
@@ -85,8 +85,8 @@ class ChunkingStrategy(ABC):
         pass
 
 
-class DocumentRepositoryPort(ABC):
-    """Abstract interface for document persistence operations."""
+class DocumentCrudPort(ABC):
+    """Abstract interface for document CRUD operations."""
 
     @abstractmethod
     async def create(
@@ -102,15 +102,55 @@ class DocumentRepositoryPort(ABC):
     ) -> Sequence[Document]: ...
 
     @abstractmethod
+    async def delete(self, document_id: str) -> bool: ...
+
+    @abstractmethod
+    async def delete_with_cascade(self, document_id: str, user_id: str) -> str | None: ...
+
+    @abstractmethod
+    async def find_by_sha256(
+        self, user_id: str, sha256: str, session_id: str | None = None
+    ) -> Document | None: ...
+
+    @abstractmethod
+    async def update_content_hash(self, document_id: str, content_hash: str) -> None: ...
+
+    @abstractmethod
+    async def list_active(self, user_id: str, session_id: str | None = None) -> list[Document]: ...
+
+
+class IngestionStatePort(ABC):
+    """Abstract interface for document state machine operations."""
+
+    @abstractmethod
     async def update_status(
         self, document_id: str, status: str, chunk_count: int = 0
     ) -> Document | None: ...
 
     @abstractmethod
-    async def delete(self, document_id: str) -> bool: ...
+    async def update_progress(self, document_id: str, stage: str, pct: int, processed: int, total: int) -> None: ...
 
     @abstractmethod
-    async def update_progress(self, document_id: str, stage: str, pct: int, processed: int, total: int) -> None: ...
+    async def mark_failed(self, document_id: str, error_msg: str, is_retryable: bool) -> None: ...
+
+    @abstractmethod
+    async def mark_cancelled(self, document_id: str) -> None: ...
+
+    @abstractmethod
+    async def mark_completed(self, document_id: str) -> None: ...
+
+    @abstractmethod
+    async def get_status(self, document_id: str, user_id: str) -> DocumentStatusDict | None: ...
+
+    @abstractmethod
+    async def count_active_jobs(self, user_id: str) -> int: ...
+
+    @abstractmethod
+    async def get_stage(self, document_id: str) -> str | None: ...
+
+
+class DocumentIntegrityPort(ABC):
+    """Abstract interface for chunk integrity and versioning operations."""
 
     @abstractmethod
     async def get_next_chunk_version(self, document_id: str) -> int: ...
@@ -120,12 +160,6 @@ class DocumentRepositoryPort(ABC):
 
     @abstractmethod
     async def delete_inactive_chunks(self, document_id: str, active_version: int | None = None) -> None: ...
-
-    @abstractmethod
-    async def update_content_hash(self, document_id: str, content_hash: str) -> None: ...
-
-    @abstractmethod
-    async def mark_completed(self, document_id: str) -> None: ...
 
     @abstractmethod
     async def delete_all_chunks(self, document_id: str) -> None: ...

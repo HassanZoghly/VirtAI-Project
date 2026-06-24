@@ -1,85 +1,97 @@
 import asyncio
-import json
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
-from app.presentation.ws.explain_handler import ExplainHandler, PresentationState
-from app.infrastructure.db.models import DocumentChunk
 
+from app.presentation.ws.explain_handler import ExplainHandler
+from app.application.explain.explain_use_case import ExplainUseCase
 
 @pytest.mark.asyncio
 async def test_explain_handler_interruption(monkeypatch):
-    monkeypatch.setattr(ExplainHandler, "_answer_question", AsyncMock())
+    monkeypatch.setattr("app.application.explain.explain_use_case.get_redis", AsyncMock())
     mock_ws = AsyncMock()
     mock_db = AsyncMock()
+    mock_chat_use_case = AsyncMock()
     
-    chunk = DocumentChunk(chunk_text="Hello slide one", chunk_order=1)
-    
-    mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = [chunk]
-    mock_db.execute.return_value = mock_result
-    
-    from app.application.chat.chat_use_case import ChatUseCase
-    mock_chat_use_case = AsyncMock(spec=ChatUseCase)
-    mock_chat_use_case.execute_rag_query.return_value = "Answering based on slide 0: [RAG Context Applied]..."
+    # We mock the entire ExplainUseCase execute functions
+    async def mock_start_or_resume(self, user_id, document_id):
+        yield {"type": "SlideStartEvent", "slide_index": 0}
+        await asyncio.sleep(0.5)
+        yield {"type": "AwaitInputEvent"}
+        
+    async def mock_handle_user_input(self, user_id, document_id, text):
+        yield {"type": "SlideContentTokens", "tokens": "mock answer"}
+        yield {"type": "AwaitInputEvent"}
+
+    monkeypatch.setattr(ExplainUseCase, "start_or_resume", mock_start_or_resume)
+    monkeypatch.setattr(ExplainUseCase, "handle_user_input", mock_handle_user_input)
     
     handler = ExplainHandler(mock_ws, "00000000-0000-0000-0000-000000000000", mock_db, "user", mock_chat_use_case)
     
-    await handler._load_chunks()
-    assert len(handler.chunks) == 1
+    # run will create background task for start_presentation and then listen for ws
+    # since ws.receive_text() is mocked, we need to make it block eventually
+    receive_futures = [
+        asyncio.sleep(0.05, result='{"type": "chat.user_message", "data": {"text": "what does it mean?"}}'),
+        asyncio.sleep(10.0) # block forever
+    ]
     
-    # Start loop
-    handler._main_task = asyncio.create_task(handler._presentation_loop())
+    async def side_effect():
+        return await receive_futures.pop(0)
+        
+    mock_ws.receive_text.side_effect = side_effect
     
-    # Let it start
-    await asyncio.sleep(0.05)
-    assert handler.state == PresentationState.EXPLAINING
+    run_task = asyncio.create_task(handler.run())
     
-    # Send interruption
-    await handler._handle_interruption({"data": {"text": "what does it mean?"}})
-    await asyncio.sleep(0.01)  # Let loop process cancellation
-    
-    assert handler._main_task.cancelled() or handler._main_task.done()
-    assert handler.state == PresentationState.AWAITING
+    await asyncio.sleep(0.1) # Let the handler process the message
+    run_task.cancel()
     
     # Verify sent events
     sent_messages = [c[0][0] for c in mock_ws.send_json.call_args_list]
     
     has_slide_start = any(msg.get("type") == "SlideStartEvent" for msg in sent_messages)
-    has_await_input = any(msg.get("type") == "AwaitInputEvent" for msg in sent_messages)
+    has_mock_answer = any(msg.get("type") == "SlideContentTokens" and msg.get("tokens") == "mock answer" for msg in sent_messages)
     
     assert has_slide_start
-    assert has_await_input
+    assert has_mock_answer
 
 @pytest.mark.asyncio
 async def test_explain_handler_continue(monkeypatch):
-    monkeypatch.setenv("GROQ_API_KEY", "dummy")
+    monkeypatch.setattr("app.application.explain.explain_use_case.get_redis", AsyncMock())
     mock_ws = AsyncMock()
     mock_db = AsyncMock()
+    mock_chat_use_case = AsyncMock()
     
-    chunk1 = DocumentChunk(chunk_text="Slide 1", chunk_order=1)
-    chunk2 = DocumentChunk(chunk_text="Slide 2", chunk_order=2)
-    
-    mock_result = MagicMock()
-    mock_result.scalars.return_value.all.return_value = [chunk1, chunk2]
-    mock_db.execute.return_value = mock_result
-    
-    from app.application.chat.chat_use_case import ChatUseCase
-    mock_chat_use_case = AsyncMock(spec=ChatUseCase)
-    mock_chat_use_case.execute_rag_query.return_value = "Answering based on slide 0: [RAG Context Applied]..."
+    async def mock_start_or_resume(self, user_id, document_id):
+        yield {"type": "SlideStartEvent", "slide_index": 0}
+        await asyncio.sleep(0.5)
+        
+    async def mock_handle_user_input(self, user_id, document_id, text):
+        # In real code, 'continue' triggers start_or_resume inside UseCase
+        # Since we mock it, we just yield the events that UseCase would yield
+        yield {"type": "SlideStartEvent", "slide_index": 1}
+        yield {"type": "AwaitInputEvent"}
+
+    monkeypatch.setattr(ExplainUseCase, "start_or_resume", mock_start_or_resume)
+    monkeypatch.setattr(ExplainUseCase, "handle_user_input", mock_handle_user_input)
     
     handler = ExplainHandler(mock_ws, "00000000-0000-0000-0000-000000000000", mock_db, "user", mock_chat_use_case)
-    await handler._load_chunks()
     
-    handler._main_task = asyncio.create_task(handler._presentation_loop())
-    await asyncio.sleep(0.05)
+    receive_futures = [
+        asyncio.sleep(0.05, result='{"type": "chat.user_message", "data": {"text": "continue to next slide"}}'),
+        asyncio.sleep(10.0) # block forever
+    ]
     
-    # Send "continue"
-    await handler._handle_interruption({"data": {"text": "continue to next slide"}})
+    async def side_effect():
+        return await receive_futures.pop(0)
+        
+    mock_ws.receive_text.side_effect = side_effect
     
-    assert handler.current_slide_index == 1
-    assert handler.state == PresentationState.EXPLAINING
+    run_task = asyncio.create_task(handler.run())
     
-    await asyncio.sleep(0.05)
-    # End
-    handler._main_task.cancel()
+    await asyncio.sleep(0.1) # Let the handler process the message
+    run_task.cancel()
+    
+    sent_messages = [c[0][0] for c in mock_ws.send_json.call_args_list]
+    has_slide_start_1 = any(msg.get("type") == "SlideStartEvent" and msg.get("slide_index") == 1 for msg in sent_messages)
+    
+    assert has_slide_start_1

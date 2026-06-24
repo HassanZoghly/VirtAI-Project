@@ -37,21 +37,19 @@ async def test_quiz_attempt_insertion(mock_db_session):
     doc_id = uuid.uuid4()
     
     new_entry = QuizAttempt(
-        user_id="test-user",
-        document_id=doc_id,
+        user_id=uuid.uuid4(),
+        quiz_id=doc_id,
         score=80,
-        total_questions=5,
-        details={"q1": "correct", "q2": "incorrect"}
+        answers={"q1": "correct", "q2": "incorrect"}
     )
     mock_db_session.add(new_entry)
     await mock_db_session.commit()
     
-    result = await mock_db_session.execute(select(QuizAttempt).where(QuizAttempt.document_id == doc_id))
+    result = await mock_db_session.execute(select(QuizAttempt).where(QuizAttempt.quiz_id == doc_id))
     entry = result.scalar_one_or_none()
     
     assert entry is not None
     assert entry.score == 80
-    assert entry.total_questions == 5
 
 @pytest.mark.asyncio
 async def test_diagram_cache_insertion(mock_db_session):

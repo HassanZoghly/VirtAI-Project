@@ -1,8 +1,22 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Protocol
+from typing import Any, Protocol, TypedDict
 from uuid import UUID, uuid4
+
+
+class DocumentStatusDict(TypedDict):
+    id: str
+    filename: str
+    status: str
+    current_stage: str
+    progress_pct: int
+    processed_chunks: int
+    total_chunks: int
+    started_at: str | None
+    completed_at: str | None
+    upload_source: str | None
+    error_message: str | None
 
 
 class Document(Protocol):

@@ -15,22 +15,27 @@ from app.schemas.ws_messages import (
 )
 
 
-def validate_message(raw_message: dict) -> ChatUserMessage | ChatAbort:
+from pydantic import TypeAdapter
+from app.schemas.ws_messages import WSMessageEnvelope
+
+envelope_adapter = TypeAdapter(WSMessageEnvelope)
+
+def validate_message(raw_message: dict) -> ChatUserMessage | ChatAbort | ClientSpeechStopped:
     if not isinstance(raw_message, dict):
         raise ValueError("Message must be a dictionary")
     if "type" not in raw_message:
         raise ValueError("Message missing 'type' field")
-    msg_type = raw_message.get("type")
-    msg_data = raw_message.get("data", {})
-    match msg_type:
-        case "chat.user_message":
-            return ChatUserMessage(**msg_data)
-        case "chat.abort":
-            return ChatAbort(**msg_data)
-        case "client.speech_stopped":
-            return ClientSpeechStopped(**msg_data)
-        case _:
+    
+    # Use discriminated union to validate payload structure
+    try:
+        envelope = envelope_adapter.validate_python(raw_message)
+        return envelope.data
+    except ValidationError as e:
+        # Check if it failed because the type wasn't in the union
+        msg_type = raw_message.get("type")
+        if msg_type not in ["chat.user_message", "chat.abort", "client.speech_stopped", "tts.request"]:
             raise ValueError(f"Unknown message type: {msg_type}")
+        raise e
 
 
 class ProtocolRouter:

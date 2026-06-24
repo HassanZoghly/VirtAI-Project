@@ -1,5 +1,5 @@
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, AsyncIterable
 from pathlib import Path
 
 import aiofiles  # type: ignore[import-untyped]
@@ -21,14 +21,18 @@ class LocalStorageProvider(StorageProvider):
         return absolute_path
 
     async def save(
-        self, key: str, data: bytes, content_type: str = "application/octet-stream"
+        self, key: str, data: bytes | AsyncIterable[bytes], content_type: str = "application/octet-stream"
     ) -> str:
         file_path = self._get_absolute_path(key)
         # Create parent directories if needed
         await aiofiles.os.makedirs(file_path.parent, exist_ok=True)
 
         async with aiofiles.open(file_path, "wb") as f:
-            await f.write(data)
+            if isinstance(data, bytes):
+                await f.write(data)
+            else:
+                async for chunk in data:
+                    await f.write(chunk)
         return key
 
     async def delete(self, key: str) -> None:

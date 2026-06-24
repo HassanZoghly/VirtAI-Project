@@ -58,8 +58,11 @@ async def test_cleanup_awaits_voice_mode_shutdown(monkeypatch: pytest.MonkeyPatc
     handler._voice_mode_handler = FakeVoiceModeHandler()
     handler.session = None
     handler.ws = FakeWebSocket()
+    
+    from app.presentation.ws.connection_lifecycle import ConnectionLifecycle
+    handler.connection_lifecycle = ConnectionLifecycle(handler)
 
-    await handler._cleanup()
+    await handler.connection_lifecycle.cleanup()
 
     assert handler._voice_mode_handler.shutdown_called is True
     assert handler.pipeline_bridge.cancelled is True

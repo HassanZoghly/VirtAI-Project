@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from uuid import UUID
+from typing import TypedDict
 
 
 class AuthProvider(str, Enum):
@@ -33,3 +34,13 @@ class UserEntity:
     refresh_token_version: int = 0
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class AvatarDict(TypedDict):
+    id: str
+    user_id: str
+    avatar_url: str
+    voice_id: str
+    language: str
+    persona_prompt: str
+    updated_at: str | None

@@ -11,6 +11,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.db.models import Avatar
+from app.domain.user.entities import AvatarDict
 from app.shared.ids import require_uuid
 
 Language = Literal["ar", "en"]
@@ -24,7 +25,7 @@ class AvatarRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_by_user(self, user_id: str) -> dict | None:
+    async def get_by_user(self, user_id: str) -> AvatarDict | None:
         stmt = select(Avatar).where(Avatar.user_id == require_uuid(user_id, field_name="user_id"))
         result = await self.db.execute(stmt)
         avatar = result.scalar_one_or_none()
@@ -37,7 +38,7 @@ class AvatarRepository:
         voice_id: str = "aria",
         language: Language = "en",
         persona_prompt: str = "",
-    ) -> dict:
+    ) -> AvatarDict:
         """Create or update avatar config for a user."""
         uid = require_uuid(user_id, field_name="user_id")
         # Check existence
@@ -78,7 +79,7 @@ class AvatarRepository:
         from sqlalchemy import CursorResult
         return cast("CursorResult", result).rowcount > 0
 
-    def _serialize(self, avatar: Avatar) -> dict:
+    def _serialize(self, avatar: Avatar) -> AvatarDict:
         return {
             "id": str(avatar.id),
             "user_id": str(avatar.user_id),

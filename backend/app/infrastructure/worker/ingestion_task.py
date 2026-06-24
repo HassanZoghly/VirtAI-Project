@@ -185,7 +185,6 @@ async def _run_ingestion(
     log_ctx: dict,
 ) -> None:
     from app.application.rag.ingest_document import IngestDocumentUseCase
-    from app.infrastructure.rag.markdown_chunker import MarkdownChunker
     from app.infrastructure.rag.pdf_markdown_extractor import PDFMarkdownExtractor
     from app.infrastructure.rag.smart_chunker import SmartChunker
     from app.shared.config import get_settings
@@ -230,11 +229,7 @@ async def _run_ingestion(
             return doc is not None and doc.current_stage == IngestionStage.CANCELLED.value
 
     settings = get_settings()
-    chunker = (
-        SmartChunker(chunk_size=settings.CHUNK_SIZE, overlap_size=settings.CHUNK_OVERLAP)
-        if settings.USE_SMART_CHUNKER
-        else MarkdownChunker(chunk_size=settings.CHUNK_SIZE, chunk_overlap=settings.CHUNK_OVERLAP)
-    )
+    chunker = SmartChunker(chunk_size=settings.CHUNK_SIZE, overlap_size=settings.CHUNK_OVERLAP)
 
     # Instantiate use case
     use_case = IngestDocumentUseCase(

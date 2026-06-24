@@ -15,7 +15,7 @@ from app.presentation.ws.pipeline_bridge import PipelineBridge, _pipeline_task_d
 from app.presentation.ws.protocol_router import ProtocolRouter
 from app.presentation.ws.session_bootstrap import SessionBootstrap
 from app.presentation.ws.voice_mode_handler import VoiceModeHandler
-from app.schemas.ws_messages import ServerMessage, ServerMessageType, make_error_msg
+from app.schemas.ws_messages import ServerReady, ServerPong, make_error
 from app.shared.config import get_settings
 
 
@@ -149,24 +149,22 @@ class WebSocketHandler:
             )
 
         try:
-            await self.outbound_sender.send(
-                ServerMessage(
-                    type=ServerMessageType.READY,
-                    data={
-                        "session_id": self.session.session_id or None,
-                        "avatar_id": self.session.avatar_id,
-                        "message": "Connected and ready",
-                        "resumed": self.resumed,
-                        "last_seq": (
-                            self.connection_manager.latest_sequence(self.session.session_id)
-                            if self.session.session_id
-                            else 0
-                        ),
-                        "timestamp": time.time(),
-                    },
+            await self.outbound_sender.send_protocol_message(
+                ServerReady(
+                    session_id=self.session.session_id or None,
+                    avatar_id=self.session.avatar_id,
+                    message="Connected and ready",
+                    resumed=self.resumed,
+                    last_seq=(
+                        self.connection_manager.latest_sequence(self.session.session_id)
+                        if self.session.session_id
+                        else 0
+                    ),
+                    timestamp=time.time(),
                 ),
                 self.session.session_id,
                 self._session_pending,
+                self._connected,
             )
 
             if self.resumed:
@@ -237,11 +235,12 @@ class WebSocketHandler:
                     from app.shared.metrics import ws_connection_drops
 
                     ws_connection_drops.labels(reason="unexpected_error").inc()
-                    await self.outbound_sender.safe_send(
-                        make_error_msg(code="INTERNAL_ERROR", message="Error processing message"),
-                        self.session.session_id,
-                        self._session_pending,
-                        self._connected,
+                    await self.outbound_sender.safe_send_error(
+                        code="INTERNAL_ERROR",
+                        message="Error processing message",
+                        session_id=self.session.session_id,
+                        session_pending=self._session_pending,
+                        connected=self._connected,
                     )
                     self._connected = False
                     break
@@ -261,10 +260,11 @@ class WebSocketHandler:
                 break
 
             try:
-                await self.outbound_sender.send(
-                    ServerMessage(type=ServerMessageType.PONG, data={"timestamp": time.time()}),
+                await self.outbound_sender.send_protocol_message(
+                    ServerPong(timestamp=time.time()),
                     self.session.session_id,
                     self._session_pending,
+                    self._connected,
                 )
             except Exception:
                 self._connected = False
@@ -353,22 +353,21 @@ class WebSocketHandler:
 
         except Exception as e:
             logger.error(f"[WS] Error handling binary frame: {e}")
-            await self.outbound_sender.safe_send(
-                make_error_msg(code="BINARY_FRAME_ERROR", message="Error processing audio data"),
-                self.session.session_id,
-                self._session_pending,
-                self._connected,
+            await self.outbound_sender.safe_send_error(
+                code="BINARY_FRAME_ERROR",
+                message="Error processing audio data",
+                session_id=self.session.session_id,
+                session_pending=self._session_pending,
+                connected=self._connected,
             )
 
     async def _close_for_message_too_large(self, size: int, max_size: int, frame_type: str) -> None:
-        await self.outbound_sender.safe_send(
-            make_error_msg(
-                code="MESSAGE_TOO_LARGE",
-                message=f"WebSocket frame exceeds max size ({max_size} bytes)",
-            ),
-            self.session.session_id,
-            self._session_pending,
-            self._connected,
+        await self.outbound_sender.safe_send_error(
+            code="MESSAGE_TOO_LARGE",
+            message=f"WebSocket frame exceeds max size ({max_size} bytes)",
+            session_id=self.session.session_id,
+            session_pending=self._session_pending,
+            connected=self._connected,
         )
         try:
             await self.ws.close(code=1009)

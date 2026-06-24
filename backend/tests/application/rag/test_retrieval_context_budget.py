@@ -41,6 +41,9 @@ async def test_retrieval_uses_session_scope_and_source_metadata() -> None:
         async def embed_batch(self, texts: list[str]) -> list[list[float]]:
             return [[0.1, 0.2] for _ in texts]
 
+        async def close(self) -> None:
+            pass
+
     class FakeVectorStore(VectorStore):
         def __init__(self) -> None:
             self.scope: str | None = None

@@ -1,7 +1,5 @@
 from app.domain.rag.task_types import TaskType, Locale
 from app.infrastructure.rag.prompts.registry import get_prompt_set
-from app.infrastructure.rag import rag_prompts
-
 def test_all_combinations_exist():
     # Assert every (TaskType × Locale) combination returns a PromptSet
     for task in TaskType:
@@ -23,8 +21,3 @@ def test_hybrid_knowledge_rule():
     ps = get_prompt_set(TaskType.SIMPLE_QA, Locale.EN)
     assert "CRITICAL RULE FOR HYBRID KNOWLEDGE:" in ps.system.template
 
-def test_backward_compat_shim():
-    # Backward-compat shim works
-    sys_prompt = rag_prompts.system_prompt
-    assert sys_prompt is not None
-    assert "You are an AI Tutor assistant" in sys_prompt.template

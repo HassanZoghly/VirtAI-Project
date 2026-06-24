@@ -10,7 +10,6 @@ from app.presentation.ws.pipeline_bridge import _pipeline_task_done_callback
 from app.schemas.ws_messages import (
     ChatAbort,
     ChatUserMessage,
-    ClientMessageType,
     ClientSpeechStopped,
     make_pipeline_state,
 )
@@ -87,39 +86,13 @@ class ProtocolRouter:
             await self._route_validated_message(raw)
             return
 
-        try:
-            msg_type = ClientMessageType(msg_type_str)
-        except ValueError as e:
-            logger.warning(f"Unknown message type: {msg_type_str} | {e}")
-            await self.ctx.outbound_sender.safe_send_error(
-                code="INVALID_MESSAGE",
-                message=f"Unknown message type: {msg_type_str}",
-                session_id=None,
-                session_pending=self.ctx._session_pending,
-                connected=self.ctx._connected,
-            )
-            return
-
-        match msg_type:
-
-            case ClientMessageType.PING:
-                await self._handle_ping()
-            case ClientMessageType.ABORT:
-                await self._handle_abort(data)
-            case ClientMessageType.VOICE_MODE_STOP:
-                await self._handle_voice_mode_stop(data)
-            case ClientMessageType.AUDIO_CHUNK:
-                if data and data.get("is_final"):
-                    voice_handler = await self.ctx._get_voice_mode_handler()
-                    await voice_handler.handle_audio_chunk(b"\x00\x00", is_final=True)
-            case _:
-                await self.ctx.outbound_sender.safe_send_error(
-                    code="UNKNOWN_TYPE",
-                    message=f"Unknown message type: {msg_type.value}",
-                    session_id=None,
-                    session_pending=self.ctx._session_pending,
-                    connected=self.ctx._connected,
-                )
+        await self.ctx.outbound_sender.safe_send_error(
+            code="UNKNOWN_TYPE",
+            message=f"Unknown message type: {msg_type_str}",
+            session_id=None,
+            session_pending=self.ctx._session_pending,
+            connected=self.ctx._connected,
+        )
 
     async def _route_validated_message(self, raw: str) -> None:
         data = json.loads(raw)
@@ -160,16 +133,6 @@ class ProtocolRouter:
                 session_pending=self.ctx._session_pending,
                 connected=self.ctx._connected,
             )
-
-    async def _handle_ping(self) -> None:
-        self.ctx._last_pong_time = time.time()
-        from app.schemas.ws_messages import ServerMessage, ServerMessageType
-
-        await self.ctx.outbound_sender.send(
-            ServerMessage(type=ServerMessageType.PONG, data={"timestamp": time.time()}),
-            self.ctx.session.session_id,
-            self.ctx._session_pending,
-        )
 
     async def _handle_abort(self, data: dict | None = None) -> None:
         async with self.ctx._turn_lock:

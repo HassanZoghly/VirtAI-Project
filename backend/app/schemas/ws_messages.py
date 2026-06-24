@@ -508,104 +508,18 @@ def make_error(
     )
 
 
-# ── Legacy Protocol (Old System) ──────────────────────────────────────────────
-# These are kept for backward compatibility with the existing WebSocket implementation
+class ServerReady(BaseModel):
+    """Server signals it is ready to receive messages."""
 
-import json
-from enum import Enum
-
-
-class ClientMessageType(str, Enum):
-    """Legacy client message types"""
-
-    PING = "ping"
-    ABORT = "abort"
-    VOICE_MODE_STOP = "voice_mode_stop"
-    AUDIO_CHUNK = "audio_chunk"
+    session_id: str | None = Field(None, description="Session UUID (if applicable)")
+    avatar_id: str = Field(..., description="Avatar identifier")
+    message: str = Field(..., description="Ready message")
+    resumed: bool = Field(..., description="Whether session was resumed")
+    last_seq: int = Field(..., description="Last sequence number")
+    timestamp: float = Field(..., description="Server timestamp")
 
 
-class ServerMessageType(str, Enum):
-    """Legacy server message types"""
+class ServerPong(BaseModel):
+    """Server responds to client ping (or sends heartbeat)."""
 
-    READY = "ready"
-    STATUS = "status"
-    TRANSCRIPT = "transcript"
-    LLM_START = "llm_start"
-    LLM_CHUNK = "llm_chunk"
-    LLM_END = "llm_end"
-    TTS_START = "tts_start"
-    TTS_CHUNK = "tts_chunk"
-    TTS_END = "tts_end"
-    VISEMES = "visemes"
-    PONG = "pong"
-    ERROR = "error"
-
-
-class AvatarStatus(str, Enum):
-    """Avatar state for legacy protocol"""
-
-    IDLE = "idle"
-    PROCESSING = "processing"
-    THINKING = "thinking"
-    SPEAKING = "speaking"
-
-
-class ServerMessage(BaseModel):
-    """Legacy server message wrapper"""
-
-    type: ServerMessageType
-    data: dict[str, Any] = Field(default_factory=dict)
-
-    def to_json(self) -> str:
-        """Convert to JSON string for WebSocket transmission"""
-        return json.dumps({"type": self.type.value, "data": self.data})
-
-
-class VisemeEvent(BaseModel):
-    """Legacy viseme event"""
-
-    offset_ms: float
-    viseme_id: int
-    duration_ms: float
-
-
-class VisemesData(BaseModel):
-    """Legacy visemes data"""
-
-    events: list[VisemeEvent]
-    audio_duration_ms: float
-
-
-# Legacy helper functions
-def make_error_msg(code: str, message: str) -> ServerMessage:
-    """Create legacy error message"""
-    return ServerMessage(type=ServerMessageType.ERROR, data={"code": code, "message": message})
-
-
-def make_status_msg(status: AvatarStatus) -> ServerMessage:
-    """Create legacy status message"""
-    return ServerMessage(type=ServerMessageType.STATUS, data={"status": status.value})
-
-
-def make_transcript_msg(text: str, is_final: bool = True) -> ServerMessage:
-    """Create legacy transcript message"""
-    return ServerMessage(
-        type=ServerMessageType.TRANSCRIPT, data={"text": text, "is_final": is_final}
-    )
-
-
-def make_tts_chunk_msg(audio_b64: str, chunk_index: int) -> ServerMessage:
-    """Create legacy TTS chunk message"""
-    return ServerMessage(
-        type=ServerMessageType.TTS_CHUNK, data={"audio": audio_b64, "chunk_index": chunk_index}
-    )
-
-
-def make_visemes_msg(visemes_data: VisemesData) -> ServerMessage:
-    """Create legacy visemes message"""
-    return ServerMessage(type=ServerMessageType.VISEMES, data=visemes_data.model_dump())
-
-
-def make_llm_chunk_msg(token: str) -> ServerMessage:
-    """Create legacy LLM chunk message"""
-    return ServerMessage(type=ServerMessageType.LLM_CHUNK, data={"token": token})
+    timestamp: float = Field(..., description="Server timestamp")

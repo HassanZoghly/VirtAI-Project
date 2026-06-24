@@ -1,32 +1,45 @@
-"""Semantic animation mapping with keyword scoring + softmax normalization."""
-
-from __future__ import annotations
-
 import math
+import re
 from dataclasses import dataclass
 from typing import ClassVar
 
 
 @dataclass(frozen=True)
 class AnimationMappingDecision:
-    """Result of mapping a text segment to animation intent and tone."""
-
     intent: str
     tone: str
     intent_scores: dict[str, float]
 
 
-from app.application.animation.intent_scorer import IntentScorer
+class IntentScorer:
+    """Semantic animation mapping with keyword scoring + softmax normalization."""
 
-class AnimationMapper:
-    """Maps text segments to animation intents using weighted keyword signals."""
-
-    _INTENT_KEYWORDS: ClassVar[dict[str, tuple[str, ...]]] = IntentScorer.INTENT_KEYWORDS
+    INTENT_KEYWORDS: ClassVar[dict[str, tuple[str, ...]]] = {
+        "question": ("?", "why", "how", "what", "when", "where", "which"),
+        "emphasis": ("important", "must", "always", "never", "key", "critical"),
+        "explanation": ("because", "therefore", "means", "for example", "step", "first"),
+        "reassurance": ("don't worry", "it's okay", "you can", "great", "good job"),
+        "transition": ("next", "then", "now", "finally", "also", "in addition"),
+    }
 
     @staticmethod
-    def _softmax_distribution(
-        scores: dict[str, float], temperature: float = 0.85
-    ) -> dict[str, float]:
+    def segment_text(text: str) -> list[str]:
+        cleaned = re.sub(r"\s+", " ", text).strip()
+        if not cleaned:
+            return []
+
+        raw = [p.strip() for p in re.split(r"(?<=[.!?])\s+", cleaned) if p.strip()]
+        result: list[str] = []
+        for chunk in raw:
+            if len(chunk) <= 140:
+                result.append(chunk)
+                continue
+            parts = [p.strip() for p in re.split(r",\s+", chunk) if p.strip()]
+            result.extend(parts or [chunk])
+        return result[:16]
+
+    @staticmethod
+    def _softmax_distribution(scores: dict[str, float], temperature: float = 0.85) -> dict[str, float]:
         bounded_temperature = max(temperature, 1e-6)
         exps = {key: math.exp(value / bounded_temperature) for key, value in scores.items()}
         total = sum(exps.values()) or 1.0
@@ -54,9 +67,9 @@ class AnimationMapper:
     ) -> AnimationMappingDecision:
         """Return intent + tone using keyword-weighted softmax scoring."""
         lower = segment.lower()
-        base_scores: dict[str, float] = dict.fromkeys(self._INTENT_KEYWORDS, 0.12)
+        base_scores: dict[str, float] = dict.fromkeys(self.INTENT_KEYWORDS, 0.12)
 
-        for intent, keywords in self._INTENT_KEYWORDS.items():
+        for intent, keywords in self.INTENT_KEYWORDS.items():
             for keyword in keywords:
                 if keyword in lower:
                     base_scores[intent] += 0.65

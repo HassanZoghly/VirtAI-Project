@@ -105,28 +105,19 @@ async def lifespan(app: FastAPI):
     app.state.embedder = embedder
     app.state.storage = LocalStorageProvider(base_path=settings.UPLOAD_BASE_PATH)
 
-    from app.infrastructure.rag.reranker import CrossEncoderReranker, DummyCrossEncoderReranker
+    from app.infrastructure.rag.reranker import CrossEncoderReranker
 
-    if settings.USE_DUMMY_RERANKER:
-        app.state.reranker = DummyCrossEncoderReranker()
-        logger.info("[Reranker] Using DummyCrossEncoderReranker (USE_DUMMY_RERANKER=True)")
-    else:
-        try:
-            # CrossEncoderReranker is now lazy: __init__ does NOT import
-            # sentence_transformers, so this line is safe even if torchaudio
-            # native libs are broken.  The heavy import happens on first rerank().
-            app.state.reranker = CrossEncoderReranker()
-            logger.info("[Reranker] Aggressively warming up CrossEncoderReranker...")
-            # Preload the model into RAM asynchronously to avoid blocking startup or first chat request
-            loop = asyncio.get_running_loop()
-            loop.run_in_executor(app.state.reranker.get_executor(), app.state.reranker._ensure_model)
-        except Exception as _reranker_exc:
-            logger.warning(
-                f"[Reranker] CrossEncoderReranker construction failed "
-                f"({type(_reranker_exc).__name__}: {_reranker_exc}). "
-                "Falling back to DummyCrossEncoderReranker for this session."
-            )
-            app.state.reranker = DummyCrossEncoderReranker()
+    try:
+        app.state.reranker = CrossEncoderReranker()
+        logger.info("[Reranker] Aggressively warming up CrossEncoderReranker...")
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(app.state.reranker.get_executor(), app.state.reranker._ensure_model)
+    except Exception as _reranker_exc:
+        logger.error(
+            f"[Reranker] CrossEncoderReranker construction failed "
+            f"({type(_reranker_exc).__name__}: {_reranker_exc}). Failing fast."
+        )
+        raise
 
     # ── Intent Classifier Preload ───────────────────────────────────────────
     try:

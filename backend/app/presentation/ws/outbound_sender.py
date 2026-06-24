@@ -6,7 +6,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from app.presentation.ws.connection_manager import WSConnectionManager
-from app.schemas.ws_messages import ServerMessage, ServerMessageType, make_error
+from app.schemas.ws_messages import make_error
 
 
 class OutboundSender:
@@ -23,42 +23,18 @@ class OutboundSender:
         "AnimationTimeline": "animation.timeline",
         "AnimationTimelineV2": "animation.timeline.v2",
         "UserMessageEcho": "user.message.echo",
+        "ServerReady": "ready",
+        "ServerPong": "pong",
     }
 
     def __init__(self, websocket: WebSocket, connection_manager: WSConnectionManager):
         self.ws = websocket
         self.connection_manager = connection_manager
 
-    async def send(
-        self, message: ServerMessage, session_id: str | None, session_pending: bool
-    ) -> None:
-        """Send message (raises exception on failure)."""
-        envelope = {
-            "type": message.type.value,
-            "data": message.data,
-        }
-        if session_pending or not session_id:
-            serialized = json.dumps(envelope)
-            await self.ws.send_text(serialized)
-            return
-
-        serialized = await self.connection_manager.stamp_and_record(session_id, envelope)
-        await self.ws.send_text(serialized)
 
     async def send_binary(self, data: bytes) -> None:
         """Send raw binary data to the client over WebSocket."""
         await self.ws.send_bytes(data)
-
-    async def safe_send(
-        self, message: ServerMessage, session_id: str | None, session_pending: bool, connected: bool
-    ) -> None:
-        """Send message, ignore errors (used during cleanup)."""
-        if not connected:
-            return
-        try:
-            await self.send(message, session_id, session_pending)
-        except Exception:
-            pass
 
     async def safe_send_raw(self, payload: dict, session_id: str | None) -> None:
         """Send a raw dictionary payload."""
@@ -91,11 +67,7 @@ class OutboundSender:
             details=details,
         )
 
-        server_msg = ServerMessage(
-            type=ServerMessageType.ERROR, data=error_msg.model_dump(exclude_none=True)
-        )
-
-        await self.safe_send(server_msg, session_id, session_pending, connected)
+        await self.send_protocol_message(error_msg, session_id, session_pending, connected)
 
     async def send_protocol_message(
         self, message: BaseModel, session_id: str | None, session_pending: bool, connected: bool

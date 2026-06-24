@@ -14,7 +14,7 @@ export default function SlideDrawer({
   width,
   onWidthChange,
   minWidth = 250,
-  maxWidth = 900,
+  maxWidth = 480,
   resizable = false,
 }) {
   const drawerRef = useRef(null);

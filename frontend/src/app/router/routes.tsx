@@ -2,6 +2,7 @@ import { Component, lazy, ReactNode } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import RequireAuth from './guards/RequireAuth';
 import RequireSetupComplete from './guards/RequireSetupComplete';
+import AppLayout from '../layouts/AppLayout';
 
 const Overview = lazy(() => import('@/pages/Overview'));
 const Classroom = lazy(() => import('@/pages/Classroom'));
@@ -51,45 +52,40 @@ class RouteErrorBoundary extends Component<RouteErrorBoundaryProps, RouteErrorBo
 export default function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={
-        <RequireAuth>
-          <RequireSetupComplete>
-            <RouteErrorBoundary><Overview /></RouteErrorBoundary>
-          </RequireSetupComplete>
-        </RequireAuth>
-      } />
-
       {/* Public routes */}
       <Route path="/auth" element={<AuthPage />} />
       <Route path="/auth/callback" element={<AuthCallbackHandler />} />
 
-      {/* Protected routes */}
-      <Route path="/setup" element={
+      {/* Protected routes wrapped in AppLayout */}
+      <Route element={
         <RequireAuth>
-          <RouteErrorBoundary><Setup /></RouteErrorBoundary>
+          <AppLayout />
         </RequireAuth>
-      } />
-      <Route path="/classroom/:sessionId?" element={
-        <RequireAuth>
+      }>
+        <Route path="/" element={
+          <RequireSetupComplete>
+            <RouteErrorBoundary><Overview /></RouteErrorBoundary>
+          </RequireSetupComplete>
+        } />
+        <Route path="/setup" element={
+          <RouteErrorBoundary><Setup /></RouteErrorBoundary>
+        } />
+        <Route path="/classroom/:sessionId?" element={
           <RequireSetupComplete>
             <RouteErrorBoundary><Classroom /></RouteErrorBoundary>
           </RequireSetupComplete>
-        </RequireAuth>
-      } />
-      <Route path="/quiz" element={
-        <RequireAuth>
+        } />
+        <Route path="/quiz" element={
           <RequireSetupComplete>
             <RouteErrorBoundary><Quiz /></RouteErrorBoundary>
           </RequireSetupComplete>
-        </RequireAuth>
-      } />
-      <Route path="/help" element={
-        <RequireAuth>
+        } />
+        <Route path="/help" element={
           <RequireSetupComplete>
             <RouteErrorBoundary><Help /></RouteErrorBoundary>
           </RequireSetupComplete>
-        </RequireAuth>
-      } />
+        } />
+      </Route>
 
       {/* Catch-all */}
       <Route path="*" element={<RouteErrorBoundary><NotFound /></RouteErrorBoundary>} />

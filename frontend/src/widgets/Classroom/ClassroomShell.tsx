@@ -1,25 +1,23 @@
-import { z } from 'zod';
-import { PCMRecorder } from '@/features/voice/audio/pcmRecorder';
-import { ConnectionState } from '@/core/realtime/useWSClient';
 import { ChatInput, MessageList } from '@/features/chat';
+import { DiagramContainer } from '@/features/diagrams/components/DiagramContainer';
 import { DocumentsDrawer } from '@/features/documents/components/DocumentsDrawer';
+import { useDocumentList } from '@/features/documents/useDocumentList';
+import { ExplainSession } from '@/features/explain/components/ExplainSession';
+import { PresentationState, useExplainWS } from '@/features/explain/hooks/useExplainWS';
 import { SettingsDrawer, useSessionManager } from '@/features/session';
+import { PCMRecorder } from '@/features/voice/audio/pcmRecorder';
 import { toast } from '@/shared/utils/toast';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { PiGearFill, PiWifiSlashFill } from 'react-icons/pi';
 import { useNavigate, useParams } from 'react-router-dom';
-import { SCROLL_STICK_THRESHOLD_PX } from './constants';
+import { z } from 'zod';
 import { AvatarCanvasWrapper } from './AvatarCanvasWrapper';
-import { useClassroomState } from './hooks/useClassroomState';
+import { AvatarTopBar } from './AvatarTopBar';
+import { SCROLL_STICK_THRESHOLD_PX } from './constants';
 import { useClassroomAudio } from './hooks/useClassroomAudio';
 import { useClassroomChat } from './hooks/useClassroomChat';
-import { AvatarTopBar } from './AvatarTopBar';
-import { ClassroomLeftRail } from './ClassroomLeftRail';
-import { useDocumentList } from '@/features/documents/useDocumentList';
-import { DiagramContainer } from '@/features/diagrams/components/DiagramContainer';
-import { useExplainWS, PresentationState } from '@/features/explain/hooks/useExplainWS';
-import { ExplainSession } from '@/features/explain/components/ExplainSession';
+import { useClassroomState } from './hooks/useClassroomState';
+import { WSContext } from '@/core/realtime/WSContext';
 
 export interface AudioVisemePacket {
   id: string;
@@ -61,7 +59,6 @@ export default function ClassroomShell() {
   const { sessionId: urlSessionId } = useParams();
   const navigate = useNavigate();
 
-  // Phase 1: Isolated State
   const {
     activeAvatarId,
     activeVoiceId,
@@ -88,7 +85,6 @@ export default function ClassroomShell() {
     setIsDiagramOpen(true);
   };
 
-  // Phase 2: Isolated Audio Pipeline
   const {
     mouthCuesRef,
     getAudioContext,
@@ -124,7 +120,7 @@ export default function ClassroomShell() {
     onSlideChange: (index, total) => {
       setExplainSlide(index);
       setExplainTotalSlides(total);
-      setExplainContent(''); // clear text for new slide
+      setExplainContent('');
     },
     onEnd: () => {
       setIsExplainActive(false);
@@ -136,7 +132,6 @@ export default function ClassroomShell() {
     setExplainContent('');
   }, []);
 
-  // Phase 1: Isolated Chat Logic
   const {
     conversationState,
     connectionState,
@@ -182,13 +177,12 @@ export default function ClassroomShell() {
   const prevSessionIdRef = useRef<string | null>(currentSessionId);
   const isCreatingSessionRef = useRef<boolean>(false);
 
-  // Save / restore scroll position on session switch
   useEffect(() => {
     const prevId = prevSessionIdRef.current;
     const nextId = currentSessionId;
     if (prevId !== nextId) {
       resetAvatarAudio();
-      
+
       if (chatScrollRef.current) {
         scrollPositionsRef.current.set(prevId, chatScrollRef.current.scrollTop);
       }
@@ -205,6 +199,19 @@ export default function ClassroomShell() {
     }
   }, [currentSessionId, resetAvatarAudio]);
 
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleOpenSessions = () => openSettings();
+    window.addEventListener('open-sessions', handleOpenSessions);
+    return () => window.removeEventListener('open-sessions', handleOpenSessions);
+  }, [openSettings]);
+
   const handleChatScroll = useCallback(() => {
     const el = chatScrollRef.current;
     if (!el) return;
@@ -217,7 +224,7 @@ export default function ClassroomShell() {
   }, [currentSession?.messages, conversationState.currentMessage, interimTranscript]);
 
   const handleStop = useCallback(() => {
-    safeSend({ 
+    safeSend({
       type: 'chat.abort',
       data: {
         session_id: currentSessionId || undefined,
@@ -229,7 +236,6 @@ export default function ClassroomShell() {
 
   useEffect(() => {
     const handleVoiceBargeIn = () => {
-      // DEFENSIVE: Listen for out-of-band VAD interruption and instantly kill audio.
       handleStop();
     };
     window.addEventListener('voice-barge-in', handleVoiceBargeIn);
@@ -239,10 +245,10 @@ export default function ClassroomShell() {
   const handleSendMessage = useCallback(() => {
     const text = inputValue.trim();
     if (!text) return;
-    
+
     commitAndSend(text);
     setInputValue('');
-    
+
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
@@ -267,10 +273,10 @@ export default function ClassroomShell() {
     if (ctx.state === 'suspended') {
       ctx.resume();
     }
-    
+
     if (currentSessionId) return true;
     if (isCreatingSessionRef.current) return false;
-    
+
     isCreatingSessionRef.current = true;
     try {
       const activeId = await session.createPersistedSession();
@@ -284,39 +290,9 @@ export default function ClassroomShell() {
     }
   }, [currentSessionId, session, getAudioContext]);
 
-  const statusBadgeClass =
-    !currentSessionId ? 'idle' :
-    {
-      [ConnectionState.OFFLINE]: 'offline',
-      [ConnectionState.RECONNECTING]: 'reconnecting',
-      [ConnectionState.INITIALIZING]: 'initializing',
-      [ConnectionState.ONLINE]: 'online',
-    }[connectionState] || 'offline';
-
-  const statusLabel =
-    !currentSessionId ? `${avatarName} — Ready` :
-    reconnectError ||
-    {
-      [ConnectionState.OFFLINE]: `${avatarName} — Offline`,
-      [ConnectionState.RECONNECTING]: 'Reconnecting…',
-      [ConnectionState.INITIALIZING]: 'Starting up…',
-      [ConnectionState.ONLINE]: `${avatarName} Online`,
-    }[connectionState] ||
-    `${avatarName} — Offline`;
-
   if (status === 'error') {
     return (
-      <div
-        className="classroom-error"
-        style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '100vh',
-          color: '#ff6b6b',
-          fontSize: '1.2rem',
-        }}
-      >
+      <div className="flex items-center justify-center h-screen bg-[#0D0D0D] text-red-500 text-lg">
         Failed to load sessions. Please refresh the page.
       </div>
     );
@@ -325,13 +301,25 @@ export default function ClassroomShell() {
   const isSidebarOpen = isSettingsOpen || isDocumentsOpen;
 
   return (
-    <>
+    <WSContext.Provider
+      value={{
+        connectionState,
+        isConnected,
+        send: safeSend,
+        reconnect,
+        disconnect,
+        currentSessionId,
+        onMessage,
+      }}
+    >
       <Helmet>
         <title>{avatarName} — VirtAI Classroom</title>
       </Helmet>
-      <div className="classroom-shell">
-        <ClassroomLeftRail onOpenSessions={openSettings} />
 
+      {/* Root Layout: Handled by AppLayout, we just provide the full width/height container */}
+      <div className="flex w-full h-full relative text-white font-sans">
+
+        {/* Floating Sidebars/Drawers */}
         <SettingsDrawer
           isOpen={isSettingsOpen}
           onClose={closeSettings}
@@ -346,28 +334,22 @@ export default function ClassroomShell() {
           onWidthChange={setSidebarWidth}
           resizable={true}
         />
-        <DocumentsDrawer 
-          isOpen={isDocumentsOpen} 
-          onClose={toggleDocuments} 
-          sessionId={currentSessionId} 
+        <DocumentsDrawer
+          isOpen={isDocumentsOpen}
+          onClose={toggleDocuments}
+          sessionId={currentSessionId}
           width={sidebarWidth}
           onWidthChange={setSidebarWidth}
           resizable={true}
         />
 
-        <DiagramContainer
-          isOpen={isDiagramOpen}
-          onClose={() => setIsDiagramOpen(false)}
-          sessionId={currentSessionId}
-        />
-
+        {/* Main Content Area */}
         <div
-          className="split-container"
-          id="main-content"
-          style={{
-            width: isSidebarOpen ? `calc(100% - ${sidebarWidth}px)` : '100%'
-          }}
+          className="flex flex-col flex-1 gap-3 p-3 lg:p-4 lg:gap-3 relative"
+          style={{ marginRight: isSidebarOpen ? `${sidebarWidth}px` : '0' }}
         >
+
+          {/* Top Navbar */}
           <AvatarTopBar
             avatarName={avatarName || 'AI Tutor'}
             connectionState={connectionState}
@@ -380,77 +362,92 @@ export default function ClassroomShell() {
             onStartExplain={handleStartExplain}
           />
 
-          <ClassroomLeftRail onOpenSessions={openSettings} className="mobile-rail" />
+          {/* The Two Distinct Containers */}
+          <div className="flex flex-row w-full flex-1 min-h-0 gap-3">
 
-          <AvatarCanvasWrapper 
-            avatarId={activeAvatarId}
-            pipelineState={conversationState.pipelineState}
-            movementEnabled={movementEnabled}
-            mouthCuesRef={mouthCuesRef}
-            getAudioContext={getAudioContext}
-            playbackStartTimeRef={playbackStartTimeRef}
-            getIsAudioPlaying={getIsAudioPlaying}
-            getNextPlaybackTime={getNextPlaybackTime}
-          />
-
-          {isExplainActive ? (
-            <div className="chat-panel explain-panel-active">
-              <ExplainSession
-                documentId={documents[0].id}
-                currentState={explainState}
-                currentSlide={explainSlide}
-                totalSlides={explainTotalSlides}
-                content={explainContent}
-                onQuestion={(text) => {
-                  explainSendQuestion(text);
-                  setExplainContent(prev => prev + `\n\n**You:** ${text}\n\n`);
-                  resetAvatarAudio();
-                }}
-                onContinue={() => {
-                  explainSendContinue();
-                  resetAvatarAudio();
-                }}
-                onPauseOrStop={() => {
-                  explainSendPauseOrStop();
-                  resetAvatarAudio();
-                }}
-                onClose={() => {
-                  setIsExplainActive(false);
-                  explainDisconnect();
-                  resetAvatarAudio();
-                }}
+            {/* Avatar Panel (Left) */}
+            <div className="flex-[3] min-w-0 min-h-0 rounded-3xl bg-[#1A1A1A] relative overflow-hidden flex items-center justify-center">
+              <AvatarCanvasWrapper
+                avatarId={activeAvatarId}
+                pipelineState={conversationState.pipelineState}
+                movementEnabled={movementEnabled}
+                mouthCuesRef={mouthCuesRef}
+                getAudioContext={getAudioContext}
+                playbackStartTimeRef={playbackStartTimeRef}
+                getIsAudioPlaying={getIsAudioPlaying}
+                getNextPlaybackTime={getNextPlaybackTime}
               />
             </div>
-          ) : (
-            <div className="chat-panel" key={currentSessionId || 'empty'}>
-              <MessageList
-                messages={currentSession?.messages || []}
-                currentMessage={conversationState.currentMessage}
-                interimTranscript={interimTranscript}
-                error={conversationState.error}
-                avatarName={avatarName}
-                chatScrollRef={chatScrollRef}
-                messagesEndRef={messagesEndRef}
-                onScroll={handleChatScroll}
-                pipelineState={conversationState.pipelineState}
-              />
-              <ChatInput
-                inputValue={inputValue}
-                onInputChange={setInputValue}
-                onSend={handleSendMessage}
-                onKeyDown={onKeyDown}
-                textareaRef={textareaRef}
-                backendStatus={connectionState as any}
-                wsClient={wsClient}
-                pipelineState={conversationState.pipelineState}
-                onToggleDocuments={toggleDocuments}
-                onBeforeVoiceStart={ensureVoiceSession}
-                onStop={handleStop}
-              />
+
+            {/* Chat Panel (Right) */}
+            <div className="flex-[7] min-w-0 min-h-0 rounded-3xl bg-[#1A1A1A] flex flex-col">
+              {isExplainActive ? (
+                <div className="flex-1 overflow-y-auto">
+                  <ExplainSession
+                    documentId={documents[0].id}
+                    currentState={explainState}
+                    currentSlide={explainSlide}
+                    totalSlides={explainTotalSlides}
+                    content={explainContent}
+                    onQuestion={(text) => {
+                      explainSendQuestion(text);
+                      setExplainContent(prev => prev + `\n\n**You:** ${text}\n\n`);
+                      resetAvatarAudio();
+                    }}
+                    onContinue={() => {
+                      explainSendContinue();
+                      resetAvatarAudio();
+                    }}
+                    onPauseOrStop={() => {
+                      explainSendPauseOrStop();
+                      resetAvatarAudio();
+                    }}
+                    onClose={() => {
+                      setIsExplainActive(false);
+                      explainDisconnect();
+                      resetAvatarAudio();
+                    }}
+                  />
+                </div>
+              ) : isDiagramOpen ? (
+                <DiagramContainer
+                  isOpen={isDiagramOpen}
+                  onClose={() => setIsDiagramOpen(false)}
+                  sessionId={currentSessionId}
+                />
+              ) : (
+                <>
+                  <MessageList
+                    messages={currentSession?.messages || []}
+                    currentMessage={conversationState.currentMessage}
+                    interimTranscript={interimTranscript}
+                    error={conversationState.error}
+                    avatarName={avatarName}
+                    chatScrollRef={chatScrollRef}
+                    messagesEndRef={messagesEndRef}
+                    onScroll={handleChatScroll}
+                    pipelineState={conversationState.pipelineState}
+                  />
+                  <div className="mt-auto">
+                    <ChatInput
+                      inputValue={inputValue}
+                      onInputChange={setInputValue}
+                      onSend={handleSendMessage}
+                      onKeyDown={onKeyDown}
+                      textareaRef={textareaRef}
+                      pipelineState={conversationState.pipelineState}
+                      onToggleDocuments={toggleDocuments}
+                      onBeforeVoiceStart={ensureVoiceSession}
+                      onStop={handleStop}
+                    />
+                  </div>
+                </>
+              )}
             </div>
-          )}
+
+          </div>
         </div>
       </div>
-    </>
+    </WSContext.Provider>
   );
 }

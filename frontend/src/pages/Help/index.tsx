@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClassroomLeftRail } from '@/widgets/Classroom/ClassroomLeftRail';
 import { FeatureCard, Feature } from './FeatureCard';
 import { FiChevronLeft, FiChevronRight, FiArrowLeft } from 'react-icons/fi';
 import styles from './Help.module.css';
@@ -40,11 +39,9 @@ export default function HelpPage() {
   }, []);
 
   return (
-    <div className="classroom-shell" style={{ width: '100%', height: '100vh', display: 'flex', backgroundColor: 'var(--bg-primary, #111111)', position: 'relative' }}>
-      <ClassroomLeftRail onOpenSessions={() => navigate('/classroom')} className="desktop-rail" />
+    <div className="classroom-shell" style={{ width: '100%', height: '100%', display: 'flex', backgroundColor: 'var(--bg-primary, #111111)', position: 'relative' }}>
       
       <div style={{ position: 'relative', flex: 1, display: 'flex' }}>
-        <ClassroomLeftRail onOpenSessions={() => navigate('/classroom')} className="mobile-rail" />
         
         <button 
           className={styles.backBtn}

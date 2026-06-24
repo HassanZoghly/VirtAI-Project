@@ -2,11 +2,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--card-bg, #1e1e1e);
-  border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  border: 1px solid var(--border-color, #333);
 }
 
 .explain-header {
@@ -48,8 +44,10 @@
 
 .explain-progress-bar {
   height: 100%;
+  width: 100%;
   background: var(--accent-gold, #D4B47A);
-  transition: width 0.3s ease;
+  transform-origin: left;
+  transition: transform 0.3s ease;
 }
 
 .explain-progress {
@@ -123,7 +121,6 @@
 
 .status-dot.explaining {
   background: var(--accent-primary, #b4ab8b);
-  box-shadow: 0 0 8px var(--accent-primary, #b4ab8b);
   animation: pulse 1.5s infinite;
 }
 

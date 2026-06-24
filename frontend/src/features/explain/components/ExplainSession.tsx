@@ -47,17 +47,12 @@ export function ExplainSession({
             Slide {currentSlide + 1} {totalSlides > 0 ? `of ${totalSlides}` : ''}
           </h2>
         </div>
-        <div className="explain-header-actions">
-          <button className="explain-ghost-btn" onClick={onClose} title="Stop Presentation">
-            <FiStopCircle size={20} /> Stop
-          </button>
-        </div>
       </div>
       
       <div className="explain-progress-bar-container">
         <div 
           className="explain-progress-bar" 
-          style={{ width: totalSlides > 0 ? `${((currentSlide + 1) / totalSlides) * 100}%` : '0%' }} 
+          style={{ transform: `scaleX(${totalSlides > 0 ? (currentSlide + 1) / totalSlides : 0})` }} 
         />
       </div>
 
@@ -67,28 +62,43 @@ export function ExplainSession({
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
               {content || "Loading slide content..."}
             </ReactMarkdown>
-            {currentState === 'EXPLAINING' && <span className="streaming-cursor">▊</span>}
+            {currentState === 'EXPLAINING' && <span className="inline-block w-[2px] h-[1em] bg-white/80 align-middle ml-1 animate-[pulse_1s_ease-in-out_infinite]"></span>}
           </div>
         </div>
       </div>
 
-      <div className="explain-controls">
-        <div className="explain-status-indicator">
-          <span className={`status-dot ${currentState.toLowerCase()}`}></span>
-          {currentState === 'EXPLAINING' && 'Explaining slide...'}
-          {currentState === 'AWAITING' && 'Waiting for your input...'}
-          {currentState === 'ANSWERING' && 'Answering question...'}
-        </div>
-
-        {currentState === 'AWAITING' ? (
+      <div className="flex flex-col p-4 bg-black/20">
+        {currentState === 'AWAITING' && (
           <SlideQuestionInput onQuestion={onQuestion} onContinue={onContinue} />
-        ) : (
-          <div className="explain-active-controls">
-            <button className="explain-ghost-btn" onClick={onPauseOrStop} title="Pause / Interrupt">
-              <FiPauseCircle size={20} /> Pause / Interrupt
+        )}
+        
+        <div className="flex items-center justify-between w-full mt-4 pt-4 border-t border-white/5">
+          <div className="explain-status-indicator">
+            <span className={`status-dot ${currentState.toLowerCase()}`}></span>
+            {currentState === 'EXPLAINING' && 'Explaining slide...'}
+            {currentState === 'AWAITING' && 'Waiting for your input...'}
+            {currentState === 'ANSWERING' && 'Answering question...'}
+          </div>
+
+          <div className="flex gap-3">
+            {currentState !== 'AWAITING' && (
+              <button 
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm font-medium text-white/90 backdrop-blur-sm transition-[background-color,border-color,transform] duration-300 hover:bg-white/15 hover:border-white/20 hover:scale-[1.02]" 
+                onClick={onPauseOrStop} 
+                title="Pause / Interrupt"
+              >
+                <FiPauseCircle size={18} /> Pause
+              </button>
+            )}
+            <button 
+              className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm font-medium text-white/90 backdrop-blur-sm transition-[background-color,border-color,transform] duration-300 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 hover:scale-[1.02]" 
+              onClick={onClose} 
+              title="Stop Presentation"
+            >
+              <FiStopCircle size={18} /> Stop
             </button>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

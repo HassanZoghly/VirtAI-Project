@@ -17,7 +17,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(function MessageBubble(
   const isUser = msg.role === 'user';
 
   const timeString = new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(
-    new Date(msg.createdAt || Date.now())
+    new Date(msg.timestamp || Date.now())
   );
 
   return (
@@ -34,8 +34,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(function MessageBubble(
         )}
         <div className={`message-bubble-container flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-none w-full`}>
           {!isUser && (
-            <div className="flex justify-start items-center w-full mt-1 mb-0.5 px-1 gap-1">
-              <span className="font-bold text-[#D4B47A] text-[15px] tracking-wide">{avatarName}</span>
+            <div className="flex justify-start items-center w-full mt-2.5 mb-0.5 px-1 gap-1">
+              <span className="font-extrabold text-[#D4B47A] text-[16.5px] tracking-wide">{avatarName}</span>
             </div>
           )}
           <div className={`message-bubble ${isUser ? 'user-bubble-content relative' : 'flex flex-col gap-2 w-full'}`}>

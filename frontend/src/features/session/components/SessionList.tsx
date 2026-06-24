@@ -277,23 +277,27 @@ const SessionList = memo(function SessionList({
     <div className="sidebar-inner" style={{ width: '100%', position: 'relative' }}>
 
       <div className="sidebar-chats-section">
-        <div className="flex justify-between items-center px-4 py-4 border-b border-white/5">
-          <h2 className="text-xl font-extrabold tracking-wider text-white/90">
+        <div className="flex items-center justify-between w-full mb-4 px-4 pt-4 border-b border-white/5 pb-4">
+          <h2 className="text-xs font-bold uppercase tracking-widest text-gray-400 m-0 leading-none">
             CHATS
           </h2>
           <div className="flex items-center gap-2">
-            <button className="sidebar-new-chat-btn text-sm flex items-center gap-1.5 px-2 py-1 hover:bg-white/10 rounded-md transition-colors" onClick={onNewSession} aria-label="New chat">
-              <PiPlusFill size={22} /> New Chat
+            <button 
+              className="text-xs font-medium px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 transition-all flex items-center gap-1.5 text-white" 
+              onClick={onNewSession} 
+              aria-label="New chat"
+            >
+              <PiPlusFill size={14} /> New Chat
             </button>
             {sessions.length > 0 && (
               <button
                 id="clear-all-chats-btn"
-                className="sidebar-clear-all-btn p-1.5 hover:bg-white/10 rounded-md transition-colors text-white/60 hover:text-red-400"
+                className="flex items-center justify-center p-1"
                 onClick={() => setIsConfirmClearOpen(true)}
                 aria-label="Delete all chats"
                 title="Delete all chats"
               >
-                <PiTrashSimpleFill size={22} />
+                <PiTrashSimpleFill className="w-4 h-4 text-gray-400 hover:text-red-400 cursor-pointer transition-colors" />
               </button>
             )}
           </div>

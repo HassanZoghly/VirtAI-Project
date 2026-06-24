@@ -37,12 +37,8 @@
 /* =============== Voice Mode Button =============== */
 .voice-mode-btn {
   position: relative;
-  width: 44px;
-  height: 44px;
   border-radius: 50%;
-  border: 1px solid var(--border-color, rgb(255 255 255 / 10%));
-  background: transparent;
-  color: var(--text-secondary, #b0b0b0);
+  border: none;
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -64,23 +60,17 @@
 
 .voice-mode-btn:hover:not(:disabled) {
   transform: translateY(-1px);
-  background: rgb(255 255 255 / 4%);
-  color: var(--text-primary, #fff);
 }
 
 /* =============== Button States =============== */
 
 /* Idle state */
 .voice-mode-btn.idle {
-  background: transparent;
-  border-color: var(--border-color, rgb(255 255 255 / 10%));
-  color: var(--text-secondary, #b0b0b0);
+  /* Let Tailwind handle background and color */
 }
 
 .voice-mode-btn.idle:hover:not(:disabled) {
-  background: rgb(240 200 82 / 10%);
-  border-color: rgb(240 200 82 / 40%);
-  color: var(--accent-primary, #b4ab8b);
+  /* Let Tailwind handle hover state */
 }
 
 /* Listening state */
@@ -306,8 +296,6 @@
 /* =============== Responsive Design =============== */
 @media (width <= 768px) {
   .voice-mode-btn {
-    width: 44px;
-    height: 44px;
     font-size: 1rem;
   }
 

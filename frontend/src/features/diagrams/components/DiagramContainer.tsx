@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
-import SlideDrawer from '@/shared/components/SlideDrawer';
 import { useDiagramSession } from '../hooks/useDiagramSession';
 import { DocumentPicker } from './DocumentPicker';
 import { DiagramViewer } from './DiagramViewer';
-import './DiagramContainer.css';
 
 interface DiagramContainerProps {
   isOpen: boolean;
@@ -15,49 +13,38 @@ export function DiagramContainer({ isOpen, onClose, sessionId }: DiagramContaine
   const { diagramState, diagramData, startDiagramGeneration, resetDiagram } = useDiagramSession();
   const [showViewer, setShowViewer] = useState(false);
 
+  if (!isOpen) return null;
+
   const handleSelectDocument = (documentId: string) => {
     setShowViewer(true);
     startDiagramGeneration(documentId, 'en');
   };
 
   const handleClose = () => {
-    onClose();
-    // small delay to allow drawer closing animation to finish before resetting
-    setTimeout(() => {
-      resetDiagram();
-      setShowViewer(false);
-    }, 300);
-  };
-
-  const handleCloseViewerOnly = () => {
     resetDiagram();
     setShowViewer(false);
+    onClose();
   };
 
   return (
-    <SlideDrawer
-      title="Knowledge Diagram"
-      description="Visualize document structure"
-      isOpen={isOpen}
-      onClose={handleClose}
-      contentClassName="diagram-drawer-content"
-      zIndex={1000}
-    >
-      <div className="diagram-container-body">
-        {!showViewer ? (
-          <DocumentPicker 
-            sessionId={sessionId} 
-            onSelect={handleSelectDocument} 
-            onCancel={handleClose} 
-          />
-        ) : (
-          <DiagramViewer 
-            diagramData={diagramData}
-            isLoading={diagramState === 'generating'}
-            onClose={handleCloseViewerOnly}
-          />
-        )}
-      </div>
-    </SlideDrawer>
+    <div className="w-full h-full flex flex-col relative bg-[#1A1A1A] overflow-hidden">
+      {!showViewer ? (
+        <div className="w-full h-full overflow-y-auto p-6 flex flex-col items-center justify-center">
+          <div className="w-full max-w-2xl w-[600px] max-w-[90vw]">
+            <DocumentPicker 
+              sessionId={sessionId} 
+              onSelect={handleSelectDocument} 
+              onCancel={handleClose} 
+            />
+          </div>
+        </div>
+      ) : (
+        <DiagramViewer 
+          diagramData={diagramData}
+          isLoading={diagramState === 'generating'}
+          onClose={handleClose}
+        />
+      )}
+    </div>
   );
 }

@@ -150,9 +150,9 @@ export function useWSConnectionManager(deps: ConnectionManagerDeps) {
       const currentMountId = mountIdRef.current;
       const instanceId = Math.random().toString(36).substring(7);
 
-      if (reconnectPolicyRef.current.attempt > 0) {
-        setConnectionState(ConnectionState.RECONNECTING);
-      }
+      // The UI state is strictly derived from the native action of instantiating the socket.
+      // We do not mutate this manually inside UI event handlers.
+      setConnectionState(ConnectionState.RECONNECTING);
 
       try {
         const socketUrl = buildResumeUrl(currentUrl, sessionStateRef.current) || currentUrl;
@@ -353,10 +353,24 @@ export function useWSConnectionManager(deps: ConnectionManagerDeps) {
     authRefreshAttemptsRef.current = 0;
     clearReconnectTimer();
     setReconnectError(null);
-    setConnectionState(ConnectionState.RECONNECTING);
+    
+    // TRUE TEARDOWN: Explicitly destroy the existing WebSocket
+    isIntentionalCloseRef.current = true;
+    if (wsRef.current) {
+      wsRef.current.onopen = null;
+      wsRef.current.onmessage = null;
+      wsRef.current.onerror = null;
+      wsRef.current.onclose = null;
+      wsRef.current.close(WS_CLOSE_NORMAL, 'Explicit reconnect requested');
+      wsRef.current = null;
+    }
+    
+    // Reset connection locks to allow immediate rebuild
+    isConnectingRef.current = false;
     isIntentionalCloseRef.current = false;
+    
     connect();
-  }, [clearReconnectTimer, connect]);
+  }, [clearReconnectTimer, connect, wsRef]);
 
   const mount = useCallback(() => {
     mountIdRef.current = Math.random();

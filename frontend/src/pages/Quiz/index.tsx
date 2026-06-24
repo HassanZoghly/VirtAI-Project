@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClassroomLeftRail } from '@/widgets/Classroom/ClassroomLeftRail';
 import { LectureMultiSelect } from './LectureMultiSelect';
 import { toast } from '@/shared/utils/toast';
 import styles from './Quiz.module.css';
@@ -20,10 +19,8 @@ export default function QuizPage() {
   /* TODO: Analytics - Dashboard Wrapper */
 
   return (
-    <div className="classroom-shell" style={{ width: '100%', height: '100vh', display: 'flex', backgroundColor: 'var(--bg-primary, #111111)' }}>
-      <ClassroomLeftRail onOpenSessions={() => navigate('/')} className="desktop-rail" />
+    <div className="classroom-shell" style={{ width: '100%', height: '100%', display: 'flex', backgroundColor: 'var(--bg-primary, #111111)' }}>
       <div style={{ position: 'relative', flex: 1, display: 'flex' }}>
-        <ClassroomLeftRail onOpenSessions={() => navigate('/')} className="mobile-rail" />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', overflowY: 'auto' }}>
           <div className={styles.quizCardContainer}>
             <h1 className={styles.quizTitle}>Take a Quiz</h1>

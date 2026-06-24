@@ -1,17 +1,13 @@
 import { useMemo } from 'react';
 import { PiMicrophone, PiPauseFill, PiWarningCircleFill } from 'react-icons/pi';
 import { useRealtimeASR } from '../hooks/useRealtimeASR';
+import { useWS } from '@/core/realtime/WSContext';
 import './VoiceModeButton.css';
 
 /**
  * Props for VoiceModeButton component
  */
 interface VoiceModeButtonProps {
-  /** WebSocket client for voice mode communication */
-  // Reason: WebSocket client interface lacks generated type
-  // bindings from the Python/FastAPI backend schema
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  wsClient: any;
   /** Current conversation pipeline state */
   pipelineState: 'idle' | 'thinking' | 'speaking' | 'error';
   /** Optional CSS class name */
@@ -31,21 +27,15 @@ interface VoiceModeButtonProps {
  *
  * @param props - Component props
  * @returns VoiceModeButton component
- *
- * @example
- * ```tsx
- * <VoiceModeButton
- *   wsClient={wsClient}
- *   pipelineState={conversation.pipelineState}
- * />
- * ```
  */
 export default function VoiceModeButton({
-  wsClient,
   pipelineState,
   className = '',
   onBeforeStart,
 }: VoiceModeButtonProps) {
+  // Consume the WebSocket Single Source of Truth context directly
+  const wsClient = useWS();
+
   // Use realtime ASR hook for voice + transcript state (Requirement 1.1, 1.4)
   const { isListening, isPaused, isProcessing, interimText, error, startListening, stopListening } =
     useRealtimeASR(wsClient, pipelineState);

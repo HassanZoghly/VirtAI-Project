@@ -77,7 +77,7 @@ export const AvatarCanvasWrapper = memo(function AvatarCanvasWrapper({
   }, []);
 
   return (
-    <div className="avatar-panel" style={{ position: 'relative', width: FULL_PERCENTAGE, height: FULL_PERCENTAGE }}>
+    <div className="w-full h-full relative">
       {isContextLost && (
         <div style={{ position: 'absolute', inset: INSET_ZERO, zIndex: Z_INDEX_OVERLAY, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#000' }}>
           <p style={{ color: '#fff' }}>Recovering Avatar Graphics...</p>
@@ -89,10 +89,10 @@ export const AvatarCanvasWrapper = memo(function AvatarCanvasWrapper({
           position: 'absolute',
           bottom: '1rem',
           left: '1rem',
-          fontSize: 'var(--h1, 2.5rem)',
+          fontSize: '1.75rem',
           fontWeight: '700',
           letterSpacing: '-0.02em',
-          opacity: 0.85,
+          opacity: 0.5,
           pointerEvents: 'none',
           zIndex: 50,
           margin: 0,

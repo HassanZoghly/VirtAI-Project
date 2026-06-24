@@ -1,7 +1,9 @@
-import React, { KeyboardEvent, useCallback, useEffect, useRef } from 'react';
+import React, { KeyboardEvent, useCallback, useEffect, useRef, useMemo } from 'react';
 import { FiSquare } from 'react-icons/fi';
 import { PiPaperclip, PiPaperPlaneTiltFill } from 'react-icons/pi';
 import VoiceModeButton from '../../voice/components/VoiceModeButton';
+import { useWS } from '@/core/realtime/WSContext';
+import { ConnectionState } from '@/core/realtime/wsConstants';
 
 const MAX_CHARS = 2000;
 
@@ -11,8 +13,6 @@ interface ChatInputProps {
   onSend: () => void;
   onKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
-  backendStatus: 'online' | 'offline' | 'checking';
-  wsClient: any;
   pipelineState: 'idle' | 'thinking' | 'speaking' | 'error';
   onToggleDocuments: () => void;
   onBeforeVoiceStart?: () => Promise<boolean> | boolean;
@@ -25,14 +25,42 @@ export default function ChatInput({
   onSend,
   onKeyDown,
   textareaRef,
-  backendStatus,
-  wsClient,
   pipelineState,
   onToggleDocuments,
   onBeforeVoiceStart,
   onStop,
 }: ChatInputProps) {
   const requestRef = useRef<number>(0);
+
+  const { connectionState, isConnected, send, onMessage, currentSessionId } = useWS();
+
+  const isOnline = connectionState === ConnectionState.ONLINE;
+  const isOffline = connectionState === ConnectionState.OFFLINE;
+  const isReconnecting = connectionState === ConnectionState.RECONNECTING;
+  const isInitializing = connectionState === ConnectionState.INITIALIZING;
+
+
+  // Derive state group from the Single Source of Truth (SSOT)
+  const stateGroup = useMemo(() => {
+    if (!currentSessionId || isOnline) {
+      return 'ready';
+    } else if (isReconnecting || isInitializing) {
+      return 'connecting';
+    } else {
+      return 'offline';
+    }
+  }, [currentSessionId, isOnline, isReconnecting, isInitializing]);
+
+  // UI status mappings for dynamic reactivity
+  const { placeholderText, isInputDisabled } = useMemo(() => {
+    if (stateGroup === 'ready') {
+      return { placeholderText: 'Type your message...', isInputDisabled: false };
+    }
+    if (stateGroup === 'connecting') {
+      return { placeholderText: 'Connecting to server...', isInputDisabled: true };
+    }
+    return { placeholderText: 'Offline (Please reconnect)...', isInputDisabled: true };
+  }, [stateGroup]);
 
   useEffect(() => {
     return () => {
@@ -69,13 +97,12 @@ export default function ChatInput({
   const isGenerating = ['thinking', 'speaking'].includes(pipelineState);
 
   return (
-    <div className="chat-input-container w-full px-4 mb-4" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+    <div className="chat-input-container w-full px-4 mb-1" style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}>
       <div className="flex flex-row items-end gap-3 max-w-[800px] mx-auto w-full">
         {/* Left Action Buttons */}
         <div className="flex flex-row items-end gap-2">
           <VoiceModeButton
             className="flex items-center justify-center"
-            wsClient={wsClient}
             pipelineState={pipelineState}
             onBeforeStart={onBeforeVoiceStart}
           />
@@ -94,14 +121,13 @@ export default function ChatInput({
         </div>
 
         {/* Input Pill */}
-        <div className="chat-input-pill flex-1 flex flex-row items-end gap-2.5 rounded-[26px] bg-[#2a2a2a] px-4 py-1 transition-all duration-300 min-h-[52px]">
+        <div className="chat-input-pill flex-1 flex flex-row items-end gap-2.5 rounded-[26px] bg-[#2a2a2a] px-4 py-1 transition-colors duration-300 min-h-[52px]">
           <textarea
             ref={textareaRef}
-            className="flex-1 bg-transparent border-none outline-none focus:ring-0 focus:border-none focus:outline-none focus:shadow-none resize-none text-[15px] text-white/90 placeholder:text-white/40 py-3 min-h-[44px] max-h-[132px]"
+            className="flex-1 bg-transparent border-none outline-none focus:ring-0 focus:border-none focus:outline-none focus:shadow-none resize-none text-[15px] text-white/90 placeholder:text-white/40 py-[11px] min-h-[44px] max-h-[132px]"
             aria-label="Message input"
-            placeholder={
-              backendStatus === 'offline' ? 'Type your message (offline mode)…' : 'Type your message...'
-            }
+            disabled={isInputDisabled}
+            placeholder={placeholderText}
             value={inputValue}
             onChange={handleChange}
             onKeyDown={onKeyDown}
@@ -127,7 +153,7 @@ export default function ChatInput({
               title="Send message"
               aria-label="Send message"
               type="button"
-              disabled={!inputValue.trim()}
+              disabled={isInputDisabled || !inputValue.trim()}
             >
               <PiPaperPlaneTiltFill size={18} />
             </button>

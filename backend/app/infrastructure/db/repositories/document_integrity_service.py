@@ -5,7 +5,13 @@ from uuid import UUID
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.infrastructure.db.models import Document, DocumentChunk
+from app.infrastructure.db.models import (
+    Document, 
+    DocumentChunk, 
+    SummaryCache, 
+    DiagramCache, 
+    Quiz
+)
 from app.shared.errors import RAGException
 from app.shared.ids import require_uuid
 
@@ -74,6 +80,12 @@ class DocumentIntegrityService:
             WHERE document_id = :doc_id
         """)
         result = await self.db.execute(stmt, {"doc_id": doc_uuid, "new_version": new_version})
+        
+        # Clear derived caches since document content was updated
+        await self.db.execute(delete(SummaryCache).where(SummaryCache.document_id == doc_uuid))
+        await self.db.execute(delete(DiagramCache).where(DiagramCache.document_id == doc_uuid))
+        await self.db.execute(delete(Quiz).where(Quiz.document_id == doc_uuid))
+
         from typing import cast
 
         from sqlalchemy import CursorResult

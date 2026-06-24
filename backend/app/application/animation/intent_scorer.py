@@ -11,16 +11,11 @@ class AnimationMappingDecision:
     intent_scores: dict[str, float]
 
 
+from app.domain.animation.intent_definitions import INTENT_KEYWORDS
+
+
 class IntentScorer:
     """Semantic animation mapping with keyword scoring + softmax normalization."""
-
-    INTENT_KEYWORDS: ClassVar[dict[str, tuple[str, ...]]] = {
-        "question": ("?", "why", "how", "what", "when", "where", "which"),
-        "emphasis": ("important", "must", "always", "never", "key", "critical"),
-        "explanation": ("because", "therefore", "means", "for example", "step", "first"),
-        "reassurance": ("don't worry", "it's okay", "you can", "great", "good job"),
-        "transition": ("next", "then", "now", "finally", "also", "in addition"),
-    }
 
     @staticmethod
     def segment_text(text: str) -> list[str]:
@@ -67,9 +62,9 @@ class IntentScorer:
     ) -> AnimationMappingDecision:
         """Return intent + tone using keyword-weighted softmax scoring."""
         lower = segment.lower()
-        base_scores: dict[str, float] = dict.fromkeys(self.INTENT_KEYWORDS, 0.12)
+        base_scores: dict[str, float] = dict.fromkeys(INTENT_KEYWORDS, 0.12)
 
-        for intent, keywords in self.INTENT_KEYWORDS.items():
+        for intent, keywords in INTENT_KEYWORDS.items():
             for keyword in keywords:
                 if keyword in lower:
                     base_scores[intent] += 0.65

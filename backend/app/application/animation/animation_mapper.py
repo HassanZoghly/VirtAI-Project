@@ -16,12 +16,12 @@ class AnimationMappingDecision:
     intent_scores: dict[str, float]
 
 
-from app.application.animation.intent_scorer import IntentScorer
+from app.domain.animation.intent_definitions import INTENT_KEYWORDS
 
 class AnimationMapper:
     """Maps text segments to animation intents using weighted keyword signals."""
 
-    _INTENT_KEYWORDS: ClassVar[dict[str, tuple[str, ...]]] = IntentScorer.INTENT_KEYWORDS
+    _INTENT_KEYWORDS: ClassVar[dict[str, tuple[str, ...]]] = INTENT_KEYWORDS
 
     @staticmethod
     def _softmax_distribution(

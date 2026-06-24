@@ -18,7 +18,8 @@ from __future__ import annotations
 
 import logging
 
-from app.domain.chat.entities import ConversationHistory, PromptSanitizer
+from app.domain.chat.entities import ConversationHistory
+from app.shared.security.prompt_sanitizer import PromptSanitizer
 
 logger = logging.getLogger(__name__)
 

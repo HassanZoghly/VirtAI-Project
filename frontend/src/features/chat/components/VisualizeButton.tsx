@@ -55,24 +55,24 @@ export function VisualizeButton({ messageId, locale = 'en' }: VisualizeButtonPro
 
   if (isHidden) return null;
 
+  if (imageUrl) {
+    return (
+      <div className="visualize-result mt-2">
+        <img src={imageUrl} alt="Message Visualization" className="visualize-image rounded-md border border-white/10 max-w-full" />
+      </div>
+    );
+  }
+
   return (
-    <div className="visualize-container">
-      {imageUrl ? (
-        <div className="visualize-result">
-          <img src={imageUrl} alt="Message Visualization" className="visualize-image" />
-        </div>
-      ) : (
-        <button
-          className="visualize-btn"
-          onClick={handleVisualize}
-          disabled={isLoading}
-          title={t.visualize}
-          aria-label={t.visualize}
-        >
-          {isLoading ? <FiLoader className="visualize-spinner" /> : <FiImage />}
-          <span className="visualize-text">{isLoading ? t.generating : t.visualize}</span>
-        </button>
-      )}
-    </div>
+    <button
+      className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md transition-all duration-200 bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80 border border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+      onClick={handleVisualize}
+      disabled={isLoading}
+      title={t.visualize}
+      aria-label={t.visualize}
+    >
+      {isLoading ? <FiLoader className="animate-spin" size={14} /> : <FiImage size={14} />}
+      <span>{isLoading ? t.generating : t.visualize}</span>
+    </button>
   );
 }

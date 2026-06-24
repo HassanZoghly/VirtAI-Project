@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from app.application.voice.filler_coordinator import FillerCoordinator
 from app.application.voice.pipeline_context import TurnContext
 from app.application.voice.pipeline_stages import (
     AnimationStage,
@@ -21,9 +22,11 @@ from app.application.voice.pipeline_stages import (
     SentenceSegmentationStage,
     TTSStage,
 )
+from app.application.voice.turn_persistence import TurnPersistenceManager
 from app.domain.chat.policies import build_conversation
 from app.domain.chat.ports import BaseLLMProvider, ChatContextCachePort
 from app.domain.voice.ports import BaseTTSProvider, StreamingASRService
+from app.shared.config import get_settings
 
 if TYPE_CHECKING:
     from app.application.rag.intent_classifier import IntentClassifier
@@ -63,10 +66,12 @@ class ConversationPipeline:
         self._retrieval = retrieval
         self._intent_classifier = intent_classifier
         self.avatar_id = avatar_id
-        self._persist_turn = persist_turn
         self._context_cache = context_cache
         self._history = build_conversation(avatar_id)
         self.tts_voice = tts_voice or getattr(tts, "voice", None)
+
+        self._persistence = TurnPersistenceManager(persist_turn, context_cache)
+        self._filler_coordinator = FillerCoordinator(tts_provider=self._tts)
 
         # Stages setup
         self.llm_stage = LLMStage(llm=self._llm, retrieval=self._retrieval, intent_classifier=self._intent_classifier)
@@ -121,14 +126,7 @@ class ConversationPipeline:
                 )
                 return
 
-            # Input Persistence
-            try:
-                if self._persist_turn:
-                    await self._persist_turn(session_id, "user", text, "text", None)
-            except Exception as e:
-                logger.warning(
-                    f"[Pipeline] Failed to persist user message: {e} | trace_id={trace_id}"
-                )
+            await self._persistence.persist_user_input(session_id, text, trace_id)
 
             await send_callback(
                 make_user_message_echo(
@@ -138,23 +136,11 @@ class ConversationPipeline:
                     conversation_id=session_id,
                 )
             )
-            if self._context_cache:
-                await self._context_cache.push_message(session_id, "user", text)
 
-            if self._history.is_empty and self._context_cache:
-                ctx_messages = await self._context_cache.get_or_rebuild_context(session_id)
-                for msg in ctx_messages[:-1]:
-                    if msg["role"] == "user":
-                        self._history.add_user_message(msg["content"])
-                    elif msg["role"] == "assistant":
-                        self._history.add_assistant_message(msg["content"])
+            await self._persistence.rebuild_history_if_needed(session_id, self._history)
 
             self._history.add_user_message(text)
             await send_callback(make_pipeline_state(session_id, "thinking", message_id))
-
-            # Execute pipeline stages concurrently for streaming
-            # LLMStage pushes to sentence_queue.
-            # Audio task pulls from sentence_queue and runs TTS+Animation sequentially per chunk.
 
             async def _llm_with_sentinel():
                 try:
@@ -162,45 +148,6 @@ class ConversationPipeline:
                 finally:
                     with suppress(Exception):
                         await context.sentence_queue.put(None)
-
-            async def filler_task_fn():
-                await asyncio.sleep(0.4)
-                if context.aborted or context.sentence_index > 0 or not self._tts:
-                    return
-                from app.domain.voice.filler_cache import get_filler_cache
-                fc = get_filler_cache()
-                if not fc:
-                    return
-
-                locale = getattr(self._history, "locale", "en-US")
-                base_lang = locale[:2] if locale else "en"
-                filler_map = {
-                    "ar": "ممم...",
-                    "fr": "Euh...",
-                    "es": "Mmm...",
-                    "en": "Hmm..."
-                }
-                filler_text = filler_map.get(base_lang, "Hmm...")
-
-                filler_tts = await fc.get_or_generate_filler(filler_text, voice=self.tts_voice, session_id="system")
-                if filler_tts and getattr(filler_tts, "audio_ref", None) and not context.aborted and context.sentence_index == 0:
-                    from pathlib import Path
-
-                    from app.schemas.ws_messages import make_tts_ready
-                    assert filler_tts.audio_ref is not None
-                    audio_file_id = Path(filler_tts.audio_ref).stem
-                    audio_url = f"/api/v1/audio/system/{audio_file_id}.mp3"
-                    await send_callback(
-                        make_tts_ready(
-                            session_id=context.session_id,
-                            message_id=f"{message_id}_filler",
-                            audio_url=audio_url,
-                            duration_ms=int(filler_tts.audio_duration_ms),
-                        )
-                    )
-
-            from app.shared.config import get_settings
-            settings = get_settings()
 
             async def process_audio():
                 try:
@@ -230,13 +177,21 @@ class ConversationPipeline:
                     )
                     context.abort()
 
-            # 2. TaskGroup Stability Execution
+            settings = get_settings()
+
             try:
                 async with asyncio.TaskGroup() as tg:
                     tg.create_task(_safe_task(_llm_with_sentinel(), "llm_stage"))
                     tg.create_task(_safe_task(process_audio(), "audio_stage"))
                     if settings.ENABLE_FILLER_AUDIO:
-                        tg.create_task(_safe_task(filler_task_fn(), "filler_task"))
+                        tg.create_task(
+                            _safe_task(
+                                self._filler_coordinator.run_filler_task(
+                                    context, self._history, self.tts_voice, send_callback
+                                ),
+                                "filler_task"
+                            )
+                        )
             except Exception:
                 context.abort()
                 raise
@@ -258,33 +213,17 @@ class ConversationPipeline:
                 )
             )
         finally:
-            # Output Persistence (Save partial text if disconnected)
             if context.llm_full_response:
-                tts_key: str | None = None
-                try:
-                    if self._tts:
-                        tts_key = self._tts.generate_cache_key(
-                            context.llm_full_response,
-                            voice=self.tts_voice,
-                        )
+                tts_key = None
+                if self._tts:
+                    try:
+                        tts_key = self._tts.generate_cache_key(context.llm_full_response, voice=self.tts_voice)
+                    except Exception as e:
+                        logger.warning(f"Failed to generate TTS cache key: {e}")
 
-                    if self._persist_turn:
-                        await self._persist_turn(
-                            session_id, "assistant", context.llm_full_response, "text", tts_key
-                        )
-                except Exception as e:
-                    logger.warning(
-                        f"[Pipeline] Failed to persist assistant message: {e} | trace_id={trace_id}"
-                    )
-
-                if self._context_cache:
-                    with suppress(Exception):
-                        await self._context_cache.push_message(
-                            session_id,
-                            "assistant",
-                            context.llm_full_response,
-                            extra={"tts_cache_key": tts_key} if tts_key else None,
-                        )
+                await self._persistence.persist_assistant_output(
+                    session_id, context.llm_full_response, tts_key, trace_id
+                )
 
             with suppress(Exception):
                 await send_callback(make_pipeline_state(session_id, "idle", message_id))

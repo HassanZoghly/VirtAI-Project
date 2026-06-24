@@ -62,6 +62,8 @@ async def test_retrieval_uses_session_scope_and_source_metadata() -> None:
             scope: str | None = None,
             scope_id: UUID | None = None,
             min_dense_score: float = 0.5,
+            metadata_filter: dict | None = None,
+            user_id: UUID | None = None,
         ) -> list[tuple[DocumentChunk, float]]:
             return []
 
@@ -75,6 +77,8 @@ async def test_retrieval_uses_session_scope_and_source_metadata() -> None:
             scope_id: UUID | None = None,
             min_hybrid_score: float = 0.015,
             min_dense_score: float = 0.5,
+            metadata_filter: dict | None = None,
+            user_id: UUID | None = None,
         ) -> list[tuple[DocumentChunk, float]]:
             self.scope = scope
             self.scope_id = scope_id
@@ -95,7 +99,7 @@ async def test_retrieval_uses_session_scope_and_source_metadata() -> None:
     vector_store = FakeVectorStore()
     retrieval = RetrievalUseCase(embedder=FakeEmbedder(), vector_store=vector_store)
 
-    context = await retrieval.execute("summarize it", session_id=session_id)
+    context = await retrieval.execute("summarize it", session_id=session_id, user_id=str(uuid4()))
 
     assert vector_store.scope == "SESSION"
     assert str(vector_store.scope_id) == session_id

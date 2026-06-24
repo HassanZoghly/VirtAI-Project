@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from fastapi import WebSocket, WebSocketDisconnect
 from loguru import logger
+from pydantic import ValidationError
 
 from app.application.chat.session_manager import Session
 from app.presentation.ws.connection_manager import WSConnectionManager
@@ -208,6 +209,15 @@ class WebSocketHandler:
                         ws_connection_drops.labels(reason="runtime_error").inc()
                     self._connected = False
                     break
+                except ValidationError as e:
+                    logger.error(f"[WS] Validation error: {e}")
+                    await self.outbound_sender.safe_send_error(
+                        code="INVALID_MESSAGE",
+                        message=f"Message validation failed: {str(e)}",
+                        session_id=self.session.session_id,
+                        session_pending=self._session_pending,
+                        connected=self._connected,
+                    )
                 except Exception as e:
                     logger.error(f"[WS] Error receiving message: {e}")
                     from app.shared.metrics import ws_connection_drops

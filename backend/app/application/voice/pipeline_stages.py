@@ -268,7 +268,7 @@ class AnimationStage(BaseStage):
 
         mouth_cues = []
         try:
-            if context.tts_result and getattr(context.tts_result, "audio_ref", None):
+            if context.tts_result and getattr(context.tts_result, "audio_ref", None) and self._viseme_generator:
                 mouth_cues = await self._viseme_generator.generate_from_audio(
                     audio_path=context.tts_result.audio_ref,
                     text=text_to_animate,

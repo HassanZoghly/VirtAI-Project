@@ -226,6 +226,7 @@ class GroqLLMProvider(BaseLLMProvider):
     async def complete(
         self,
         history: ConversationHistory,
+        response_format: dict | None = None,
     ) -> LLMResult:
         """
         Non-streaming completion.
@@ -245,13 +246,18 @@ class GroqLLMProvider(BaseLLMProvider):
                 reraise=True
             ):
                 with attempt:
-                    response = await self._client.chat.completions.create(
-                        model=self.model,
-                        messages=cast("list[Any]", messages),
-                        max_tokens=self.max_tokens,
-                        temperature=self.temperature,
-                        stream=False,
-                    )
+                    kwargs = {
+                        "model": self.model,
+                        "messages": cast("list[Any]", messages),
+                        "max_tokens": self.max_tokens,
+                        "temperature": self.temperature,
+                        "stream": False,
+                    }
+                    if response_format:
+                        kwargs["response_format"] = response_format
+
+                    response = await self._client.chat.completions.create(**kwargs)
+
         except Exception as e:
             logger.error(f"Groq LLM complete failed: {e}")
             raise LLMException(f"LLM complete failed: {e!s}") from e

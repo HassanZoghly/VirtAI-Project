@@ -14,7 +14,56 @@ from app.infrastructure.db.models import DocumentChunk, Quiz, QuizQuestion
 from app.infrastructure.rag.prompts.registry import get_prompt_set
 
 
-class QuizDomainException(Exception):
+from pydantic import BaseModel
+from app.shared.errors import RAGException
+
+class QuizQuestionModel(BaseModel):
+    question_text: str
+    options: list[str]
+    correct_option_index: int
+    explanation: str
+    citations: list[int]
+
+class QuizModel(BaseModel):
+    questions: list[QuizQuestionModel]
+
+QUIZ_SCHEMA = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "quiz",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "questions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "question_text": {"type": "string"},
+                            "options": {
+                                "type": "array",
+                                "items": {"type": "string"}
+                            },
+                            "correct_option_index": {"type": "integer"},
+                            "explanation": {"type": "string"},
+                            "citations": {
+                                "type": "array",
+                                "items": {"type": "integer"}
+                            }
+                        },
+                        "required": ["question_text", "options", "correct_option_index", "explanation", "citations"],
+                        "additionalProperties": False
+                    }
+                }
+            },
+            "required": ["questions"],
+            "additionalProperties": False
+        },
+        "strict": True
+    }
+}
+
+class QuizDomainException(RAGException):
     pass
 
 
@@ -76,36 +125,28 @@ class QuizUseCase:
 
         user_text = f"--- Document Content ---\n\n{lecture_text}\n\n{footer}"
 
-        # 2. Call LLM with up to 2 retries
-        parsed_json = None
+        # 2. Call LLM with JSON format
+        logger.info("Generating quiz via structured output")
+        history = ConversationHistory(system_prompt=sys_prompt)
+        history.add_user_message(user_text)
+        
+        quiz_data = None
         for attempt in range(3):
-            logger.info(f"Generating quiz, attempt {attempt + 1}")
-            history = ConversationHistory(system_prompt=sys_prompt)
-            history.add_user_message(user_text)
-            
+            logger.info(f"Generating quiz via structured output, attempt {attempt + 1}")
             try:
-                res = await self.llm.complete(history)
+                res = await self.llm.complete(history, response_format=QUIZ_SCHEMA)
                 response_text = res.full_text.strip()
                 
-                # Regex fallback parser
-                match = re.search(r'\[.*\]', response_text, re.DOTALL)
-                if match:
-                    json_str = match.group(0)
-                else:
-                    json_str = response_text
-                    
-                parsed_json = json.loads(json_str)
+                quiz_data = QuizModel.model_validate_json(response_text)
                 
-                if isinstance(parsed_json, list) and len(parsed_json) > 0:
-                    break # Success
-                else:
-                    logger.warning("Parsed JSON is not a non-empty list.")
-                    parsed_json = None
+                if not quiz_data.questions:
+                    raise ValueError("LLM returned an empty questions list")
+                break
             except Exception as e:
                 logger.error(f"Quiz generation parsing failed: {e}")
-                parsed_json = None
+                quiz_data = None
 
-        if not parsed_json:
+        if not quiz_data:
             raise QuizDomainException("Failed to generate a valid quiz JSON after 3 attempts.")
 
         # 3. Save Quiz
@@ -114,14 +155,14 @@ class QuizUseCase:
         await db.flush() # get quiz.id
 
         # 4. Save QuizQuestions
-        for q_data in parsed_json:
+        for q_data in quiz_data.questions:
             question = QuizQuestion(
                 quiz_id=quiz.id,
-                question_text=q_data.get("question_text", "Untitled Question"),
-                options=q_data.get("options", []),
-                correct_option_index=q_data.get("correct_option_index", 0),
-                explanation=q_data.get("explanation", ""),
-                citations=q_data.get("citations", []),
+                question_text=q_data.question_text,
+                options=q_data.options,
+                correct_option_index=q_data.correct_option_index,
+                explanation=q_data.explanation,
+                citations=q_data.citations,
             )
             db.add(question)
         

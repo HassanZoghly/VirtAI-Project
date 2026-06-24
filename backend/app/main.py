@@ -20,7 +20,6 @@ from app.presentation.ws.connection_manager import WSConnectionManager
 from app.shared.config import get_settings
 from app.shared.errors import (
     AvatarBaseException,
-    avatar_exception_handler,
 )
 from app.shared.log_config import setup_logging
 
@@ -197,8 +196,15 @@ async def lifespan(app: FastAPI):
         from app.application.voice.pipeline_stages import AnimationStage
         from app.infrastructure.tts.viseme_generator import VisemeGenerator
 
+        try:
+            viseme_gen = VisemeGenerator()
+        except RuntimeError as e:
+            logger.warning(f"Viseme generation disabled: {e}")
+            viseme_gen = None
+            app.state.viseme_disabled = True
+
         return AnimationStage(
-            animation_service=AnimationIntelligenceService(), viseme_generator=VisemeGenerator()
+            animation_service=AnimationIntelligenceService(), viseme_generator=viseme_gen
         )
 
     def create_chat_context_cache():
@@ -357,19 +363,9 @@ def create_app() -> FastAPI:
 
     app.add_middleware(CSRFMiddleware)
 
-    import traceback
+    from app.shared.error_envelope_middleware import setup_error_handlers
+    setup_error_handlers(app)
 
-    from fastapi.responses import JSONResponse
-
-    @app.exception_handler(Exception)
-    async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-        logger.error(f"Global exception caught: {exc}\n{traceback.format_exc()}")
-        return JSONResponse(
-            status_code=500,
-            content={"error": "INTERNAL_SERVER_ERROR", "message": "An unexpected error occurred."}
-        )
-
-    app.add_exception_handler(AvatarBaseException, avatar_exception_handler)
 
     # ── JWKS Endpoint ─────────────────────────────────────────────────────────
     @app.get("/.well-known/jwks.json", tags=["auth"])

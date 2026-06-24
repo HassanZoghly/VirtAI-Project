@@ -161,31 +161,3 @@ class WebSocketException(Exception):
         self.message = message
         self.code = code
         super().__init__(message)
-
-
-async def avatar_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    if not isinstance(exc, AvatarBaseException):
-        raise exc
-
-    if exc.status_code >= 500:
-        logger.error(f"[{exc.code}] {exc.message} | Details: {exc.details}")
-    else:
-        logger.warning(f"[{exc.code}] {exc.message} | Path: {request.url.path}")
-
-    response_content: dict[str, Any] = {
-        "error": exc.code,
-        "message": exc.message,
-        "timestamp": datetime.utcnow().isoformat(),
-        "path": request.url.path,
-    }
-
-    settings = get_settings()
-    if settings.DEBUG and exc.details:
-        response_content["details"] = exc.details
-
-    return JSONResponse(
-        status_code=exc.status_code,
-        content=response_content,
-    )
-
-

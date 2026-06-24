@@ -14,7 +14,34 @@ from app.infrastructure.db.models import DocumentChunk, DiagramCache
 from app.infrastructure.rag.prompts.registry import get_prompt_set
 
 
-class DiagramDomainException(Exception):
+from pydantic import BaseModel
+from app.shared.errors import RAGException
+
+class DiagramModel(BaseModel):
+    mermaid_code: str
+    citations: list[int]
+
+DIAGRAM_SCHEMA = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "diagram",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "mermaid_code": {"type": "string"},
+                "citations": {
+                    "type": "array",
+                    "items": {"type": "integer"}
+                }
+            },
+            "required": ["mermaid_code", "citations"],
+            "additionalProperties": False
+        },
+        "strict": True
+    }
+}
+
+class DiagramDomainException(RAGException):
     pass
 
 
@@ -124,41 +151,30 @@ class DiagramUseCase:
         user_text = f"--- Document Content ---\n\n{lecture_text}\n\n{footer}"
 
         # 2. Call LLM with retries
-        parsed_json = None
+        diagram_data = None
         for attempt in range(3):
             logger.info(f"Generating diagram, attempt {attempt + 1}")
             history = ConversationHistory(system_prompt=sys_prompt)
             history.add_user_message(user_text)
             
             try:
-                res = await self.llm.complete(history)
+                res = await self.llm.complete(history, response_format=DIAGRAM_SCHEMA)
                 response_text = res.full_text.strip()
                 
-                match = re.search(r'\{.*\}', response_text, re.DOTALL)
-                if match:
-                    json_str = match.group(0)
-                else:
-                    json_str = response_text
-                    
-                parsed_json = json.loads(json_str)
-                
-                if isinstance(parsed_json, dict) and "mermaid_code" in parsed_json:
-                    break # Success
-                else:
-                    logger.warning("Parsed JSON missing 'mermaid_code'.")
-                    parsed_json = None
+                diagram_data = DiagramModel.model_validate_json(response_text)
+                break # Success
             except Exception as e:
                 logger.error(f"Diagram generation parsing failed: {e}")
-                parsed_json = None
+                diagram_data = None
 
-        if not parsed_json:
+        if not diagram_data:
             raise DiagramDomainException("Failed to generate a valid diagram JSON after 3 attempts.")
 
         # 3. Sanitize and Validate
-        raw_mermaid = parsed_json.get("mermaid_code", "")
+        raw_mermaid = diagram_data.mermaid_code
         sanitized_mermaid = self._sanitize_mermaid(raw_mermaid)
         self._check_node_limit(sanitized_mermaid)
-        citations = parsed_json.get("citations", [])
+        citations = diagram_data.citations
 
         # 4. Save Diagram
         diagram = DiagramCache(

@@ -14,8 +14,8 @@ class MockLLMProvider:
     def __init__(self):
         self.complete_mock = AsyncMock()
 
-    async def complete(self, history):
-        return await self.complete_mock(history)
+    async def complete(self, history, **kwargs):
+        return await self.complete_mock(history, **kwargs)
 
 
 @pytest.mark.asyncio
@@ -97,12 +97,11 @@ async def test_diagram_use_case_json_parsing_success():
     
     good_json = {
         "mermaid_code": "flowchart TD\n  A[Concept 1] --> B[Concept 2]",
-        "citations": ["Chunk: 1"]
+        "citations": [1]
     }
     
-    # Wrap with markdown
     llm.complete_mock.return_value = LLMResult(
-        full_text=f"```json\n{json.dumps(good_json)}\n```"
+        full_text=json.dumps(good_json)
     )
 
     use_case = DiagramUseCase(llm)

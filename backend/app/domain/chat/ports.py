@@ -86,6 +86,7 @@ class BaseLLMProvider(ABC):
     async def complete(
         self,
         history: ConversationHistory,
+        response_format: dict | None = None,
     ) -> LLMResult:
         """Non-streaming completion (for simple cases)"""
         ...

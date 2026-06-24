@@ -84,6 +84,7 @@ class ConversationPipeline:
         # State tracking
         self._current_context: TurnContext | None = None
         self._current_message_id: str | None = None
+        self._running_tasks: list[asyncio.Task] = []
         logger.info(f"ConversationPipeline created | avatar={avatar_id}")
 
     # ── Public API ────────────────────────────────────────────────────────────
@@ -181,10 +182,11 @@ class ConversationPipeline:
 
             try:
                 async with asyncio.TaskGroup() as tg:
-                    tg.create_task(_safe_task(_llm_with_sentinel(), "llm_stage"))
-                    tg.create_task(_safe_task(process_audio(), "audio_stage"))
+                    t1 = tg.create_task(_safe_task(_llm_with_sentinel(), "llm_stage"))
+                    t2 = tg.create_task(_safe_task(process_audio(), "audio_stage"))
+                    self._running_tasks.extend([t1, t2])
                     if settings.ENABLE_FILLER_AUDIO:
-                        tg.create_task(
+                        t3 = tg.create_task(
                             _safe_task(
                                 self._filler_coordinator.run_filler_task(
                                     context, self._history, self.tts_voice, send_callback
@@ -192,6 +194,7 @@ class ConversationPipeline:
                                 "filler_task"
                             )
                         )
+                        self._running_tasks.append(t3)
             except Exception:
                 context.abort()
                 raise
@@ -229,6 +232,7 @@ class ConversationPipeline:
                 await send_callback(make_pipeline_state(session_id, "idle", message_id))
             self._current_message_id = None
             self._current_context = None
+            self._running_tasks.clear()
             logger.info(
                 f"Pipeline complete | session={session_id} | message={message_id} | trace_id={trace_id}"
             )
@@ -236,6 +240,10 @@ class ConversationPipeline:
     def abort(self) -> None:
         if self._current_context:
             self._current_context.abort()
+        for task in self._running_tasks:
+            if not task.done():
+                task.cancel()
+        self._running_tasks.clear()
         logger.info("Pipeline abort requested")
 
     def set_tts_voice(self, voice_id: str | None) -> None:

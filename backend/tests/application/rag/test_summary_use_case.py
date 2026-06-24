@@ -16,10 +16,10 @@ class MockLLMProvider:
         self.stream_mock = MagicMock()
         self.stream_chunks = []
 
-    async def complete(self, history):
-        return await self.complete_mock(history)
+    async def complete(self, history, **kwargs):
+        return await self.complete_mock(history, **kwargs)
 
-    async def stream(self, history, on_sentence=None, trace_id=None):
+    async def stream(self, history, on_sentence=None, trace_id=None, **kwargs):
         for chunk in self.stream_chunks:
             yield chunk
 

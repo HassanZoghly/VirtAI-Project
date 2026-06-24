@@ -14,8 +14,8 @@ class MockLLMProvider:
     def __init__(self):
         self.complete_mock = AsyncMock()
 
-    async def complete(self, history):
-        return await self.complete_mock(history)
+    async def complete(self, history, **kwargs):
+        return await self.complete_mock(history, **kwargs)
 
 
 @pytest.mark.asyncio
@@ -53,18 +53,19 @@ async def test_quiz_use_case_json_parsing_success():
     
     llm = MockLLMProvider()
     
-    good_json = [
-        {
-            "question_text": "Q1?",
-            "options": ["A", "B", "C", "D"],
-            "correct_option_index": 0,
-            "explanation": "Exp",
-            "citations": []
-        }
-    ]
-    # Wrap with markdown to test fallback parser
+    good_json = {
+        "questions": [
+            {
+                "question_text": "Q1?",
+                "options": ["A", "B", "C", "D"],
+                "correct_option_index": 0,
+                "explanation": "Exp",
+                "citations": []
+            }
+        ]
+    }
     llm.complete_mock.return_value = LLMResult(
-        full_text=f"```json\n{json.dumps(good_json)}\n```"
+        full_text=json.dumps(good_json)
     )
 
     use_case = QuizUseCase(llm)
@@ -97,7 +98,11 @@ async def test_quiz_use_case_json_parsing_retry_success():
     llm = MockLLMProvider()
     
     bad_output = "I couldn't generate a quiz."
-    good_json = [{"question_text": "Q1?", "options": ["A","B","C","D"], "correct_option_index": 0, "explanation": "Exp", "citations": []}]
+    good_json = {
+        "questions": [
+            {"question_text": "Q1?", "options": ["A","B","C","D"], "correct_option_index": 0, "explanation": "Exp", "citations": []}
+        ]
+    }
     good_output = json.dumps(good_json)
     
     # First fails, second succeeds

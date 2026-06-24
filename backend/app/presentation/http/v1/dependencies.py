@@ -229,6 +229,10 @@ async def _current_user(
 ) -> UserEntity:
     """Dependency: resolve Bearer token → UserEntity, checking blacklist."""
     from app.infrastructure.cache.jwt_blacklist import is_blacklisted
+    import asyncio
+    import redis.exceptions
+    from loguru import logger
+    
     if creds is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
@@ -236,10 +240,21 @@ async def _current_user(
     user_id = token_payload.user_id
     jti = token_payload.jti
 
-    if jti and await is_blacklisted(jti):
-        raise RevokedTokenError()
+    try:
+        is_bl = await asyncio.wait_for(is_blacklisted(jti), timeout=0.2) if jti else False
+        if is_bl:
+            raise RevokedTokenError()
 
-    cached = await get_cached_auth_session(str(user_id))
+        cached = await asyncio.wait_for(get_cached_auth_session(str(user_id)), timeout=0.2)
+    except asyncio.TimeoutError:
+        logger.error("Redis token validation timeout. Failing closed.")
+        raise HTTPException(status_code=401, detail="Authentication service unavailable")
+    except RevokedTokenError:
+        raise
+    except redis.exceptions.RedisError as e:
+        logger.error(f"Redis token validation error: {e.__class__.__name__}. Failing closed.")
+        raise HTTPException(status_code=401, detail="Authentication service unavailable")
+
     if cached is not None:
         user = _deserialize_cached_user(cached)
         if not user.is_active:
@@ -255,5 +270,12 @@ async def _current_user(
         raise HTTPException(status_code=403, detail="User account is inactive")
     if token_payload.token_version != user.refresh_token_version:
         raise RevokedTokenError("Access token is stale")
-    await cache_auth_session(str(user_id), _serialize_user_for_cache(user))
+        
+    try:
+        await asyncio.wait_for(cache_auth_session(str(user_id), _serialize_user_for_cache(user)), timeout=0.2)
+    except asyncio.TimeoutError:
+        logger.warning("Redis timeout writing auth session. Proceeding anyway.")
+    except Exception as e:
+        logger.warning(f"Redis error writing auth session: {e}. Proceeding anyway.")
+        
     return user

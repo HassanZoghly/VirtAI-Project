@@ -3,7 +3,7 @@
   top: 0;
   right: 0;
   width: 420px;
-  max-width: min(92vw, 420px);
+  max-width: 92vw;
   height: 100%;
   display: flex;
   flex-direction: column;

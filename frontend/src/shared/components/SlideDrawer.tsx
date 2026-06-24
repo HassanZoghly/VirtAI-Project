@@ -11,13 +11,49 @@ export default function SlideDrawer({
   contentClassName = '',
   zIndex = 1000,
   enableDrag = false,
+  width,
+  onWidthChange,
+  minWidth = 250,
+  maxWidth = 900,
+  resizable = false,
 }) {
   const drawerRef = useRef(null);
   const previousFocusRef = useRef(null);
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 1023px)').matches
   );
+  const [isResizing, setIsResizing] = useState(false);
   const id = useId();
+
+  // Resizing logic
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      let newWidth = window.innerWidth - e.clientX;
+      const dynamicMaxWidth = Math.min(maxWidth, window.innerWidth - 320);
+      if (newWidth < minWidth) newWidth = minWidth;
+      if (newWidth > dynamicMaxWidth) newWidth = dynamicMaxWidth;
+      
+      if (onWidthChange) {
+        onWidthChange(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.userSelect = 'none';
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing, minWidth, maxWidth, onWidthChange]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(max-width: 1023px)');
@@ -101,12 +137,13 @@ export default function SlideDrawer({
             transition={{ duration: 0.2 }}
           />
           <motion.div
-            className={`drawer-content ${contentClassName}`}
+            className={`drawer-content ${contentClassName} ${isResizing ? 'resizing' : ''}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby={title ? `${id}-title` : undefined}
             aria-describedby={description ? `${id}-desc` : undefined}
             ref={drawerRef}
+            style={{ width: (!isMobile && width) ? width : undefined }}
             onKeyDown={handleKeyDown}
             drag={isMobile && enableDrag ? 'y' : false}
             dragConstraints={{ top: 0, bottom: 0 }}
@@ -121,6 +158,29 @@ export default function SlideDrawer({
             exit={isMobile ? { y: '100%' } : { x: '100%' }}
             transition={{ type: 'tween', ease: [0.2, 0.8, 0.2, 1], duration: 0.3 }}
           >
+            {!isMobile && resizable && (
+              <div
+                className="drawer-resize-handle"
+                onMouseDown={() => setIsResizing(true)}
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: '6px',
+                  cursor: 'col-resize',
+                  zIndex: 10,
+                  backgroundColor: isResizing ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                  transition: 'background-color 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isResizing) (e.target as HTMLElement).style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!isResizing) (e.target as HTMLElement).style.backgroundColor = 'transparent';
+                }}
+              />
+            )}
             {isMobile && (
               <div
                 className="drawer-drag-handle"

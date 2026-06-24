@@ -1,5 +1,5 @@
 import React from 'react';
-import { PiGearFill, PiWifiSlashFill } from 'react-icons/pi';
+import { PiWifiSlashFill } from 'react-icons/pi';
 import { ConnectionState } from '@/core/realtime/useWSClient';
 import { QuizButton } from '@/features/quiz/components/QuizButton';
 import { DiagramButton } from '@/features/diagrams/components/DiagramButton';
@@ -10,11 +10,9 @@ interface AvatarTopBarProps {
   connectionState: ConnectionState | string;
   currentSessionId: string | null;
   reconnectError: string | null;
-  openSettings: () => void;
   reconnect: () => void;
   hasDocuments: boolean;
   hasMessages: boolean;
-  onTakeQuiz: () => void;
   onGenerateDiagram: () => void;
   onStartExplain: () => void;
 }
@@ -24,11 +22,9 @@ export function AvatarTopBar({
   connectionState,
   currentSessionId,
   reconnectError,
-  openSettings,
   reconnect,
   hasDocuments,
   hasMessages,
-  onTakeQuiz,
   onGenerateDiagram,
   onStartExplain
 }: AvatarTopBarProps) {
@@ -42,27 +38,18 @@ export function AvatarTopBar({
     }[connectionState as ConnectionState] || 'offline';
 
   const statusLabel =
-    !currentSessionId ? `${avatarName} — Ready` :
-    reconnectError ||
+    !currentSessionId ? `Ready  ·  ${avatarName}` :
+    reconnectError ? `Error  ·  ${avatarName}` :
     {
-      [ConnectionState.OFFLINE]: `${avatarName} — Offline`,
-      [ConnectionState.RECONNECTING]: 'Reconnecting…',
-      [ConnectionState.INITIALIZING]: 'Starting up…',
-      [ConnectionState.ONLINE]: `${avatarName} Online`,
+      [ConnectionState.OFFLINE]: `Offline  ·  ${avatarName}`,
+      [ConnectionState.RECONNECTING]: `Reconnecting…  ·  ${avatarName}`,
+      [ConnectionState.INITIALIZING]: `Starting up…  ·  ${avatarName}`,
+      [ConnectionState.ONLINE]: `${avatarName} is Online`,
     }[connectionState as ConnectionState] ||
-    `${avatarName} — Offline`;
+    `Offline  ·  ${avatarName}`;
 
   return (
     <div className="classroom-top-controls">
-      <button
-        className="avatar-settings-btn"
-        onClick={openSettings}
-        title="Settings"
-        aria-label="Open settings"
-      >
-        <PiGearFill />
-      </button>
-
       <div
         className={`avatar-status-badge ${statusBadgeClass}`}
         role="status"
@@ -92,10 +79,10 @@ export function AvatarTopBar({
         ) : null}
       </div>
 
-      <div className="classroom-top-actions" style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
+      <div className="classroom-top-actions">
         <ExplainButton onClick={onStartExplain} isVisible={hasDocuments && !hasMessages} />
         <DiagramButton onClick={onGenerateDiagram} disabled={!hasDocuments} />
-        <QuizButton onClick={onTakeQuiz} disabled={!hasDocuments} />
+        <QuizButton disabled={!hasDocuments} />
       </div>
     </div>
   );

@@ -8,9 +8,10 @@ import './VisualizeButton.css';
 interface VisualizeButtonProps {
   messageId: string;
   locale?: Locale;
+  onExpand?: () => void;
 }
 
-export function VisualizeButton({ messageId, locale = 'en' }: VisualizeButtonProps) {
+export function VisualizeButton({ messageId, locale = 'en', onExpand }: VisualizeButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isHidden, setIsHidden] = useState(false);
@@ -58,14 +59,19 @@ export function VisualizeButton({ messageId, locale = 'en' }: VisualizeButtonPro
   if (imageUrl) {
     return (
       <div className="visualize-result mt-2">
-        <img src={imageUrl} alt="Message Visualization" className="visualize-image rounded-md border border-white/10 max-w-full" />
+        <img 
+          src={imageUrl} 
+          alt="Message Visualization" 
+          className="visualize-image rounded-md border border-white/10 max-w-full"
+          onLoad={onExpand}
+        />
       </div>
     );
   }
 
   return (
     <button
-      className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md transition-all duration-200 bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80 border border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full transition-all duration-200 bg-white/5 text-white/50 border border-white/10 hover:border-[#D4B47A] hover:text-[#D4B47A] disabled:opacity-50 disabled:cursor-not-allowed"
       onClick={handleVisualize}
       disabled={isLoading}
       title={t.visualize}

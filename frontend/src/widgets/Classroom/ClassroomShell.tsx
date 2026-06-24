@@ -15,9 +15,8 @@ import { useClassroomState } from './hooks/useClassroomState';
 import { useClassroomAudio } from './hooks/useClassroomAudio';
 import { useClassroomChat } from './hooks/useClassroomChat';
 import { AvatarTopBar } from './AvatarTopBar';
+import { ClassroomLeftRail } from './ClassroomLeftRail';
 import { useDocumentList } from '@/features/documents/useDocumentList';
-import { useQuizSession } from '@/features/quiz/hooks/useQuizSession';
-import { QuizDrawer } from '@/features/quiz/components/QuizDrawer';
 import { DiagramContainer } from '@/features/diagrams/components/DiagramContainer';
 import { useExplainWS, PresentationState } from '@/features/explain/hooks/useExplainWS';
 import { ExplainSession } from '@/features/explain/components/ExplainSession';
@@ -70,6 +69,8 @@ export default function ClassroomShell() {
     avatarName,
     isSettingsOpen,
     isDocumentsOpen,
+    sidebarWidth,
+    setSidebarWidth,
     openSettings,
     closeSettings,
     toggleDocuments,
@@ -81,16 +82,7 @@ export default function ClassroomShell() {
   const status = session.status;
 
   const { documents } = useDocumentList(currentSessionId);
-  const quizSession = useQuizSession();
-  const [isQuizOpen, setIsQuizOpen] = useState(false);
   const [isDiagramOpen, setIsDiagramOpen] = useState(false);
-
-  const handleTakeQuiz = () => {
-    if (documents.length > 0 && documents[0].id) {
-      quizSession.startQuiz(documents[0].id, 'en');
-      setIsQuizOpen(true);
-    }
-  };
 
   const handleGenerateDiagram = () => {
     setIsDiagramOpen(true);
@@ -338,24 +330,8 @@ export default function ClassroomShell() {
         <title>{avatarName} — VirtAI Classroom</title>
       </Helmet>
       <div className="classroom-shell">
-        <h1
-          className="classroom-watermark"
-          style={{
-            position: 'absolute',
-            bottom: '1.5rem',
-            left: '1.5rem',
-            fontSize: 'var(--h1)',
-            fontWeight: '700',
-            letterSpacing: '-0.02em',
-            color: 'var(--text-primary)',
-            opacity: 0.05,
-            pointerEvents: 'none',
-            zIndex: 10,
-            margin: 0,
-          }}
-        >
-          VirtAI
-        </h1>
+        <ClassroomLeftRail onOpenSessions={openSettings} />
+
         <SettingsDrawer
           isOpen={isSettingsOpen}
           onClose={closeSettings}
@@ -366,28 +342,17 @@ export default function ClassroomShell() {
           onDeleteSession={handleDeleteSession}
           onRenameSession={session.renameSession}
           onClearAllSessions={handleClearAllSessions}
+          width={sidebarWidth}
+          onWidthChange={setSidebarWidth}
+          resizable={true}
         />
-        <DocumentsDrawer isOpen={isDocumentsOpen} onClose={toggleDocuments} sessionId={currentSessionId} />
-
-        <AvatarTopBar
-          avatarName={avatarName}
-          connectionState={connectionState}
-          currentSessionId={currentSessionId}
-          reconnectError={reconnectError}
-          openSettings={openSettings}
-          reconnect={reconnect}
-          hasDocuments={documents.length > 0}
-          hasMessages={currentSession?.messages?.length ? currentSession.messages.length > 0 : false}
-          onTakeQuiz={handleTakeQuiz}
-          onGenerateDiagram={handleGenerateDiagram}
-          onStartExplain={handleStartExplain}
-        />
-
-        <QuizDrawer
-          isOpen={isQuizOpen}
-          onClose={() => setIsQuizOpen(false)}
-          documentId={documents.length > 0 ? documents[0].id : null}
-          quizSession={quizSession}
+        <DocumentsDrawer 
+          isOpen={isDocumentsOpen} 
+          onClose={toggleDocuments} 
+          sessionId={currentSessionId} 
+          width={sidebarWidth}
+          onWidthChange={setSidebarWidth}
+          resizable={true}
         />
 
         <DiagramContainer
@@ -400,9 +365,23 @@ export default function ClassroomShell() {
           className="split-container"
           id="main-content"
           style={{
-            width: isSidebarOpen ? 'calc(100% - 320px)' : '100%'
+            width: isSidebarOpen ? `calc(100% - ${sidebarWidth}px)` : '100%'
           }}
         >
+          <AvatarTopBar
+            avatarName={avatarName || 'AI Tutor'}
+            connectionState={connectionState}
+            currentSessionId={currentSessionId}
+            reconnectError={reconnectError}
+            reconnect={reconnect}
+            hasDocuments={documents.length > 0}
+            hasMessages={currentSession?.messages?.length ? currentSession.messages.length > 0 : false}
+            onGenerateDiagram={handleGenerateDiagram}
+            onStartExplain={handleStartExplain}
+          />
+
+          <ClassroomLeftRail onOpenSessions={openSettings} className="mobile-rail" />
+
           <AvatarCanvasWrapper 
             avatarId={activeAvatarId}
             pipelineState={conversationState.pipelineState}

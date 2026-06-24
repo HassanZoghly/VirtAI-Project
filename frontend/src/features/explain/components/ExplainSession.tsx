@@ -42,24 +42,33 @@ export function ExplainSession({
     <div className="explain-session-container">
       <div className="explain-header">
         <div className="explain-title">
-          <span className="explain-badge">Presentation Mode</span>
+          <div><span className="explain-pill-badge">Presentation Mode</span></div>
           <h2 className="explain-progress">
             Slide {currentSlide + 1} {totalSlides > 0 ? `of ${totalSlides}` : ''}
           </h2>
         </div>
         <div className="explain-header-actions">
-          <button className="explain-stop-btn" onClick={onClose} title="Stop Presentation">
+          <button className="explain-ghost-btn" onClick={onClose} title="Stop Presentation">
             <FiStopCircle size={20} /> Stop
           </button>
         </div>
       </div>
+      
+      <div className="explain-progress-bar-container">
+        <div 
+          className="explain-progress-bar" 
+          style={{ width: totalSlides > 0 ? `${((currentSlide + 1) / totalSlides) * 100}%` : '0%' }} 
+        />
+      </div>
 
       <div className="explain-content" ref={contentRef}>
-        <div className="markdown-body">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {content || "Loading slide content..."}
-          </ReactMarkdown>
-          {currentState === 'EXPLAINING' && <span className="streaming-cursor">▊</span>}
+        <div className="explain-content-wrapper">
+          <div className="markdown-body">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {content || "Loading slide content..."}
+            </ReactMarkdown>
+            {currentState === 'EXPLAINING' && <span className="streaming-cursor">▊</span>}
+          </div>
         </div>
       </div>
 
@@ -75,7 +84,7 @@ export function ExplainSession({
           <SlideQuestionInput onQuestion={onQuestion} onContinue={onContinue} />
         ) : (
           <div className="explain-active-controls">
-            <button className="explain-pause-btn" onClick={onPauseOrStop} title="Pause / Interrupt">
+            <button className="explain-ghost-btn" onClick={onPauseOrStop} title="Pause / Interrupt">
               <FiPauseCircle size={20} /> Pause / Interrupt
             </button>
           </div>

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { PiMicrophoneFill, PiPauseFill, PiWarningCircleFill } from 'react-icons/pi';
+import { PiMicrophone, PiPauseFill, PiWarningCircleFill } from 'react-icons/pi';
 import { useRealtimeASR } from '../hooks/useRealtimeASR';
 import './VoiceModeButton.css';
 
@@ -75,7 +75,7 @@ export default function VoiceModeButton({
     if (isPaused) {
       return PiPauseFill;
     }
-    return PiMicrophoneFill;
+    return PiMicrophone;
   }, [error, isPaused]);
 
   // Determine button title/tooltip
@@ -110,7 +110,7 @@ export default function VoiceModeButton({
     <div className={`voice-mode-container ${className}`}>
       {/* Main voice mode button (Requirement 1.1, 1.4) */}
       <button
-        className={`voice-mode-btn ${buttonState}`}
+        className={`w-[52px] h-[52px] rounded-full bg-[#1e1e1e] hover:bg-[#2a2a2a] flex items-center justify-center transition-colors text-white/70 hover:text-white voice-mode-btn ${buttonState}`}
         onClick={async () => {
           if (isListening) {
             stopListening();
@@ -126,7 +126,7 @@ export default function VoiceModeButton({
         disabled={!!error}
         type="button"
       >
-        <ButtonIcon className="voice-mode-icon" />
+        <ButtonIcon className="voice-mode-icon" size={22} />
 
         {/* Listening animation (Requirement 8.3) */}
         {isListening && !isPaused && (

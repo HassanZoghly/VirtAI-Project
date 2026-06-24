@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { loadSetup } from '@/features/setup';
+import { getAvatarById } from '@/features/avatar/data/avatars';
 
 export interface SetupConfig {
   avatarId?: string;
@@ -66,10 +67,12 @@ export function useClassroomState() {
   const activeAvatarId = setupConfig.avatarId || 'avatar1';
   const activeVoiceId = setupConfig.voiceId || getDefaultVoiceId();
   const movementEnabled = setupConfig.movementEnabled ?? true;
-  const avatarName = setupConfig.avatarName || 'AI Tutor';
+  const avatarData = getAvatarById(activeAvatarId);
+  const avatarName = setupConfig.avatarName || avatarData?.name || 'AI Tutor';
 
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isDocumentsOpen, setIsDocumentsOpen] = useState<boolean>(false);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(320);
 
   const openSettings = useCallback(() => setIsSettingsOpen(true), []);
   const closeSettings = useCallback(() => setIsSettingsOpen(false), []);
@@ -83,6 +86,8 @@ export function useClassroomState() {
     avatarName,
     isSettingsOpen,
     isDocumentsOpen,
+    sidebarWidth,
+    setSidebarWidth,
     openSettings,
     closeSettings,
     toggleDocuments,

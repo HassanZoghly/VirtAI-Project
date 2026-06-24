@@ -83,6 +83,24 @@ export const AvatarCanvasWrapper = memo(function AvatarCanvasWrapper({
           <p style={{ color: '#fff' }}>Recovering Avatar Graphics...</p>
         </div>
       )}
+      <h1
+        className="classroom-watermark"
+        style={{
+          position: 'absolute',
+          bottom: '1rem',
+          left: '1rem',
+          fontSize: 'var(--h1, 2.5rem)',
+          fontWeight: '700',
+          letterSpacing: '-0.02em',
+          opacity: 0.85,
+          pointerEvents: 'none',
+          zIndex: 50,
+          margin: 0,
+        }}
+      >
+        <span style={{ color: 'var(--text-primary)' }}>Virt</span>
+        <span style={{ color: 'var(--accent-gold, #D4B47A)' }}>AI</span>
+      </h1>
       <Canvas onCreated={(state) => {
         const evidence = {
           camera: {

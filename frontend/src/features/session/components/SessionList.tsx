@@ -8,9 +8,7 @@ import {
   PiPencilSimpleFill,
   PiPlusFill,
   PiTrashSimpleFill,
-  PiUserGearFill,
 } from 'react-icons/pi';
-import { useNavigate } from 'react-router-dom';
 import { ISession } from '../types';
 import SessionHoverPreview from './SessionHoverPreview';
 
@@ -134,7 +132,6 @@ const SessionList = memo(function SessionList({
   onClearAllSessions,
   onCloseDrawer,
 }: SessionListProps) {
-  const navigate = useNavigate();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [hoveredSession, setHoveredSession] = useState<ISession | null>(null);
@@ -257,13 +254,6 @@ const SessionList = memo(function SessionList({
     [onSessionSelect, onCloseDrawer]
   );
 
-  const handleSetupClick = useCallback(() => {
-    navigate('/setup');
-    if (onCloseDrawer) {
-      onCloseDrawer();
-    }
-  }, [navigate, onCloseDrawer]);
-
   const handleLogout = useCallback(() => {
     void logout();
     if (onCloseDrawer) {
@@ -284,40 +274,26 @@ const SessionList = memo(function SessionList({
   const contextSession = contextMenu ? sessions.find((s) => s.id === contextMenu.sessionId) : null;
 
   return (
-    <div className="sidebar-inner">
-      <div className="sidebar-setup-card-wrapper">
-        <button
-          className="sidebar-setup-card"
-          onClick={handleSetupClick}
-          aria-label="Avatar and System Setup"
-        >
-          <div className="setup-card-icon">
-            <PiUserGearFill size={20} />
-          </div>
-          <div className="setup-card-content">
-            <span className="setup-card-title">Avatar & System Setup</span>
-          </div>
-        </button>
-      </div>
+    <div className="sidebar-inner" style={{ width: '100%', position: 'relative' }}>
 
       <div className="sidebar-chats-section">
-        <div className="sidebar-chats-header">
-          <h2 className="sidebar-section-title">
-            <PiChatsFill /> Chats
+        <div className="flex justify-between items-center px-4 py-4 border-b border-white/5">
+          <h2 className="text-xl font-extrabold tracking-wider text-white/90">
+            CHATS
           </h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <button className="sidebar-new-chat-btn" onClick={onNewSession} aria-label="New chat">
-              <PiPlusFill size={14} /> New Chat
+          <div className="flex items-center gap-2">
+            <button className="sidebar-new-chat-btn text-sm flex items-center gap-1.5 px-2 py-1 hover:bg-white/10 rounded-md transition-colors" onClick={onNewSession} aria-label="New chat">
+              <PiPlusFill size={22} /> New Chat
             </button>
             {sessions.length > 0 && (
               <button
                 id="clear-all-chats-btn"
-                className="sidebar-clear-all-btn"
+                className="sidebar-clear-all-btn p-1.5 hover:bg-white/10 rounded-md transition-colors text-white/60 hover:text-red-400"
                 onClick={() => setIsConfirmClearOpen(true)}
                 aria-label="Delete all chats"
                 title="Delete all chats"
               >
-                <PiTrashSimpleFill size={14} />
+                <PiTrashSimpleFill size={22} />
               </button>
             )}
           </div>
@@ -369,24 +345,26 @@ const SessionList = memo(function SessionList({
         contextSession &&
         createPortal(
           <div
-            className="session-context-menu"
+            className="flex flex-col min-w-[160px] bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 shadow-2xl rounded-xl overflow-hidden p-1 z-[9999]"
             ref={contextMenuRef}
             style={{
               position: 'fixed',
               top: contextMenu.y,
               left: contextMenu.x,
-              zIndex: 9999,
             }}
           >
-            <button className="context-menu-item" onClick={() => startEditing(contextSession)}>
-              <PiPencilSimpleFill /> Rename
+            <button 
+              className="flex items-center gap-2 w-full text-left px-3.5 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white rounded-lg transition-colors"
+              onClick={() => startEditing(contextSession)}
+            >
+              <PiPencilSimpleFill size={16} /> Rename
             </button>
-            <div className="context-menu-divider" />
+            <div className="h-px bg-white/10 my-1 mx-2" />
             <button
-              className="context-menu-item danger"
+              className="flex items-center gap-2 w-full text-left px-3.5 py-2.5 text-sm text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
               onClick={() => handleDelete(contextMenu.sessionId)}
             >
-              <PiTrashSimpleFill /> Delete
+              <PiTrashSimpleFill size={16} /> Delete
             </button>
           </div>,
           document.body

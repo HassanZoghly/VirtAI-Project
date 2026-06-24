@@ -1,28 +1,29 @@
 import React from 'react';
 import { FiEdit3 } from 'react-icons/fi';
+import { useNavigate } from 'react-router-dom';
 import { getQuizTranslations, Locale } from '../i18n';
 import './QuizButton.css';
 
 interface QuizButtonProps {
-  onClick: () => void;
   disabled?: boolean;
   locale?: Locale;
 }
 
-export function QuizButton({ onClick, disabled, locale = 'en' }: QuizButtonProps) {
+export function QuizButton({ disabled, locale = 'en' }: QuizButtonProps) {
   const t = getQuizTranslations(locale);
+  const navigate = useNavigate();
 
   return (
-    <div className="quiz-btn-wrapper" title={disabled ? t.noDocuments : t.takeQuiz}>
-      <button
-        className="quiz-action-btn"
-        onClick={onClick}
-        disabled={disabled}
-        aria-label={t.takeQuiz}
-      >
-        <FiEdit3 />
-        <span className="quiz-btn-text">{t.takeQuiz}</span>
-      </button>
-    </div>
+    <button
+      className="classroom-action-btn"
+      data-variant="quiz"
+      onClick={() => navigate('/quiz')}
+      disabled={disabled}
+      aria-label={t.takeQuiz}
+      title={disabled ? t.noDocuments : t.takeQuiz}
+    >
+      <FiEdit3 />
+      <span>{t.takeQuiz}</span>
+    </button>
   );
 }

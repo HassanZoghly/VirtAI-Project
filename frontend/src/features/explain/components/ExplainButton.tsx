@@ -11,15 +11,15 @@ export function ExplainButton({ onClick, isVisible }: ExplainButtonProps) {
   if (!isVisible) return null;
 
   return (
-    <div className="explain-btn-wrapper" title="Start slide-by-slide presentation">
-      <button
-        className="explain-action-btn"
-        onClick={onClick}
-        aria-label="Start Presentation"
-      >
-        <FiMonitor />
-        <span className="explain-btn-text">Explain</span>
-      </button>
-    </div>
+    <button
+      className="classroom-action-btn"
+      data-variant="explain"
+      onClick={onClick}
+      aria-label="Start Presentation"
+      title="Start slide-by-slide presentation"
+    >
+      <FiMonitor />
+      <span>Explain</span>
+    </button>
   );
 }

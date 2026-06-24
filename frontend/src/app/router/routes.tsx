@@ -9,6 +9,8 @@ const Setup = lazy(() => import('@/pages/Setup'));
 const NotFound = lazy(() => import('@/pages/NotFound'));
 const AuthPage = lazy(() => import('@/pages/Auth'));
 const AuthCallbackHandler = lazy(() => import('@/pages/AuthCallback'));
+const Quiz = lazy(() => import('@/pages/Quiz'));
+const Help = lazy(() => import('@/pages/Help'));
 
 interface RouteErrorBoundaryProps {
   children: ReactNode;
@@ -71,6 +73,20 @@ export default function AppRoutes() {
         <RequireAuth>
           <RequireSetupComplete>
             <RouteErrorBoundary><Classroom /></RouteErrorBoundary>
+          </RequireSetupComplete>
+        </RequireAuth>
+      } />
+      <Route path="/quiz" element={
+        <RequireAuth>
+          <RequireSetupComplete>
+            <RouteErrorBoundary><Quiz /></RouteErrorBoundary>
+          </RequireSetupComplete>
+        </RequireAuth>
+      } />
+      <Route path="/help" element={
+        <RequireAuth>
+          <RequireSetupComplete>
+            <RouteErrorBoundary><Help /></RouteErrorBoundary>
           </RequireSetupComplete>
         </RequireAuth>
       } />

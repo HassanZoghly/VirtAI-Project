@@ -12,6 +12,9 @@ export interface SettingsDrawerProps {
   onDeleteSession: (id: string) => void;
   onRenameSession: (id: string, title: string) => void;
   onClearAllSessions?: () => void;
+  width?: number;
+  onWidthChange?: (width: number) => void;
+  resizable?: boolean;
 }
 
 /**
@@ -27,6 +30,9 @@ export default function SettingsDrawer({
   onDeleteSession,
   onRenameSession,
   onClearAllSessions,
+  width,
+  onWidthChange,
+  resizable,
 }: SettingsDrawerProps) {
   return (
     <SlideDrawer
@@ -36,6 +42,9 @@ export default function SettingsDrawer({
       onClose={onClose}
       contentClassName="sidebar-minimal"
       enableDrag={true}
+      width={width}
+      onWidthChange={onWidthChange}
+      resizable={resizable}
     >
       <div
         className="drawer-body"

@@ -1,5 +1,6 @@
-import React, { useCallback, KeyboardEvent, useRef, useEffect } from 'react';
-import { PiPaperclipFill, PiPaperPlaneTiltFill } from 'react-icons/pi';
+import React, { KeyboardEvent, useCallback, useEffect, useRef } from 'react';
+import { FiSquare } from 'react-icons/fi';
+import { PiPaperclip, PiPaperPlaneTiltFill } from 'react-icons/pi';
 import VoiceModeButton from '../../voice/components/VoiceModeButton';
 
 const MAX_CHARS = 2000;
@@ -45,16 +46,16 @@ export default function ChatInput({
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const el = e.target;
       onInputChange(el.value);
-      
+
       const hardcodedMaxHeight = 150;
-      
+
       if (requestRef.current) {
         cancelAnimationFrame(requestRef.current);
       }
       requestRef.current = requestAnimationFrame(() => {
         el.style.height = 'auto';
         const nextHeight = Math.min(el.scrollHeight, hardcodedMaxHeight);
-        
+
         el.style.height = `${nextHeight}px`;
 
         const shouldScroll = el.scrollHeight > hardcodedMaxHeight + 1;
@@ -65,75 +66,77 @@ export default function ChatInput({
     [onInputChange]
   );
 
-  return (
-    <div className="chat-input-wrapper">
-      <div className="chat-input-bar">
-        <button
-          className="input-icon-btn"
-          title="Manage Knowledge Base"
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleDocuments();
-          }}
-          aria-label="Manage Knowledge Base"
-        >
-          <PiPaperclipFill />
-        </button>
+  const isGenerating = ['thinking', 'speaking'].includes(pipelineState);
 
-        <div style={{ marginBottom: '4px' }}>
+  return (
+    <div className="chat-input-container w-full px-4 mb-4" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+      <div className="flex flex-row items-end gap-3 max-w-[800px] mx-auto w-full">
+        {/* Left Action Buttons */}
+        <div className="flex flex-row items-end gap-2">
           <VoiceModeButton
+            className="flex items-center justify-center"
             wsClient={wsClient}
             pipelineState={pipelineState}
             onBeforeStart={onBeforeVoiceStart}
           />
+          <button
+            className="w-[52px] h-[52px] rounded-full bg-[#1e1e1e] hover:bg-[#2a2a2a] flex items-center justify-center transition-colors text-white/70 hover:text-white"
+            title="Manage Knowledge Base"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleDocuments();
+            }}
+            aria-label="Manage Knowledge Base"
+          >
+            <PiPaperclip size={22} />
+          </button>
         </div>
 
-        {pipelineState === 'speaking' && (
-          <button
-            className="stop-btn flex items-center gap-2 bg-red-500/20 text-red-500 hover:bg-red-500/30 rounded-full px-4 py-1.5 font-medium text-sm transition-colors mr-2"
-            onClick={onStop}
-            title="Stop Generating"
-            type="button"
-          >
-            <div className="w-2.5 h-2.5 bg-red-500 rounded-sm" />
-            Stop
-          </button>
-        )}
+        {/* Input Pill */}
+        <div className="chat-input-pill flex-1 flex flex-row items-end gap-2.5 rounded-[26px] bg-[#2a2a2a] px-4 py-1 transition-all duration-300 min-h-[52px]">
+          <textarea
+            ref={textareaRef}
+            className="flex-1 bg-transparent border-none outline-none focus:ring-0 focus:border-none focus:outline-none focus:shadow-none resize-none text-[15px] text-white/90 placeholder:text-white/40 py-3 min-h-[44px] max-h-[132px]"
+            aria-label="Message input"
+            placeholder={
+              backendStatus === 'offline' ? 'Type your message (offline mode)…' : 'Type your message...'
+            }
+            value={inputValue}
+            onChange={handleChange}
+            onKeyDown={onKeyDown}
+            rows={1}
+            maxLength={MAX_CHARS}
+            style={{ overflowY: 'auto', outline: 'none', boxShadow: 'none' }}
+          />
 
-        <textarea
-          ref={textareaRef}
-          className="chat-input chat-input-textarea"
-          aria-label="Message input"
-          placeholder={
-            backendStatus === 'offline' ? 'Type a message (offline mode)…' : 'Type a message…'
-          }
-          value={inputValue}
-          onChange={handleChange}
-          onKeyDown={onKeyDown}
-          rows={1}
-          maxLength={MAX_CHARS}
-        />
-
-        <button
-          className="send-btn"
-          onClick={onSend}
-          title="Send message"
-          aria-label="Send message"
-          type="button"
-          disabled={!inputValue.trim()}
-          style={{ opacity: inputValue.trim() ? 1 : 0.5 }}
-        >
-          <PiPaperPlaneTiltFill />
-        </button>
+          {isGenerating ? (
+            <button
+              className="w-10 h-10 rounded-full flex items-center justify-center bg-red-500/90 text-white self-end mb-0.5 hover:bg-red-500 transition-all animate-pulse"
+              onClick={onStop}
+              title="Stop Generating"
+              type="button"
+              aria-label="Stop generation"
+            >
+              <FiSquare fill="currentColor" size={16} />
+            </button>
+          ) : (
+            <button
+              className="w-10 h-10 rounded-full flex items-center justify-center bg-[#cda473] text-white self-end mb-0.5 hover:bg-[#b89163] transition-colors disabled:opacity-50 disabled:bg-white/10 disabled:text-white/30"
+              onClick={onSend}
+              title="Send message"
+              aria-label="Send message"
+              type="button"
+              disabled={!inputValue.trim()}
+            >
+              <PiPaperPlaneTiltFill size={18} />
+            </button>
+          )}
+        </div>
       </div>
-
       <div
-        className={`char-count${inputValue.length >= MAX_CHARS ? ' char-count--limit' : ''}`}
-        style={{
-          visibility: inputValue.length > 0 ? 'visible' : 'hidden',
-          opacity: inputValue.length > 0 ? 1 : 0,
-        }}
+        className={`text-center text-[10px] mt-1 text-white/30 transition-opacity ${inputValue.length >= MAX_CHARS ? 'text-red-400' : ''}`}
+        style={{ opacity: inputValue.length > 0 ? 1 : 0 }}
       >
         {inputValue.length}/{MAX_CHARS}
       </div>

@@ -47,13 +47,22 @@ const MessageList = React.memo(function MessageList({
       ) : (
         <div className="chat-stream">
           {messages.map((msg, index) => (
-            <MessageBubble 
-              key={msg.id} 
-              msg={msg} 
-              isLast={index === messages.length - 1} 
+            <MessageBubble
+              key={msg.id}
+              msg={msg}
+              isLast={index === messages.length - 1}
+              avatarName={avatarName}
+              onScrollToBottom={() => {
+                if (chatScrollRef.current) {
+                  chatScrollRef.current.scrollTo({
+                    top: chatScrollRef.current.scrollHeight,
+                    behavior: 'smooth'
+                  });
+                }
+              }}
             />
           ))}
-          
+
           {/* Typing indicator when AI is thinking but not yet streaming */}
           {pipelineState === 'thinking' && !currentMessage && (
             <div
@@ -98,11 +107,14 @@ const MessageList = React.memo(function MessageList({
                   <Bot size={22} aria-hidden="true" />
                 </div>
                 <div className="message-bubble flex flex-col gap-2 max-w-none w-full">
+                  <div className="flex justify-start items-center w-full mt-1 mb-0.5 px-1 gap-1">
+                    <span className="font-bold text-[#D4B47A] text-[15px] tracking-wide">{avatarName}</span>
+                  </div>
                   <div className="markdown-body">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
                       {currentMessage}
                     </ReactMarkdown>
-                    <span className="streaming-cursor">▊</span>
+                    <span className="streaming-cursor"></span>
                   </div>
                 </div>
               </div>

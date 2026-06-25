@@ -20,9 +20,9 @@ export default function AppLayout() {
   const showSidebar = isAppRoute;
 
   return (
-    <div className="flex w-full h-screen overflow-hidden bg-[#0A0908] text-white font-sans">
+    <div className="flex w-full h-screen bg-dark text-white font-sans">
       {showSidebar && <ClassroomLeftRail />}
-      <main className="flex-1 min-w-0 flex flex-col relative h-full overflow-hidden bg-[#0A0908]">
+      <main className="flex-1 min-w-0 flex flex-col relative h-full bg-dark">
         <AnimatePresence mode="sync" initial={false}>
           <motion.div
             key={location.pathname}

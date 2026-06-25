@@ -24,9 +24,9 @@ export function ClassroomLeftRail({ className }: ClassroomLeftRailProps) {
   const isHelpActive = location.pathname.startsWith('/help');
 
   return (
-    <nav className={`hidden lg:flex w-16 min-w-[4rem] max-w-[4rem] flex-shrink-0 sticky top-0 h-screen flex-col items-center gap-6 pt-6 pb-6 bg-[#0A0908] border-r border-gold/15 z-[100] ${className || ''}`}>
+    <nav className={`hidden lg:flex w-16 min-w-[4rem] max-w-[4rem] flex-shrink-0 sticky top-0 h-screen flex-col items-center gap-6 pt-6 pb-6 bg-dark border-r border-gold/15 z-[100] ${className || ''}`}>
       <button 
-        className={`p-3 flex items-center justify-center rounded-xl transition-all duration-300 ${isClassroomActive ? 'bg-gold/10 text-gold shadow-[0_0_12px_rgba(180,171,139,0.1)]' : 'bg-transparent text-white/50 hover:bg-gold/5 hover:text-gold-soft'}`}
+        className={`p-3 flex items-center justify-center rounded-xl transition-[background-color,color,box-shadow,transform] duration-300 ${isClassroomActive ? 'bg-gold/10 text-gold shadow-[0_0_12px_rgba(180,171,139,0.1)]' : 'bg-transparent text-white/50 hover:bg-gold/5 hover:text-gold-soft'}`}
         onClick={handleSessionsClick}
         aria-label="Open sessions drawer"
         title="Chats"
@@ -35,7 +35,7 @@ export function ClassroomLeftRail({ className }: ClassroomLeftRailProps) {
       </button>
 
       <button 
-        className={`p-3 flex items-center justify-center rounded-xl transition-all duration-300 ${isSetupActive ? 'bg-gold/10 text-gold shadow-[0_0_12px_rgba(180,171,139,0.1)]' : 'bg-transparent text-white/50 hover:bg-gold/5 hover:text-gold-soft'}`}
+        className={`p-3 flex items-center justify-center rounded-xl transition-[background-color,color,box-shadow,transform] duration-300 ${isSetupActive ? 'bg-gold/10 text-gold shadow-[0_0_12px_rgba(180,171,139,0.1)]' : 'bg-transparent text-white/50 hover:bg-gold/5 hover:text-gold-soft'}`}
         onClick={() => navigate('/setup')}
         aria-label="Go to setup"
         title="Setup Profile"
@@ -44,7 +44,7 @@ export function ClassroomLeftRail({ className }: ClassroomLeftRailProps) {
       </button>
 
       <button
-        className={`p-3 flex items-center justify-center rounded-xl transition-all duration-300 mt-auto ${isHelpActive ? 'bg-gold/10 text-gold shadow-[0_0_12px_rgba(180,171,139,0.1)]' : 'bg-transparent text-white/50 hover:bg-gold/5 hover:text-gold-soft'}`}
+        className={`p-3 flex items-center justify-center rounded-xl transition-[background-color,color,box-shadow,transform] duration-300 mt-auto ${isHelpActive ? 'bg-gold/10 text-gold shadow-[0_0_12px_rgba(180,171,139,0.1)]' : 'bg-transparent text-white/50 hover:bg-gold/5 hover:text-gold-soft'}`}
         onClick={() => navigate('/help')}
         aria-label="Feature Tour"
         title="Help & Tour"

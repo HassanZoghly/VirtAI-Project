@@ -51,7 +51,7 @@ export default function AuthPage() {
           initial={{ opacity: 0, y: 20, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.4, ease: 'easeOut' }}
-          className="relative z-20 w-full max-w-[420px] rounded-2xl border border-white/10 bg-[#0A0908]/90 backdrop-blur-md p-8 shadow-lg sm:p-10"
+          className="relative z-20 w-full max-w-[420px] rounded-2xl border border-white/10 bg-dark/90 backdrop-blur-md p-8 shadow-lg sm:p-10"
         >
           <div className="mb-8 text-center">
             <h1 className="text-2xl font-bold text-offwhite font-display">

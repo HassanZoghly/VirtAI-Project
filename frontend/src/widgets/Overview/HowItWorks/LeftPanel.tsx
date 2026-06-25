@@ -32,7 +32,7 @@ export default function LeftPanel({ activeIndex }: LeftPanelProps) {
             className="absolute inset-0 flex flex-col"
           >
             <div className="flex items-center gap-4 mb-6">
-              <div className="flex items-center justify-center w-12 h-12 rounded-full border border-crimson/50 bg-crimson/10 text-crimson font-bold shadow-[0_0_20px_rgba(109,0,26,0.3)]">
+              <div className="flex items-center justify-center w-12 h-12 rounded-full bg-crimson text-white font-bold">
                 {currentStep.step}
               </div>
               <h3 className="display-h3 text-offwhite m-0">{currentStep.label}</h3>
@@ -42,7 +42,7 @@ export default function LeftPanel({ activeIndex }: LeftPanelProps) {
               {currentStep.description}
             </p>
 
-            <div className="mt-10 flex flex-col gap-4 p-6 rounded-2xl bg-black/40 border border-white/10 backdrop-blur-md shadow-2xl">
+            <div className="mt-10 flex flex-col gap-4 p-6 rounded-2xl bg-dark-secondary">
               <div className="grid grid-cols-[80px_1fr] items-center gap-4 text-sm font-mono">
                 <span className="text-offwhite/40 font-semibold tracking-wider">IN</span>
                 <span className="text-gold/90">{currentStep.input}</span>
@@ -59,7 +59,7 @@ export default function LeftPanel({ activeIndex }: LeftPanelProps) {
               
               <div className="grid grid-cols-[80px_1fr] items-center gap-4 text-sm font-mono">
                 <span className="text-offwhite/40 font-semibold tracking-wider">OUT</span>
-                <span className="text-crimson-glow font-bold bg-crimson-glow/10 border border-crimson-glow/20 px-2 py-1 rounded-md inline-block w-fit">{currentStep.output}</span>
+                <span className="text-white font-bold bg-crimson px-3 py-1.5 rounded-md inline-block w-fit">{currentStep.output}</span>
               </div>
             </div>
           </motion.div>

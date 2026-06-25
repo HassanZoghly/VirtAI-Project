@@ -199,8 +199,21 @@ const SessionList = memo(function SessionList({
 
   const filtered = useMemo(() => {
     const sessionMap = new Map(sessions.map((s) => [s.id, s]));
-    return sortedIds.map((id) => sessionMap.get(id)).filter(Boolean) as ISession[];
-  }, [sortedIds, sessions]);
+    return sortedIds
+      .map((id) => sessionMap.get(id))
+      .filter((s): s is ISession => {
+        if (!s) return false;
+        const isNewChat = !s.title || s.title === 'New chat';
+        const hasNoMessages =
+          (s.messages && s.messages.length === 0) || s.message_count === 0 || (!s.messages && typeof s.message_count !== 'number');
+        
+        // Ghost session filter
+        if (isNewChat && hasNoMessages && s.id !== currentSessionId) {
+          return false;
+        }
+        return true;
+      });
+  }, [sortedIds, sessions, currentSessionId]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, sessionId: string) => {
     e.preventDefault();
@@ -349,7 +362,7 @@ const SessionList = memo(function SessionList({
         contextSession &&
         createPortal(
           <div
-            className="flex flex-col min-w-[160px] bg-[#1a1a1a]/95 backdrop-blur-xl border border-white/10 shadow-2xl rounded-xl overflow-hidden p-1 z-[9999]"
+            className="flex flex-col min-w-[160px] bg-dark-tertiary/95 backdrop-blur-xl border border-white/10 shadow-2xl rounded-xl overflow-hidden p-1 z-[9999]"
             ref={contextMenuRef}
             style={{
               position: 'fixed',

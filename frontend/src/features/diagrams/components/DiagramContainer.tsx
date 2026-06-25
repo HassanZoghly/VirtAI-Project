@@ -27,7 +27,7 @@ export function DiagramContainer({ isOpen, onClose, sessionId }: DiagramContaine
   };
 
   return (
-    <section className="w-full h-full flex flex-col relative bg-[#1A1A1A] overflow-hidden min-w-0">
+    <section className="w-full h-full flex flex-col relative bg-dark-tertiary overflow-hidden min-w-0">
       {!showViewer ? (
         <div className="w-full h-full overflow-y-auto p-6 flex flex-col items-center justify-center">
           <div className="w-full max-w-2xl w-[600px] max-w-[90vw]">

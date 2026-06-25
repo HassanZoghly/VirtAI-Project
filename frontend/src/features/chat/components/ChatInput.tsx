@@ -128,7 +128,7 @@ export default function ChatInput({
             onBeforeStart={onBeforeVoiceStart}
           />
           <button
-            className="w-[52px] h-[52px] rounded-full bg-[#1e1e1e] hover:bg-[#2a2a2a] flex items-center justify-center transition-colors text-white/70 hover:text-white"
+            className="w-[52px] h-[52px] rounded-full bg-dark-secondary hover:bg-dark-tertiary flex items-center justify-center transition-colors text-white/70 hover:text-white"
             title="Manage Curricular Reference Library"
             type="button"
             onClick={(e) => {
@@ -142,7 +142,7 @@ export default function ChatInput({
         </div>
 
         {/* Input Pill */}
-        <div className="chat-input-pill flex-1 flex flex-row items-end gap-2.5 rounded-[26px] bg-[#2a2a2a] px-4 py-1 transition-colors duration-300 min-h-[52px]">
+        <div className="chat-input-pill flex-1 flex flex-row items-end gap-2.5 rounded-[26px] bg-dark-tertiary px-4 py-1 transition-colors duration-300 min-h-[52px]">
           <textarea
             ref={textareaRef}
             className="flex-1 bg-transparent border-none outline-none focus:ring-0 focus:border-none focus:outline-none focus:shadow-none resize-none text-[15px] text-white/90 placeholder:text-white/40 py-[11px] min-h-[44px] max-h-[132px]"
@@ -171,7 +171,7 @@ export default function ChatInput({
           ) : (
             <button
               type="button"
-              className="w-10 h-10 rounded-full flex items-center justify-center bg-[#cda473] text-white self-end mb-0.5 hover:bg-[#b89163] transition-colors disabled:opacity-50 disabled:bg-white/10 disabled:text-white/30"
+              className="w-10 h-10 rounded-full flex items-center justify-center bg-gold text-white self-end mb-0.5 hover:bg-gold-deep transition-colors disabled:opacity-50 disabled:bg-white/10 disabled:text-white/30"
               onClick={handleSendSafe}
               title="Submit inquiry"
               aria-label="Submit inquiry"

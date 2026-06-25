@@ -40,6 +40,7 @@ __tests__/
 .mypy_cache/
 .ruff_cache/
 .dmypy.json
+backend/.cache
 
 # ═══════════════════════════════════════════
 #  Runtime Data & Database

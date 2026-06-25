@@ -100,7 +100,7 @@ export default function VoiceModeButton({
     <div className={`voice-mode-container ${className}`}>
       {/* Main voice mode button (Requirement 1.1, 1.4) */}
       <button
-        className={`w-[52px] h-[52px] rounded-full bg-[#1e1e1e] hover:bg-[#2a2a2a] flex items-center justify-center transition-colors text-white/70 hover:text-white voice-mode-btn ${buttonState}`}
+        className={`w-[52px] h-[52px] rounded-full bg-dark-secondary hover:bg-dark-tertiary flex items-center justify-center transition-colors text-white/70 hover:text-white voice-mode-btn ${buttonState}`}
         onClick={async () => {
           if (!!error) return;
           if (isListening) {

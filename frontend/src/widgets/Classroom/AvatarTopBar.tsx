@@ -68,7 +68,7 @@ export function AvatarTopBar({
       {/* Desktop Header Layout */}
       <div className="hidden lg:flex items-center justify-between w-full">
         {/* Left Section (Status) */}
-        <div className="flex items-center gap-2.5 px-4 py-2 rounded-full border border-white/10 bg-[#1a1a1a]/80 shadow-sm transition-colors duration-300">
+        <div className="flex items-center gap-2.5 px-4 py-2 rounded-full border border-white/10 bg-dark-tertiary/80 shadow-sm transition-colors duration-300">
           <div className="relative flex items-center justify-center">
             {stateGroup === 'offline' && currentSessionId !== null ? (
               <PiWifiSlashFill size={14} className="text-red-500" />
@@ -136,14 +136,14 @@ export function AvatarTopBar({
         {/* Far Left: Hamburger Menu Icon */}
         <button
           onClick={() => window.dispatchEvent(new CustomEvent('open-sessions'))}
-          className="w-10 h-10 flex items-center justify-center rounded-xl bg-[#1a1a1a]/80 border border-white/10 text-white/80 active:bg-white/10 active:text-white transition-colors duration-200 cursor-pointer"
+          className="w-10 h-10 flex items-center justify-center rounded-xl bg-dark-tertiary/80 border border-white/10 text-white/80 active:bg-white/10 active:text-white transition-colors duration-200 cursor-pointer"
           aria-label="Open Sessions Drawer"
         >
           <PiList size={22} />
         </button>
 
         {/* Center: "AI Tutor Online" status indicator */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/10 bg-[#1a1a1a]/80 shadow-sm">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/10 bg-dark-tertiary/80 shadow-sm">
           <div className="relative flex items-center justify-center">
             {stateGroup === 'offline' && currentSessionId !== null ? (
               <PiWifiSlashFill size={12} className="text-red-500" />

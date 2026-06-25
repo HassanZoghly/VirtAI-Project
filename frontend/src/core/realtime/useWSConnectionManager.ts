@@ -98,7 +98,9 @@ export function useWSConnectionManager(deps: ConnectionManagerDeps) {
       }
 
       const rawDelay = reconnectPolicyRef.current.nextDelay();
-      const delay = Math.max(1000, rawDelay);
+      // Add +/- 15% jitter to prevent thundering herd problems
+      const jitterFactor = 0.85 + Math.random() * 0.3;
+      const delay = Math.max(1000, Math.floor(rawDelay * jitterFactor));
       if (import.meta.env.DEV) {
         console.debug(`[WS] Reconnecting in ${delay}ms (attempt ${reconnectPolicyRef.current.attempt}/5)`);
       }

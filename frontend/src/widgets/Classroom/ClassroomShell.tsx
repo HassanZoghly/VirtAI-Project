@@ -293,8 +293,8 @@ export default function ClassroomShell() {
 
   if (status === 'error') {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-[#0A0908] text-white p-6 text-center">
-        <h2 className="text-xl font-bold text-crimson-glow mb-2">Classroom Session Load Failure</h2>
+      <div className="flex flex-col items-center justify-center h-screen bg-dark text-white p-6 text-center">
+        <h2 className="text-xl font-display font-bold text-crimson-glow mb-2">Classroom Session Load Failure</h2>
         <p className="text-offwhite/70 max-w-md mb-6 text-sm">
           We encountered an issue retrieving your academic sessions. This may be due to a temporary network disruption or an expired security token.
         </p>
@@ -377,7 +377,7 @@ export default function ClassroomShell() {
           <div className="hidden lg:flex flex-row w-full flex-1 min-h-0 gap-3">
 
             {/* Avatar Panel (Left) */}
-            <aside className="flex-[3] min-w-0 min-h-0 rounded-2xl bg-[#1A1A1A] relative overflow-hidden flex items-center justify-center">
+            <aside className="flex-[3] min-w-0 min-h-0 rounded-2xl bg-dark-secondary border border-white/5 relative overflow-hidden flex items-center justify-center shadow-xl">
               <AvatarCanvasWrapper
                 avatarId={activeAvatarId}
                 pipelineState={conversationState.pipelineState}
@@ -391,7 +391,7 @@ export default function ClassroomShell() {
             </aside>
 
             {/* Chat Panel (Right) */}
-            <section className="flex-[7] min-w-0 min-h-0 rounded-2xl bg-[#1A1A1A] flex flex-col overflow-hidden">
+            <section className="flex-[7] min-w-0 min-h-0 rounded-2xl bg-dark-secondary border border-white/5 flex flex-col overflow-hidden shadow-xl">
               {isExplainActive ? (
                 <div className="flex-1 overflow-y-auto">
                   <ExplainSession
@@ -462,7 +462,7 @@ export default function ClassroomShell() {
           <div className="flex lg:hidden flex-col w-full flex-1 min-h-0 gap-3 pb-16">
 
             {/* Avatar Container: exactly 40% of available height */}
-            <aside className="h-[40%] min-h-0 rounded-2xl bg-[#1A1A1A] relative overflow-hidden flex items-center justify-center">
+            <aside className="h-[40%] min-h-0 rounded-2xl bg-dark-secondary border border-white/5 relative overflow-hidden flex items-center justify-center shadow-xl">
               <AvatarCanvasWrapper
                 avatarId={activeAvatarId}
                 pipelineState={conversationState.pipelineState}
@@ -476,7 +476,7 @@ export default function ClassroomShell() {
             </aside>
 
             {/* Chat Container: remaining 60% height */}
-            <section className="h-[60%] min-h-0 rounded-2xl bg-[#1A1A1A] flex flex-col overflow-hidden relative">
+            <section className="h-[60%] min-h-0 rounded-2xl bg-dark-secondary border border-white/5 flex flex-col overflow-hidden relative shadow-xl">
               {isExplainActive ? (
                 <div className="flex-1 overflow-y-auto">
                   <ExplainSession
@@ -544,7 +544,7 @@ export default function ClassroomShell() {
           </div>
 
           {/* Fixed Bottom Navigation Bar (Mobile Only) */}
-          <nav className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-[#0A0908]/95 backdrop-blur-md border-t border-gold/15 flex items-center justify-around px-4 z-[100]">
+          <nav className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-dark/95 backdrop-blur-md border-t border-gold/15 flex items-center justify-around px-4 z-[100]">
             {/* Chat Tab */}
             <button
               onClick={() => {

@@ -110,6 +110,16 @@ export function useRealtimeASR(
     const unsubscribe = wsClient.onMessage('transcript', (message: TranscriptMessage) => {
       if (!isMountedRef.current) return;
       if (message.is_final) {
+        // Strict blocklist for ASR silence hallucinations
+        const normalized = message.text.trim().toLowerCase().replace(/[.,!?;:]/g, '');
+        const hallucinations = ['thank you', 'thanks for watching', '...', ''];
+        
+        if (hallucinations.includes(normalized)) {
+          setInterimText('');
+          setIsProcessing(false);
+          return;
+        }
+
         setFinalText(message.text);
         setInterimText('');
         setIsProcessing(false);

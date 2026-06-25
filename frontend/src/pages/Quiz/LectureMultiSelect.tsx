@@ -1,6 +1,7 @@
 import React from 'react';
 import { useDocumentList } from '@/features/documents/useDocumentList';
 import styles from './Quiz.module.css';
+import { formatDateOnly } from '@/shared/utils/date';
 
 interface LectureMultiSelectProps {
   selectedIds: string[];
@@ -57,7 +58,7 @@ export function LectureMultiSelect({ selectedIds, onChange }: LectureMultiSelect
             <div className={`${styles.lectureInfo} min-w-0`}>
               <h3 className={`${styles.lectureTitle} truncate block w-full overflow-hidden text-ellipsis`} dir="auto" title={doc.filename}>{doc.filename}</h3>
               <p className={styles.lectureMeta}>
-                Uploaded {new Date(doc.upload_date).toLocaleDateString()}
+                Uploaded {formatDateOnly(doc.upload_date)}
               </p>
             </div>
           </div>

@@ -12,31 +12,7 @@ import {
 import { ISession } from '../types';
 import SessionHoverPreview from './SessionHoverPreview';
 
-/** Format a timestamp to a short relative / absolute label. */
-function formatTime(ts?: string | number): string {
-  if (!ts) {
-    return '';
-  }
-  const d = new Date(ts);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1) {
-    return 'Just now';
-  }
-  if (diffMin < 60) {
-    return `${diffMin}m`;
-  }
-  const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) {
-    return `${diffH}h`;
-  }
-  const diffD = Math.floor(diffH / 24);
-  if (diffD < 7) {
-    return `${diffD}d`;
-  }
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
+import { formatRelativeTime, safeParseDate } from '@/shared/utils/date';
 
 export interface SessionListProps {
   sessions: ISession[];
@@ -108,7 +84,7 @@ const SessionListItem = memo(function SessionListItem({
             <div className="session-title-row min-w-0">
               <span className="session-title truncate block w-full overflow-hidden text-ellipsis" dir="auto" title={session.title || 'New chat'}>{session.title || 'New chat'}</span>
               {displayTime && (
-                <span className="session-time">{formatTime(displayTime)}</span>
+                <span className="session-time">{formatRelativeTime(displayTime)}</span>
               )}
             </div>
           )}
@@ -180,10 +156,9 @@ const SessionList = memo(function SessionList({
   // The previous version called `new Date()` inside the comparator, executing
   // it O(N log N) times on every render — catastrophic for large session lists.
 
-  /** Normalise a session timestamp (string ISO or epoch number) to ms. */
   function toMs(v: string | number | undefined): number {
     if (v === undefined || v === null) return 0;
-    return typeof v === 'number' ? v : Date.parse(v) || 0;
+    return safeParseDate(v).getTime();
   }
 
   const sortedIds = useMemo(() => {

@@ -1,9 +1,9 @@
 import { ISession } from '../types';
 
+import { safeParseDate } from '@/shared/utils/date';
+
 export function getSessionTimeMs(session: Partial<ISession>): number {
-  return new Date(
-    session?.updated_at || session?.created_at || 0
-  ).getTime();
+  return safeParseDate(session?.updated_at || session?.created_at || 0).getTime();
 }
 
 export function sortSessionsByRecency(sessions: ISession[]): ISession[] {

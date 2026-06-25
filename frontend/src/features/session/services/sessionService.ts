@@ -1,5 +1,6 @@
 import apiClient from '@/core/api/apiClient';
 import { z } from 'zod';
+import { formatDateOnly } from '@/shared/utils/date';
 
 const sessionSchema = z.object({
   id: z.string(),
@@ -84,13 +85,13 @@ export async function deleteAllSessions(): Promise<any> {
 export async function generateSmartTitle(sessionId: string, firstUserMessage: string, options?: { signal?: AbortSignal }): Promise<string> {
   try {
     const response = await apiClient.post(`/chat/${sessionId}/title`, { message: firstUserMessage }, options);
-    return response.data?.title || `Conversation ${new Date().toLocaleDateString()}`;
+    return response.data?.title || `Conversation ${formatDateOnly(Date.now())}`;
   } catch (error: unknown) {
     if (error instanceof Error && (error.name === 'CanceledError' || error.message?.includes('aborted'))) {
       throw error; // Let react query handle the abort
     }
     console.error('Failed to generate smart title:', error);
-    return `Conversation ${new Date().toLocaleDateString()}`;
+    return `Conversation ${formatDateOnly(Date.now())}`;
   }
 }
 

@@ -5,6 +5,7 @@ import { Bot, User } from 'lucide-react';
 import CopyButton from '../../../shared/components/CopyButton';
 import { VisualizeButton } from './VisualizeButton';
 import { IMessage } from '../../session/types';
+import { formatTimeOnly } from '../../../shared/utils/date';
 
 interface MessageBubbleProps {
   msg: IMessage;
@@ -16,9 +17,7 @@ interface MessageBubbleProps {
 const MessageBubble: React.FC<MessageBubbleProps> = memo(function MessageBubble({ msg, isLast, avatarName, onScrollToBottom }) {
   const isUser = msg.role === 'user';
 
-  const timeString = new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(
-    new Date(msg.timestamp || Date.now())
-  );
+  const timeString = formatTimeOnly(msg.timestamp || Date.now());
 
   return (
     <div

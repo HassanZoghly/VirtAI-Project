@@ -2,6 +2,7 @@ import { FiCheckCircle, FiClock, FiFileText, FiLoader, FiTrash2, FiXCircle } fro
 import { useDocumentList } from '../useDocumentList';
 import './DocumentsPanel.css';
 import { UploadTab } from './UploadTab';
+import { formatDateOnly } from '@/shared/utils/date';
 
 interface DocumentsPanelProps {
   sessionId?: string | null;
@@ -106,7 +107,7 @@ export function DocumentsPanel({ sessionId = null, onClose }: DocumentsPanelProp
                       {getStatusIcon(doc.current_stage)}
                       {getStatusText(doc.current_stage, doc.progress_pct, doc.chunks_processed, doc.total_chunks)}
                     </span>
-                    <span className="doc-date">{new Date(doc.upload_date).toLocaleDateString()}</span>
+                    <span className="doc-date">{formatDateOnly(doc.upload_date)}</span>
                     {doc.tokens_used !== undefined && doc.tokens_used > 0 && (
                       <span className="doc-tokens" style={{ marginLeft: '0.5rem', fontSize: '0.8em', color: 'var(--text-muted)' }}>
                         ({doc.tokens_used} tokens)

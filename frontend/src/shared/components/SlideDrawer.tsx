@@ -143,7 +143,7 @@ export default function SlideDrawer({
   return (
     <AnimatePresence>
       {isOpen && (
-        <motion.div key="drawer-wrapper" className={`slide-drawer open ${className}`} style={{ zIndex }}>
+        <motion.aside key="drawer-wrapper" className={`slide-drawer open ${className}`} style={{ zIndex }}>
           <motion.div
             className="drawer-overlay"
             onClick={onClose}
@@ -217,9 +217,9 @@ export default function SlideDrawer({
             )}
             {title && <h2 id={`${id}-title`} className="sr-only">{title}</h2>}
             {description && <p id={`${id}-desc`} className="sr-only">{description}</p>}
-            {children}
+            {children || null}
           </motion.div>
-        </motion.div>
+        </motion.aside>
       )}
     </AnimatePresence>
   );

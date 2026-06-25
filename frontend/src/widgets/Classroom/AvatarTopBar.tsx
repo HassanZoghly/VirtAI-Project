@@ -64,7 +64,7 @@ export function AvatarTopBar({
   const pulseClass = (stateGroup === 'ready' || isConnecting) ? 'animate-pulse' : '';
 
   return (
-    <div className="w-full pb-2">
+    <header className="w-full pb-2 relative z-[60]">
       {/* Desktop Header Layout */}
       <div className="hidden lg:flex items-center justify-between w-full">
         {/* Left Section (Status) */}
@@ -81,7 +81,7 @@ export function AvatarTopBar({
               </>
             )}
           </div>
-          <span className="text-sm font-semibold text-white/90 tracking-wide font-sans">
+          <span className="text-sm font-semibold text-white/90 tracking-wide font-sans truncate max-w-[150px] lg:max-w-[200px]" title={statusText}>
             {statusText}
           </span>
           
@@ -156,7 +156,7 @@ export function AvatarTopBar({
               </>
             )}
           </div>
-          <span className="text-xs font-semibold text-white/95 tracking-wide font-sans">
+          <span className="text-xs font-semibold text-white/95 tracking-wide font-sans truncate max-w-[120px]" title={statusText}>
             {statusText}
           </span>
           <button
@@ -177,6 +177,6 @@ export function AvatarTopBar({
           <FiUser size={18} />
         </button>
       </div>
-    </div>
+    </header>
   );
 }

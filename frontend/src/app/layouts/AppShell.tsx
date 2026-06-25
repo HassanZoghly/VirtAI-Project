@@ -46,7 +46,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <title>Classroom App</title>
         <meta name="description" content="Interactive learning platform" />
       </Helmet>
-      <div className="app">
+      <div className="app min-w-0 w-full overflow-x-hidden relative">
         <Toaster
           richColors
           position="top-right"
@@ -58,7 +58,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           }}
         />
         <Suspense fallback={<PageLoader />}>
-          {children}
+          {children || null}
         </Suspense>
       </div>
     </ErrorBoundary>

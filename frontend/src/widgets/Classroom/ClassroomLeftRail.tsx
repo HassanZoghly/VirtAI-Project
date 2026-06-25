@@ -24,7 +24,7 @@ export function ClassroomLeftRail({ className }: ClassroomLeftRailProps) {
   const isHelpActive = location.pathname.startsWith('/help');
 
   return (
-    <div className={`hidden lg:flex w-16 min-w-[4rem] max-w-[4rem] flex-shrink-0 sticky top-0 h-screen flex-col items-center gap-6 pt-6 pb-6 bg-[#0A0908] border-r border-gold/15 z-[100] ${className || ''}`}>
+    <nav className={`hidden lg:flex w-16 min-w-[4rem] max-w-[4rem] flex-shrink-0 sticky top-0 h-screen flex-col items-center gap-6 pt-6 pb-6 bg-[#0A0908] border-r border-gold/15 z-[100] ${className || ''}`}>
       <button 
         className={`p-3 flex items-center justify-center rounded-xl transition-all duration-300 ${isClassroomActive ? 'bg-gold/10 text-gold shadow-[0_0_12px_rgba(180,171,139,0.1)]' : 'bg-transparent text-white/50 hover:bg-gold/5 hover:text-gold-soft'}`}
         onClick={handleSessionsClick}
@@ -51,6 +51,6 @@ export function ClassroomLeftRail({ className }: ClassroomLeftRailProps) {
       >
         <FiHelpCircle size={26} />
       </button>
-    </div>
+    </nav>
   );
 }

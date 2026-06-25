@@ -354,8 +354,8 @@ export default function ClassroomShell() {
         />
 
         {/* Main Content Area */}
-        <div
-          className="flex flex-col flex-1 gap-3 p-3 lg:p-4 lg:gap-3 relative overflow-hidden"
+        <main
+          className="flex flex-col flex-1 gap-3 p-3 lg:p-4 lg:gap-3 relative overflow-hidden min-w-0"
           style={{ marginRight: isSidebarOpen && (typeof window !== 'undefined' && window.innerWidth >= 1024) ? `${sidebarWidth}px` : '0' }}
         >
 
@@ -377,7 +377,7 @@ export default function ClassroomShell() {
           <div className="hidden lg:flex flex-row w-full flex-1 min-h-0 gap-3">
 
             {/* Avatar Panel (Left) */}
-            <div className="flex-[3] min-w-0 min-h-0 rounded-2xl bg-[#1A1A1A] relative overflow-hidden flex items-center justify-center">
+            <aside className="flex-[3] min-w-0 min-h-0 rounded-2xl bg-[#1A1A1A] relative overflow-hidden flex items-center justify-center">
               <AvatarCanvasWrapper
                 avatarId={activeAvatarId}
                 pipelineState={conversationState.pipelineState}
@@ -388,10 +388,10 @@ export default function ClassroomShell() {
                 getIsAudioPlaying={getIsAudioPlaying}
                 getNextPlaybackTime={getNextPlaybackTime}
               />
-            </div>
+            </aside>
 
             {/* Chat Panel (Right) */}
-            <div className="flex-[7] min-w-0 min-h-0 rounded-2xl bg-[#1A1A1A] flex flex-col overflow-hidden">
+            <section className="flex-[7] min-w-0 min-h-0 rounded-2xl bg-[#1A1A1A] flex flex-col overflow-hidden">
               {isExplainActive ? (
                 <div className="flex-1 overflow-y-auto">
                   <ExplainSession
@@ -454,7 +454,7 @@ export default function ClassroomShell() {
                   </div>
                 </>
               )}
-            </div>
+            </section>
 
           </div>
 
@@ -462,7 +462,7 @@ export default function ClassroomShell() {
           <div className="flex lg:hidden flex-col w-full flex-1 min-h-0 gap-3 pb-16">
 
             {/* Avatar Container: exactly 40% of available height */}
-            <div className="h-[40%] min-h-0 rounded-2xl bg-[#1A1A1A] relative overflow-hidden flex items-center justify-center">
+            <aside className="h-[40%] min-h-0 rounded-2xl bg-[#1A1A1A] relative overflow-hidden flex items-center justify-center">
               <AvatarCanvasWrapper
                 avatarId={activeAvatarId}
                 pipelineState={conversationState.pipelineState}
@@ -473,10 +473,10 @@ export default function ClassroomShell() {
                 getIsAudioPlaying={getIsAudioPlaying}
                 getNextPlaybackTime={getNextPlaybackTime}
               />
-            </div>
+            </aside>
 
             {/* Chat Container: remaining 60% height */}
-            <div className="h-[60%] min-h-0 rounded-2xl bg-[#1A1A1A] flex flex-col overflow-hidden relative">
+            <section className="h-[60%] min-h-0 rounded-2xl bg-[#1A1A1A] flex flex-col overflow-hidden relative">
               {isExplainActive ? (
                 <div className="flex-1 overflow-y-auto">
                   <ExplainSession
@@ -539,12 +539,12 @@ export default function ClassroomShell() {
                   </div>
                 </>
               )}
-            </div>
+            </section>
 
           </div>
 
           {/* Fixed Bottom Navigation Bar (Mobile Only) */}
-          <div className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-[#0A0908]/95 backdrop-blur-md border-t border-gold/15 flex items-center justify-around px-4 z-50">
+          <nav className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-[#0A0908]/95 backdrop-blur-md border-t border-gold/15 flex items-center justify-around px-4 z-[100]">
             {/* Chat Tab */}
             <button
               onClick={() => {
@@ -598,9 +598,9 @@ export default function ClassroomShell() {
               <FiEdit3 size={20} />
               <span className="text-[10px] font-semibold tracking-wide font-sans">Quiz</span>
             </button>
-          </div>
+          </nav>
 
-        </div>
+        </main>
       </div>
     </WSContext.Provider>
   );

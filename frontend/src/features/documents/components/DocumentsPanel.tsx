@@ -70,22 +70,22 @@ export function DocumentsPanel({ sessionId = null, onClose }: DocumentsPanelProp
         )}
       </div>
 
-      <div className="documents-panel list-panel">
+      <section className="documents-panel list-panel">
         <div className="documents-panel-header">
           <h3 className="display-h3">Curricular Library</h3>
-          <span className="badge">{documents.length} of 10 Resources</span>
+          <span className="badge">{(documents || []).length} of 10 Resources</span>
         </div>
 
         {error && (
           <div className="error-banner" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span>{error}</span>
-            <button onClick={clearError} className="icon-btn" style={{ marginLeft: 'auto' }} aria-label="Clear error">
+            <button type="button" onClick={clearError} className="icon-btn" style={{ marginLeft: 'auto' }} aria-label="Clear error">
               <FiXCircle />
             </button>
           </div>
         )}
 
-        {documents.length === 0 ? (
+        {(!documents || documents.length === 0) ? (
           <div className="empty-state">
             <FiFileText size={48} />
             <p>No curricular documents have been uploaded to this session yet.</p>
@@ -94,12 +94,12 @@ export function DocumentsPanel({ sessionId = null, onClose }: DocumentsPanelProp
           <ul className="document-list">
             {documents.map((doc) => (
               <li key={doc.id || doc.temp_id} className={`document-item ${doc.current_stage?.toLowerCase()}`}>
-                <div className="doc-icon">
+                <div className="doc-icon flex-shrink-0">
                   <FiFileText size={24} />
                 </div>
-                <div className="doc-info">
-                  <div className="doc-name" title={doc.filename}>
-                    {doc.filename}
+                <div className="doc-info min-w-0">
+                  <div className="doc-name truncate text-ellipsis overflow-hidden whitespace-nowrap" title={doc.filename || 'Unknown'}>
+                    {doc.filename || 'Unknown'}
                   </div>
                   <div className="doc-meta">
                     <span className="doc-status" title={doc.current_stage === 'FAILED' ? 'Delete and Re-upload' : ''}>
@@ -134,7 +134,7 @@ export function DocumentsPanel({ sessionId = null, onClose }: DocumentsPanelProp
             ))}
           </ul>
         )}
-      </div>
+      </section>
     </div>
   );
 }

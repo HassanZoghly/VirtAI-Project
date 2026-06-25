@@ -22,7 +22,7 @@ export default function AppLayout() {
   return (
     <div className="flex w-full h-screen overflow-hidden bg-[#0A0908] text-white font-sans">
       {showSidebar && <ClassroomLeftRail />}
-      <div className="flex-1 min-w-0 flex flex-col relative h-full overflow-hidden bg-[#0A0908]">
+      <main className="flex-1 min-w-0 flex flex-col relative h-full overflow-hidden bg-[#0A0908]">
         <AnimatePresence mode="sync" initial={false}>
           <motion.div
             key={location.pathname}
@@ -37,8 +37,6 @@ export default function AppLayout() {
               display: isAppRoute ? 'flex' : 'block',
               flexDirection: isAppRoute ? 'column' : undefined,
               backgroundColor: '#0A0908',
-              // App routes: fixed viewport, no scrollbar.
-              // Document routes: allow vertical scroll so Lenis/native scroll works.
               overflowY: isAppRoute ? 'hidden' : 'auto',
             }}
           >
@@ -47,7 +45,7 @@ export default function AppLayout() {
             </Suspense>
           </motion.div>
         </AnimatePresence>
-      </div>
+      </main>
     </div>
   );
 }

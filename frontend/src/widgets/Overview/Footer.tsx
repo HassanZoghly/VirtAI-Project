@@ -19,7 +19,7 @@ export default function Footer() {
         </motion.h2>
 
         <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:grid-cols-5">
-          {team.map((member, i) => (
+          {(team || []).map((member, i) => (
             <motion.a
               key={member.name}
               href={member.github}

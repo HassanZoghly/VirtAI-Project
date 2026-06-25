@@ -235,10 +235,10 @@ export default function Navbar({ ctaLabel, ctaTo }: { ctaLabel: string; ctaTo: s
 
               {/* Primary CTA Button */}
               <Link
-                to={ctaTo}
+                to={ctaTo || '/'}
                 className="inline-flex cursor-pointer items-center justify-center rounded-full bg-gold px-5 py-2 text-sm font-semibold tracking-wide text-dark transition-[background-color,transform,box-shadow] duration-200 hover:bg-gold-soft hover:scale-[1.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark font-display"
               >
-                {ctaLabel}
+                {ctaLabel || 'Get Started'}
               </Link>
             </div>
 

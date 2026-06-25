@@ -61,17 +61,10 @@ export function useClassroomChat({
   const isCreatingSessionRef = useRef<boolean>(false);
   const conversationStateRef = useRef(conversationState);
 
-  useEffect(() => {
-    currentSessionIdRef.current = currentSessionId;
-  }, [currentSessionId]);
-
-  useEffect(() => {
-    sessionRef.current = session;
-  }, [session]);
-
-  useEffect(() => {
-    conversationStateRef.current = conversationState;
-  }, [conversationState]);
+  // Sync refs during render to prevent stale closures between render and effect commit
+  currentSessionIdRef.current = currentSessionId;
+  sessionRef.current = session;
+  conversationStateRef.current = conversationState;
 
   // Relying on core useWSMessageQueue for offline-queue delivery instead of custom manual queue.
 
@@ -126,6 +119,10 @@ export function useClassroomChat({
             // The message will be queued by the core WS queue until connection is established.
             send({ type: 'chat.user_message', data: { message_id, text } });
           }
+        }).catch((err: unknown) => {
+          isCreatingSessionRef.current = false;
+          dispatch({ type: 'PIPELINE_STATE', payload: { state: 'idle' } });
+          console.error(err);
         });
       } else {
         const message_id = crypto.randomUUID();
@@ -252,7 +249,8 @@ export function useClassroomChat({
     return () => unsubs.forEach((fn) => fn?.());
   }, [onMessage, dispatch, currentSessionId, onTtsReady, onVisemesReady]);
 
-  const wsClient = useMemo(() => ({ connectionState, isConnected, send: safeSend, onMessage }), [connectionState, isConnected, safeSend, onMessage]);
+  // Expose stable properties to prevent deep re-renders when connectionState changes
+  const wsClient = useMemo(() => ({ send: safeSend, onMessage }), [safeSend, onMessage]);
 
   return {
     conversationState,

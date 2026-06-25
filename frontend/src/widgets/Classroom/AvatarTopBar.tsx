@@ -1,8 +1,10 @@
 import React from 'react';
 import { PiWifiSlashFill, PiList } from 'react-icons/pi';
-import { FiMonitor, FiShare2, FiEdit3, FiRefreshCw, FiSettings, FiUser } from 'react-icons/fi';
+import { FiMonitor, FiShare2, FiEdit3, FiUser } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import { ConnectionState } from '@/core/realtime/useWSClient';
+import { ConnectionBadge } from '@/shared/components/ConnectionBadge';
+import { ActionButton } from '@/shared/components/ActionButton';
 
 interface AvatarTopBarProps {
   avatarName: string;
@@ -68,66 +70,40 @@ export function AvatarTopBar({
       {/* Desktop Header Layout */}
       <div className="hidden lg:flex items-center justify-between w-full">
         {/* Left Section (Status) */}
-        <div className="flex items-center gap-2.5 px-4 py-2 rounded-full border border-white/10 bg-dark-tertiary/80 shadow-sm transition-colors duration-300">
-          <div className="relative flex items-center justify-center">
-            {stateGroup === 'offline' && currentSessionId !== null ? (
-              <PiWifiSlashFill size={14} className="text-red-500" />
-            ) : (
-              <>
-                <div className={`w-2.5 h-2.5 rounded-full ${dotColor} ${pulseClass}`}></div>
-                {(stateGroup === 'ready' || isConnecting) && (
-                  <div className={`absolute w-2.5 h-2.5 rounded-full ${dotColor} animate-ping opacity-75`}></div>
-                )}
-              </>
-            )}
-          </div>
-          <span className="text-sm font-semibold text-white/90 tracking-wide font-sans truncate max-w-[150px] lg:max-w-[200px]" title={statusText}>
-            {statusText}
-          </span>
-          
-          {/* Localized Reconnection Button */}
-          <button
-            onClick={reconnect}
-            disabled={isConnecting}
-            title="Reconnect"
-            className="flex items-center justify-center text-gray-400 hover:text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ml-1"
-          >
-            <FiRefreshCw size={14} className={isConnecting ? 'animate-spin' : ''} />
-          </button>
-        </div>
+        <ConnectionBadge
+          stateGroup={stateGroup}
+          currentSessionId={currentSessionId}
+          statusText={statusText}
+          onReconnect={reconnect}
+          size="md"
+        />
 
         {/* Right Section (Action Buttons) */}
         <div className="flex items-center gap-3">
 
           {hasDocuments && !hasMessages && (
-            <button
+            <ActionButton
               onClick={onStartExplain}
-              className="flex items-center justify-center gap-2 px-4 py-2 rounded-full bg-transparent border border-white/10 text-white/90 hover:bg-white/10 transition-colors duration-300 ease-in-out shadow-sm cursor-pointer"
-            >
-              <FiMonitor size={15} />
-              <span className="text-[13px] font-semibold tracking-wide font-sans">Explain Slide</span>
-            </button>
+              icon={<FiMonitor size={15} />}
+              label="Explain Slide"
+            />
           )}
           
-          <button
+          <ActionButton
             onClick={onGenerateDiagram}
             disabled={!hasDocuments}
-            className="flex items-center justify-center gap-2 px-4 py-2 rounded-full bg-transparent border border-white/10 text-white/90 hover:bg-white/10 transition-colors duration-300 ease-in-out shadow-sm disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer"
             title={!hasDocuments ? "Please upload syllabus or reference materials to generate a diagram" : "Synthesize Relationship Diagram"}
-          >
-            <FiShare2 size={15} />
-            <span className="text-[13px] font-semibold tracking-wide font-sans">Synthesize Diagram</span>
-          </button>
+            icon={<FiShare2 size={15} />}
+            label="Synthesize Diagram"
+          />
           
-          <button
+          <ActionButton
             onClick={() => navigate('/quiz')}
             disabled={!hasDocuments}
-            className="flex items-center justify-center gap-2 px-4 py-2 rounded-full bg-transparent border border-white/10 text-white/90 hover:bg-white/10 transition-colors duration-300 ease-in-out shadow-sm disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed cursor-pointer"
             title={!hasDocuments ? "Please upload syllabus or reference materials to generate a quiz" : "Start Knowledge Check"}
-          >
-            <FiEdit3 size={15} />
-            <span className="text-[13px] font-semibold tracking-wide font-sans">Start Quiz</span>
-          </button>
+            icon={<FiEdit3 size={15} />}
+            label="Start Quiz"
+          />
         </div>
       </div>
 
@@ -143,30 +119,13 @@ export function AvatarTopBar({
         </button>
 
         {/* Center: "AI Tutor Online" status indicator */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/10 bg-dark-tertiary/80 shadow-sm">
-          <div className="relative flex items-center justify-center">
-            {stateGroup === 'offline' && currentSessionId !== null ? (
-              <PiWifiSlashFill size={12} className="text-red-500" />
-            ) : (
-              <>
-                <div className={`w-2 h-2 rounded-full ${dotColor} ${pulseClass}`}></div>
-                {(stateGroup === 'ready' || isConnecting) && (
-                  <div className={`absolute w-2 h-2 rounded-full ${dotColor} animate-ping opacity-75`}></div>
-                )}
-              </>
-            )}
-          </div>
-          <span className="text-xs font-semibold text-white/95 tracking-wide font-sans truncate max-w-[120px]" title={statusText}>
-            {statusText}
-          </span>
-          <button
-            onClick={reconnect}
-            disabled={isConnecting}
-            className="flex items-center justify-center text-gray-400 active:text-white transition-colors ml-0.5 cursor-pointer"
-          >
-            <FiRefreshCw size={12} className={isConnecting ? 'animate-spin' : ''} />
-          </button>
-        </div>
+        <ConnectionBadge
+          stateGroup={stateGroup}
+          currentSessionId={currentSessionId}
+          statusText={statusText}
+          onReconnect={reconnect}
+          size="sm"
+        />
 
         {/* Far Right: Setup Profile Icon */}
         <button

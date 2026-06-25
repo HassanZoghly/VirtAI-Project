@@ -4,6 +4,7 @@ import { Bot, User } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import MessageBubble from './MessageBubble';
+import { ChatMessageRow, TypingDots } from './ChatPrimitives';
 import { IMessage } from '../../session/types';
 
 interface MessageListProps {
@@ -65,60 +66,28 @@ const MessageList = React.memo(function MessageList({
 
           {/* Typing indicator when AI is thinking but not yet streaming */}
           {pipelineState === 'thinking' && !currentMessage && (
-            <div
-              className="chat-message-wrapper ai-message-wrapper message-enter"
-              role="status"
-              aria-label="AI is typing"
-            >
-              <div className="chat-message ai-message typing-state">
-                <div className="message-avatar ai-avatar">
-                  <Bot size={22} aria-hidden="true" />
-                </div>
-                <div className="message-bubble typing-indicator">
-                  <span className="typing-dot" />
-                  <span className="typing-dot" />
-                  <span className="typing-dot" />
-                </div>
-              </div>
-            </div>
+            <ChatMessageRow role="assistant" isTyping ariaLabel="AI is typing">
+              <TypingDots />
+            </ChatMessageRow>
           )}
 
           {/* Show interim ASR transcript as grayed/italic user bubble */}
           {interimTranscript && (
-            <div
-              className="chat-message-wrapper user-message-wrapper"
-              role="status"
-              aria-live="polite"
-            >
-              <div className="chat-message user-message interim-transcript">
-                <div className="message-bubble">{interimTranscript}</div>
-                <div className="message-avatar user-avatar">
-                  <User size={22} aria-hidden="true" />
-                </div>
-              </div>
-            </div>
+            <ChatMessageRow role="user" isInterim ariaLabel="Interim transcript">
+              {interimTranscript}
+            </ChatMessageRow>
           )}
 
           {/* Show streaming message if present */}
           {currentMessage && (
-            <div className="chat-message-wrapper ai-message-wrapper">
-              <div className="chat-message ai-message items-start">
-                <div className="message-avatar ai-avatar mt-1">
-                  <Bot size={22} aria-hidden="true" />
-                </div>
-                <div className="message-bubble flex flex-col gap-2 max-w-none w-full">
-                  <div className="flex justify-start items-center w-full mt-1 mb-0.5 px-1 gap-1">
-                    <span className="font-bold text-[#D4B47A] text-[15px] tracking-wide">{avatarName}</span>
-                  </div>
-                  <div className="markdown-body">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {currentMessage}
-                    </ReactMarkdown>
-                    <span className="streaming-cursor"></span>
-                  </div>
-                </div>
+            <ChatMessageRow role="assistant" avatarName={avatarName} ariaLabel="Assistant is typing">
+              <div className="markdown-body">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {currentMessage}
+                </ReactMarkdown>
+                <span className="streaming-cursor"></span>
               </div>
-            </div>
+            </ChatMessageRow>
           )}
           <div ref={messagesEndRef} />
         </div>

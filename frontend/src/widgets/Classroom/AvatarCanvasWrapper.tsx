@@ -60,9 +60,9 @@ const CanvasDisposer = memo(function CanvasDisposer() {
           mats.forEach((m: THREE.Material) => m.dispose());
         }
       });
-      // Dispose the renderer — this releases the WebGL context immediately and
-      // terminates the internal RAF loop. Framer Motion can then complete its exit.
-      glRef.current.dispose();
+      // Dispose materials and geometries, but DO NOT dispose the renderer (gl).
+      // React Three Fiber's `<Canvas>` manages the WebGLContext lifecycle.
+      // Calling gl.dispose() inside a child component fights the renderer and causes black screens.
     };
   }, []); // empty dep array: run ONLY on unmount
 

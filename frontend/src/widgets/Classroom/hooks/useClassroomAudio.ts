@@ -1,7 +1,5 @@
-import { useRef, useCallback, useEffect } from 'react';
+import { useRef, useCallback } from 'react';
 import { useGaplessAudioQueue, Viseme } from '@/features/voice/hooks/useGaplessAudioQueue';
-
-const EMPTY_LENGTH = 0;
 
 export function useClassroomAudio() {
   // Structure: { baseId: { chunkIndex: { url, cues } } }
@@ -158,6 +156,10 @@ export function useClassroomAudio() {
   const resetAvatarAudio = useCallback((abortedMessageId?: string | null) => {
     if (abortedMessageId) {
       abortedMessageIdsRef.current.add(abortedMessageId);
+      if (abortedMessageIdsRef.current.size > 50) {
+        const iter = abortedMessageIdsRef.current.values();
+        for (let i = 0; i < 20; i++) abortedMessageIdsRef.current.delete(iter.next().value as string);
+      }
     }
     chunksRef.current = {};
     expectedChunkRef.current = {};

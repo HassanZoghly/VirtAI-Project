@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { FiArrowLeft } from 'react-icons/fi';
 import { LectureMultiSelect } from './LectureMultiSelect';
 import { toast } from '@/shared/utils/toast';
 import styles from './Quiz.module.css';
@@ -21,6 +22,14 @@ export default function QuizPage() {
   return (
     <div className="classroom-shell w-full h-full flex bg-[#0A0908]">
       <div className="relative flex-1 flex">
+        <button 
+          className={styles.backBtn}
+          onClick={() => navigate('/classroom')}
+          aria-label="Back to classroom"
+        >
+          <FiArrowLeft /> Back to classroom
+        </button>
+
         <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 overflow-y-auto">
           <div className={styles.quizCardContainer}>
             <h1 className={styles.quizTitle}>Take a Quiz</h1>

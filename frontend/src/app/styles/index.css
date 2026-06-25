@@ -612,7 +612,7 @@ input[type="password"]::-webkit-contacts-auto-fill-button {
   align-items: center;
   justify-content: center;
   border-radius: 12px;
-  padding: 0 18px;
+  padding: 8px 18px;
   border: 1px solid rgb(255 255 255 / 14%);
   font-size: 14px;
   font-weight: 700;

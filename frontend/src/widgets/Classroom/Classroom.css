@@ -634,7 +634,7 @@
 
 .message-bubble {
   background: var(--card-bg, #1e1e1e);
-  border: 1px solid var(--border-color, #333);
+  border: none;
   padding: 0.8rem 1rem;
   color: var(--text-primary, #fff);
   max-width: 80%;
@@ -643,7 +643,6 @@
   white-space: pre-wrap;
   overflow-wrap: break-word;
   hyphens: auto;
-  box-shadow: 0 2px 8px rgb(0 0 0 / 15%);
 }
 
 /* AI messages: completely transparent, continuous text flow */
@@ -664,7 +663,6 @@
 .user-message .message-bubble {
   background: linear-gradient(135deg, #c4bb9b, #b4ab8b);
   color: #1a1a1a;
-  border: 1px solid rgb(180 171 139 / 55%);
   border-radius: 15px 15px 0;
 }
 

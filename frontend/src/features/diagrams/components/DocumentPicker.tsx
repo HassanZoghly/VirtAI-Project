@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useDocumentList } from '@/features/documents/useDocumentList';
 import { PiFilePdfDuotone } from 'react-icons/pi';
 import { FiCheck } from 'react-icons/fi';
+import { LoadingState, EmptyState } from '@/shared/components/UIStates';
 
 interface DocumentPickerProps {
   sessionId: string | null;
@@ -21,23 +22,30 @@ export function DocumentPicker({ sessionId, onSelect, onCancel }: DocumentPicker
 
   if (isLoading && documents.length === 0) {
     return (
-      <div className="bg-dark-tertiary rounded-2xl border border-white/5 p-8 flex flex-col items-center justify-center min-h-[300px]">
-        <div className="w-8 h-8 border-2 border-white/20 border-t-white/80 rounded-full animate-spin mb-4" />
-        <p className="text-white/60 text-sm font-medium">Loading documents...</p>
+      <div className="p-8 flex flex-col min-h-[300px]">
+        <LoadingState 
+          isAbsolute={false} 
+          message="Loading documents..." 
+          className="flex-1 justify-center items-center" 
+        />
       </div>
     );
   }
 
   return (
-    <div className="bg-dark-tertiary rounded-2xl border border-white/5 p-8 shadow-2xl flex flex-col relative">
-      <h2 className="text-xl font-bold text-white/90 tracking-wide mb-6 text-center">
+    <div className="p-8 flex flex-col relative">
+      <h2 className="text-2xl font-bold font-display text-white/90 tracking-wide mb-6 text-center">
         Select Document for Diagram
       </h2>
 
       {documents.length === 0 ? (
-        <div className="py-12 flex flex-col items-center justify-center text-center">
-          <PiFilePdfDuotone className="w-12 h-12 text-white/20 mb-3" />
-          <p className="text-white/60 text-sm font-medium">No documents found for this session.</p>
+        <div className="py-12">
+          <EmptyState
+            icon={<PiFilePdfDuotone className="w-8 h-8 text-white/50" />}
+            title="No Documents"
+            description="No documents found for this session."
+            isAbsolute={false}
+          />
         </div>
       ) : (
         <div className="flex flex-col gap-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">

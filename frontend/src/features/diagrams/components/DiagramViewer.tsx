@@ -3,6 +3,7 @@ import { useMermaidRender } from '../hooks/useMermaidRender';
 import { DiagramData } from '../api/diagramApi';
 import { FiDownload, FiX } from 'react-icons/fi';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
+import { LoadingState, ErrorState } from '@/shared/components/UIStates';
 
 interface DiagramViewerProps {
   diagramData: DiagramData | null;
@@ -69,20 +70,15 @@ export function DiagramViewer({ diagramData, isLoading, onClose }: DiagramViewer
 
       <div className="flex-1 w-full h-full cursor-grab active:cursor-grabbing overflow-hidden relative">
         {(isLoading || (isRenderLoading && !error)) && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-dark z-10 animate-fade-in">
-            <div className="w-8 h-8 border-2 border-gold/20 border-t-gold rounded-full animate-spin mb-4" />
-            <p className="text-gold-soft/80 text-sm font-medium">Synthesizing conceptual relationship diagram...</p>
-          </div>
+          <LoadingState message="Synthesizing conceptual relationship diagram..." />
         )}
         
         {error && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-dark z-10 text-center p-6">
-            <p className="text-crimson-glow font-medium mb-2">Diagram Rendering Failed</p>
-            <p className="text-offwhite/70 text-sm max-w-md">
-              We were unable to render the concept diagram due to a syntax parsing conflict. Please review the chat explanation or attempt to regenerate the layout.
-            </p>
-            {error && <p className="text-offwhite/40 text-xs mt-2 font-mono">({error})</p>}
-          </div>
+          <ErrorState 
+            title="Diagram Rendering Failed"
+            message="We were unable to render the concept diagram due to a syntax parsing conflict. Please review the chat explanation or attempt to regenerate the layout."
+            details={error}
+          />
         )}
 
         {!error && !isLoading && (

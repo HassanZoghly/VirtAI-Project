@@ -163,7 +163,6 @@ export default function ChatInput({
               className="w-10 h-10 rounded-full flex items-center justify-center bg-red-500/90 text-white self-end mb-0.5 hover:bg-red-500 transition-all animate-pulse"
               onClick={onStop}
               title="Halt Generation"
-              type="button"
               aria-label="Halt generation"
             >
               <FiSquare fill="currentColor" size={16} />

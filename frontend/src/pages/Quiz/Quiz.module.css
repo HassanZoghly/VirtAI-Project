@@ -3,13 +3,13 @@
   background: var(--card-bg, #1a1a1a);
   border: 1px solid rgba(180, 171, 139, 0.15);
   border-radius: 16px;
-  padding: 2.5rem;
+  padding: 3rem;
   width: 100%;
   min-width: 320px;
-  max-width: 560px;
+  max-width: 640px;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 2rem;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
   overflow: hidden;
 }
@@ -100,8 +100,8 @@
 .lectureCard {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 1rem;
+  gap: 1.25rem;
+  padding: 1.25rem 1.5rem;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 12px;
@@ -171,8 +171,30 @@
 .emptyState, .loadingState {
   text-align: center;
   color: var(--text-muted, rgba(255, 255, 255, 0.5));
-  padding: 2rem;
+  padding: 3rem 2rem;
   background: rgba(255, 255, 255, 0.02);
   border-radius: 0.75rem;
   border: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.backBtn {
+  position: absolute;
+  top: 2rem;
+  left: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: transparent;
+  color: var(--text-secondary, #b0b0b0);
+  border: none;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  z-index: 50;
+}
+
+.backBtn:hover {
+  color: var(--text-primary, #ffffff);
 }

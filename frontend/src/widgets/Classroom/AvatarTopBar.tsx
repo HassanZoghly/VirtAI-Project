@@ -4,7 +4,7 @@ import { FiMonitor, FiShare2, FiEdit3, FiUser } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import { ConnectionState } from '@/core/realtime/useWSClient';
 import { ConnectionBadge } from '@/shared/components/ConnectionBadge';
-import { ActionButton } from '@/shared/components/ActionButton';
+import { ToolbarButton } from '@/shared/components/ToolbarButton';
 
 interface AvatarTopBarProps {
   avatarName: string;
@@ -82,14 +82,14 @@ export function AvatarTopBar({
         <div className="flex items-center gap-3">
 
           {hasDocuments && !hasMessages && (
-            <ActionButton
+            <ToolbarButton
               onClick={onStartExplain}
               icon={<FiMonitor size={15} />}
               label="Explain Slide"
             />
           )}
           
-          <ActionButton
+          <ToolbarButton
             onClick={onGenerateDiagram}
             disabled={!hasDocuments}
             title={!hasDocuments ? "Please upload syllabus or reference materials to generate a diagram" : "Synthesize Relationship Diagram"}
@@ -97,7 +97,7 @@ export function AvatarTopBar({
             label="Synthesize Diagram"
           />
           
-          <ActionButton
+          <ToolbarButton
             onClick={() => navigate('/quiz')}
             disabled={!hasDocuments}
             title={!hasDocuments ? "Please upload syllabus or reference materials to generate a quiz" : "Start Knowledge Check"}

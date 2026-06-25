@@ -5,7 +5,7 @@ import CopyButton from '../../../shared/components/CopyButton';
 import { VisualizeButton } from './VisualizeButton';
 import { IMessage } from '../../session/types';
 import { formatTimeOnly } from '../../../shared/utils/date';
-import { ChatMessageRow } from './ChatPrimitives';
+import { ChatBubble } from '../../../shared/components/ChatPrimitives';
 
 interface MessageBubbleProps {
   msg: IMessage;
@@ -19,7 +19,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(function MessageBubble(
   const timeString = formatTimeOnly(msg.timestamp || Date.now());
 
   return (
-    <ChatMessageRow
+    <ChatBubble
       role={isUser ? 'user' : 'assistant'}
       avatarName={avatarName}
       timeString={timeString}
@@ -42,7 +42,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = memo(function MessageBubble(
           </div>
         </>
       )}
-    </ChatMessageRow>
+    </ChatBubble>
   );
 });
 

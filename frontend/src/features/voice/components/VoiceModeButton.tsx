@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { PiMicrophone, PiPauseFill, PiWarningCircleFill } from 'react-icons/pi';
 import { useRealtimeASR } from '../hooks/useRealtimeASR';
 import { useWS } from '@/core/realtime/WSContext';
+import { VoiceIndicator } from '@/shared/components/VoiceIndicator';
 import './VoiceModeButton.css';
 
 /**
@@ -120,12 +121,7 @@ export default function VoiceModeButton({
         <ButtonIcon className="voice-mode-icon" size={22} />
 
         {/* Listening animation (Requirement 8.3) */}
-        {isListening && !isPaused && (
-          <span className="voice-activity-indicator">
-            <span className="pulse-ring" />
-            <span className="pulse-ring pulse-ring-delay" />
-          </span>
-        )}
+        <VoiceIndicator isListening={isListening} isPaused={isPaused} />
       </button>
 
       {/* Interim transcript display (Step 4.2: visual feedback) */}

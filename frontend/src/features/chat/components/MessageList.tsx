@@ -4,7 +4,7 @@ import { Bot, User } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import MessageBubble from './MessageBubble';
-import { ChatMessageRow, TypingDots } from './ChatPrimitives';
+import { ChatBubble, MessageStatus } from '../../../shared/components/ChatPrimitives';
 import { IMessage } from '../../session/types';
 
 interface MessageListProps {
@@ -66,28 +66,28 @@ const MessageList = React.memo(function MessageList({
 
           {/* Typing indicator when AI is thinking but not yet streaming */}
           {pipelineState === 'thinking' && !currentMessage && (
-            <ChatMessageRow role="assistant" isTyping ariaLabel="AI is typing">
-              <TypingDots />
-            </ChatMessageRow>
+            <ChatBubble role="assistant" isTyping ariaLabel="AI is typing">
+              <MessageStatus />
+            </ChatBubble>
           )}
 
           {/* Show interim ASR transcript as grayed/italic user bubble */}
           {interimTranscript && (
-            <ChatMessageRow role="user" isInterim ariaLabel="Interim transcript">
+            <ChatBubble role="user" isInterim ariaLabel="Interim transcript">
               {interimTranscript}
-            </ChatMessageRow>
+            </ChatBubble>
           )}
 
           {/* Show streaming message if present */}
           {currentMessage && (
-            <ChatMessageRow role="assistant" avatarName={avatarName} ariaLabel="Assistant is typing">
+            <ChatBubble role="assistant" avatarName={avatarName} ariaLabel="Assistant is typing">
               <div className="markdown-body">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {currentMessage}
                 </ReactMarkdown>
                 <span className="streaming-cursor"></span>
               </div>
-            </ChatMessageRow>
+            </ChatBubble>
           )}
           <div ref={messagesEndRef} />
         </div>

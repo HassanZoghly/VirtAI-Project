@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo, useLayoutEffect } from 'react';
 import useWSClient, { ConnectionState } from '@/core/realtime/useWSClient';
 import useConversationReducer from '@/features/chat/hooks/useConversationReducer';
 import { toast } from '@/shared/utils/toast';
@@ -61,10 +61,12 @@ export function useClassroomChat({
   const isCreatingSessionRef = useRef<boolean>(false);
   const conversationStateRef = useRef(conversationState);
 
-  // Sync refs during render to prevent stale closures between render and effect commit
-  currentSessionIdRef.current = currentSessionId;
-  sessionRef.current = session;
-  conversationStateRef.current = conversationState;
+  // Sync refs safely
+  useLayoutEffect(() => {
+    currentSessionIdRef.current = currentSessionId;
+    sessionRef.current = session;
+    conversationStateRef.current = conversationState;
+  }, [currentSessionId, session, conversationState]);
 
   // Relying on core useWSMessageQueue for offline-queue delivery instead of custom manual queue.
 

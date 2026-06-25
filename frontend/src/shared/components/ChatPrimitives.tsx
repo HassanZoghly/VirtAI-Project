@@ -1,7 +1,31 @@
 import React, { ReactNode } from 'react';
 import { Bot, User } from 'lucide-react';
 
-export interface ChatMessageRowProps {
+export interface AvatarProps {
+  type: 'user' | 'assistant';
+  size?: number;
+  className?: string;
+  isTyping?: boolean;
+}
+
+export const Avatar: React.FC<AvatarProps> = ({ type, size = 22, className = '', isTyping }) => {
+  const isUser = type === 'user';
+  return (
+    <div className={`message-avatar ${isUser ? 'user-avatar' : `ai-avatar ${isTyping ? '' : 'mt-1'}`} ${className}`}>
+      {isUser ? <User size={size} aria-hidden="true" /> : <Bot size={size} aria-hidden="true" />}
+    </div>
+  );
+};
+
+export const MessageStatus: React.FC = () => (
+  <>
+    <span className="typing-dot" />
+    <span className="typing-dot" />
+    <span className="typing-dot" />
+  </>
+);
+
+export interface ChatBubbleProps {
   role: 'user' | 'assistant';
   children: ReactNode;
   avatarName?: string;
@@ -11,7 +35,7 @@ export interface ChatMessageRowProps {
   ariaLabel?: string;
 }
 
-export const ChatMessageRow: React.FC<ChatMessageRowProps> = ({
+export const ChatBubble: React.FC<ChatBubbleProps> = ({
   role,
   children,
   avatarName,
@@ -32,11 +56,7 @@ export const ChatMessageRow: React.FC<ChatMessageRowProps> = ({
       <div 
         className={`chat-message ${isUser ? 'user-message' : 'ai-message'} ${isTyping ? 'typing-state' : 'items-start'} ${isInterim ? 'interim-transcript' : ''}`}
       >
-        {!isUser && (
-          <div className={`message-avatar ai-avatar ${isTyping ? '' : 'mt-1'}`}>
-            <Bot size={22} aria-hidden="true" />
-          </div>
-        )}
+        {!isUser && <Avatar type="assistant" isTyping={isTyping} />}
         
         <div className={`message-bubble-container flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-none w-full`}>
           {!isUser && avatarName && !isTyping && (
@@ -59,20 +79,8 @@ export const ChatMessageRow: React.FC<ChatMessageRowProps> = ({
           </div>
         </div>
 
-        {isUser && (
-          <div className="message-avatar user-avatar">
-            <User size={22} aria-hidden="true" />
-          </div>
-        )}
+        {isUser && <Avatar type="user" />}
       </div>
     </div>
   );
 };
-
-export const TypingDots: React.FC = () => (
-  <>
-    <span className="typing-dot" />
-    <span className="typing-dot" />
-    <span className="typing-dot" />
-  </>
-);

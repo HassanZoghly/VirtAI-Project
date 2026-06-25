@@ -1,11 +1,11 @@
 import React, { ReactNode } from 'react';
 
-export interface ActionButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface ToolbarButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: ReactNode;
   label: string;
 }
 
-export function ActionButton({ icon, label, className = '', ...props }: ActionButtonProps) {
+export function ToolbarButton({ icon, label, className = '', ...props }: ToolbarButtonProps) {
   return (
     <button
       {...props}

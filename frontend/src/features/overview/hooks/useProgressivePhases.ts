@@ -79,15 +79,30 @@ export function useProgressivePhases(prefersReducedMotion: boolean, isLowPerform
         return;
       }
 
+      // If it's the first step (navbar), we can do it alone, then batch the rest
       const cleanup = scheduleIdleTask(
         () => {
           if (cancelled) return;
-          revealStep(PHASE_SEQUENCE[index]);
-          queueStep(index + 1);
+          
+          if (index === 0) {
+            revealStep(PHASE_SEQUENCE[0]);
+            queueStep(1);
+          } else {
+            // Batch all remaining steps to prevent scroll blocking
+            startTransition(() => {
+              setPhase2((prev) => {
+                const next = { ...prev };
+                for (let i = index; i < PHASE_SEQUENCE.length; i++) {
+                  next[PHASE_SEQUENCE[i]] = true;
+                }
+                return next;
+              });
+            });
+          }
         },
         {
           delay: 0,
-          timeout: index === 0 ? 1000 : 1600,
+          timeout: 500,
         }
       );
 

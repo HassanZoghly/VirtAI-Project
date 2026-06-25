@@ -34,8 +34,8 @@ export default function AppLayout() {
             style={{
               position: 'absolute',
               inset: 0,
-              display: 'flex',
-              flexDirection: 'column',
+              display: isAppRoute ? 'flex' : 'block',
+              flexDirection: isAppRoute ? 'column' : undefined,
               backgroundColor: '#0A0908',
               // App routes: fixed viewport, no scrollbar.
               // Document routes: allow vertical scroll so Lenis/native scroll works.

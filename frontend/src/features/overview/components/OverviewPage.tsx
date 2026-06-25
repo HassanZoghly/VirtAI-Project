@@ -65,6 +65,7 @@ export default function OverviewPage() {
       orientation: 'vertical',
       gestureOrientation: 'vertical',
       smoothWheel: true,
+      autoResize: true,
     });
     (window as any).lenis = lenis;
 

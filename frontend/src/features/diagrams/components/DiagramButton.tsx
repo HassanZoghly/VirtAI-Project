@@ -10,9 +10,10 @@ interface DiagramButtonProps {
 export function DiagramButton({ onClick, disabled }: DiagramButtonProps) {
   return (
     <button
+      type="button"
       className="classroom-action-btn"
       data-variant="diagram"
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
       disabled={disabled}
       aria-label="Generate Diagram"
       title={disabled ? "Upload a document first to generate a diagram" : "Generate Diagram"}

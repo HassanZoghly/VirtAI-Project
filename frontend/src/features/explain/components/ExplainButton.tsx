@@ -12,9 +12,11 @@ export function ExplainButton({ onClick, isVisible }: ExplainButtonProps) {
 
   return (
     <button
+      type="button"
       className="classroom-action-btn"
       data-variant="explain"
-      onClick={onClick}
+      onClick={!isVisible ? undefined : onClick}
+      disabled={!isVisible}
       aria-label="Start Presentation"
       title="Start slide-by-slide presentation"
     >

@@ -15,9 +15,10 @@ export function QuizButton({ disabled, locale = 'en' }: QuizButtonProps) {
 
   return (
     <button
+      type="button"
       className="classroom-action-btn"
       data-variant="quiz"
-      onClick={() => navigate('/quiz')}
+      onClick={disabled ? undefined : () => navigate('/quiz')}
       disabled={disabled}
       aria-label={t.takeQuiz}
       title={disabled ? t.noDocuments : t.takeQuiz}

@@ -10,10 +10,17 @@ interface SlideQuestionInputProps {
 export function SlideQuestionInput({ onQuestion, onContinue }: SlideQuestionInputProps) {
   const [text, setText] = useState('');
 
+  const lastSubmitTime = React.useRef(0);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (text.trim()) {
-      onQuestion(text.trim());
+    const now = Date.now();
+    if (now - lastSubmitTime.current < 500) return;
+    
+    const cleanText = text.trim();
+    if (cleanText) {
+      lastSubmitTime.current = now;
+      onQuestion(cleanText);
       setText('');
     }
   };
@@ -30,6 +37,7 @@ export function SlideQuestionInput({ onQuestion, onContinue }: SlideQuestionInpu
           placeholder="Type your academic question or inquiry..."
           value={text}
           onChange={(e) => setText(e.target.value)}
+          maxLength={500}
           autoFocus
         />
         <button
@@ -46,6 +54,7 @@ export function SlideQuestionInput({ onQuestion, onContinue }: SlideQuestionInpu
         <button
           type="button"
           className="slide-continue-btn"
+          aria-label="Advance presentation"
           onClick={onContinue}
         >
           <FiPlay /> Advance presentation

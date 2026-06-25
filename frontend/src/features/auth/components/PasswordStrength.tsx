@@ -21,9 +21,10 @@ interface PasswordStrengthProps {
 }
 
 export default function PasswordStrength({ password = '' }: PasswordStrengthProps) {
-  const passed = rules.filter((r) => r.test(password)).length;
+  const safePassword = password ?? '';
+  const passed = rules.filter((r) => r.test(safePassword)).length;
 
-  if (!password) {
+  if (!safePassword) {
     return null;
   }
 

@@ -1,6 +1,10 @@
 import { motion } from 'framer-motion';
 
-export default function SectionHeader({ titlePrefix, titleHighlight, description, className = '', descriptionClassName = 'mt-5 text-lg leading-relaxed text-offwhite/70' }) {
+export default function SectionHeader({ titlePrefix = '', titleHighlight = '', description = '', className = '', descriptionClassName = 'mt-5 text-lg leading-relaxed text-offwhite/70' }) {
+  const safeTitlePrefix = titlePrefix ?? '';
+  const safeTitleHighlight = titleHighlight ?? '';
+  const safeDescription = description ?? '';
+
   return (
     <motion.div
       className={className}
@@ -12,10 +16,10 @@ export default function SectionHeader({ titlePrefix, titleHighlight, description
       <h2
         className="display-h2 text-offwhite"
       >
-        {titlePrefix} <span className="text-gold">{titleHighlight}</span>
+        {safeTitlePrefix} <span className="text-gold">{safeTitleHighlight}</span>
       </h2>
       <p className={descriptionClassName}>
-        {description}
+        {safeDescription}
       </p>
     </motion.div>
   );

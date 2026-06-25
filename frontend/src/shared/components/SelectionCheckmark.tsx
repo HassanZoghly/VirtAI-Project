@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { FiCheck } from 'react-icons/fi';
 
-export default function SelectionCheckmark({ isSelected, className = '', size = 12 }) {
+export default function SelectionCheckmark({ isSelected = false, className = '', size = 12 }) {
   return (
     <AnimatePresence>
       {isSelected && (

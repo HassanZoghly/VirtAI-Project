@@ -31,6 +31,7 @@ export default function ChatInput({
   onStop,
 }: ChatInputProps) {
   const requestRef = useRef<number>(0);
+  const lastActionTime = useRef<number>(0);
 
   const { connectionState, isConnected, send, onMessage, currentSessionId } = useWS();
 
@@ -94,6 +95,26 @@ export default function ChatInput({
     [onInputChange]
   );
 
+  const handleKeyDownSafe = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      const now = Date.now();
+      if (now - lastActionTime.current < 500) {
+        e.preventDefault();
+        return;
+      }
+      lastActionTime.current = now;
+    }
+    onKeyDown(e);
+  }, [onKeyDown]);
+
+  const handleSendSafe = useCallback(() => {
+    const now = Date.now();
+    if (now - lastActionTime.current < 500) return;
+    if (isInputDisabled || !inputValue.trim()) return;
+    lastActionTime.current = now;
+    onSend();
+  }, [isInputDisabled, inputValue, onSend]);
+
   const isGenerating = ['thinking', 'speaking'].includes(pipelineState);
 
   return (
@@ -130,7 +151,7 @@ export default function ChatInput({
             placeholder={placeholderText}
             value={inputValue}
             onChange={handleChange}
-            onKeyDown={onKeyDown}
+            onKeyDown={handleKeyDownSafe}
             rows={1}
             maxLength={MAX_CHARS}
             style={{ overflowY: 'auto', outline: 'none', boxShadow: 'none' }}
@@ -138,6 +159,7 @@ export default function ChatInput({
 
           {isGenerating ? (
             <button
+              type="button"
               className="w-10 h-10 rounded-full flex items-center justify-center bg-red-500/90 text-white self-end mb-0.5 hover:bg-red-500 transition-all animate-pulse"
               onClick={onStop}
               title="Halt Generation"
@@ -148,11 +170,11 @@ export default function ChatInput({
             </button>
           ) : (
             <button
+              type="button"
               className="w-10 h-10 rounded-full flex items-center justify-center bg-[#cda473] text-white self-end mb-0.5 hover:bg-[#b89163] transition-colors disabled:opacity-50 disabled:bg-white/10 disabled:text-white/30"
-              onClick={onSend}
+              onClick={handleSendSafe}
               title="Submit inquiry"
               aria-label="Submit inquiry"
-              type="button"
               disabled={isInputDisabled || !inputValue.trim()}
             >
               <PiPaperPlaneTiltFill size={18} />

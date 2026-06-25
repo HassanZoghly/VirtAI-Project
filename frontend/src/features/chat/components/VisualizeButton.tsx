@@ -71,8 +71,9 @@ export function VisualizeButton({ messageId, locale = 'en', onExpand }: Visualiz
 
   return (
     <button
+      type="button"
       className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full transition-all duration-200 bg-white/5 text-white/50 border border-white/10 hover:border-[#D4B47A] hover:text-[#D4B47A] disabled:opacity-50 disabled:cursor-not-allowed"
-      onClick={handleVisualize}
+      onClick={isLoading ? undefined : handleVisualize}
       disabled={isLoading}
       title={t.visualize}
       aria-label={t.visualize}

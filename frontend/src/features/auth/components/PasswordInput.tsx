@@ -26,14 +26,16 @@ export default function PasswordInput({
         autoComplete={id.includes('confirm') ? 'new-password' : 'current-password'}
         placeholder={placeholder || '••••••••'}
         disabled={disabled}
+        maxLength={128}
         {...register}
-        className={`${className} pr-11`}
+        className={`${className} pr-11 text-ellipsis overflow-hidden`}
       />
       <button
         type="button"
         aria-label={showPassword ? 'Hide password' : 'Show password'}
-        onClick={() => setShowPassword((v) => !v)}
-        className="absolute top-1/2 right-3 -translate-y-1/2 rounded-full p-1 text-(--text-muted) transition-[color,transform] duration-200 hover:text-(--text-secondary) active:scale-95 focus-visible:text-(--text-primary)"
+        onClick={() => !disabled && setShowPassword((v) => !v)}
+        disabled={disabled}
+        className="absolute top-1/2 right-3 -translate-y-1/2 rounded-full p-1 text-(--text-muted) transition-[color,transform] duration-200 hover:text-(--text-secondary) active:scale-95 focus-visible:text-(--text-primary) disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {showPassword ? (
           <svg

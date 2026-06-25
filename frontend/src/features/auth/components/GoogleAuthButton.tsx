@@ -10,8 +10,9 @@ export default function GoogleAuthButton({ label = 'Continue with Google' }: Goo
   return (
     <button
       type="button"
-      onClick={startGoogleAuth}
+      onClick={isLoading ? undefined : startGoogleAuth}
       disabled={isLoading}
+      aria-label={label || 'Continue with Google'}
       className="flex w-full items-center justify-center gap-3 rounded-xl border border-(--border-color)/80 bg-black/20 px-4 py-2.5 text-sm font-medium text-(--text-primary) transition-[border-color,background-color,color,transform] duration-200 hover:border-(--accent-primary)/45 hover:bg-black/32 hover:text-white active:scale-[0.99] disabled:cursor-not-allowed disabled:border-(--border-color)/55 disabled:bg-black/15 disabled:opacity-60"
     >
       {isLoading ? (

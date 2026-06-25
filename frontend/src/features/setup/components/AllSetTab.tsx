@@ -93,12 +93,12 @@ export default function AllSetTab({
         <div className="allset-item">
           <FiCheck className="check-icon" />
           <span>Teaching Assistant Avatar:</span>
-          <span className="item-value">{avatar?.name ?? '—'}</span>
+          <span className="item-value truncate block max-w-[200px] overflow-hidden text-ellipsis" dir="auto" title={avatar?.name ?? '—'}>{avatar?.name ?? '—'}</span>
         </div>
         <div className="allset-item">
           <FiCheck className="check-icon" />
           <span>Speech Profile:</span>
-          <span className="item-value">{voice?.name ?? '—'}</span>
+          <span className="item-value truncate block max-w-[200px] overflow-hidden text-ellipsis" dir="auto" title={voice?.name ?? '—'}>{voice?.name ?? '—'}</span>
         </div>
       </motion.div>
 

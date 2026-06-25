@@ -71,8 +71,8 @@ const AvatarTab = memo(function AvatarTab({ selected, onSelect }: AvatarTabProps
                 loading="lazy"
                 decoding="async"
               />
-              <span className="avatar-card-name">{avatar.name}</span>
-              <span className="avatar-card-desc">{avatar.description}</span>
+              <span className="avatar-card-name truncate block w-full text-ellipsis overflow-hidden" dir="auto" title={avatar.name}>{avatar.name}</span>
+              <span className="avatar-card-desc truncate block w-full text-ellipsis overflow-hidden" dir="auto" title={avatar.description}>{avatar.description}</span>
 
               <SelectionCheckmark
                 isSelected={isSelected}

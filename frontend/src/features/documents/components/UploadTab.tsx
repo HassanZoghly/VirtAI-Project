@@ -200,8 +200,8 @@ export function UploadTab({ onSkip, enqueueUpload, documents }: UploadTabProps) 
                       exit={{ opacity: 0, scale: 0.95 }}
                     >
                       <FiFileText className="file-list-icon" />
-                      <div className="file-list-details">
-                        <span className="file-list-name">{file.name}</span>
+                      <div className="file-list-details min-w-0">
+                        <span className="file-list-name truncate block w-full overflow-hidden text-ellipsis" dir="auto" title={file.name}>{file.name}</span>
                         <span className="file-list-size">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
                         {fileError && (
                           <span className="file-list-error-text">{fileError}</span>

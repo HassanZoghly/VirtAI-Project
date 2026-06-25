@@ -105,8 +105,8 @@ const SessionListItem = memo(function SessionListItem({
               onClick={(e) => e.stopPropagation()}
             />
           ) : (
-            <div className="session-title-row">
-              <span className="session-title">{session.title || 'New chat'}</span>
+            <div className="session-title-row min-w-0">
+              <span className="session-title truncate block w-full overflow-hidden text-ellipsis" dir="auto" title={session.title || 'New chat'}>{session.title || 'New chat'}</span>
               {displayTime && (
                 <span className="session-time">{formatTime(displayTime)}</span>
               )}

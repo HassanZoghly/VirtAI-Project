@@ -51,8 +51,12 @@ export default function SignupForm({ onToggleMode }: SignupFormProps) {
 
   const passwordValue = useWatch({ control, name: 'password' });
 
-  const onSubmit = async (data) => {
-    await signup({ fullName: data.fullName, email: data.email, password: data.password });
+  const onSubmit = async (data: z.infer<typeof signupSchema>) => {
+    try {
+      await signup({ fullName: data.fullName, email: data.email, password: data.password });
+    } catch (error) {
+      console.error('Signup failed:', error);
+    }
   };
 
   return (
@@ -76,9 +80,10 @@ export default function SignupForm({ onToggleMode }: SignupFormProps) {
             disabled={isLoading}
             {...register('fullName')}
             className={inputClass}
+            dir="auto"
           />
           {errors.fullName && (
-            <p className="mt-1.5 text-xs font-medium text-(--error)">{errors.fullName.message}</p>
+            <p className="mt-1.5 text-xs font-medium text-(--error) break-words">{errors.fullName.message}</p>
           )}
         </div>
 
@@ -87,8 +92,8 @@ export default function SignupForm({ onToggleMode }: SignupFormProps) {
           <label htmlFor="signup-email" className={labelClass}>
             Institutional email
           </label>
-          <input id="signup-email" type="email" autoComplete="email" placeholder="you@institution.edu" disabled={isLoading} {...register('email')} className={inputClass} />
-          {errors.email && <p className="mt-1.5 text-xs font-medium text-(--error)">{errors.email.message}</p>}
+          <input id="signup-email" type="email" autoComplete="email" placeholder="you@institution.edu" disabled={isLoading} {...register('email')} className={inputClass} dir="auto" />
+          {errors.email && <p className="mt-1.5 text-xs font-medium text-(--error) break-words">{errors.email.message}</p>}
         </div>
 
         {/* Password */}
@@ -104,7 +109,7 @@ export default function SignupForm({ onToggleMode }: SignupFormProps) {
             className={inputClass}
           />
           {errors.password && (
-            <p className="mt-1.5 text-xs font-medium text-(--error)">{errors.password.message}</p>
+            <p className="mt-1.5 text-xs font-medium text-(--error) break-words">{errors.password.message}</p>
           )}
           <PasswordStrength password={passwordValue} />
         </div>
@@ -122,7 +127,7 @@ export default function SignupForm({ onToggleMode }: SignupFormProps) {
             className={inputClass}
           />
           {errors.confirmPassword && (
-            <p className="mt-1.5 text-xs font-medium text-(--error)">
+            <p className="mt-1.5 text-xs font-medium text-(--error) break-words">
               {errors.confirmPassword.message}
             </p>
           )}

@@ -70,7 +70,7 @@ const VoiceTab = memo(function VoiceTab({ selected, onSelect, avatarGender, onPl
               aria-label={`${voice.name} — ${voice.desc}`}
             >
               <div className="voice-card-info">
-                <div className="voice-card-name">
+                <div className="voice-card-name truncate block w-full text-ellipsis overflow-hidden" dir="auto" title={voice.name}>
                   {voice.name}
                   <span className={`voice-gender-badge ${voice.gender}`}>{voice.gender}</span>
                   {isCurrentlyPlaying && (
@@ -82,8 +82,8 @@ const VoiceTab = memo(function VoiceTab({ selected, onSelect, avatarGender, onPl
                     </div>
                   )}
                 </div>
-                <div className="voice-card-desc">{voice.desc}</div>
-                <div className="voice-card-greeting">&ldquo;{voice.greeting}&rdquo;</div>
+                <div className="voice-card-desc truncate block w-full text-ellipsis overflow-hidden" dir="auto" title={voice.desc}>{voice.desc}</div>
+                <div className="voice-card-greeting truncate block w-full text-ellipsis overflow-hidden" dir="auto" title={voice.greeting}>&ldquo;{voice.greeting}&rdquo;</div>
               </div>
 
               <button

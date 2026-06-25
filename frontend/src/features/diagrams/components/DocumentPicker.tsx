@@ -71,7 +71,7 @@ export function DocumentPicker({ sessionId, onSelect, onCancel }: DocumentPicker
                 </div>
                 
                 <div className="flex-1 min-w-0 flex flex-col">
-                  <span className={`text-sm font-medium truncate ${isSelected ? 'text-white' : 'text-white/80'}`}>
+                  <span className={`text-sm font-medium truncate block w-full overflow-hidden text-ellipsis ${isSelected ? 'text-white' : 'text-white/80'}`} dir="auto" title={doc.filename}>
                     {doc.filename}
                   </span>
                   {isProcessing && (

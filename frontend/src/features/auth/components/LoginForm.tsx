@@ -32,8 +32,12 @@ export default function LoginForm({ onToggleMode }: LoginFormProps) {
     defaultValues: { email: '', password: '' },
   });
 
-  const onSubmit = async (data) => {
-    await login(data.email, data.password);
+  const onSubmit = async (data: z.infer<typeof loginSchema>) => {
+    try {
+      await login(data.email, data.password);
+    } catch (error) {
+      console.error('Login failed:', error);
+    }
   };
 
   return (
@@ -49,8 +53,8 @@ export default function LoginForm({ onToggleMode }: LoginFormProps) {
           <label htmlFor="login-email" className={labelClass}>
             Institutional email
           </label>
-          <input id="login-email" type="email" autoComplete="email" placeholder="you@institution.edu" disabled={isLoading} {...register('email')} className={inputClass} />
-          {errors.email && <p className="mt-1.5 text-xs font-medium text-(--error)">{errors.email.message}</p>}
+          <input id="login-email" type="email" autoComplete="email" placeholder="you@institution.edu" disabled={isLoading} {...register('email')} className={inputClass} dir="auto" />
+          {errors.email && <p className="mt-1.5 text-xs font-medium text-(--error) break-words">{errors.email.message}</p>}
         </div>
 
         {/* Password */}
@@ -66,7 +70,7 @@ export default function LoginForm({ onToggleMode }: LoginFormProps) {
             className={inputClass}
           />
           {errors.password && (
-            <p className="mt-1.5 text-xs font-medium text-(--error)">{errors.password.message}</p>
+            <p className="mt-1.5 text-xs font-medium text-(--error) break-words">{errors.password.message}</p>
           )}
         </div>
 

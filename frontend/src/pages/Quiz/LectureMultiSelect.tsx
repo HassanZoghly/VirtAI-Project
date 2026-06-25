@@ -54,8 +54,8 @@ export function LectureMultiSelect({ selectedIds, onChange }: LectureMultiSelect
             <div className={styles.checkbox}>
               {isSelected && <div className={styles.checkmark} />}
             </div>
-            <div className={styles.lectureInfo}>
-              <h3 className={styles.lectureTitle}>{doc.filename}</h3>
+            <div className={`${styles.lectureInfo} min-w-0`}>
+              <h3 className={`${styles.lectureTitle} truncate block w-full overflow-hidden text-ellipsis`} dir="auto" title={doc.filename}>{doc.filename}</h3>
               <p className={styles.lectureMeta}>
                 Uploaded {new Date(doc.upload_date).toLocaleDateString()}
               </p>

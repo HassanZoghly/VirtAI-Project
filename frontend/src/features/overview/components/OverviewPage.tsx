@@ -13,7 +13,7 @@ const Navbar = lazy(() => import('@/widgets/Overview/Navbar'));
 const SplashScreen = lazy(() => import('@/widgets/Overview/SplashScreen'));
 const CircuitBoardBackground = lazy(() => import('@/widgets/Overview/CircuitBoardBackground'));
 const FeaturesSection = lazy(() => import('@/widgets/Overview/FeaturesSection'));
-
+const HowItWorksSection = lazy(() => import('@/widgets/Overview/HowItWorks'));
 const TechStackSection = lazy(() => import('@/widgets/Overview/TechStackSection'));
 const DemoPreview = lazy(() => import('@/widgets/Overview/DemoPreview'));
 const FAQSection = lazy(() => import('@/widgets/Overview/FAQSection'));
@@ -112,6 +112,9 @@ export default function OverviewPage() {
           <HeroSection ctaLabel={primaryCta.label} ctaTo={primaryCta.to} />
           <DeferredSection shouldRender={phase2.features}>
             <FeaturesSection />
+          </DeferredSection>
+          <DeferredSection shouldRender={phase2.features}>
+            <HowItWorksSection />
           </DeferredSection>
 
           <DeferredSection shouldRender={phase2.techStack}>

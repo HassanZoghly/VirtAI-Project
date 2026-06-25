@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 
 export default function TechStackSection() {
   return (
-    <section id="tech-stack" className="relative mx-auto max-w-5xl px-6 py-16 md:py-20">
+    <section id="tech-stack" className="relative mx-auto max-w-5xl px-6 py-24 md:py-32">
       <motion.h2
         className="mb-14 text-center display-h2 text-offwhite"
         initial={{ opacity: 0, y: 20 }}

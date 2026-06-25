@@ -25,7 +25,7 @@ const FAQS = [
 
 export default function FAQSection() {
   return (
-    <section id="faq" className="relative mx-auto max-w-4xl px-6 py-20 md:py-24">
+    <section id="faq" className="relative mx-auto max-w-4xl px-6 py-24 md:py-32">
       {/* Background ambient glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -z-10 h-80 w-80 rounded-full bg-gold/5 blur-[120px] pointer-events-none" />
 

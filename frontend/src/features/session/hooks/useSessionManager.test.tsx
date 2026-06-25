@@ -28,6 +28,7 @@ describe('useSessionManager', () => {
     });
     vi.clearAllMocks();
     (useAuthStore as unknown as any).mockReturnValue(true);
+    (sessionService.fetchSessionMessages as any).mockResolvedValue([]);
   });
 
   const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -85,5 +86,49 @@ describe('useSessionManager', () => {
     const newId = await result.current.createNewSession();
     expect(newId).toBe('s5');
     expect(sessionService.createSession).toHaveBeenCalledOnce();
+  });
+
+  it('reconciles a pending user message with server created_at without duplicating it', async () => {
+    (sessionService.fetchSessions as any).mockResolvedValue([
+      { id: 's1', title: 'Session', message_count: 0 },
+    ]);
+
+    const { result } = renderHook(() => useSessionManager('s1'), { wrapper });
+
+    await waitFor(() => expect(result.current.status).toBe('success'));
+
+    result.current.addUserMessage(
+      { id: 'm1', role: 'user', content: 'hello', status: 'pending' },
+      's1'
+    );
+    result.current.addUserMessage(
+      {
+        id: 'm1',
+        role: 'user',
+        content: 'hello',
+        created_at: '2026-06-25T10:00:00Z',
+      },
+      's1'
+    );
+
+    const messages = queryClient.getQueryData(['sessionMessages', 's1']);
+    expect(messages).toEqual([
+      {
+        id: 'm1',
+        role: 'user',
+        content: 'hello',
+        status: 'sent',
+        created_at: '2026-06-25T10:00:00Z',
+      },
+    ]);
+
+    const sessions = queryClient.getQueryData(['sessions']);
+    expect(sessions).toMatchObject([
+      {
+        id: 's1',
+        message_count: 1,
+        last_message_at: '2026-06-25T10:00:00Z',
+      },
+    ]);
   });
 });

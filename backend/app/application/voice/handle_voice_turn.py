@@ -31,6 +31,7 @@ from app.shared.config import get_settings
 if TYPE_CHECKING:
     from app.application.rag.intent_classifier import IntentClassifier
     from app.application.rag.retrieval_use_case import RetrievalUseCase
+    from app.domain.chat.entities import ChatMessageDict
 
 
 async def _safe_task(coro: Awaitable[None], name: str = "task") -> None:
@@ -58,7 +59,7 @@ class ConversationPipeline:
         intent_classifier: IntentClassifier | None = None,
         avatar_id: str = "avatar1",
         tts_voice: str | None = None,
-        persist_turn: Callable[[str, str, str, str, str | None], Awaitable[None]] | None = None,
+        persist_turn: Callable[[str, str, str, str, str | None], Awaitable["ChatMessageDict | None"]] | None = None,
     ):
         self._asr = asr
         self._llm = llm
@@ -99,7 +100,7 @@ class ConversationPipeline:
         trace_id: str | None = None,
     ) -> None:
         """Sequential processing using decoupled stages."""
-        from app.schemas.ws_messages import make_error, make_pipeline_state, make_user_message_echo
+        from app.schemas.ws_messages import make_chat_final, make_error, make_pipeline_state, make_user_message_echo
 
         self._current_message_id = message_id
 
@@ -127,7 +128,13 @@ class ConversationPipeline:
                 )
                 return
 
-            await self._persistence.persist_user_input(session_id, text, trace_id)
+            # Phase 2: persist_user_input now returns the saved ChatMessageDict.
+            # We forward its timestamp as `created_at` in the echo so the
+            # client receives the canonical server time instead of Date.now().
+            saved_user_msg = await self._persistence.persist_user_input(session_id, text, trace_id)
+            user_created_at: str | None = (
+                saved_user_msg.get("created_at") if saved_user_msg else None
+            )
 
             await send_callback(
                 make_user_message_echo(
@@ -135,6 +142,7 @@ class ConversationPipeline:
                     message_id=message_id,
                     text=text,
                     conversation_id=session_id,
+                    created_at=user_created_at,
                 )
             )
 
@@ -224,9 +232,26 @@ class ConversationPipeline:
                     except Exception as e:
                         logger.warning(f"Failed to generate TTS cache key: {e}")
 
-                await self._persistence.persist_assistant_output(
+                # Phase 2: persist first, then send chat.final so the canonical
+                # timestamp from the DB row is available in the WS event.
+                saved_asst_msg = await self._persistence.persist_assistant_output(
                     session_id, context.llm_full_response, tts_key, trace_id
                 )
+                context.assistant_created_at = (
+                    saved_asst_msg.get("created_at") if saved_asst_msg else None
+                )
+
+                # Send chat.final after persist so created_at is populated.
+                with suppress(Exception):
+                    await send_callback(
+                        make_chat_final(
+                            session_id=session_id,
+                            message_id=message_id,
+                            text=context.llm_full_response,
+                            emotion=context.llm_emotion,
+                            created_at=context.assistant_created_at,
+                        )
+                    )
 
             with suppress(Exception):
                 await send_callback(make_pipeline_state(session_id, "idle", message_id))

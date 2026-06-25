@@ -193,15 +193,12 @@ class LLMStage(BaseStage):
             context.abort()
             return
 
-        if context.send_callback:
-            await context.send_callback(
-                make_chat_final(
-                    session_id=context.session_id,
-                    message_id=context.message_id,
-                    text=full_response,
-                    emotion=emotion,
-                )
-            )
+        # Phase 2: chat.final is now sent by handle_voice_turn *after*
+        # persist_assistant_output completes so the canonical `created_at`
+        # timestamp from the DB row can be included.  LLMStage only stores
+        # the completed response and emotion on context — it no longer emits
+        # the WS event itself.
+        # (Previously the send happened here; moved to handle_voice_turn.)
 
         context.history.add_assistant_message(full_response)
 

@@ -45,6 +45,7 @@ export const WSPayloadSchema = z.object({
   session_id: z.string().optional(),
   message_id: z.string().optional(),
   text: z.string().optional(),
+  created_at: z.union([z.string(), z.number()]).nullable().optional(),
   delta: z.string().optional(),
   is_final: z.boolean().optional(),
   audio: z.object({

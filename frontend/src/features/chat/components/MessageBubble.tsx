@@ -16,14 +16,15 @@ interface MessageBubbleProps {
 
 const MessageBubble: React.FC<MessageBubbleProps> = memo(function MessageBubble({ msg, isLast, avatarName, onScrollToBottom }) {
   const isUser = msg.role === 'user';
-  const timeString = formatTimeOnly(msg.timestamp || Date.now());
+  const canonicalTimestamp = msg.created_at;
+  const timeString = msg.status === 'pending' ? 'Sending...' : formatTimeOnly(canonicalTimestamp);
 
   return (
     <ChatBubble
       role={isUser ? 'user' : 'assistant'}
       avatarName={avatarName}
       timeString={timeString}
-      ariaLabel={`${isUser ? 'You' : avatarName} at ${timeString}`}
+      ariaLabel={timeString ? `${isUser ? 'You' : avatarName} at ${timeString}` : `${isUser ? 'You' : avatarName}`}
     >
       {isUser ? (
         msg.content

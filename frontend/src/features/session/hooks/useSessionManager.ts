@@ -7,6 +7,10 @@ import * as sessionService from '../services/sessionService';
 import { IMessage, ISession } from '../types';
 import { normalizeAndSortSessions } from '../utils/sessionState';
 
+function getMessageCanonicalTimestamp(message: Pick<IMessage, 'created_at'>): string | number | undefined {
+  return message.created_at;
+}
+
 export default function useSessionManager(urlSessionId?: string, navigate?: any) {
   const queryClient = useQueryClient();
   const isAuthenticated = useAuthStore(selectIsAuthenticated);
@@ -240,33 +244,69 @@ export default function useSessionManager(urlSessionId?: string, navigate?: any)
     const id = explicitSessionId || currentSessionId;
     if (!id) return;
     let added = false;
+    let reconciled = false;
+    const canonicalTimestamp = getMessageCanonicalTimestamp(message);
+    const nextMessage: IMessage = {
+      ...message,
+      status: canonicalTimestamp ? 'sent' : message.status,
+    };
     queryClient.setQueryData(['sessionMessages', id], (old: IMessage[] = []) => {
-      if (old.some((m) => m.id === message.id)) return old;
+      if (old.some((m) => m.id === message.id)) {
+        reconciled = true;
+        return old.map((m) => (
+          m.id === message.id
+            ? { ...m, ...nextMessage, status: nextMessage.status ?? m.status }
+            : m
+        ));
+      }
       added = true;
-      return [...old, message];
+      return [...old, nextMessage];
     });
-    if (added) {
+    if (added || reconciled) {
       queryClient.setQueryData(['sessions'], (old: ISession[] = []) => 
-        old.map(s => s.id === id ? { ...s, message_count: (s.message_count || 0) + 1 } : s)
+        old.map(s => {
+          if (s.id !== id) return s;
+          return {
+            ...s,
+            message_count: added ? (s.message_count || 0) + 1 : s.message_count,
+            last_message_at: canonicalTimestamp ?? s.last_message_at,
+          };
+        })
       );
     }
   }, [currentSessionId, queryClient]);
 
-  const addAssistantMessage = useCallback((messageId: string, text: string, explicitSessionId?: string) => {
+  const addAssistantMessage = useCallback((messageId: string, text: string, explicitSessionId?: string, createdAt?: string | number | null) => {
     const id = explicitSessionId || currentSessionId;
     if (!id) return;
     let added = false;
+    const canonicalTimestamp = createdAt ?? undefined;
     queryClient.setQueryData(['sessionMessages', id], (old: IMessage[] = []) => {
       const exists = old.some((m) => m.id === messageId);
       if (exists) {
-        return old.map(m => m.id === messageId ? { ...m, content: text } : m);
+        return old.map(m => m.id === messageId ? {
+          ...m,
+          content: text,
+          created_at: canonicalTimestamp ?? m.created_at,
+          status: canonicalTimestamp ? 'sent' : m.status,
+        } : m);
       }
       added = true;
-      return [...old, { id: messageId, role: 'assistant', content: text, timestamp: Date.now() }];
+      return [...old, {
+        id: messageId,
+        role: 'assistant',
+        content: text,
+        created_at: canonicalTimestamp,
+        status: canonicalTimestamp ? 'sent' : undefined,
+      }];
     });
     if (added) {
       queryClient.setQueryData(['sessions'], (old: ISession[] = []) => 
-        old.map(s => s.id === id ? { ...s, message_count: (s.message_count || 0) + 1 } : s)
+        old.map(s => s.id === id ? {
+          ...s,
+          message_count: (s.message_count || 0) + 1,
+          last_message_at: canonicalTimestamp ?? s.last_message_at,
+        } : s)
       );
     }
   }, [currentSessionId, queryClient]);

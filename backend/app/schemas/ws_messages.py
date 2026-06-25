@@ -235,6 +235,9 @@ class ChatFinal(BaseModel):
     message_id: str = Field(..., description="Message UUID")
     text: str = Field(..., description="Complete response text")
     emotion: str | None = Field(None, description="Detected emotion from AI response")
+    # Phase 2: canonical server timestamp for the persisted assistant message.
+    # Clients that don't read this field yet are unaffected (additive).
+    created_at: str | None = Field(None, description="ISO-8601 UTC timestamp of persisted message")
 
 
 class UserMessageEcho(BaseModel):
@@ -246,6 +249,9 @@ class UserMessageEcho(BaseModel):
     message_id: str = Field(..., description="Message UUID")
     text: str = Field(..., description="User message text")
     conversation_id: str | None = Field(None, description="Conversation identifier")
+    # Phase 2: canonical server timestamp from the persisted message row.
+    # Clients that don't read this field yet are unaffected (additive).
+    created_at: str | None = Field(None, description="ISO-8601 UTC timestamp of persisted message")
 
 
 class PipelineState(BaseModel):
@@ -442,10 +448,20 @@ def make_chat_delta(session_id: str, message_id: str, delta: str) -> ChatDelta:
 
 
 def make_chat_final(
-    session_id: str, message_id: str, text: str, emotion: str | None = None
+    session_id: str,
+    message_id: str,
+    text: str,
+    emotion: str | None = None,
+    created_at: str | None = None,
 ) -> ChatFinal:
     """Create a ChatFinal message."""
-    return ChatFinal(session_id=session_id, message_id=message_id, text=text, emotion=emotion)
+    return ChatFinal(
+        session_id=session_id,
+        message_id=message_id,
+        text=text,
+        emotion=emotion,
+        created_at=created_at,
+    )
 
 
 def make_user_message_echo(
@@ -453,6 +469,7 @@ def make_user_message_echo(
     message_id: str,
     text: str,
     conversation_id: str | None = None,
+    created_at: str | None = None,
 ) -> UserMessageEcho:
     """Create a UserMessageEcho message."""
     return UserMessageEcho(
@@ -460,6 +477,7 @@ def make_user_message_echo(
         message_id=message_id,
         text=text,
         conversation_id=conversation_id,
+        created_at=created_at,
     )
 
 

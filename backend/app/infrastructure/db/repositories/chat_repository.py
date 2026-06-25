@@ -75,11 +75,16 @@ class ChatRepository(ChatRepositoryPort):
         return await self.get_chat_session(session_id)
 
     async def list_user_sessions(self, user_id: str, limit: int = 50) -> list[ChatSessionDict]:
-        """List sessions for a user, ordered by updated_at desc."""
+        """List sessions for a user, ordered by last_message_at desc.
+
+        Phase 1: switched from updated_at to last_message_at so that title
+        renames no longer corrupt session ordering.  updated_at is still
+        stamped and kept — this change only affects the ORDER BY clause.
+        """
         stmt = (
             select(ChatSession)
             .where(ChatSession.user_id == require_uuid(user_id, field_name="user_id"))
-            .order_by(ChatSession.updated_at.desc())
+            .order_by(ChatSession.last_message_at.desc())
             .limit(limit)
         )
         result = await self.db.execute(stmt)
@@ -217,13 +222,18 @@ class ChatRepository(ChatRepositoryPort):
         )
         self.db.add(message)
 
-        # Update session message_count and updated_at
+        # Update session message_count, updated_at, and last_message_at.
+        # Phase 1: last_message_at is stamped here alongside updated_at so both
+        # fields are kept current.  updated_at is unchanged (still set) for
+        # backward compatibility; last_message_at is the canonical sort key.
+        now = _now()
         await self.db.execute(
             update(ChatSession)
             .where(ChatSession.id == sid)
             .values(
                 message_count=ChatSession.message_count + 1,
-                updated_at=_now(),
+                updated_at=now,
+                last_message_at=now,
             )
         )
 
@@ -275,6 +285,8 @@ class ChatRepository(ChatRepositoryPort):
             "created_at": session.created_at.isoformat() if session.created_at else None,
             "updated_at": session.updated_at.isoformat() if session.updated_at else None,
             "message_count": session.message_count,
+            # Phase 1: new canonical field.  Always present after Phase 0 backfill.
+            "last_message_at": session.last_message_at.isoformat() if session.last_message_at else None,
         }
 
     def _serialize_message(self, message: Message) -> ChatMessageDict:
@@ -286,5 +298,5 @@ class ChatRepository(ChatRepositoryPort):
             "input_type": message.input_type,
             "tts_cache_key": message.tts_cache_key,
             "sources": message.sources,
-            "timestamp": message.timestamp.isoformat() if message.timestamp else None,
+            "created_at": message.timestamp.isoformat() if message.timestamp else None,
         }

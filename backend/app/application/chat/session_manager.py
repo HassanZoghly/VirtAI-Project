@@ -26,6 +26,7 @@ from app.shared.ids import parse_uuid
 if TYPE_CHECKING:
     from app.application.rag.intent_classifier import IntentClassifier
     from app.application.rag.retrieval_use_case import RetrievalUseCase
+    from app.domain.chat.entities import ChatMessageDict
     from app.domain.chat.ports import BaseLLMProvider, ChatContextCachePort, ChatRepositoryPort
     from app.domain.voice.ports import BaseTTSProvider, StreamingASRService
 
@@ -48,7 +49,7 @@ class ConversationSession:
         context_cache: ChatContextCachePort | None = None,
         intent_classifier: IntentClassifier | None = None,
         tts_voice: str | None = None,
-        persist_turn: Callable[[str, str, str, str, str | None], Awaitable[None]] | None = None,
+        persist_turn: Callable[[str, str, str, str, str | None], Awaitable["ChatMessageDict | None"]] | None = None,
     ):
         self.session_id: str = session_id
         self.user_id: str = user_id
@@ -180,10 +181,14 @@ class SessionManager:
         content: str,
         input_type: str,
         tts_cache_key: str | None = None,
-    ) -> None:
-        """Persist a conversation turn to the database."""
+    ) -> "ChatMessageDict | None":
+        """Persist a conversation turn to the database.
+
+        Phase 2: returns the saved ChatMessageDict so the pipeline can forward
+        the canonical `timestamp` (exposed as `created_at`) to WS events.
+        """
         async with self._repo_factory() as repo:
-            await repo.save_message(
+            return await repo.save_message(
                 session_id=session_id,
                 role=role,
                 content=content,

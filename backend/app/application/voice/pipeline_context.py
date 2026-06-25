@@ -26,6 +26,10 @@ class TurnContext:
     asr_transcript: str | None = None
     llm_full_response: str | None = None
     llm_emotion: str | None = None
+    # Phase 2: canonical ISO-8601 timestamp from the persisted assistant
+    # message row.  Populated by handle_voice_turn after persist_assistant_output
+    # completes; read by LLMStage to attach to the chat.final WS event.
+    assistant_created_at: str | None = None
     tts_voice: str | None = None
     tts_result: TTSResult | None = None
     mouth_cues: list[Any] = field(default_factory=list)

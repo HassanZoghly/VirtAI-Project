@@ -59,8 +59,18 @@ class ChatSession(Base):
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
     message_count: Mapped[int] = mapped_column(Integer, default=0)
+    # Phase 1: canonical timestamp for the most-recent message in this session.
+    # Stamped by save_message() on every persist; NOT touched by title renames.
+    # Backfilled from messages.timestamp by migration 20260625_add_last_message_at.
+    last_message_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
-    __table_args__ = (Index("ix_chat_sessions_user_updated", "user_id", "updated_at"),)
+    __table_args__ = (
+        # Legacy index kept; still referenced by update_chat_session_title path.
+        Index("ix_chat_sessions_user_updated", "user_id", "updated_at"),
+        # New canonical recency index (created by Phase 0 migration).
+        Index("ix_chat_sessions_user_last_message", "user_id", "last_message_at"),
+    )
+
 
 
 class Message(Base):

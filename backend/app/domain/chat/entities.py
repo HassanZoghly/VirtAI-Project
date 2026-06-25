@@ -24,7 +24,8 @@ class ChatSessionDict(TypedDict):
     user_id: str
     title: str
     created_at: str
-    updated_at: str | None
+    last_message_at: str | None
+
 
 # ── Message Roles ─────────────────────────────────────────────────────────────
 class MessageRole(str, Enum):

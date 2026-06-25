@@ -115,7 +115,7 @@ export function useClassroomChat({
           } else {
             // The handleFirstMessage successfully created a session, so the currentSessionId will update shortly.
             sessionRef.current.addUserMessage(
-              { id: message_id, role: 'user', content: text, timestamp: Date.now() },
+              { id: message_id, role: 'user', content: text, status: 'pending' },
               newId
             );
             // The message will be queued by the core WS queue until connection is established.
@@ -133,7 +133,7 @@ export function useClassroomChat({
         dispatch({ type: 'USER_MESSAGE', payload: { message_id, text } });
         dispatch({ type: 'PIPELINE_STATE', payload: { state: 'thinking' } });
         sessionRef.current.addUserMessage(
-          { id: message_id, role: 'user', content: text, timestamp: Date.now() },
+          { id: message_id, role: 'user', content: text, status: 'pending' },
           activeId
         );
         send({ type: 'chat.user_message', data: { message_id, text } });
@@ -180,7 +180,7 @@ export function useClassroomChat({
         const echoSessionId = d.session_id || currentSessionId;
         dispatch({ type: 'USER_MESSAGE', payload: { message_id: d.message_id, text: d.text } });
         sessionRef.current.addUserMessage(
-          { id: d.message_id, role: 'user', content: d.text, timestamp: Date.now() },
+          { id: d.message_id, role: 'user', content: d.text, created_at: d.created_at ?? undefined },
           echoSessionId
         );
         if (echoSessionId) {
@@ -199,7 +199,12 @@ export function useClassroomChat({
         const safePayload = { ...d, text: d.text ? d.text.replace(/\[.*?\]/g, '') : undefined };
         dispatch({ type: 'CHAT_FINAL', payload: safePayload });
         if (safePayload.text) {
-          sessionRef.current.addAssistantMessage(`${d.message_id}-assistant`, safePayload.text, d.session_id);
+          sessionRef.current.addAssistantMessage(
+            `${d.message_id}-assistant`,
+            safePayload.text,
+            d.session_id,
+            d.created_at
+          );
         }
         if (d.message_id) {
           forceAdvanceSequence(d.message_id);

@@ -1,11 +1,11 @@
 /**
  * Robust date parsing that handles both ISO strings and UNIX epochs safely.
  * @param timestamp - ISO string or numeric epoch (in ms or seconds)
- * @returns A guaranteed valid Date object. Falls back to Date.now() if invalid.
+ * @returns A valid Date object, or null when the timestamp is missing/invalid.
  */
-export function safeParseDate(timestamp?: string | number | null): Date {
+export function safeParseDate(timestamp?: string | number | null): Date | null {
   if (!timestamp) {
-    return new Date();
+    return null;
   }
 
   let ts = timestamp;
@@ -27,7 +27,7 @@ export function safeParseDate(timestamp?: string | number | null): Date {
   
   // NaN protection
   if (isNaN(d.getTime())) {
-    return new Date();
+    return null;
   }
   
   return d;
@@ -40,6 +40,7 @@ export function safeParseDate(timestamp?: string | number | null): Date {
 export function formatRelativeTime(ts?: string | number | null): string {
   if (!ts) return '';
   const d = safeParseDate(ts);
+  if (!d) return '';
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffMin = Math.floor(diffMs / 60_000);
@@ -63,6 +64,7 @@ export function formatRelativeTime(ts?: string | number | null): string {
 export function formatTimeOnly(ts?: string | number | null): string {
   if (!ts) return '';
   const d = safeParseDate(ts);
+  if (!d) return '';
   return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(d);
 }
 
@@ -73,5 +75,6 @@ export function formatTimeOnly(ts?: string | number | null): string {
 export function formatDateOnly(ts?: string | number | null): string {
   if (!ts) return '';
   const d = safeParseDate(ts);
+  if (!d) return '';
   return new Intl.DateTimeFormat(undefined).format(d);
 }

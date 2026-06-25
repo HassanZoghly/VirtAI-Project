@@ -52,7 +52,7 @@ const SessionListItem = memo(function SessionListItem({
   onMouseLeave,
   onSelect,
 }: SessionListItemProps) {
-  const displayTime = session.updated_at || session.created_at;
+  const displayTime = session.last_message_at;
 
   return (
     <div
@@ -158,13 +158,13 @@ const SessionList = memo(function SessionList({
 
   function toMs(v: string | number | undefined): number {
     if (v === undefined || v === null) return 0;
-    return safeParseDate(v).getTime();
+    return safeParseDate(v)?.getTime() ?? 0;
   }
 
   const sortedIds = useMemo(() => {
     // Step 1: compute a numeric timestamp for every session — O(N).
     const tsMap = new Map<string, number>(
-      sessions.map((s) => [s.id, toMs(s.updated_at ?? s.created_at)])
+      sessions.map((s) => [s.id, toMs(s.last_message_at)])
     );
     // Step 2: sort by pre-computed value — O(N log N), comparisons are cheap.
     return [...sessions]

@@ -11,6 +11,7 @@ vi.mock('@/core/api/apiClient', () => ({
 }));
 
 const mockGet = apiClient.get as MockedFunction<typeof apiClient.get>;
+const apiResponse = (data: unknown) => ({ data }) as Awaited<ReturnType<typeof apiClient.get>>;
 
 describe('sessionService response extraction', () => {
   beforeEach(() => {
@@ -18,15 +19,15 @@ describe('sessionService response extraction', () => {
   });
 
   it('unwraps wrapped sessions payloads', async () => {
-    mockGet.mockResolvedValueOnce({ data: { sessions: [{ id: 's1' }] } } as any);
+    mockGet.mockResolvedValueOnce(apiResponse({ sessions: [{ id: 's1', title: 'Session 1' }] }));
 
     const sessions = await fetchSessions();
 
-    expect(sessions).toEqual([{ id: 's1' }]);
+    expect(sessions).toEqual([{ id: 's1', title: 'Session 1' }]);
   });
 
   it('returns [] when sessions payload is not an array', async () => {
-    mockGet.mockResolvedValueOnce({ data: { ok: true } } as any);
+    mockGet.mockResolvedValueOnce(apiResponse({ ok: true }));
 
     const sessions = await fetchSessions();
 
@@ -34,10 +35,58 @@ describe('sessionService response extraction', () => {
   });
 
   it('unwraps wrapped messages payloads', async () => {
-    mockGet.mockResolvedValueOnce({ data: { messages: [{ id: 'm1' }] } } as any);
+    mockGet.mockResolvedValueOnce(
+      apiResponse({
+        messages: [{ id: 'm1', session_id: 'session-1', role: 'assistant', content: 'Hello' }],
+      })
+    );
 
     const messages = await fetchSessionMessages('session-1');
 
-    expect(messages).toEqual([{ id: 'm1' }]);
+    expect(messages).toEqual([{ id: 'm1', session_id: 'session-1', role: 'assistant', content: 'Hello' }]);
+  });
+
+  it('accepts canonical session timestamp fields', async () => {
+    mockGet.mockResolvedValueOnce(
+      apiResponse({
+        sessions: [
+          {
+            id: 's1',
+            title: 'Session 1',
+            created_at: '2026-06-25T10:00:00Z',
+            last_message_at: '2026-06-25T10:06:00Z',
+          },
+        ],
+      })
+    );
+
+    const sessions = await fetchSessions();
+
+    expect(sessions[0]).toMatchObject({
+      created_at: '2026-06-25T10:00:00Z',
+      last_message_at: '2026-06-25T10:06:00Z',
+    });
+  });
+
+  it('accepts canonical message created_at field', async () => {
+    mockGet.mockResolvedValueOnce(
+      apiResponse({
+        messages: [
+          {
+            id: 'm1',
+            session_id: 'session-1',
+            role: 'assistant',
+            content: 'Hello',
+            created_at: '2026-06-25T10:05:01Z',
+          },
+        ],
+      })
+    );
+
+    const messages = await fetchSessionMessages('session-1');
+
+    expect(messages[0]).toMatchObject({
+      created_at: '2026-06-25T10:05:01Z',
+    });
   });
 });

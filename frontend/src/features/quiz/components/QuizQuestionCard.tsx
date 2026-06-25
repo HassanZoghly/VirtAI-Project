@@ -72,7 +72,7 @@ export function QuizQuestionCard({
             <div className="quiz-explanation-box">
               <p className="quiz-explanation-text">{question.explanation}</p>
               {question.citations && question.citations.length > 0 && (
-                <Suspense fallback={<div className="pdf-viewer-skeleton">Loading document viewer...</div>}>
+                <Suspense fallback={<div className="pdf-viewer-skeleton">Retrieving reference page...</div>}>
                   <PdfPageViewer documentId={documentId} citations={question.citations} />
                 </Suspense>
               )}

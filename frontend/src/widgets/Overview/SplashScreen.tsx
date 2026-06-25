@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 
 const MIN_VISIBLE_MS = 2800;
@@ -44,12 +44,12 @@ export default function SplashScreen({ onComplete }) {
 
           {/* title */}
           <motion.h1
-            className="absolute mt-164 text-center px-6 text-4xl font-bold tracking-wide text-offwhite"
+            className="absolute mt-[280px] text-center px-6 text-2xl font-bold tracking-wide text-offwhite/90 font-display"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7, delay: 0.7 }}
           >
-            Welcome to the Future of Teaching
+            Welcome to the <span className="text-gold">Future</span> of Teaching
           </motion.h1>
         </motion.div>
       )}

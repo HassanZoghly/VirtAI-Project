@@ -29,12 +29,12 @@ export function DocumentsPanel({ sessionId = null, onClose }: DocumentsPanelProp
   };
 
   const getStatusText = (stage: string | undefined, progress_pct: number, chunks_processed?: number, total_chunks?: number) => {
-    if (stage === 'COMPLETE') return 'Ready';
-    if (stage === 'FAILED') return 'Failed (Delete and Re-upload)';
+    if (stage === 'COMPLETE') return 'Curricular Resource Active';
+    if (stage === 'FAILED') return 'Analysis Failed (Delete and Retry)';
     if (stage === 'CANCELLED') return 'Cancelled';
-    if (stage === 'QUEUED') return 'Queued...';
+    if (stage === 'QUEUED') return 'Awaiting Analysis...';
 
-    let text = `${stage || 'Processing'} (${Math.round(progress_pct || 0)}%)`;
+    let text = `${stage || 'Analyzing'} (${Math.round(progress_pct || 0)}%)`;
     if (chunks_processed !== undefined && total_chunks !== undefined && total_chunks > 0) {
       text += ` - ${chunks_processed}/${total_chunks} Chunks`;
     }
@@ -42,7 +42,7 @@ export function DocumentsPanel({ sessionId = null, onClose }: DocumentsPanelProp
   };
 
   if (isLoading && documents.length === 0) {
-    return <div className="documents-panel-loading">Loading documents...</div>;
+    return <div className="documents-panel-loading">Syncing curricular library...</div>;
   }
 
   return (
@@ -72,8 +72,8 @@ export function DocumentsPanel({ sessionId = null, onClose }: DocumentsPanelProp
 
       <div className="documents-panel list-panel">
         <div className="documents-panel-header">
-          <h3 className="display-h3">Knowledge Base</h3>
-          <span className="badge">{documents.length} / 10 Files</span>
+          <h3 className="display-h3">Curricular Library</h3>
+          <span className="badge">{documents.length} of 10 Resources</span>
         </div>
 
         {error && (
@@ -88,7 +88,7 @@ export function DocumentsPanel({ sessionId = null, onClose }: DocumentsPanelProp
         {documents.length === 0 ? (
           <div className="empty-state">
             <FiFileText size={48} />
-            <p>No documents uploaded yet.</p>
+            <p>No curricular documents have been uploaded to this session yet.</p>
           </div>
         ) : (
           <ul className="document-list">
@@ -117,7 +117,7 @@ export function DocumentsPanel({ sessionId = null, onClose }: DocumentsPanelProp
                 <button
                   className="icon-button delete"
                   onClick={() => doc.id && deleteDocument(doc.id)}
-                  title="Delete document"
+                  title="Delete Resource"
                   disabled={!doc.id}
                 >
                   <FiTrash2 />

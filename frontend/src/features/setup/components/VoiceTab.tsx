@@ -1,5 +1,5 @@
 import SelectionCheckmark from '@/shared/components/SelectionCheckmark';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import React, { memo } from 'react';
 import { HiPlay, HiStop } from 'react-icons/hi2';
 import { voices, Voice } from '../data/voices';
@@ -28,8 +28,8 @@ const VoiceTab = memo(function VoiceTab({ selected, onSelect, avatarGender, onPl
 
   return (
     <div className="voice-tab-scroll">
-      <h2 className="setup-section-title">Choose a Voice</h2>
-      <p className="setup-section-subtitle">Select how your avatar will sound</p>
+      <h2 className="setup-section-title">Select Speech Profile</h2>
+      <p className="setup-section-subtitle">Choose the acoustic synthesis that best aligns with your instruction delivery.</p>
 
       <div className="voice-grid" role="radiogroup" aria-label="Voices">
         {filteredVoices.map((voice: Voice, idx: number) => {

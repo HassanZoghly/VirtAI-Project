@@ -1,11 +1,12 @@
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { FiCheck, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { HiOutlineSparkles, HiOutlineSpeakerWave, HiOutlineUser } from 'react-icons/hi2';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { avatarImages } from '@/features/avatar/data/avatars';
+import useReducedMotionPreference from '@/features/overview/hooks/useReducedMotionPreference';
 import { cn } from '@/shared/utils/cn';
 import CircuitBoardBackground from '@/widgets/Overview/CircuitBoardBackground';
 import { voices as VOICES, Voice } from '../data/voices';
@@ -15,6 +16,7 @@ import AllSetTab from './AllSetTab';
 import AvatarPreview from './AvatarPreview';
 import AvatarTab, { Avatar } from './AvatarTab';
 import VoiceTab from './VoiceTab';
+import LaunchOverlay from './LaunchOverlay';
 
 const TABS = [
   { key: 'avatar', label: 'Avatar', icon: HiOutlineUser },
@@ -25,6 +27,7 @@ const TABS = [
 export default function SetupPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState(0);
+  const shouldReduceMotion = useReducedMotionPreference();
   const [selectedAvatar, setSelectedAvatar] = useState<Avatar | null>(() => {
     const saved = loadSetup();
     if (!saved || !saved.avatarId) return null;
@@ -51,6 +54,7 @@ export default function SetupPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
   const [direction, setDirection] = useState(1);
+  const [isLaunching, setIsLaunching] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const stopAudio = useCallback(() => {
@@ -157,9 +161,17 @@ export default function SetupPage() {
   }, [stopAudio]);
 
   const slideVariants = {
-    enter: (d) => ({ x: d > 0 ? 80 : -80, opacity: 0 }),
-    center: { x: 0, opacity: 1 },
-    exit: (d) => ({ x: d > 0 ? -80 : 80, opacity: 0 }),
+    enter: (d) => ({ x: shouldReduceMotion ? 0 : d > 0 ? 60 : -60, opacity: 0 }),
+    center: { 
+      x: 0, 
+      opacity: 1,
+      transition: { duration: shouldReduceMotion ? 0.01 : 0.35, ease: [0.16, 1, 0.3, 1] as const }
+    },
+    exit: (d) => ({ 
+      x: shouldReduceMotion ? 0 : d > 0 ? -60 : 60, 
+      opacity: 0,
+      transition: { duration: shouldReduceMotion ? 0.01 : 0.25, ease: [0.16, 1, 0.3, 1] as const }
+    }),
   };
 
   return (
@@ -172,9 +184,9 @@ export default function SetupPage() {
 
       <motion.div
         className="setup-card"
-        initial={{ opacity: 0, y: 30 }}
+        initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 30 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
+        transition={{ duration: shouldReduceMotion ? 0.01 : 0.6, ease: [0.16, 1, 0.3, 1] }}
       >
         {/* Step indicator */}
         <div className="setup-step-indicator">
@@ -235,7 +247,6 @@ export default function SetupPage() {
               })}
             </div>
 
-            {/* Tab content with AnimatePresence */}
             <div className="setup-tab-content">
               <AnimatePresence mode="wait" custom={direction}>
                 <motion.div
@@ -245,7 +256,6 @@ export default function SetupPage() {
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
                   style={{ height: '100%' }}
                   role="tabpanel"
                   id={`panel-${TABS[activeTab].key}`}
@@ -269,6 +279,7 @@ export default function SetupPage() {
                       avatar={selectedAvatar}
                       voice={selectedVoice}
                       movementEnabled={isMovementEnabled}
+                      onLaunch={() => setIsLaunching(true)}
                     />
                   )}
                 </motion.div>
@@ -277,10 +288,17 @@ export default function SetupPage() {
 
             {/* Navigation */}
             <div className="setup-nav">
-              <button className="setup-nav-btn" onClick={handleBack}>
-                <FiChevronLeft size={16} />
-                {activeTab === 0 ? 'Overview' : 'Back'}
-              </button>
+              {activeTab === 0 ? (
+                <Link to="/" className="setup-nav-btn">
+                  <FiChevronLeft size={16} />
+                  Overview
+                </Link>
+              ) : (
+                <button className="setup-nav-btn" onClick={handleBack}>
+                  <FiChevronLeft size={16} />
+                  Back
+                </button>
+              )}
 
               {activeTab < TABS.length - 1 && (
                 <button
@@ -288,7 +306,7 @@ export default function SetupPage() {
                   onClick={handleNext}
                   disabled={!canAdvance}
                 >
-                  Next
+                  {activeTab === 0 ? 'Configure Voice' : 'Finalize Setup'}
                   <FiChevronRight size={16} />
                 </button>
               )}
@@ -309,6 +327,15 @@ export default function SetupPage() {
           </div>
         </div>
       </motion.div>
+
+      <AnimatePresence>
+        {isLaunching && (
+          <LaunchOverlay
+            avatar={selectedAvatar}
+            onComplete={() => navigate('/classroom', { replace: true })}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

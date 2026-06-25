@@ -1,6 +1,6 @@
 import { useLogin } from '@/features/auth/hooks/useAuth';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -8,8 +8,8 @@ import GoogleAuthButton from './GoogleAuthButton';
 import PasswordInput from './PasswordInput';
 
 const loginSchema = z.object({
-  email: z.string().min(1, 'Email is required').email('Please enter a valid email'),
-  password: z.string().min(1, 'Password is required'),
+  email: z.string().min(1, 'Please enter your institutional email address').email('Please enter a valid email address (e.g., name@university.edu)'),
+  password: z.string().min(1, 'Please enter your password'),
 });
 
 interface LoginFormProps {
@@ -47,9 +47,9 @@ export default function LoginForm({ onToggleMode }: LoginFormProps) {
         {/* Email */}
         <div>
           <label htmlFor="login-email" className={labelClass}>
-            Work email
+            Institutional email
           </label>
-          <input id="login-email" type="email" autoComplete="email" placeholder="you@example.com" disabled={isLoading} {...register('email')} className={inputClass} />
+          <input id="login-email" type="email" autoComplete="email" placeholder="you@institution.edu" disabled={isLoading} {...register('email')} className={inputClass} />
           {errors.email && <p className="mt-1.5 text-xs font-medium text-(--error)">{errors.email.message}</p>}
         </div>
 
@@ -79,7 +79,7 @@ export default function LoginForm({ onToggleMode }: LoginFormProps) {
           {isLoading ? (
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-current/30 border-t-current" />
           ) : (
-            'Sign in'
+            'Access Classroom Workspace'
           )}
         </button>
       </form>

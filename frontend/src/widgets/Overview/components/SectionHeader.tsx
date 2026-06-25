@@ -1,4 +1,4 @@
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 
 export default function SectionHeader({ titlePrefix, titleHighlight, description, className = '', descriptionClassName = 'mt-5 text-lg leading-relaxed text-offwhite/70' }) {
   return (
@@ -10,8 +10,7 @@ export default function SectionHeader({ titlePrefix, titleHighlight, description
       transition={{ duration: 0.6 }}
     >
       <h2
-        className="text-4xl font-bold text-offwhite sm:text-5xl"
-        style={{ fontFamily: 'var(--font-display)' }}
+        className="display-h2 text-offwhite"
       >
         {titlePrefix} <span className="text-gold">{titleHighlight}</span>
       </h2>

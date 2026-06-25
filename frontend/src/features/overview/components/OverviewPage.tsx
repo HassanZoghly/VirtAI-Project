@@ -1,279 +1,128 @@
-import { lazy, startTransition, Suspense, useEffect, useState } from 'react';
-import { Helmet } from 'react-helmet-async';
-
+import { lazy, Suspense, useEffect } from 'react';
+import Lenis from 'lenis';
 import { selectIsAuthenticated, useAuthStore } from '@/features/auth/store/authStore';
 import HeroSection from '@/widgets/Overview/HeroSection';
+import ErrorBoundary from '@/shared/components/ErrorBoundary';
+import OverviewSEO from './OverviewSEO';
+import useReducedMotionPreference from '../hooks/useReducedMotionPreference';
+import useDevicePerformance from '../hooks/useDevicePerformance';
+import useSplashSession from '../hooks/useSplashSession';
+import useProgressivePhases from '../hooks/useProgressivePhases';
 
 const Navbar = lazy(() => import('@/widgets/Overview/Navbar'));
 const SplashScreen = lazy(() => import('@/widgets/Overview/SplashScreen'));
 const CircuitBoardBackground = lazy(() => import('@/widgets/Overview/CircuitBoardBackground'));
-const DemoPreview = lazy(() => import('@/widgets/Overview/DemoPreview'));
 const FeaturesSection = lazy(() => import('@/widgets/Overview/FeaturesSection'));
-const Footer = lazy(() => import('@/widgets/Overview/Footer'));
-const HowItWorks = lazy(() => import('@/widgets/Overview/HowItWorks'));
+
 const TechStackSection = lazy(() => import('@/widgets/Overview/TechStackSection'));
+const DemoPreview = lazy(() => import('@/widgets/Overview/DemoPreview'));
+const FAQSection = lazy(() => import('@/widgets/Overview/FAQSection'));
+const Footer = lazy(() => import('@/widgets/Overview/Footer'));
 
-const INITIAL_PHASES = {
-  navbar: false,
-  features: false,
-  howItWorks: false,
-  techStack: false,
-  demo: false,
-  footer: false,
-};
-
-const PHASE2_SEQUENCE = ['navbar', 'features', 'howItWorks', 'techStack', 'demo', 'footer'];
-
-function getReducedMotionPreference() {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-    return false;
-  }
-
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+interface DeferredProps {
+  shouldRender: boolean;
+  fallback?: React.ReactNode;
+  children: React.ReactNode;
 }
 
-function isLowPerformanceDevice() {
-  if (typeof window === 'undefined') {
-    return true;
-  }
-
-  const nav = navigator as unknown as {
-    connection?: { saveData?: boolean; effectiveType?: string };
-    deviceMemory?: number;
-  };
-  const connection = nav.connection;
-  const saveDataEnabled = !!connection?.saveData;
-  const slowNetwork = ['slow-2g', '2g'].includes(connection?.effectiveType || '');
-  const lowMemoryDevice = typeof nav.deviceMemory === 'number' && nav.deviceMemory <= 4;
-  const lowCpuDevice =
-    typeof navigator.hardwareConcurrency === 'number' && navigator.hardwareConcurrency <= 4;
-  const isMobileViewport =
-    typeof window.matchMedia !== 'function' || window.matchMedia('(max-width: 1023px)').matches;
-
-  return saveDataEnabled || slowNetwork || lowMemoryDevice || lowCpuDevice || isMobileViewport;
-}
-
-function scheduleIdleTask(task, { delay = 0, timeout = 1500 } = {}) {
-  let idleId: number | null = null;
-  let timeoutId: number | null = null;
-  let cancelled = false;
-
-  const runTask = () => {
-    if (cancelled) {
-      return;
-    }
-
-    task();
-  };
-
-  const queueTask = () => {
-    if ('requestIdleCallback' in window) {
-      idleId = window.requestIdleCallback(runTask, { timeout });
-      return;
-    }
-
-    timeoutId = setTimeout(runTask, 1) as unknown as number;
-  };
-
-  if (delay > 0) {
-    timeoutId = setTimeout(queueTask, delay) as unknown as number;
-  } else {
-    queueTask();
-  }
-
-  return () => {
-    cancelled = true;
-
-    if (idleId !== null && 'cancelIdleCallback' in window) {
-      window.cancelIdleCallback(idleId);
-    }
-
-    if (timeoutId !== null) {
-      clearTimeout(timeoutId);
-    }
-  };
-}
-
-function DeferredSection({ shouldRender, fallback = null, children }) {
-  if (!shouldRender) {
-    return null;
-  }
-
-  return <Suspense fallback={fallback}>{children}</Suspense>;
+function DeferredSection({ shouldRender, fallback = null, children }: DeferredProps) {
+  if (!shouldRender) return null;
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={fallback}>{children}</Suspense>
+    </ErrorBoundary>
+  );
 }
 
 export default function OverviewPage() {
-  const [phase2, setPhase2] = useState(INITIAL_PHASES);
-  const [showSplash, setShowSplash] = useState(false);
-  const [showAmbient, setShowAmbient] = useState(false);
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(getReducedMotionPreference);
   const isAuthenticated = useAuthStore(selectIsAuthenticated);
+  const prefersReducedMotion = useReducedMotionPreference();
+  const { isLowPerformance } = useDevicePerformance();
+  const { phase2, isAmbientReady } = useProgressivePhases(prefersReducedMotion, isLowPerformance);
+  const { showSplash, handleSplashComplete } = useSplashSession({
+    isNavbarReady: phase2.navbar,
+    prefersReducedMotion,
+  });
 
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
+    // Reset scroll position on the TRUE scrollport (the motion.div in AppLayout)
+    const scrollRoot = document.getElementById('main-scroll-container');
+    if (scrollRoot) scrollRoot.scrollTop = 0;
 
-  useEffect(() => {
-    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const updatePreference = () => setPrefersReducedMotion(media.matches);
+    if (prefersReducedMotion) return;
 
-    updatePreference();
-    media.addEventListener('change', updatePreference);
+    // Lenis wrapper = the constrained scrollport (overflow-y: auto, fixed height)
+    // Lenis content = the growing inner content div (drives scroll range)
+    const wrapper = document.getElementById('main-scroll-container');
+    const content = document.getElementById('overview-content');
+    if (!wrapper || !content) return;
 
-    return () => media.removeEventListener('change', updatePreference);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    let firstFrameId = null;
-    let secondFrameId = null;
-    const cleanups = [];
-
-    const revealStep = (step) => {
-      startTransition(() => {
-        setPhase2((currentPhase) => {
-          if (currentPhase[step]) {
-            return currentPhase;
-          }
-
-          return { ...currentPhase, [step]: true };
-        });
-      });
-    };
-
-    const queueStep = (index) => {
-      if (cancelled || index >= PHASE2_SEQUENCE.length) {
-        return;
-      }
-
-      const cleanup = scheduleIdleTask(
-        () => {
-          if (cancelled) {
-            return;
-          }
-
-          revealStep(PHASE2_SEQUENCE[index]);
-          queueStep(index + 1);
-        },
-        {
-          delay: 0,
-          timeout: index === 0 ? 1000 : 1600,
-        }
-      );
-
-      cleanups.push(cleanup);
-    };
-
-    firstFrameId = window.requestAnimationFrame(() => {
-      secondFrameId = window.requestAnimationFrame(() => {
-        queueStep(0);
-      });
+    const lenis = new Lenis({
+      wrapper,
+      content,
+      duration: 1.2,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      orientation: 'vertical',
+      gestureOrientation: 'vertical',
+      smoothWheel: true,
     });
+    (window as any).lenis = lenis;
+
+    let rafId: number;
+    function raf(time: number) {
+      lenis.raf(time);
+      rafId = requestAnimationFrame(raf);
+    }
+    rafId = requestAnimationFrame(raf);
 
     return () => {
-      cancelled = true;
-
-      if (firstFrameId !== null) {
-        cancelAnimationFrame(firstFrameId);
-      }
-      if (secondFrameId !== null) {
-        cancelAnimationFrame(secondFrameId);
-      }
-
-      cleanups.forEach((cleanup) => cleanup());
+      cancelAnimationFrame(rafId);
+      lenis.destroy();
+      (window as any).lenis = undefined;
     };
-  }, []);
-
-  useEffect(() => {
-    if (!phase2.navbar || prefersReducedMotion) {
-      return;
-    }
-
-    const alreadySeenSplash = sessionStorage.getItem('virtai:overview-splash-seen') === '1';
-    if (alreadySeenSplash) {
-      return;
-    }
-
-    return scheduleIdleTask(() => setShowSplash(true), { delay: 0, timeout: 2200 });
-  }, [phase2.navbar, prefersReducedMotion]);
-
-  useEffect(() => {
-    const isLowPerf = isLowPerformanceDevice();
-    if (!phase2.footer || prefersReducedMotion || isLowPerf) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setShowAmbient(false);
-      return;
-    }
-
-    return scheduleIdleTask(() => setShowAmbient(true), { delay: 0, timeout: 2600 });
-  }, [phase2.footer, prefersReducedMotion]);
+  }, [prefersReducedMotion]);
 
   const primaryCta = isAuthenticated
     ? { label: 'Go to Classroom', to: '/classroom' }
     : { label: 'Log In / Sign Up', to: '/auth' };
 
-  const handleSplashComplete = () => {
-    try {
-      sessionStorage.setItem('virtai:overview-splash-seen', '1');
-    } catch {
-      // ignore
-    } finally {
-      setShowSplash(false);
-    }
-  };
-
   return (
     <>
-      <Helmet>
-        <title>VirtAI – AI Teaching Assistant</title>
-        <meta
-          name="description"
-          content="VirtAI is a real-time AI teaching assistant powered by speech recognition, large language models, and a 3D avatar."
-        />
-      </Helmet>
-
+      <OverviewSEO />
       {showSplash && (
         <Suspense fallback={null}>
           <SplashScreen onComplete={handleSplashComplete} />
         </Suspense>
       )}
-
-      <div className="relative min-h-screen bg-dark text-offwhite">
+      <div id="overview-content" className="relative min-h-screen bg-dark text-offwhite font-sans antialiased">
         <a
           href="#main-content"
           className="absolute -top-[1000px] left-4 z-[100] focus:fixed focus:top-4 focus:rounded-md focus:bg-gold focus:px-4 focus:py-2 focus:text-dark focus:outline-none"
         >
           Skip to content
         </a>
-
-        <DeferredSection shouldRender={showAmbient}>
+        <DeferredSection shouldRender={isAmbientReady}>
           <CircuitBoardBackground />
         </DeferredSection>
-
         <DeferredSection shouldRender={phase2.navbar}>
           <Navbar ctaLabel={primaryCta.label} ctaTo={primaryCta.to} />
         </DeferredSection>
-
         <main id="main-content">
           <HeroSection ctaLabel={primaryCta.label} ctaTo={primaryCta.to} />
-
           <DeferredSection shouldRender={phase2.features}>
             <FeaturesSection />
-          </DeferredSection>
-
-          <DeferredSection shouldRender={phase2.howItWorks}>
-            <HowItWorks />
           </DeferredSection>
 
           <DeferredSection shouldRender={phase2.techStack}>
             <TechStackSection />
           </DeferredSection>
-
           <DeferredSection shouldRender={phase2.demo}>
             <DemoPreview />
           </DeferredSection>
+          <DeferredSection shouldRender={phase2.demo}>
+            <FAQSection />
+          </DeferredSection>
         </main>
-
         <DeferredSection shouldRender={phase2.footer}>
           <Footer />
         </DeferredSection>
@@ -281,3 +130,4 @@ export default function OverviewPage() {
     </>
   );
 }
+

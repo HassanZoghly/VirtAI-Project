@@ -103,3 +103,24 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ── Confetti Particle Animation ── */
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(500px) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+.animate-confetti-fall {
+  position: absolute;
+  width: 6px;
+  height: 12px;
+  border-radius: 2px;
+  pointer-events: none;
+  animation: confetti-fall 2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+}

@@ -21,7 +21,7 @@ export function DocumentPicker({ sessionId, onSelect, onCancel }: DocumentPicker
 
   if (isLoading && documents.length === 0) {
     return (
-      <div className="bg-[#1A1A1A] rounded-3xl border border-white/5 p-8 flex flex-col items-center justify-center min-h-[300px]">
+      <div className="bg-[#1A1A1A] rounded-2xl border border-white/5 p-8 flex flex-col items-center justify-center min-h-[300px]">
         <div className="w-8 h-8 border-2 border-white/20 border-t-white/80 rounded-full animate-spin mb-4" />
         <p className="text-white/60 text-sm font-medium">Loading documents...</p>
       </div>
@@ -29,7 +29,7 @@ export function DocumentPicker({ sessionId, onSelect, onCancel }: DocumentPicker
   }
 
   return (
-    <div className="bg-[#1A1A1A] rounded-3xl border border-white/5 p-8 shadow-2xl flex flex-col relative">
+    <div className="bg-[#1A1A1A] rounded-2xl border border-white/5 p-8 shadow-2xl flex flex-col relative">
       <h2 className="text-xl font-bold text-white/90 tracking-wide mb-6 text-center">
         Select Document for Diagram
       </h2>

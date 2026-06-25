@@ -279,23 +279,23 @@ const SessionList = memo(function SessionList({
       <div className="sidebar-chats-section">
         <div className="flex items-center justify-between w-full mb-4 px-4 pt-4 border-b border-white/5 pb-4">
           <h2 className="text-xs font-bold uppercase tracking-widest text-gray-400 m-0 leading-none">
-            CHATS
+            Discussion History
           </h2>
           <div className="flex items-center gap-2">
             <button 
               className="text-xs font-medium px-3 py-1.5 rounded-full bg-white/5 hover:bg-white/15 border border-white/10 transition-all flex items-center gap-1.5 text-white" 
               onClick={onNewSession} 
-              aria-label="New chat"
+              aria-label="Start new session"
             >
-              <PiPlusFill size={14} /> New Chat
+              <PiPlusFill size={14} /> New Session
             </button>
             {sessions.length > 0 && (
               <button
                 id="clear-all-chats-btn"
                 className="flex items-center justify-center p-1"
                 onClick={() => setIsConfirmClearOpen(true)}
-                aria-label="Delete all chats"
-                title="Delete all chats"
+                aria-label="Delete all sessions"
+                title="Clear Session History"
               >
                 <PiTrashSimpleFill className="w-4 h-4 text-gray-400 hover:text-red-400 cursor-pointer transition-colors" />
               </button>
@@ -306,7 +306,7 @@ const SessionList = memo(function SessionList({
         <div className="sidebar-sessions-scroll">
           {filtered.length === 0 ? (
             <div className="sidebar-empty-state">
-              <p>No chats yet.</p>
+              <p>No active classroom sessions. Upload a syllabus or document to start your first session.</p>
             </div>
           ) : (
             filtered.map((session) => {
@@ -337,10 +337,10 @@ const SessionList = memo(function SessionList({
             type="button"
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-medium text-offwhite/75 transition-colors duration-200 hover:border-red-400/30 hover:bg-red-500/10 hover:text-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60"
             onClick={handleLogout}
-            aria-label="Log out of VirtAI"
+            aria-label="Disconnect account from VirtAI"
           >
             <FiLogOut className="h-4 w-4" />
-            <span>Log Out</span>
+            <span>Disconnect Account</span>
           </button>
         </div>
       </div>
@@ -361,14 +361,14 @@ const SessionList = memo(function SessionList({
               className="flex items-center gap-2 w-full text-left px-3.5 py-2.5 text-sm text-white/80 hover:bg-white/10 hover:text-white rounded-lg transition-colors"
               onClick={() => startEditing(contextSession)}
             >
-              <PiPencilSimpleFill size={16} /> Rename
+              <PiPencilSimpleFill size={16} /> Rename Session
             </button>
             <div className="h-px bg-white/10 my-1 mx-2" />
             <button
               className="flex items-center gap-2 w-full text-left px-3.5 py-2.5 text-sm text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
               onClick={() => handleDelete(contextMenu.sessionId)}
             >
-              <PiTrashSimpleFill size={16} /> Delete
+              <PiTrashSimpleFill size={16} /> Delete Session
             </button>
           </div>,
           document.body
@@ -378,14 +378,14 @@ const SessionList = memo(function SessionList({
         createPortal(
           <div className="clear-confirm-overlay">
             <div className="clear-confirm-modal">
-              <h3 className="clear-confirm-title">Clear all chats?</h3>
-              <p className="clear-confirm-desc">This action cannot be undone.</p>
+              <h3 className="clear-confirm-title">Delete All Sessions?</h3>
+              <p className="clear-confirm-desc">This will permanently erase all active and archived sessions from this device. This operation cannot be reversed.</p>
               <div className="clear-confirm-actions">
                 <button
                   className="clear-confirm-cancel"
                   onClick={() => setIsConfirmClearOpen(false)}
                 >
-                  Cancel
+                  Keep Sessions
                 </button>
                 <button
                   className="clear-confirm-danger"
@@ -394,7 +394,7 @@ const SessionList = memo(function SessionList({
                     onClearAllSessions?.();
                   }}
                 >
-                  Delete
+                  Delete All Sessions
                 </button>
               </div>
             </div>

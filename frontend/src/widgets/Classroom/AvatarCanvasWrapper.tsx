@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback, useEffect } from 'react';
+import React, { memo, useState, useCallback, useEffect, useRef } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { PerspectiveCamera, OrbitControls } from '@react-three/drei';
 import { AvatarComponent } from '@/features/avatar/components/AvatarComponent';
@@ -19,7 +19,6 @@ const DIR_LIGHT_POS_Z = 3;
 const DIR_LIGHT_INTENSITY = 1;
 const Z_INDEX_OVERLAY = 10;
 const INSET_ZERO = 0;
-const FULL_PERCENTAGE = '100%';
 
 interface AvatarCanvasWrapperProps {
   avatarId: string;
@@ -31,6 +30,44 @@ interface AvatarCanvasWrapperProps {
   getIsAudioPlaying: () => boolean;
   getNextPlaybackTime: () => number;
 }
+
+// DEFENSIVE: Synchronously dispose WebGL resources on unmount.
+// This prevents the R3F render loop from lingering across route transitions,
+// which was the root cause of the Framer Motion exit-animation deadlock.
+// Without this, the Canvas kept rendering for multiple RAF cycles after unmount,
+// holding the JS thread and blocking mode="wait" AnimatePresence from completing.
+const CanvasDisposer = memo(function CanvasDisposer() {
+  const { gl, scene } = useThree();
+  // Use refs so the cleanup closure captures the live instances, not stale closures
+  const glRef = useRef(gl);
+  const sceneRef = useRef(scene);
+
+  useEffect(() => {
+    glRef.current = gl;
+    sceneRef.current = scene;
+  });
+
+  useEffect(() => {
+    return () => {
+      // Traverse the scene graph and release all GPU geometry/material/texture memory
+      sceneRef.current.traverse((object) => {
+        const mesh = object as THREE.Mesh;
+        if (mesh.geometry) {
+          mesh.geometry.dispose();
+        }
+        if (mesh.material) {
+          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          mats.forEach((m: THREE.Material) => m.dispose());
+        }
+      });
+      // Dispose the renderer — this releases the WebGL context immediately and
+      // terminates the internal RAF loop. Framer Motion can then complete its exit.
+      glRef.current.dispose();
+    };
+  }, []); // empty dep array: run ONLY on unmount
+
+  return null;
+});
 
 // DEFENSIVE: WebGL Context Watcher with strict cleanup
 const WebGLContextWatcher = memo(({ onLost, onRestored }: { onLost: () => void; onRestored: () => void }) => {
@@ -116,6 +153,8 @@ export const AvatarCanvasWrapper = memo(function AvatarCanvasWrapper({
         console.log('[Runtime Evidence] Canvas Created:', evidence);
         (window as any).__CAMERA_EVIDENCE = evidence;
       }}>
+        {/* CanvasDisposer MUST be first — it runs cleanup before other children unmount */}
+        <CanvasDisposer />
         <WebGLContextWatcher onLost={handleContextLost} onRestored={handleContextRestored} />
         <PerspectiveCamera makeDefault position={[CAMERA_POS_X, CAMERA_POS_Y, CAMERA_POS_Z]} fov={CAMERA_FOV} />
         <OrbitControls target={[TARGET_POS_X, TARGET_POS_Y, TARGET_POS_Z]} enablePan={false} enableZoom={false} enableRotate={false} />

@@ -60,7 +60,7 @@ export function ExplainSession({
         <div className="explain-content-wrapper">
           <div className="markdown-body">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {content || "Loading slide content..."}
+              {content || "Analyzing slide context and preparing instructional content..."}
             </ReactMarkdown>
             {currentState === 'EXPLAINING' && <span className="inline-block w-[2px] h-[1em] bg-white/80 align-middle ml-1 animate-[pulse_1s_ease-in-out_infinite]"></span>}
           </div>
@@ -75,15 +75,15 @@ export function ExplainSession({
         <div className="flex items-center justify-between w-full mt-4 pt-4 border-t border-white/5">
           <div className="explain-status-indicator">
             <span className={`status-dot ${currentState.toLowerCase()}`}></span>
-            {currentState === 'EXPLAINING' && 'Explaining slide...'}
-            {currentState === 'AWAITING' && 'Waiting for your input...'}
-            {currentState === 'ANSWERING' && 'Answering question...'}
+            {currentState === 'EXPLAINING' && 'Delivering presentation analysis...'}
+            {currentState === 'AWAITING' && 'Awaiting educator inquiry...'}
+            {currentState === 'ANSWERING' && 'Synthesizing explanation...'}
           </div>
 
           <div className="flex gap-3">
             {currentState !== 'AWAITING' && (
               <button 
-                className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm font-medium text-white/90 backdrop-blur-sm transition-[background-color,border-color,transform] duration-300 hover:bg-white/15 hover:border-white/20 hover:scale-[1.02]" 
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm font-medium text-white/90 backdrop-blur-sm transition-[background-color,border-color,transform] duration-300 hover:bg-gold/5 hover:border-gold/30 hover:text-gold-soft hover:scale-[1.02]" 
                 onClick={onPauseOrStop} 
                 title="Pause / Interrupt"
               >
@@ -91,7 +91,7 @@ export function ExplainSession({
               </button>
             )}
             <button 
-              className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm font-medium text-white/90 backdrop-blur-sm transition-[background-color,border-color,transform] duration-300 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 hover:scale-[1.02]" 
+              className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm font-medium text-white/90 backdrop-blur-sm transition-[background-color,border-color,transform] duration-300 hover:bg-crimson/15 hover:text-crimson-glow hover:border-crimson/40 hover:scale-[1.02]" 
               onClick={onClose} 
               title="Stop Presentation"
             >

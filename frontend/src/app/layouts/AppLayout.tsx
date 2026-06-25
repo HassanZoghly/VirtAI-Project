@@ -1,16 +1,55 @@
+import { Suspense } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { ClassroomLeftRail } from '@/widgets/Classroom/ClassroomLeftRail';
+import { motion, AnimatePresence } from 'framer-motion';
+import useReducedMotionPreference from '@/features/overview/hooks/useReducedMotionPreference';
+import PageLoader from '@/shared/components/PageLoader';
 
 export default function AppLayout() {
   const location = useLocation();
-  const showSidebar = location.pathname.startsWith('/classroom') || location.pathname.startsWith('/help') || location.pathname.startsWith('/setup') || location.pathname.startsWith('/quiz');
+  const shouldReduceMotion = useReducedMotionPreference();
+
+  // App-chrome routes need a fixed viewport (no scroll) — the page manages its own layout.
+  // Document-style routes (Overview, Auth) need overflow-y: auto so content can scroll.
+  const isAppRoute =
+    location.pathname.startsWith('/classroom') ||
+    location.pathname.startsWith('/help') ||
+    location.pathname.startsWith('/setup') ||
+    location.pathname.startsWith('/quiz');
+
+  const showSidebar = isAppRoute;
 
   return (
-    <div className="flex w-full min-h-screen bg-[#0D0D0D] text-white font-sans">
+    <div className="flex w-full h-screen overflow-hidden bg-[#0A0908] text-white font-sans">
       {showSidebar && <ClassroomLeftRail />}
-      <div className="flex-1 min-w-0 flex flex-col relative bg-[#0D0D0D]">
-        <Outlet />
+      <div className="flex-1 min-w-0 flex flex-col relative h-full overflow-hidden bg-[#0A0908]">
+        <AnimatePresence mode="sync" initial={false}>
+          <motion.div
+            key={location.pathname}
+            id={isAppRoute ? undefined : 'main-scroll-container'}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: shouldReduceMotion ? 0.01 : 0.18, ease: 'easeOut' }}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              backgroundColor: '#0A0908',
+              // App routes: fixed viewport, no scrollbar.
+              // Document routes: allow vertical scroll so Lenis/native scroll works.
+              overflowY: isAppRoute ? 'hidden' : 'auto',
+            }}
+          >
+            <Suspense fallback={<PageLoader />}>
+              <Outlet />
+            </Suspense>
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );
 }
+
+

@@ -27,7 +27,10 @@ const messagesResponseSchema = z.array(messageSchema);
  */
 export async function fetchSessions(): Promise<any[]> {
   const response = await apiClient.get('/chat/');
-  const parsed = sessionsResponseSchema.safeParse(response.data);
+  const rawData = Array.isArray(response.data)
+    ? response.data
+    : response.data?.sessions || [];
+  const parsed = sessionsResponseSchema.safeParse(rawData);
   if (!parsed.success) {
     console.error('[API Contract Error] fetchSessions response deviated from expected schema:', parsed.error);
     throw new Error('Invalid sessions format received from backend');
@@ -48,7 +51,10 @@ export async function createSession(): Promise<any> {
  */
 export async function fetchSessionMessages(sessionId: string, options: any = {}): Promise<any[]> {
   const response = await apiClient.get(`/chat/${sessionId}/messages`, options);
-  const parsed = messagesResponseSchema.safeParse(response.data);
+  const rawData = Array.isArray(response.data)
+    ? response.data
+    : response.data?.messages || [];
+  const parsed = messagesResponseSchema.safeParse(rawData);
   if (!parsed.success) {
     console.error('[API Contract Error] fetchSessionMessages response deviated from expected schema:', parsed.error);
     throw new Error('Invalid messages format received from backend');

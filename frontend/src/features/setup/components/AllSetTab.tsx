@@ -1,4 +1,4 @@
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { useState } from 'react';
 import { FiCheck } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
@@ -9,11 +9,19 @@ import { toast } from 'sonner';
 import { saveSetup } from '../services/setupStorage';
 import SuccessAnimation from './SuccessAnimation';
 
+interface AllSetTabProps {
+  avatar: any;
+  voice: any;
+  movementEnabled: boolean;
+  onLaunch?: () => void;
+}
+
 export default function AllSetTab({
   avatar,
   voice,
   movementEnabled,
-}) {
+  onLaunch,
+}: AllSetTabProps) {
   const navigate = useNavigate();
   const setUser = useAuthStore((s) => s.setUser);
   const isInitializing = useAuthStore((s) => s.isInitializing);
@@ -37,13 +45,18 @@ export default function AllSetTab({
         movementEnabled: !!movementEnabled,
       });
 
-      navigate('/classroom', { replace: true });
+      if (onLaunch) {
+        onLaunch();
+      } else {
+        navigate('/classroom', { replace: true });
+      }
     } catch {
-      toast.error('Setup Save Failed', { description: 'Could not persist setup status. Please try again.' });
+      toast.error('Unable to Save Configuration', { description: 'We were unable to save your assistant configuration because of a temporary connection error. Please try clicking the button again.' });
     } finally {
       setIsSaving(false);
     }
   };
+
 
   const isReady = !!avatar && !!voice;
 
@@ -58,7 +71,7 @@ export default function AllSetTab({
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.8 }}
       >
-        You&#39;re All Set!
+        Configuration Complete
       </motion.h2>
 
       <motion.p
@@ -68,7 +81,7 @@ export default function AllSetTab({
         animate={{ opacity: 1 }}
         transition={{ delay: 1 }}
       >
-        Your AI avatar assistant is ready
+        Your curriculum-aware teaching assistant has been configured.
       </motion.p>
 
       <motion.div
@@ -79,12 +92,12 @@ export default function AllSetTab({
       >
         <div className="allset-item">
           <FiCheck className="check-icon" />
-          <span>Avatar:</span>
+          <span>Teaching Assistant Avatar:</span>
           <span className="item-value">{avatar?.name ?? '—'}</span>
         </div>
         <div className="allset-item">
           <FiCheck className="check-icon" />
-          <span>Voice:</span>
+          <span>Speech Profile:</span>
           <span className="item-value">{voice?.name ?? '—'}</span>
         </div>
       </motion.div>
@@ -105,7 +118,7 @@ export default function AllSetTab({
         }
       >
         <span style={{ position: 'relative', zIndex: 1 }}>
-          {isSaving ? 'Saving...' : 'Save & Continue to Classroom →'}
+          {isSaving ? 'Persisting Configuration...' : 'Launch VirtAI Classroom →'}
         </span>
       </motion.button>
     </div>

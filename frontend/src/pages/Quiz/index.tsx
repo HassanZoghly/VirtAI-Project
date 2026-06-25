@@ -19,9 +19,9 @@ export default function QuizPage() {
   /* TODO: Analytics - Dashboard Wrapper */
 
   return (
-    <div className="classroom-shell" style={{ width: '100%', height: '100%', display: 'flex', backgroundColor: 'var(--bg-primary, #111111)' }}>
-      <div style={{ position: 'relative', flex: 1, display: 'flex' }}>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', overflowY: 'auto' }}>
+    <div className="classroom-shell w-full h-full flex bg-[#0A0908]">
+      <div className="relative flex-1 flex">
+        <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 overflow-y-auto">
           <div className={styles.quizCardContainer}>
             <h1 className={styles.quizTitle}>Take a Quiz</h1>
             <p className={styles.quizSubtitle}>Pick one or more lectures to generate questions from.</p>

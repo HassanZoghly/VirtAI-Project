@@ -11,6 +11,21 @@
   height: 100%;
 }
 
+.helpContainer::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, var(--color-crimson, #6d001a) 0%, transparent 70%);
+  filter: blur(140px);
+  opacity: 0.05;
+  pointer-events: none;
+  z-index: -1;
+}
+
 .helpHeader {
   text-align: center;
   margin-bottom: 2rem;
@@ -39,19 +54,6 @@
 .featureCardWrapper {
   flex: 1;
   position: relative;
-  /* AnimatePresence styling placeholder if needed */
-  animation: slideFade 0.25s ease-out forwards;
-}
-
-@keyframes slideFade {
-  from {
-    opacity: 0;
-    transform: translateX(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
 }
 
 .featureCard {
@@ -68,11 +70,13 @@
   border: 1px solid var(--border-color, #333);
   border-radius: 1rem;
   overflow: hidden;
-  transition: border-color 0.2s ease;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 20%);
 }
 
 .videoWrapper:hover {
-  border-color: var(--accent-gold, #D4B47A);
+  border-color: var(--color-gold, #b4ab8b);
+  box-shadow: 0 8px 24px rgb(180 171 139 / 12%);
 }
 
 .videoElement {
@@ -108,8 +112,8 @@
   gap: 0.75rem;
   margin-top: 0.5rem;
   padding: 0.75rem 1rem;
-  background: rgba(212, 180, 122, 0.05);
-  border-left: 2px solid var(--accent-gold, #D4B47A);
+  background: rgb(180 171 139 / 8%);
+  border: 1px solid var(--color-gold, #b4ab8b);
   border-radius: 0.5rem;
 }
 
@@ -139,17 +143,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--accent-gold, #D4B47A);
+  border: 1px solid var(--color-gold, #b4ab8b);
   background: transparent;
-  color: var(--accent-gold, #D4B47A);
+  color: var(--color-gold-soft, #c9c0a0);
   font-size: 1.25rem;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.25s ease, border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
 }
 
 .navBtn:hover:not(:disabled) {
-  background: rgba(212, 180, 122, 0.1);
+  background: rgb(180 171 139 / 8%);
+  border-color: var(--color-gold-soft, #c9c0a0);
   transform: scale(1.05);
+  box-shadow: 0 0 12px rgb(180 171 139 / 15%);
 }
 
 .navBtn:disabled {

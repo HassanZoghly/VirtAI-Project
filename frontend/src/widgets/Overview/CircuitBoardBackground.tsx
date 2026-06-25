@@ -574,12 +574,31 @@ export default function CircuitBoardBackground({ pulseCount = 8, opacity = 0.5, 
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) {
+          if (s.raf) {
+            cancelAnimationFrame(s.raf);
+            s.raf = 0;
+          }
+        } else {
+          if (!s.raf && !document.hidden) {
+            s.lastTime = 0;
+            s.raf = requestAnimationFrame(draw);
+          }
+        }
+      },
+      { threshold: 0 }
+    );
+    io.observe(canvas);
+
     s.lastTime = 0;
     s.raf = requestAnimationFrame(draw);
 
     return () => {
       cancelAnimationFrame(s.raf);
       ro.disconnect();
+      io.disconnect();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [regenerate, draw]);

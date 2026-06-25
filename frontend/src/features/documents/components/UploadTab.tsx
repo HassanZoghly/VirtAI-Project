@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FiFileText, FiUploadCloud, FiX } from 'react-icons/fi';
 import { Document } from '../types';
@@ -9,10 +9,10 @@ const ACCEPTED_EXTENSIONS = new Set(['pdf', 'txt', 'md']);
 function validateSelectedFile(file: File): string | null {
   const extension = file.name.split('.').pop()?.toLowerCase();
   if (!extension || !ACCEPTED_EXTENSIONS.has(extension)) {
-    return 'Choose a PDF, TXT, or MD file.';
+    return 'Please select a document in PDF, TXT, or Markdown format.';
   }
   if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-    return `File must be ${MAX_FILE_SIZE_MB}MB or smaller.`;
+    return `The selected file exceeds the ${MAX_FILE_SIZE_MB}MB size limit. Please compress the file or choose a smaller resource.`;
   }
   return null;
 }
@@ -55,7 +55,7 @@ export function UploadTab({ onSkip, enqueueUpload, documents }: UploadTabProps) 
       }
 
       if (projectedCount >= 10) {
-        errors[file.name] = 'Session document limit (10) reached.';
+        errors[file.name] = 'You have reached the maximum limit of 10 uploaded documents for this session.';
         return;
       }
 
@@ -135,7 +135,7 @@ export function UploadTab({ onSkip, enqueueUpload, documents }: UploadTabProps) 
         removeFile(file.name);
 
       } catch (err: unknown) {
-        setLocalErrors(prev => ({ ...prev, [file.name]: 'Hashing failed: ' + (err instanceof Error ? err.message : 'Unknown error') }));
+        setLocalErrors(prev => ({ ...prev, [file.name]: 'Failed to calculate file hash: ' + (err instanceof Error ? err.message : 'Unknown checksum error') + '. Please try uploading the file again.' }));
         console.error("Hashing error", err);
       }
     }
@@ -149,15 +149,15 @@ export function UploadTab({ onSkip, enqueueUpload, documents }: UploadTabProps) 
     <div className="tab-pane upload-tab fade-in">
       <div className="upload-card modern-glass-card">
         <div className="upload-header">
-          <h2 className="setup-section-title">Add Knowledge Base</h2>
+          <h2 className="setup-section-title">Upload Curriculum Documents</h2>
           <p className="setup-section-subtitle">
-            Upload course notes or references your tutor can use during lessons. (Max 10 files)
+            Provide syllabus, textbooks, or course notes to inform your virtual teaching assistant's curriculum awareness (Maximum 10 files per session).
           </p>
         </div>
 
         {isLimitReached && (
           <div className="error-banner" style={{ marginBottom: '1rem' }}>
-            You have reached the allowed limit for uploading files in a single session.
+            This session has reached the limit of 10 curriculum documents. Please remove an existing document to upload a new one.
           </div>
         )}
 
@@ -182,8 +182,8 @@ export function UploadTab({ onSkip, enqueueUpload, documents }: UploadTabProps) 
               <span className="upload-icon-wrap">
                 <FiUploadCloud />
               </span>
-              <p>Drag files here, or click to browse</p>
-              <span className="upload-formats">PDF, TXT, or MD up to 25MB</span>
+              <p>Drag reference documents here, or click to browse files</p>
+              <span className="upload-formats">Supports PDF, TXT, or MD formats up to 25MB</span>
             </div>
           ) : (
             <div className="selected-files-list" onClick={(e) => e.stopPropagation()}>
@@ -228,7 +228,7 @@ export function UploadTab({ onSkip, enqueueUpload, documents }: UploadTabProps) 
         <div className="tab-actions">
           {onSkip && (
             <button className="btn secondary" onClick={onSkip} disabled={isProcessing}>
-              Skip for now
+              Skip Document Upload
             </button>
           )}
 
@@ -237,7 +237,7 @@ export function UploadTab({ onSkip, enqueueUpload, documents }: UploadTabProps) 
             onClick={handleUpload}
             disabled={!hasFiles || isProcessing || isLimitReached}
           >
-            {isProcessing ? 'Processing...' : 'Upload & Process'}
+            {isProcessing ? 'Hashing & Analyzing...' : 'Upload Reference Materials'}
           </button>
         </div>
       </div>

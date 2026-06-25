@@ -2,15 +2,15 @@ export type Locale = 'en' | 'ar';
 
 export const QUIZ_I18N = {
   en: {
-    takeQuiz: "Take Quiz",
-    noDocuments: "Upload a document first to take a quiz",
-    loading: "Generating your quiz...",
+    takeQuiz: "Start Quiz",
+    noDocuments: "Please upload syllabus or reference materials before starting a knowledge check.",
+    loading: "Synthesizing course materials and generating quiz questions...",
     whyIsThisWrong: "Why is this wrong?",
     correct: "Correct!",
     incorrect: "Incorrect",
-    nextQuestion: "Next Question",
-    finishQuiz: "Finish Quiz",
-    score: "Your Score: {score}/{total}",
+    nextQuestion: "Proceed to Next Question",
+    finishQuiz: "Complete Knowledge Check",
+    score: "Assessment Complete: You answered {score} out of {total} questions correctly.",
   },
   ar: {
     takeQuiz: "ابدأ الاختبار",

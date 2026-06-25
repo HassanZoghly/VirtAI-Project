@@ -1,5 +1,22 @@
-import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useCallback, useEffect, useId, useRef, useState, ReactNode } from 'react';
+
+interface SlideDrawerProps {
+  title: string;
+  description?: string;
+  isOpen: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  className?: string;
+  contentClassName?: string;
+  zIndex?: number;
+  enableDrag?: boolean;
+  width?: number;
+  onWidthChange?: (width: number) => void;
+  minWidth?: number;
+  maxWidth?: number;
+  resizable?: boolean;
+}
 
 export default function SlideDrawer({
   title,
@@ -16,7 +33,7 @@ export default function SlideDrawer({
   minWidth = 250,
   maxWidth = 480,
   resizable = false,
-}) {
+}: SlideDrawerProps) {
   const drawerRef = useRef(null);
   const previousFocusRef = useRef(null);
   const [isMobile, setIsMobile] = useState(

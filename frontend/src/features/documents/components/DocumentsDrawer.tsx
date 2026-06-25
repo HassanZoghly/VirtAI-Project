@@ -13,8 +13,8 @@ interface DocumentsDrawerProps {
 export function DocumentsDrawer({ isOpen, onClose, sessionId, width, onWidthChange, resizable }: DocumentsDrawerProps) {
   return (
     <SlideDrawer
-      title="Documents"
-      description="Manage your documents"
+      title="Curricular Library"
+      description="Manage reference syllabus, textbooks, and notes for this session"
       isOpen={isOpen}
       onClose={onClose}
       contentClassName="documents-drawer-content"

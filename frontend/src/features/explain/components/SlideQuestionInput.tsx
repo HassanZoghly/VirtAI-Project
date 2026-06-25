@@ -21,13 +21,13 @@ export function SlideQuestionInput({ onQuestion, onContinue }: SlideQuestionInpu
   return (
     <div className="slide-question-container">
       <div className="slide-question-prompt">
-        <p>Any questions about this slide, or should we continue?</p>
+        <p>Pose a question about this slide content or proceed with the lecture presentation.</p>
       </div>
       <form className="slide-question-form" onSubmit={handleSubmit}>
         <input
           type="text"
           className="slide-question-input"
-          placeholder="Ask a question..."
+          placeholder="Type your academic question or inquiry..."
           value={text}
           onChange={(e) => setText(e.target.value)}
           autoFocus
@@ -48,7 +48,7 @@ export function SlideQuestionInput({ onQuestion, onContinue }: SlideQuestionInpu
           className="slide-continue-btn"
           onClick={onContinue}
         >
-          <FiPlay /> Continue to next slide
+          <FiPlay /> Advance presentation
         </button>
       </div>
     </div>

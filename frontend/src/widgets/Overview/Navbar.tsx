@@ -1,15 +1,15 @@
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
 import { FiMenu, FiX } from 'react-icons/fi';
 import { Link } from 'react-router-dom';
 
 const NAV_ITEMS = [
   { label: 'Features', target: 'features' },
-  { label: 'How It Works', target: 'how-it-works' },
   { label: 'Tech Stack', target: 'tech-stack' },
+  { label: 'FAQs', target: 'faq' },
 ];
 
-export default function Navbar({ ctaLabel, ctaTo }) {
+export default function Navbar({ ctaLabel, ctaTo }: { ctaLabel: string; ctaTo: string }) {
   const [visible, setVisible] = useState(false);
   const [activeId, setActiveId] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -18,17 +18,28 @@ export default function Navbar({ ctaLabel, ctaTo }) {
   /* show/hide based on scroll past hero */
   useEffect(() => {
     let ticking = false;
+    const scrollContainer = document.getElementById('main-scroll-container') || window;
+
     const onScroll = () => {
       if (!ticking) {
         window.requestAnimationFrame(() => {
-          setVisible(window.scrollY > window.innerHeight * 0.6);
+          const scrollTop = scrollContainer === window
+            ? window.scrollY
+            : (scrollContainer as HTMLElement).scrollTop;
+          setVisible(scrollTop > window.innerHeight * 0.6);
           ticking = false;
         });
         ticking = true;
       }
     };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+
+    const initialScrollTop = scrollContainer === window
+      ? window.scrollY
+      : (scrollContainer as HTMLElement).scrollTop;
+    setVisible(initialScrollTop > window.innerHeight * 0.6);
+
+    scrollContainer.addEventListener('scroll', onScroll, { passive: true });
+    return () => scrollContainer.removeEventListener('scroll', onScroll);
   }, []);
 
   /* highlight active section via IntersectionObserver */
@@ -68,7 +79,7 @@ export default function Navbar({ ctaLabel, ctaTo }) {
       { rootMargin: '-40% 0px -55% 0px' }
     );
 
-    const observed = new Set();
+    const observed = new Set<string>();
     const observeElements = () => {
       ids.forEach((id) => {
         if (!observed.has(id)) {
@@ -79,21 +90,35 @@ export default function Navbar({ ctaLabel, ctaTo }) {
           }
         }
       });
-      return observed.size === ids.length;
     };
 
-    let mutationObserver = null;
+    observeElements();
 
-    // Attempt to observe immediately in case they are already in DOM
-    if (!observeElements()) {
-      // If not all found, wait for them to appear
+    let mutationObserver: MutationObserver | null = null;
+    let fallbackTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    if (observed.size < ids.length) {
       mutationObserver = new MutationObserver(() => {
-        if (observeElements() && mutationObserver) {
+        observeElements();
+        if (observed.size === ids.length && mutationObserver) {
+          mutationObserver.disconnect();
+          mutationObserver = null;
+          if (fallbackTimeout) clearTimeout(fallbackTimeout);
+        }
+      });
+
+      mutationObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+
+      // Failsafe: if chunks fail to load, disconnect after 10 seconds to prevent infinite listening
+      fallbackTimeout = setTimeout(() => {
+        if (mutationObserver) {
           mutationObserver.disconnect();
           mutationObserver = null;
         }
-      });
-      mutationObserver.observe(document.body, { childList: true, subtree: true });
+      }, 10000);
     }
 
     return () => {
@@ -101,10 +126,13 @@ export default function Navbar({ ctaLabel, ctaTo }) {
       if (mutationObserver) {
         mutationObserver.disconnect();
       }
+      if (fallbackTimeout) {
+        clearTimeout(fallbackTimeout);
+      }
     };
   }, []);
 
-  const scrollTo = (id) => {
+  const scrollTo = (id: string) => {
     const el = document.getElementById(id);
     if (!el) {
       return;
@@ -115,9 +143,21 @@ export default function Navbar({ ctaLabel, ctaTo }) {
     setMobileMenuOpen(false);
 
     const offset = 80;
-    const y = el.getBoundingClientRect().top + window.scrollY - offset;
-
-    window.scrollTo({ top: y, behavior: 'smooth' });
+    const lenis = (window as any).lenis;
+    if (lenis) {
+      lenis.scrollTo(el, { offset });
+    } else {
+      const scrollContainer = document.getElementById('main-scroll-container');
+      if (scrollContainer) {
+        const elementTop = el.getBoundingClientRect().top;
+        const containerTop = scrollContainer.getBoundingClientRect().top;
+        const y = scrollContainer.scrollTop + elementTop - containerTop - offset;
+        scrollContainer.scrollTo({ top: y, behavior: 'smooth' });
+      } else {
+        const y = el.getBoundingClientRect().top + window.scrollY - offset;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+      }
+    }
 
     // Release lock after smooth scroll completes
     setTimeout(() => {
@@ -127,7 +167,17 @@ export default function Navbar({ ctaLabel, ctaTo }) {
 
   const scrollToTop = () => {
     setMobileMenuOpen(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    const lenis = (window as any).lenis;
+    if (lenis) {
+      lenis.scrollTo(0);
+    } else {
+      const scrollContainer = document.getElementById('main-scroll-container');
+      if (scrollContainer) {
+        scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
   };
 
   return (
@@ -149,10 +199,7 @@ export default function Navbar({ ctaLabel, ctaTo }) {
               aria-label="VirtAI — Scroll to top"
               className="flex shrink-0 cursor-pointer items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark rounded-lg"
             >
-              <span
-                className="text-lg font-semibold tracking-wide text-offwhite"
-                style={{ fontFamily: 'var(--font-display)' }}
-              >
+              <span className="text-lg font-semibold tracking-wide text-offwhite font-display">
                 VirtAI
               </span>
             </button>
@@ -168,9 +215,8 @@ export default function Navbar({ ctaLabel, ctaTo }) {
                         e.preventDefault();
                         scrollTo(target);
                       }}
-                      className="relative block cursor-pointer px-1 py-2 text-sm font-medium tracking-wide transition-colors duration-200"
+                      className="relative block cursor-pointer px-1 py-2 text-sm font-medium tracking-wide transition-colors duration-200 font-display focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark rounded-md"
                       style={{
-                        fontFamily: 'var(--font-display)',
                         color: activeId === target ? '#B4AB8B' : '#f5f1ec',
                       }}
                     >
@@ -190,8 +236,7 @@ export default function Navbar({ ctaLabel, ctaTo }) {
               {/* Primary CTA Button */}
               <Link
                 to={ctaTo}
-                className="inline-flex cursor-pointer items-center justify-center rounded-full bg-offwhite px-5 py-2 text-sm font-semibold tracking-wide text-dark transition-transform duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark"
-                style={{ fontFamily: 'var(--font-display)' }}
+                className="inline-flex cursor-pointer items-center justify-center rounded-full bg-gold px-5 py-2 text-sm font-semibold tracking-wide text-dark transition-[background-color,transform,box-shadow] duration-200 hover:bg-gold-soft hover:scale-[1.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark font-display"
               >
                 {ctaLabel}
               </Link>
@@ -201,7 +246,7 @@ export default function Navbar({ ctaLabel, ctaTo }) {
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
-              className="md:hidden w-10 h-10 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark"
+              className="md:hidden w-12 h-12 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark"
             >
               {mobileMenuOpen ? (
                 <FiX className="w-6 h-6 text-offwhite" />
@@ -244,11 +289,10 @@ export default function Navbar({ ctaLabel, ctaTo }) {
                       <button
                         key={target}
                         onClick={() => scrollTo(target)}
-                        className={`text-left px-4 py-3 rounded-lg font-medium transition-colors ${activeId === target
+                        className={`text-left px-4 py-3 rounded-lg font-medium transition-colors font-display focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark ${activeId === target
                           ? 'bg-gold/15 text-gold font-semibold'
                           : 'text-offwhite/80 hover:bg-white/10'
                           }`}
-                        style={{ fontFamily: 'var(--font-display)' }}
                       >
                         {label}
                       </button>
@@ -259,8 +303,7 @@ export default function Navbar({ ctaLabel, ctaTo }) {
                   <div className="p-6 border-t border-white/10">
                     <Link
                       to={ctaTo}
-                      className="inline-flex w-full cursor-pointer items-center justify-center rounded-full bg-offwhite px-6 py-3 text-sm font-semibold tracking-wide text-dark transition-transform duration-200 hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark"
-                      style={{ fontFamily: 'var(--font-display)' }}
+                      className="inline-flex w-full cursor-pointer items-center justify-center rounded-full bg-gold px-6 py-3 text-sm font-semibold tracking-wide text-dark transition-[background-color,transform,box-shadow] duration-200 hover:bg-gold-soft hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/70 focus-visible:ring-offset-2 focus-visible:ring-offset-dark font-display"
                     >
                       {ctaLabel}
                     </Link>

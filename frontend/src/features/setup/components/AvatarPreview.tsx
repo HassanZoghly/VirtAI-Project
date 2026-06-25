@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { HiOutlineUser, HiPlay, HiStop } from 'react-icons/hi2';
 import SoundWaveAnimation from './SoundWaveAnimation';
 
@@ -58,21 +58,23 @@ export default function AvatarPreview({
         {isPlaying && <SoundWaveAnimation active={isPlaying} />}
       </div>
 
-      <AnimatePresence mode="wait">
-        {avatar && (
-          <motion.span
-            key={avatar.id}
-            className="preview-name"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            {avatar.name}
-          </motion.span>
-        )}
-      </AnimatePresence>
+      <div className="preview-info">
+        <AnimatePresence mode="wait">
+          {avatar && (
+            <motion.span
+              key={avatar.id}
+              className="preview-name"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              {avatar.name}
+            </motion.span>
+          )}
+        </AnimatePresence>
 
-      {voice && <span className="preview-voice">Voice: {voice.name}</span>}
+        {voice && <span className="preview-voice">Voice: {voice.name}</span>}
+      </div>
 
       <div className="preview-actions">
         <button

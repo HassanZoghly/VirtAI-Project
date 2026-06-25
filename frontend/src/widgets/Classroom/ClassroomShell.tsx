@@ -18,6 +18,7 @@ import { useClassroomAudio } from './hooks/useClassroomAudio';
 import { useClassroomChat } from './hooks/useClassroomChat';
 import { useClassroomState } from './hooks/useClassroomState';
 import { WSContext } from '@/core/realtime/WSContext';
+import { FiMonitor, FiShare2, FiEdit3, FiMessageSquare } from 'react-icons/fi';
 
 export interface AudioVisemePacket {
   id: string;
@@ -292,8 +293,17 @@ export default function ClassroomShell() {
 
   if (status === 'error') {
     return (
-      <div className="flex items-center justify-center h-screen bg-[#0D0D0D] text-red-500 text-lg">
-        Failed to load sessions. Please refresh the page.
+      <div className="flex flex-col items-center justify-center h-screen bg-[#0A0908] text-white p-6 text-center">
+        <h2 className="text-xl font-bold text-crimson-glow mb-2">Classroom Session Load Failure</h2>
+        <p className="text-offwhite/70 max-w-md mb-6 text-sm">
+          We encountered an issue retrieving your academic sessions. This may be due to a temporary network disruption or an expired security token.
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-6 py-2.5 rounded-full bg-gold text-[#0A0908] font-semibold text-sm hover:bg-gold-soft hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer shadow-lg"
+        >
+          Reload Classroom
+        </button>
       </div>
     );
   }
@@ -345,8 +355,8 @@ export default function ClassroomShell() {
 
         {/* Main Content Area */}
         <div
-          className="flex flex-col flex-1 gap-3 p-3 lg:p-4 lg:gap-3 relative"
-          style={{ marginRight: isSidebarOpen ? `${sidebarWidth}px` : '0' }}
+          className="flex flex-col flex-1 gap-3 p-3 lg:p-4 lg:gap-3 relative overflow-hidden"
+          style={{ marginRight: isSidebarOpen && (typeof window !== 'undefined' && window.innerWidth >= 1024) ? `${sidebarWidth}px` : '0' }}
         >
 
           {/* Top Navbar */}
@@ -360,13 +370,14 @@ export default function ClassroomShell() {
             hasMessages={currentSession?.messages?.length ? currentSession.messages.length > 0 : false}
             onGenerateDiagram={handleGenerateDiagram}
             onStartExplain={handleStartExplain}
+            onOpenSettings={openSettings}
           />
 
-          {/* The Two Distinct Containers */}
-          <div className="flex flex-row w-full flex-1 min-h-0 gap-3">
+          {/* Desktop Content Layout (lg screens and up) */}
+          <div className="hidden lg:flex flex-row w-full flex-1 min-h-0 gap-3">
 
             {/* Avatar Panel (Left) */}
-            <div className="flex-[3] min-w-0 min-h-0 rounded-3xl bg-[#1A1A1A] relative overflow-hidden flex items-center justify-center">
+            <div className="flex-[3] min-w-0 min-h-0 rounded-2xl bg-[#1A1A1A] relative overflow-hidden flex items-center justify-center">
               <AvatarCanvasWrapper
                 avatarId={activeAvatarId}
                 pipelineState={conversationState.pipelineState}
@@ -380,7 +391,7 @@ export default function ClassroomShell() {
             </div>
 
             {/* Chat Panel (Right) */}
-            <div className="flex-[7] min-w-0 min-h-0 rounded-3xl bg-[#1A1A1A] flex flex-col">
+            <div className="flex-[7] min-w-0 min-h-0 rounded-2xl bg-[#1A1A1A] flex flex-col overflow-hidden">
               {isExplainActive ? (
                 <div className="flex-1 overflow-y-auto">
                   <ExplainSession
@@ -446,6 +457,149 @@ export default function ClassroomShell() {
             </div>
 
           </div>
+
+          {/* Mobile Content Layout (sm/md screens: hidden on lg) */}
+          <div className="flex lg:hidden flex-col w-full flex-1 min-h-0 gap-3 pb-16">
+
+            {/* Avatar Container: exactly 40% of available height */}
+            <div className="h-[40%] min-h-0 rounded-2xl bg-[#1A1A1A] relative overflow-hidden flex items-center justify-center">
+              <AvatarCanvasWrapper
+                avatarId={activeAvatarId}
+                pipelineState={conversationState.pipelineState}
+                movementEnabled={movementEnabled}
+                mouthCuesRef={mouthCuesRef}
+                getAudioContext={getAudioContext}
+                playbackStartTimeRef={playbackStartTimeRef}
+                getIsAudioPlaying={getIsAudioPlaying}
+                getNextPlaybackTime={getNextPlaybackTime}
+              />
+            </div>
+
+            {/* Chat Container: remaining 60% height */}
+            <div className="h-[60%] min-h-0 rounded-2xl bg-[#1A1A1A] flex flex-col overflow-hidden relative">
+              {isExplainActive ? (
+                <div className="flex-1 overflow-y-auto">
+                  <ExplainSession
+                    documentId={documents[0].id}
+                    currentState={explainState}
+                    currentSlide={explainSlide}
+                    totalSlides={explainTotalSlides}
+                    content={explainContent}
+                    onQuestion={(text) => {
+                      explainSendQuestion(text);
+                      setExplainContent(prev => prev + `\n\n**You:** ${text}\n\n`);
+                      resetAvatarAudio();
+                    }}
+                    onContinue={() => {
+                      explainSendContinue();
+                      resetAvatarAudio();
+                    }}
+                    onPauseOrStop={() => {
+                      explainSendPauseOrStop();
+                      resetAvatarAudio();
+                    }}
+                    onClose={() => {
+                      setIsExplainActive(false);
+                      explainDisconnect();
+                      resetAvatarAudio();
+                    }}
+                  />
+                </div>
+              ) : isDiagramOpen ? (
+                <DiagramContainer
+                  isOpen={isDiagramOpen}
+                  onClose={() => setIsDiagramOpen(false)}
+                  sessionId={currentSessionId}
+                />
+              ) : (
+                <>
+                  <MessageList
+                    messages={currentSession?.messages || []}
+                    currentMessage={conversationState.currentMessage}
+                    interimTranscript={interimTranscript}
+                    error={conversationState.error}
+                    avatarName={avatarName}
+                    chatScrollRef={chatScrollRef}
+                    messagesEndRef={messagesEndRef}
+                    onScroll={handleChatScroll}
+                    pipelineState={conversationState.pipelineState}
+                  />
+                  <div className="mt-auto">
+                    <ChatInput
+                      inputValue={inputValue}
+                      onInputChange={setInputValue}
+                      onSend={handleSendMessage}
+                      onKeyDown={onKeyDown}
+                      textareaRef={textareaRef}
+                      pipelineState={conversationState.pipelineState}
+                      onToggleDocuments={toggleDocuments}
+                      onBeforeVoiceStart={ensureVoiceSession}
+                      onStop={handleStop}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+          </div>
+
+          {/* Fixed Bottom Navigation Bar (Mobile Only) */}
+          <div className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-[#0A0908]/95 backdrop-blur-md border-t border-gold/15 flex items-center justify-around px-4 z-50">
+            {/* Chat Tab */}
+            <button
+              onClick={() => {
+                setIsExplainActive(false);
+                setIsDiagramOpen(false);
+              }}
+              className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 cursor-pointer transition-colors duration-200 ${
+                (!isExplainActive && !isDiagramOpen)
+                  ? 'text-gold'
+                  : 'text-gray-400 active:text-white'
+              }`}
+            >
+              <FiMessageSquare size={20} />
+              <span className="text-[10px] font-semibold tracking-wide font-sans">Chat</span>
+            </button>
+
+            {/* Explain Tab */}
+            <button
+              onClick={handleStartExplain}
+              disabled={!documents.length}
+              className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 cursor-pointer transition-colors duration-200 disabled:opacity-30 disabled:cursor-not-allowed ${
+                isExplainActive
+                  ? 'text-gold font-bold'
+                  : 'text-gray-400 active:text-white'
+              }`}
+            >
+              <FiMonitor size={20} />
+              <span className="text-[10px] font-semibold tracking-wide font-sans">Explain</span>
+            </button>
+
+            {/* Diagram Tab */}
+            <button
+              onClick={handleGenerateDiagram}
+              disabled={!documents.length}
+              className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 cursor-pointer transition-colors duration-200 disabled:opacity-30 disabled:cursor-not-allowed ${
+                isDiagramOpen
+                  ? 'text-gold font-bold'
+                  : 'text-gray-400 active:text-white'
+              }`}
+            >
+              <FiShare2 size={20} />
+              <span className="text-[10px] font-semibold tracking-wide font-sans">Diagram</span>
+            </button>
+
+            {/* Quiz Tab */}
+            <button
+              onClick={() => navigate('/quiz')}
+              disabled={!documents.length}
+              className="flex flex-col items-center justify-center gap-1 flex-1 py-1 cursor-pointer text-gray-400 active:text-white transition-colors duration-200 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <FiEdit3 size={20} />
+              <span className="text-[10px] font-semibold tracking-wide font-sans">Quiz</span>
+            </button>
+          </div>
+
         </div>
       </div>
     </WSContext.Provider>

@@ -19,10 +19,14 @@ export function ClassroomLeftRail({ className }: ClassroomLeftRailProps) {
     }
   };
 
+  const isClassroomActive = location.pathname.startsWith('/classroom');
+  const isSetupActive = location.pathname.startsWith('/setup');
+  const isHelpActive = location.pathname.startsWith('/help');
+
   return (
-    <div className={`w-16 min-w-[4rem] max-w-[4rem] flex-shrink-0 sticky top-0 h-screen flex flex-col items-center gap-6 pt-6 pb-6 bg-[#0D0D0D] border-r border-white/10 z-[100] ${className || ''}`}>
+    <div className={`hidden lg:flex w-16 min-w-[4rem] max-w-[4rem] flex-shrink-0 sticky top-0 h-screen flex-col items-center gap-6 pt-6 pb-6 bg-[#0A0908] border-r border-gold/15 z-[100] ${className || ''}`}>
       <button 
-        className="p-3 flex items-center justify-center rounded-xl bg-transparent hover:bg-white/10 text-white/70 hover:text-white transition-colors duration-300"
+        className={`p-3 flex items-center justify-center rounded-xl transition-all duration-300 ${isClassroomActive ? 'bg-gold/10 text-gold shadow-[0_0_12px_rgba(180,171,139,0.1)]' : 'bg-transparent text-white/50 hover:bg-gold/5 hover:text-gold-soft'}`}
         onClick={handleSessionsClick}
         aria-label="Open sessions drawer"
         title="Chats"
@@ -31,7 +35,7 @@ export function ClassroomLeftRail({ className }: ClassroomLeftRailProps) {
       </button>
 
       <button 
-        className="p-3 flex items-center justify-center rounded-xl bg-transparent hover:bg-white/10 text-white/70 hover:text-white transition-colors duration-300"
+        className={`p-3 flex items-center justify-center rounded-xl transition-all duration-300 ${isSetupActive ? 'bg-gold/10 text-gold shadow-[0_0_12px_rgba(180,171,139,0.1)]' : 'bg-transparent text-white/50 hover:bg-gold/5 hover:text-gold-soft'}`}
         onClick={() => navigate('/setup')}
         aria-label="Go to setup"
         title="Setup Profile"
@@ -40,7 +44,7 @@ export function ClassroomLeftRail({ className }: ClassroomLeftRailProps) {
       </button>
 
       <button
-        className="p-3 flex items-center justify-center rounded-xl bg-transparent hover:bg-white/10 text-white/70 hover:text-white transition-colors duration-300 mt-auto"
+        className={`p-3 flex items-center justify-center rounded-xl transition-all duration-300 mt-auto ${isHelpActive ? 'bg-gold/10 text-gold shadow-[0_0_12px_rgba(180,171,139,0.1)]' : 'bg-transparent text-white/50 hover:bg-gold/5 hover:text-gold-soft'}`}
         onClick={() => navigate('/help')}
         aria-label="Feature Tour"
         title="Help & Tour"

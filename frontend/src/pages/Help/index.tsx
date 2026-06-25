@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FeatureCard, Feature } from './FeatureCard';
 import { FiChevronLeft, FiChevronRight, FiArrowLeft } from 'react-icons/fi';
+import { motion, AnimatePresence } from 'framer-motion';
+import useReducedMotionPreference from '@/features/overview/hooks/useReducedMotionPreference';
 import styles from './Help.module.css';
 
 const features: Feature[] = [
@@ -16,12 +18,16 @@ const features: Feature[] = [
 export default function HelpPage() {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
+  const [direction, setDirection] = useState(1);
+  const shouldReduceMotion = useReducedMotionPreference();
 
   const handleNext = () => {
+    setDirection(1);
     setCurrentStep((prev) => Math.min(prev + 1, features.length - 1));
   };
 
   const handlePrev = () => {
+    setDirection(-1);
     setCurrentStep((prev) => Math.max(prev - 1, 0));
   };
 
@@ -38,10 +44,33 @@ export default function HelpPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  const slideVariants = {
+    enter: (d) => ({
+      x: shouldReduceMotion ? 0 : d > 0 ? 50 : -50,
+      opacity: 0
+    }),
+    center: {
+      x: 0,
+      opacity: 1,
+      transition: {
+        duration: shouldReduceMotion ? 0.01 : 0.35,
+        ease: [0.16, 1, 0.3, 1] as const, // easeOutExpo
+      }
+    },
+    exit: (d) => ({
+      x: shouldReduceMotion ? 0 : d > 0 ? -50 : 50,
+      opacity: 0,
+      transition: {
+        duration: shouldReduceMotion ? 0.01 : 0.25,
+        ease: [0.16, 1, 0.3, 1] as const, // easeOutExpo
+      }
+    })
+  };
+
   return (
-    <div className="classroom-shell" style={{ width: '100%', height: '100%', display: 'flex', backgroundColor: 'var(--bg-primary, #111111)', position: 'relative' }}>
+    <div className="classroom-shell w-full h-full flex bg-dark relative">
       
-      <div style={{ position: 'relative', flex: 1, display: 'flex' }}>
+      <div className="relative flex-1 flex">
         
         <button 
           className={styles.backBtn}
@@ -51,16 +80,30 @@ export default function HelpPage() {
           <FiArrowLeft /> Back to classroom
         </button>
 
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflowY: 'auto' }}>
+        <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-8 overflow-y-auto">
           <div className={styles.helpContainer}>
             <div className={styles.helpHeader}>
-              <h1 className={styles.helpTitle}>Features Tour</h1>
+              <h1 className={`${styles.helpTitle} font-display`}>
+                <span className="text-gold">Features</span> Tour
+              </h1>
               <p className={styles.helpTagline}>Discover what you can do with VirtAI</p>
             </div>
             
             <div className={styles.contentRow}>
-              <div className={styles.featureCardWrapper} key={currentStep}>
-                <FeatureCard feature={features[currentStep]} />
+              <div className="flex-1 overflow-hidden min-h-[460px] flex items-center">
+                <AnimatePresence mode="wait" custom={direction}>
+                  <motion.div
+                    key={currentStep}
+                    custom={direction}
+                    variants={slideVariants}
+                    initial="enter"
+                    animate="center"
+                    exit="exit"
+                    className={styles.featureCardWrapper}
+                  >
+                    <FeatureCard feature={features[currentStep]} />
+                  </motion.div>
+                </AnimatePresence>
               </div>
               
               <div className={styles.navControls}>

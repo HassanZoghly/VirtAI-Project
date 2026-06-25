@@ -31,17 +31,17 @@ export default function NotFound() {
             {animationData && <Lottie animationData={animationData} loop autoplay />}
           </div>
 
-          <p className="notfound-title">Lost in Space</p>
+          <p className="notfound-title">Resource Not Found</p>
           <p className="notfound-text">
-            The page you&apos;re looking for doesn&apos;t exist or has been moved.
+            The academic resource or route you requested could not be resolved. It may have been relocated or your session may have expired.
           </p>
 
           <div className="notfound-actions">
             <button className="notfound-btn primary" onClick={() => navigate('/')}>
-              Go Home
+              Return to Dashboard
             </button>
             <button className="notfound-btn secondary" onClick={() => navigate(-1)}>
-              Go Back
+              Return to Previous Page
             </button>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { avatarImages } from '@/features/avatar/data/avatars';
 import SelectionCheckmark from '@/shared/components/SelectionCheckmark';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import React, { memo } from 'react';
 
 const avatarList = Object.values(avatarImages);
@@ -22,8 +22,8 @@ export interface AvatarTabProps {
 const AvatarTab = memo(function AvatarTab({ selected, onSelect }: AvatarTabProps) {
   return (
     <div>
-      <h2 className="setup-section-title">Choose Your Avatar</h2>
-      <p className="setup-section-subtitle">Select the avatar that will be your AI assistant</p>
+      <h2 className="setup-section-title">Select Teaching Assistant Profile</h2>
+      <p className="setup-section-subtitle">Choose the visual representation of your virtual classroom teaching assistant.</p>
 
       <div className="avatar-grid" role="radiogroup" aria-label="Avatars">
         {avatarList.map((avatar, idx) => {

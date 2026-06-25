@@ -54,12 +54,12 @@ export default function ChatInput({
   // UI status mappings for dynamic reactivity
   const { placeholderText, isInputDisabled } = useMemo(() => {
     if (stateGroup === 'ready') {
-      return { placeholderText: 'Type your message...', isInputDisabled: false };
+      return { placeholderText: 'Ask a question or input a curricular topic...', isInputDisabled: false };
     }
     if (stateGroup === 'connecting') {
-      return { placeholderText: 'Connecting to server...', isInputDisabled: true };
+      return { placeholderText: 'Connecting to VirtAI teaching assistant...', isInputDisabled: true };
     }
-    return { placeholderText: 'Offline (Please reconnect)...', isInputDisabled: true };
+    return { placeholderText: 'Session disconnected (Please reconnect to resume)...', isInputDisabled: true };
   }, [stateGroup]);
 
   useEffect(() => {
@@ -108,13 +108,13 @@ export default function ChatInput({
           />
           <button
             className="w-[52px] h-[52px] rounded-full bg-[#1e1e1e] hover:bg-[#2a2a2a] flex items-center justify-center transition-colors text-white/70 hover:text-white"
-            title="Manage Knowledge Base"
+            title="Manage Curricular Reference Library"
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onToggleDocuments();
             }}
-            aria-label="Manage Knowledge Base"
+            aria-label="Manage Curricular Reference Library"
           >
             <PiPaperclip size={22} />
           </button>
@@ -140,9 +140,9 @@ export default function ChatInput({
             <button
               className="w-10 h-10 rounded-full flex items-center justify-center bg-red-500/90 text-white self-end mb-0.5 hover:bg-red-500 transition-all animate-pulse"
               onClick={onStop}
-              title="Stop Generating"
+              title="Halt Generation"
               type="button"
-              aria-label="Stop generation"
+              aria-label="Halt generation"
             >
               <FiSquare fill="currentColor" size={16} />
             </button>
@@ -150,8 +150,8 @@ export default function ChatInput({
             <button
               className="w-10 h-10 rounded-full flex items-center justify-center bg-[#cda473] text-white self-end mb-0.5 hover:bg-[#b89163] transition-colors disabled:opacity-50 disabled:bg-white/10 disabled:text-white/30"
               onClick={onSend}
-              title="Send message"
-              aria-label="Send message"
+              title="Submit inquiry"
+              aria-label="Submit inquiry"
               type="button"
               disabled={isInputDisabled || !inputValue.trim()}
             >

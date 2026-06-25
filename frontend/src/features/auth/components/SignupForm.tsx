@@ -1,6 +1,6 @@
 import { useSignup } from '@/features/auth/hooks/useAuth';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import GoogleAuthButton from './GoogleAuthButton';
@@ -11,20 +11,20 @@ const signupSchema = z
   .object({
     fullName: z
       .string()
-      .min(2, 'Name must be at least 2 characters')
+      .min(2, 'Please enter your full name (minimum 2 characters)')
       .regex(/^[a-zA-Z\s'-]+$/, 'Name can only contain letters, spaces, hyphens, and apostrophes'),
-    email: z.string().min(1, 'Email is required').email('Please enter a valid email'),
+    email: z.string().min(1, 'Please enter your institutional email address').email('Please enter a valid email address (e.g., name@university.edu)'),
     password: z
       .string()
-      .min(8, 'Password must be at least 8 characters')
-      .regex(/[A-Z]/, 'Password must contain an uppercase letter')
-      .regex(/[a-z]/, 'Password must contain a lowercase letter')
-      .regex(/[0-9]/, 'Password must contain a number')
-      .regex(/[^A-Za-z0-9]/, 'Password must contain a special character'),
-    confirmPassword: z.string().min(1, 'Please confirm your password'),
+      .min(8, 'Password must be at least 8 characters long')
+      .regex(/[A-Z]/, 'Include at least one uppercase letter (A-Z)')
+      .regex(/[a-z]/, 'Include at least one lowercase letter (a-z)')
+      .regex(/[0-9]/, 'Include at least one numerical digit (0-9)')
+      .regex(/[^A-Za-z0-9]/, 'Include at least one special character (e.g., !@#$%)'),
+    confirmPassword: z.string().min(1, 'Please re-type your password to confirm'),
   })
   .refine((data) => data.password === data.confirmPassword, {
-    message: 'Passwords do not match',
+    message: 'The passwords you entered do not match. Please verify and try again.',
     path: ['confirmPassword'],
   });
 
@@ -72,7 +72,7 @@ export default function SignupForm({ onToggleMode }: SignupFormProps) {
             id="fullName"
             type="text"
             autoComplete="name"
-            placeholder="Eren Yeager"
+            placeholder="Dr. Sarah Jenkins"
             disabled={isLoading}
             {...register('fullName')}
             className={inputClass}
@@ -85,9 +85,9 @@ export default function SignupForm({ onToggleMode }: SignupFormProps) {
         {/* Email */}
         <div>
           <label htmlFor="signup-email" className={labelClass}>
-            Work email
+            Institutional email
           </label>
-          <input id="signup-email" type="email" autoComplete="email" placeholder="you@example.com" disabled={isLoading} {...register('email')} className={inputClass} />
+          <input id="signup-email" type="email" autoComplete="email" placeholder="you@institution.edu" disabled={isLoading} {...register('email')} className={inputClass} />
           {errors.email && <p className="mt-1.5 text-xs font-medium text-(--error)">{errors.email.message}</p>}
         </div>
 
@@ -137,10 +137,10 @@ export default function SignupForm({ onToggleMode }: SignupFormProps) {
           {isLoading ? (
             <span className="flex items-center justify-center gap-2">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-current/30 border-t-current" />
-              Creating account…
+              Registering Account…
             </span>
           ) : (
-            'Create account'
+            'Register Academic Account'
           )}
         </button>
       </form>

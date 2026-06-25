@@ -1,5 +1,5 @@
 import PageLoader from '@/shared/components/PageLoader';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link, useNavigate } from 'react-router-dom';
@@ -35,7 +35,7 @@ export default function AuthPage() {
         <title>{mode === 'login' ? 'Sign In' : 'Create Account'} — VirtAI</title>
       </Helmet>
 
-      <div className="flex min-h-screen w-full flex-col items-center justify-center bg-dark p-4 sm:p-6">
+      <div className="flex min-h-screen w-full flex-col items-center justify-center bg-black/60 bg-blend-overlay bg-[url('/assets/images/background.webp')] bg-cover bg-center bg-no-repeat p-4 sm:p-6">
         {/* VirtAI Logo */}
         <div className="absolute left-6 top-6 sm:left-10 sm:top-10">
           <Link
@@ -51,7 +51,7 @@ export default function AuthPage() {
           initial={{ opacity: 0, y: 20, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.4, ease: 'easeOut' }}
-          className="relative z-20 w-full max-w-[420px] rounded-2xl border border-white/10 bg-card-bg p-8 shadow-lg sm:p-10"
+          className="relative z-20 w-full max-w-[420px] rounded-2xl border border-white/10 bg-[#0A0908]/90 backdrop-blur-md p-8 shadow-lg sm:p-10"
         >
           <div className="mb-8 text-center">
             <h1 className="text-2xl font-bold text-offwhite font-display">

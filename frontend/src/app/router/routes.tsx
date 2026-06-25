@@ -59,31 +59,25 @@ export default function AppRoutes() {
       {/* Protected routes wrapped in AppLayout */}
       <Route element={
         <RequireAuth>
-          <AppLayout />
+          <RequireSetupComplete>
+            <AppLayout />
+          </RequireSetupComplete>
         </RequireAuth>
       }>
         <Route path="/" element={
-          <RequireSetupComplete>
-            <RouteErrorBoundary><Overview /></RouteErrorBoundary>
-          </RequireSetupComplete>
+          <RouteErrorBoundary><Overview /></RouteErrorBoundary>
         } />
         <Route path="/setup" element={
           <RouteErrorBoundary><Setup /></RouteErrorBoundary>
         } />
         <Route path="/classroom/:sessionId?" element={
-          <RequireSetupComplete>
-            <RouteErrorBoundary><Classroom /></RouteErrorBoundary>
-          </RequireSetupComplete>
+          <RouteErrorBoundary><Classroom /></RouteErrorBoundary>
         } />
         <Route path="/quiz" element={
-          <RequireSetupComplete>
-            <RouteErrorBoundary><Quiz /></RouteErrorBoundary>
-          </RequireSetupComplete>
+          <RouteErrorBoundary><Quiz /></RouteErrorBoundary>
         } />
         <Route path="/help" element={
-          <RequireSetupComplete>
-            <RouteErrorBoundary><Help /></RouteErrorBoundary>
-          </RequireSetupComplete>
+          <RouteErrorBoundary><Help /></RouteErrorBoundary>
         } />
       </Route>
 

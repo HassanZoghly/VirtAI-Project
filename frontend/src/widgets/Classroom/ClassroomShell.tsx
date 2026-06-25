@@ -1,0 +1,581 @@
+import { ChatInput, MessageList } from '@/features/chat';
+import { DiagramContainer } from '@/features/diagrams/components/DiagramContainer';
+import { DocumentsDrawer } from '@/features/documents/components/DocumentsDrawer';
+import { useDocumentList } from '@/features/documents/useDocumentList';
+import { ExplainSession } from '@/features/explain/components/ExplainSession';
+import { PresentationState, useExplainWS } from '@/features/explain/hooks/useExplainWS';
+import { SettingsDrawer, useSessionManager } from '@/features/session';
+import { PCMRecorder } from '@/features/voice/audio/pcmRecorder';
+import { toast } from '@/shared/utils/toast';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Helmet } from 'react-helmet-async';
+import { useNavigate, useParams } from 'react-router-dom';
+import { z } from 'zod';
+import { AssistantPanel } from './AssistantPanel';
+import { AvatarCanvasWrapper } from './AvatarCanvasWrapper';
+import { AvatarTopBar } from './AvatarTopBar';
+import { SCROLL_STICK_THRESHOLD_PX } from './constants';
+import { useClassroomAudio } from './hooks/useClassroomAudio';
+import { useClassroomChat } from './hooks/useClassroomChat';
+import { useClassroomState } from './hooks/useClassroomState';
+import { WSContext } from '@/core/realtime/WSContext';
+import { FiMonitor, FiShare2, FiEdit3, FiMessageSquare } from 'react-icons/fi';
+import { ErrorState } from '@/shared/components/UIStates';
+
+export interface AudioVisemePacket {
+  id: string;
+  url: string;
+  mouthCues: Viseme[];
+}
+
+export const VisemeSchema = z.object({
+  start: z.number().catch(0),
+  end: z.number().catch(0),
+  value: z.string().catch(''),
+}).passthrough();
+
+export type Viseme = z.infer<typeof VisemeSchema>;
+
+export interface PendingFirstMessage {
+  message_id: string;
+  text: string;
+}
+
+export const WSPayloadSchema = z.object({
+  session_id: z.string().optional(),
+  message_id: z.string().optional(),
+  text: z.string().optional(),
+  created_at: z.union([z.string(), z.number()]).nullable().optional(),
+  delta: z.string().optional(),
+  is_final: z.boolean().optional(),
+  audio: z.object({
+    url: z.string().optional(),
+    duration_ms: z.number().optional()
+  }).passthrough().optional(),
+  mouthCues: z.array(VisemeSchema).optional(),
+  message: z.string().optional(),
+  state: z.enum(['idle', 'thinking', 'speaking', 'error']).optional(),
+}).passthrough();
+
+export type WSPayload = z.infer<typeof WSPayloadSchema>;
+
+export default function ClassroomShell() {
+  const { sessionId: urlSessionId } = useParams();
+  const navigate = useNavigate();
+
+  const {
+    activeAvatarId,
+    activeVoiceId,
+    movementEnabled,
+    avatarName,
+    isSettingsOpen,
+    isDocumentsOpen,
+    sidebarWidth,
+    setSidebarWidth,
+    openSettings,
+    closeSettings,
+    toggleDocuments,
+  } = useClassroomState();
+
+  const session = useSessionManager(urlSessionId, navigate);
+  const currentSessionId = session.currentSessionId;
+  const currentSession = session.currentSession;
+  const status = session.status;
+
+  const { documents } = useDocumentList(currentSessionId);
+  const [isDiagramOpen, setIsDiagramOpen] = useState(false);
+
+  const handleGenerateDiagram = () => {
+    setIsDiagramOpen(true);
+  };
+
+  const {
+    mouthCuesRef,
+    getAudioContext,
+    playbackStartTimeRef,
+    handleTtsReady,
+    handleVisemesReady,
+    forceAdvanceSequence,
+    resetAvatarAudio,
+    getIsAudioPlaying,
+    getNextPlaybackTime
+  } = useClassroomAudio();
+
+  const [isExplainActive, setIsExplainActive] = useState(false);
+  const [explainContent, setExplainContent] = useState('');
+  const [explainState, setExplainState] = useState<PresentationState>('EXPLAINING');
+  const [explainSlide, setExplainSlide] = useState(0);
+  const [explainTotalSlides, setExplainTotalSlides] = useState(0);
+
+  const {
+    isConnected: isExplainConnected,
+    sendQuestion: explainSendQuestion,
+    sendContinue: explainSendContinue,
+    sendPauseOrStop: explainSendPauseOrStop,
+    disconnect: explainDisconnect
+  } = useExplainWS({
+    documentId: isExplainActive && documents.length > 0 ? documents[0].id : null,
+    onTokens: (tokens) => {
+      setExplainContent(prev => prev + tokens);
+    },
+    onStateChange: (state) => {
+      setExplainState(state);
+    },
+    onSlideChange: (index, total) => {
+      setExplainSlide(index);
+      setExplainTotalSlides(total);
+      setExplainContent('');
+    },
+    onEnd: () => {
+      setIsExplainActive(false);
+    }
+  });
+
+  const handleStartExplain = useCallback(() => {
+    setIsExplainActive(true);
+    setExplainContent('');
+  }, []);
+
+  const {
+    conversationState,
+    connectionState,
+    isConnected,
+    reconnect,
+    reconnectError,
+    disconnect,
+    safeSend,
+    commitAndSend,
+    inputValue,
+    setInputValue,
+    interimTranscript,
+    onMessage,
+    wsClient
+  } = useClassroomChat({
+    wsAvatarId: activeAvatarId,
+    activeVoiceId,
+    session,
+    onTtsReady: handleTtsReady,
+    onVisemesReady: handleVisemesReady as any,
+    forceAdvanceSequence,
+    resetAvatarAudio,
+    getAudioContext
+  });
+
+  const handleClearAllSessions = useCallback(async () => {
+    disconnect();
+    await session.clearAllSessions();
+  }, [disconnect, session]);
+
+  const handleDeleteSession = useCallback(async (sessionId: string) => {
+    if (sessionId === currentSessionId) {
+      disconnect();
+    }
+    await session.deleteSession(sessionId);
+  }, [disconnect, session, currentSessionId]);
+
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const shouldStickToBottom = useRef<boolean>(true);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const scrollPositionsRef = useRef<Map<string | null, number>>(new Map());
+  const prevSessionIdRef = useRef<string | null>(currentSessionId);
+  const isCreatingSessionRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    const prevId = prevSessionIdRef.current;
+    const nextId = currentSessionId;
+    if (prevId !== nextId) {
+      resetAvatarAudio();
+
+      if (chatScrollRef.current) {
+        scrollPositionsRef.current.set(prevId, chatScrollRef.current.scrollTop);
+      }
+      requestAnimationFrame(() => {
+        const saved = scrollPositionsRef.current.get(nextId);
+        if (chatScrollRef.current && saved !== null && saved !== undefined) {
+          chatScrollRef.current.scrollTop = saved;
+          shouldStickToBottom.current = false;
+        } else {
+          shouldStickToBottom.current = true;
+        }
+      });
+      prevSessionIdRef.current = nextId;
+    }
+  }, [currentSessionId, resetAvatarAudio]);
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleOpenSessions = () => openSettings();
+    window.addEventListener('open-sessions', handleOpenSessions);
+    return () => window.removeEventListener('open-sessions', handleOpenSessions);
+  }, [openSettings]);
+
+  const handleChatScroll = useCallback(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    shouldStickToBottom.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight <= SCROLL_STICK_THRESHOLD_PX;
+  }, []);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [currentSession?.messages, conversationState.currentMessage, interimTranscript]);
+
+  const handleStop = useCallback(() => {
+    safeSend({
+      type: 'chat.abort',
+      data: {
+        session_id: currentSessionId || undefined,
+        message_id: conversationState.activeMessageId || undefined
+      }
+    });
+    resetAvatarAudio(conversationState.activeMessageId);
+  }, [safeSend, resetAvatarAudio, currentSessionId, conversationState.activeMessageId]);
+
+  useEffect(() => {
+    const handleVoiceBargeIn = () => {
+      handleStop();
+    };
+    window.addEventListener('voice-barge-in', handleVoiceBargeIn);
+    return () => window.removeEventListener('voice-barge-in', handleVoiceBargeIn);
+  }, [handleStop]);
+
+  const handleSendMessage = useCallback(() => {
+    const text = inputValue.trim();
+    if (!text) return;
+
+    commitAndSend(text);
+    setInputValue('');
+
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+    if (!isConnected && currentSessionId !== null) {
+      toast.warning('Offline', 'Message queued. Will send when connected.', 3000);
+    }
+  }, [inputValue, isConnected, currentSessionId, commitAndSend, setInputValue]);
+
+  const onKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSendMessage();
+      }
+    },
+    [handleSendMessage]
+  );
+
+  const ensureVoiceSession = useCallback(async () => {
+    PCMRecorder.preWarmWorklet();
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
+
+    if (currentSessionId) return true;
+    if (isCreatingSessionRef.current) return false;
+
+    isCreatingSessionRef.current = true;
+    try {
+      const activeId = await session.createPersistedSession();
+      if (!activeId) {
+        toast.error('Error', 'Failed to initialize voice session');
+        return false;
+      }
+      return true;
+    } finally {
+      isCreatingSessionRef.current = false;
+    }
+  }, [currentSessionId, session, getAudioContext]);
+
+  if (status === 'error') {
+    return (
+      <div className="flex flex-col h-screen bg-dark text-white">
+        <ErrorState
+          title="Classroom Session Load Failure"
+          message="We encountered an issue retrieving your academic sessions. This may be due to a temporary network disruption or an expired security token."
+          isAbsolute={false}
+          action={
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-2.5 rounded-full bg-gold text-[#0A0908] font-semibold text-sm hover:bg-gold-soft hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer shadow-lg"
+            >
+              Reload Classroom
+            </button>
+          }
+        />
+      </div>
+    );
+  }
+
+  const isSidebarOpen = isSettingsOpen || isDocumentsOpen;
+
+  return (
+    <WSContext.Provider
+      value={{
+        connectionState,
+        isConnected,
+        send: safeSend,
+        reconnect,
+        disconnect,
+        currentSessionId,
+        onMessage,
+      }}
+    >
+      <Helmet>
+        <title>{avatarName} — VirtAI Classroom</title>
+      </Helmet>
+
+      {/* Root Layout: Handled by AppLayout, we just provide the full width/height container */}
+      <div className="flex w-full h-full relative text-white font-sans">
+
+        {/* Floating Sidebars/Drawers */}
+        <SettingsDrawer
+          isOpen={isSettingsOpen}
+          onClose={closeSettings}
+          sessions={session.sessions}
+          currentSessionId={currentSessionId}
+          onSessionSelect={session.switchSession}
+          onNewSession={session.createNewSession}
+          onDeleteSession={handleDeleteSession}
+          onRenameSession={session.renameSession}
+          onClearAllSessions={handleClearAllSessions}
+          width={sidebarWidth}
+          onWidthChange={setSidebarWidth}
+          resizable={true}
+        />
+        <DocumentsDrawer
+          isOpen={isDocumentsOpen}
+          onClose={toggleDocuments}
+          sessionId={currentSessionId}
+          width={sidebarWidth}
+          onWidthChange={setSidebarWidth}
+          resizable={true}
+        />
+
+        {/* Main Content Area */}
+        <main
+          className="flex flex-col flex-1 gap-4 p-4 lg:p-6 lg:gap-8 relative min-w-0"
+          style={{ marginRight: isSidebarOpen && (typeof window !== 'undefined' && window.innerWidth >= 1024) ? `${sidebarWidth}px` : '0' }}
+        >
+
+          {/* Top Navbar */}
+          <AvatarTopBar
+            avatarName={avatarName || 'AI Tutor'}
+            connectionState={connectionState}
+            currentSessionId={currentSessionId}
+            reconnectError={reconnectError}
+            reconnect={reconnect}
+            hasDocuments={documents.length > 0}
+            hasMessages={currentSession?.messages?.length ? currentSession.messages.length > 0 : false}
+            onGenerateDiagram={handleGenerateDiagram}
+            onStartExplain={handleStartExplain}
+            onOpenSettings={openSettings}
+          />
+
+          {/* Desktop Content Layout (lg screens and up) */}
+          <div className="hidden lg:flex flex-row w-full flex-1 min-h-0 gap-6">
+
+            {/* Avatar Panel (Left) */}
+            <aside className="flex-[3] min-w-0 min-h-0 rounded-2xl bg-dark-secondary border border-white/5 relative overflow-hidden flex items-center justify-center shadow-xl">
+              <AvatarCanvasWrapper
+                avatarId={activeAvatarId}
+                pipelineState={conversationState.pipelineState}
+                movementEnabled={movementEnabled}
+                mouthCuesRef={mouthCuesRef}
+                getAudioContext={getAudioContext}
+                playbackStartTimeRef={playbackStartTimeRef}
+                getIsAudioPlaying={getIsAudioPlaying}
+                getNextPlaybackTime={getNextPlaybackTime}
+              />
+            </aside>
+
+            {/* Chat Panel (Right) */}
+            <section className="flex-[7] min-w-0 min-h-0 rounded-2xl bg-dark-secondary border border-white/5 flex flex-col shadow-xl relative">
+              <AssistantPanel
+                isExplainActive={isExplainActive}
+                isDiagramOpen={isDiagramOpen}
+                explainDocumentId={documents.length > 0 ? documents[0].id : undefined}
+                explainState={explainState}
+                explainSlide={explainSlide}
+                explainTotalSlides={explainTotalSlides}
+                explainContent={explainContent}
+                onExplainQuestion={(text) => {
+                  explainSendQuestion(text);
+                  setExplainContent(prev => prev + `\n\n**You:** ${text}\n\n`);
+                  resetAvatarAudio();
+                }}
+                onExplainContinue={() => {
+                  explainSendContinue();
+                  resetAvatarAudio();
+                }}
+                onExplainPauseOrStop={() => {
+                  explainSendPauseOrStop();
+                  resetAvatarAudio();
+                }}
+                onExplainClose={() => {
+                  setIsExplainActive(false);
+                  explainDisconnect();
+                  resetAvatarAudio();
+                }}
+                onDiagramClose={() => setIsDiagramOpen(false)}
+                currentSessionId={currentSessionId}
+                messages={currentSession?.messages}
+                currentMessage={conversationState.currentMessage}
+                interimTranscript={interimTranscript}
+                chatError={conversationState.error}
+                avatarName={avatarName}
+                chatScrollRef={chatScrollRef}
+                messagesEndRef={messagesEndRef}
+                onChatScroll={handleChatScroll}
+                pipelineState={conversationState.pipelineState as any}
+                inputValue={inputValue}
+                onInputChange={setInputValue}
+                onSendMessage={handleSendMessage}
+                onKeyDown={onKeyDown}
+                textareaRef={textareaRef}
+                onToggleDocuments={toggleDocuments}
+                onBeforeVoiceStart={ensureVoiceSession}
+                onStop={handleStop}
+              />
+            </section>
+
+          </div>
+
+          {/* Mobile Content Layout (sm/md screens: hidden on lg) */}
+          <div className="flex lg:hidden flex-col w-full flex-1 min-h-0 gap-4 pb-16">
+
+            {/* Avatar Container: exactly 40% of available height */}
+            <aside className="h-[40%] min-h-0 rounded-2xl bg-dark-secondary border border-white/5 relative overflow-hidden flex items-center justify-center shadow-xl">
+              <AvatarCanvasWrapper
+                avatarId={activeAvatarId}
+                pipelineState={conversationState.pipelineState}
+                movementEnabled={movementEnabled}
+                mouthCuesRef={mouthCuesRef}
+                getAudioContext={getAudioContext}
+                playbackStartTimeRef={playbackStartTimeRef}
+                getIsAudioPlaying={getIsAudioPlaying}
+                getNextPlaybackTime={getNextPlaybackTime}
+              />
+            </aside>
+
+            {/* Chat Container: remaining 60% height */}
+            <section className="h-[60%] min-h-0 rounded-2xl bg-dark-secondary border border-white/5 flex flex-col relative shadow-xl">
+              <AssistantPanel
+                isExplainActive={isExplainActive}
+                isDiagramOpen={isDiagramOpen}
+                explainDocumentId={documents.length > 0 ? documents[0].id : undefined}
+                explainState={explainState}
+                explainSlide={explainSlide}
+                explainTotalSlides={explainTotalSlides}
+                explainContent={explainContent}
+                onExplainQuestion={(text) => {
+                  explainSendQuestion(text);
+                  setExplainContent(prev => prev + `\n\n**You:** ${text}\n\n`);
+                  resetAvatarAudio();
+                }}
+                onExplainContinue={() => {
+                  explainSendContinue();
+                  resetAvatarAudio();
+                }}
+                onExplainPauseOrStop={() => {
+                  explainSendPauseOrStop();
+                  resetAvatarAudio();
+                }}
+                onExplainClose={() => {
+                  setIsExplainActive(false);
+                  explainDisconnect();
+                  resetAvatarAudio();
+                }}
+                onDiagramClose={() => setIsDiagramOpen(false)}
+                currentSessionId={currentSessionId}
+                messages={currentSession?.messages}
+                currentMessage={conversationState.currentMessage}
+                interimTranscript={interimTranscript}
+                chatError={conversationState.error}
+                avatarName={avatarName}
+                chatScrollRef={chatScrollRef}
+                messagesEndRef={messagesEndRef}
+                onChatScroll={handleChatScroll}
+                pipelineState={conversationState.pipelineState as any}
+                inputValue={inputValue}
+                onInputChange={setInputValue}
+                onSendMessage={handleSendMessage}
+                onKeyDown={onKeyDown}
+                textareaRef={textareaRef}
+                onToggleDocuments={toggleDocuments}
+                onBeforeVoiceStart={ensureVoiceSession}
+                onStop={handleStop}
+              />
+            </section>
+
+          </div>
+
+          {/* Fixed Bottom Navigation Bar (Mobile Only) */}
+          <nav className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-dark/95 backdrop-blur-md border-t border-gold/15 flex items-center justify-around px-4 z-[100]">
+            {/* Chat Tab */}
+            <button
+              onClick={() => {
+                setIsExplainActive(false);
+                setIsDiagramOpen(false);
+              }}
+              className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 cursor-pointer transition-colors duration-200 ${
+                (!isExplainActive && !isDiagramOpen)
+                  ? 'text-gold'
+                  : 'text-gray-400 active:text-white'
+              }`}
+            >
+              <FiMessageSquare size={20} />
+              <span className="text-[10px] font-semibold tracking-wide font-sans">Chat</span>
+            </button>
+
+            {/* Explain Tab */}
+            <button
+              onClick={handleStartExplain}
+              disabled={!documents.length}
+              className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 cursor-pointer transition-colors duration-200 disabled:opacity-30 disabled:cursor-not-allowed ${
+                isExplainActive
+                  ? 'text-gold font-bold'
+                  : 'text-gray-400 active:text-white'
+              }`}
+            >
+              <FiMonitor size={20} />
+              <span className="text-[10px] font-semibold tracking-wide font-sans">Explain</span>
+            </button>
+
+            {/* Diagram Tab */}
+            <button
+              onClick={handleGenerateDiagram}
+              disabled={!documents.length}
+              className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 cursor-pointer transition-colors duration-200 disabled:opacity-30 disabled:cursor-not-allowed ${
+                isDiagramOpen
+                  ? 'text-gold font-bold'
+                  : 'text-gray-400 active:text-white'
+              }`}
+            >
+              <FiShare2 size={20} />
+              <span className="text-[10px] font-semibold tracking-wide font-sans">Diagram</span>
+            </button>
+
+            {/* Quiz Tab */}
+            <button
+              onClick={() => navigate('/quiz')}
+              disabled={!documents.length}
+              className="flex flex-col items-center justify-center gap-1 flex-1 py-1 cursor-pointer text-gray-400 active:text-white transition-colors duration-200 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <FiEdit3 size={20} />
+              <span className="text-[10px] font-semibold tracking-wide font-sans">Quiz</span>
+            </button>
+          </nav>
+
+        </main>
+      </div>
+    </WSContext.Provider>
+  );
+}

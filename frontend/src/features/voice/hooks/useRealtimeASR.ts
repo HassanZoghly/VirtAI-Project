@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { eventBus } from '../../../shared/hooks/useEventBus';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
 import { useVoiceMode } from './useVoiceMode';
 
 /**
@@ -81,7 +81,18 @@ export function useRealtimeASR(
 
   // Ref for onFinalTranscript to avoid re-subscriptions
   const onFinalRef = useRef(onFinalTranscript);
-  onFinalRef.current = onFinalTranscript;
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    onFinalRef.current = onFinalTranscript;
+  }, [onFinalTranscript]);
 
   // Delegate to useVoiceMode for mic/VAD/WS orchestration
   const voiceMode = useVoiceMode(wsClient, pipelineState);
@@ -97,12 +108,23 @@ export function useRealtimeASR(
     }
 
     const unsubscribe = wsClient.onMessage('transcript', (message: TranscriptMessage) => {
+      if (!isMountedRef.current) return;
       if (message.is_final) {
+        // Strict blocklist for ASR silence hallucinations
+        const normalized = message.text.trim().toLowerCase().replace(/[.,!?;:]/g, '');
+        const hallucinations = ['thank you', 'thanks for watching', '...', ''];
+        
+        if (hallucinations.includes(normalized)) {
+          setInterimText('');
+          setIsProcessing(false);
+          return;
+        }
+
         setFinalText(message.text);
         setInterimText('');
         setIsProcessing(false);
         onFinalRef.current?.(message.text);
-        eventBus.emit('asr:final-result', { text: message.text });
+
       } else {
         setInterimText(message.text);
         setIsProcessing(false);
@@ -119,6 +141,7 @@ export function useRealtimeASR(
    */
   useEffect(() => {
     if (voiceMode.isListening) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsProcessing(true);
     } else {
       setIsProcessing(false);
@@ -144,14 +167,14 @@ export function useRealtimeASR(
 
   return {
     isListening: voiceMode.isListening,
-    isPaused: voiceMode.isPaused,
+    isPaused: false,
     isProcessing,
     interimText,
     finalText,
     error: voiceMode.error,
     errorCode: voiceMode.errorCode ?? null,
     canRetry: voiceMode.canRetry ?? false,
-    clearError: voiceMode.clearError ?? (() => {}),
+    clearError: voiceMode.clearError ?? (() => { }),
     startListening,
     stopListening,
     resetTranscript,

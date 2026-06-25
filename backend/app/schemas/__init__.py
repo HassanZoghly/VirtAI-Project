@@ -26,13 +26,11 @@ from app.schemas.auth import (
 # ── voice_mode ───────────────────────────────────────────────
 from app.schemas.voice_mode import (
     AudioChunkMessage,
-    TranscriptMessage,
     VoiceModeError,
     VoiceModeStop,
     make_buffer_overflow_error,
     make_invalid_audio_format_error,
     make_rate_limit_error,
-    make_transcript_message,
     make_transcription_failed_error,
     make_voice_mode_error,
 )
@@ -42,25 +40,21 @@ from app.schemas.ws_messages import (
     AnimationTimelineV2,
     AnimationTimelineV2Item,
     AudioData,
-    AvatarStatus,
     ChatAbort,
     # Server → Client (modern)
     ChatDelta,
     ChatFinal,
     # Client → Server
     ChatUserMessage,
-    # Legacy enums
-    ClientMessageType,
+    ClientSpeechStopped,
     ErrorMessage,
     MouthCue,
     PipelineState,
-    # Legacy models
-    ServerMessage,
-    ServerMessageType,
+    ServerPong,
+    ServerReady,
+    TranscriptMessage,
     TTSReady,
     TTSRequest,
-    VisemeEvent,
-    VisemesData,
     VisemesReady,
     # Envelope / base
     WSMessageEnvelope,
@@ -69,15 +63,9 @@ from app.schemas.ws_messages import (
     make_chat_delta,
     make_chat_final,
     make_error,
-    # Legacy factory helpers
-    make_error_msg,
-    make_llm_chunk_msg,
     make_pipeline_state,
-    make_status_msg,
-    make_transcript_msg,
-    make_tts_chunk_msg,
+    make_transcript_message,
     make_tts_ready,
-    make_visemes_msg,
     make_visemes_ready,
 )
 
@@ -107,6 +95,7 @@ __all__ = [
     # ws_messages – modern protocol
     "WSMessageEnvelope",
     "ChatUserMessage",
+    "ClientSpeechStopped",
     "ChatAbort",
     "TTSRequest",
     "ChatDelta",
@@ -126,17 +115,6 @@ __all__ = [
     "make_tts_ready",
     "make_visemes_ready",
     "make_error",
-    # ws_messages – legacy
-    "ClientMessageType",
-    "ServerMessageType",
-    "AvatarStatus",
-    "ServerMessage",
-    "VisemeEvent",
-    "VisemesData",
-    "make_error_msg",
-    "make_status_msg",
-    "make_transcript_msg",
-    "make_tts_chunk_msg",
-    "make_visemes_msg",
-    "make_llm_chunk_msg",
+    "ServerReady",
+    "ServerPong",
 ]

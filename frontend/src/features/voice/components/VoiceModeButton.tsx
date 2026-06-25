@@ -1,21 +1,20 @@
 import { useMemo } from 'react';
-import { PiMicrophoneFill, PiPauseFill, PiWarningCircleFill } from 'react-icons/pi';
+import { PiMicrophone, PiPauseFill, PiWarningCircleFill } from 'react-icons/pi';
 import { useRealtimeASR } from '../hooks/useRealtimeASR';
+import { useWS } from '@/core/realtime/WSContext';
+import { VoiceIndicator } from '@/shared/components/VoiceIndicator';
 import './VoiceModeButton.css';
 
 /**
  * Props for VoiceModeButton component
  */
 interface VoiceModeButtonProps {
-  /** WebSocket client for voice mode communication */
-  // Reason: WebSocket client interface lacks generated type
-  // bindings from the Python/FastAPI backend schema
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  wsClient: any;
   /** Current conversation pipeline state */
   pipelineState: 'idle' | 'thinking' | 'speaking' | 'error';
   /** Optional CSS class name */
   className?: string;
+  /** Optional guard used to prepare a session before microphone capture starts */
+  onBeforeStart?: () => Promise<boolean> | boolean;
 }
 
 /**
@@ -29,30 +28,18 @@ interface VoiceModeButtonProps {
  *
  * @param props - Component props
  * @returns VoiceModeButton component
- *
- * @example
- * ```tsx
- * <VoiceModeButton
- *   wsClient={wsClient}
- *   pipelineState={conversation.pipelineState}
- * />
- * ```
  */
 export default function VoiceModeButton({
-  wsClient,
   pipelineState,
   className = '',
+  onBeforeStart,
 }: VoiceModeButtonProps) {
+  // Consume the WebSocket Single Source of Truth context directly
+  const wsClient = useWS();
+
   // Use realtime ASR hook for voice + transcript state (Requirement 1.1, 1.4)
-  const {
-    isListening,
-    isPaused,
-    isProcessing,
-    interimText,
-    error,
-    startListening,
-    stopListening,
-  } = useRealtimeASR(wsClient, pipelineState);
+  const { isListening, isPaused, isProcessing, interimText, error, startListening, stopListening } =
+    useRealtimeASR(wsClient, pipelineState);
 
   // Determine button state and styling
   const buttonState = useMemo(() => {
@@ -79,7 +66,7 @@ export default function VoiceModeButton({
     if (isPaused) {
       return PiPauseFill;
     }
-    return PiMicrophoneFill;
+    return PiMicrophone;
   }, [error, isPaused]);
 
   // Determine button title/tooltip
@@ -114,22 +101,27 @@ export default function VoiceModeButton({
     <div className={`voice-mode-container ${className}`}>
       {/* Main voice mode button (Requirement 1.1, 1.4) */}
       <button
-        className={`voice-mode-btn ${buttonState}`}
-        onClick={isListening ? stopListening : startListening}
+        className={`w-[52px] h-[52px] rounded-full bg-dark-secondary hover:bg-dark-tertiary flex items-center justify-center transition-colors text-white/70 hover:text-white voice-mode-btn ${buttonState}`}
+        onClick={async () => {
+          if (!!error) return;
+          if (isListening) {
+            stopListening();
+            return;
+          }
+          const canStart = onBeforeStart ? await onBeforeStart() : true;
+          if (canStart) {
+            startListening();
+          }
+        }}
         title={buttonTitle}
         aria-label={ariaLabel}
         disabled={!!error}
         type="button"
       >
-        <ButtonIcon className="voice-mode-icon" />
+        <ButtonIcon className="voice-mode-icon" size={22} />
 
         {/* Listening animation (Requirement 8.3) */}
-        {isListening && !isPaused && (
-          <span className="voice-activity-indicator">
-            <span className="pulse-ring" />
-            <span className="pulse-ring pulse-ring-delay" />
-          </span>
-        )}
+        <VoiceIndicator isListening={isListening} isPaused={isPaused} />
       </button>
 
       {/* Interim transcript display (Step 4.2: visual feedback) */}
@@ -146,7 +138,6 @@ export default function VoiceModeButton({
           <span className="status-text">Paused (assistant speaking)</span>
         </div>
       )}
-
     </div>
   );
 }

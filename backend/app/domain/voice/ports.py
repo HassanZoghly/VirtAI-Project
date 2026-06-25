@@ -1,17 +1,12 @@
-"""
-Voice domain ports — abstract interfaces for ASR, TTS, and viseme generation.
-
-Extracted from:
-  - app.services.asr.base (BaseASRProvider → ASRPort, StreamingASRService → StreamingASRPort)
-  - app.services.tts.base (BaseTTSProvider → TTSPort)
-  - app.services.tts.viseme_generator (→ VisemePort)
-"""
+"""Voice domain ports — abstract interfaces for ASR, TTS, and viseme generation."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 from typing import Any
+
+import numpy as np
 
 from app.domain.voice.entities import (
     ASRResult,
@@ -52,7 +47,7 @@ class StreamingASRService(ABC):
 
     @abstractmethod
     async def transcribe_stream(
-        self, audio_data: Any, sample_rate: int = 16000
+        self, audio_data: np.ndarray, sample_rate: int = 16000
     ) -> StreamingASRResult:
         """
         Transcribe accumulated streaming audio data.
@@ -69,6 +64,18 @@ class StreamingASRService(ABC):
 
 class BaseTTSProvider(ABC):
     """Abstract TTS provider interface."""
+
+    # Subclasses that expose a voice attribute should store it here.
+    _voice: str | None = None
+
+    @property
+    def voice(self) -> str | None:
+        """The active voice ID (may be None if not yet configured)."""
+        return self._voice
+
+    @voice.setter
+    def voice(self, value: str | None) -> None:
+        self._voice = value
 
     @abstractmethod
     async def synthesize(self, text: str) -> TTSResult:
@@ -89,6 +96,8 @@ class BaseTTSProvider(ABC):
         text: str,
         session_id: str,
         message_id: str,
+        trace_id: str | None = None,
+        voice: str | None = None,
     ) -> TTSResult:
         """Generate audio, store to disk, and return result with file path."""
         ...
@@ -99,30 +108,11 @@ class BaseTTSProvider(ABC):
         ...
 
     @abstractmethod
+    def generate_cache_key(self, text: str, voice: str | None = None) -> str:
+        """Generates a cache key for the given text."""
+        ...
+
+    @abstractmethod
     async def get_voice_settings(self, voice_name: str) -> dict[str, Any]:
         """Get available settings for a specific voice."""
         ...
-
-
-class VisemePort(ABC):
-    """Abstract interface for viseme generation from audio."""
-
-    @abstractmethod
-    async def generate_from_audio(
-        self,
-        session_id: str,
-        message_id: str,
-        audio_path: str,
-    ) -> list[dict]:
-        """
-        Generate viseme timeline from an audio file.
-
-        Returns list of mouth cue dicts with start, end, and value fields.
-        """
-        ...
-
-
-# Hexagonal aliases
-ASRPort = BaseASRProvider
-StreamingASRPort = StreamingASRService
-TTSPort = BaseTTSProvider

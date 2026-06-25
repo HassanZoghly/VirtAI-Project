@@ -28,8 +28,33 @@ async def handle_text_turn(
     Yields:
         PipelineEvent objects (THINKING, LLM_TOKEN, TTS_AUDIO, etc.)
     """
-    async for event in pipeline.process_text(text, session_id=session_id):
-        yield event
+    import asyncio
+    queue: asyncio.Queue[PipelineEvent] = asyncio.Queue()
+
+    async def send_callback(event: PipelineEvent) -> None:
+        await queue.put(event)
+
+    # Run the pipeline in the background
+    task = asyncio.create_task(
+        pipeline.process_message(
+            message_id="direct_text_turn",
+            text=text,
+            session_id=session_id or "default",
+            send_callback=send_callback,
+        )
+    )
+
+    # Yield events as they arrive
+    while not task.done() or not queue.empty():
+        try:
+            # Short timeout to allow checking task.done()
+            event = await asyncio.wait_for(queue.get(), timeout=0.1)
+            yield event
+        except asyncio.TimeoutError:
+            continue
+
+
+from typing import Any
 
 
 async def handle_message(
@@ -37,7 +62,7 @@ async def handle_message(
     message_id: str,
     text: str,
     session_id: str,
-    send_callback: Callable,
+    send_callback: Callable[[Any], Any],
 ) -> None:
     """
     Process user message through LLM → TTS → Visemes with callback-based delivery.

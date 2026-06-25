@@ -17,10 +17,10 @@ from __future__ import annotations
 HARD_SENTENCE_ENDINGS = frozenset({".", "!", "?", "\n"})
 
 # Characters that can end a sentence if the buffer is long enough
-SOFT_SENTENCE_ENDINGS = frozenset({","})
+SOFT_SENTENCE_ENDINGS = frozenset({",", ";", ":", "-"})
 
 # Minimum chars before a soft ending triggers a split
-SOFT_SPLIT_MIN_LENGTH = 80
+SOFT_SPLIT_MIN_LENGTH = 40
 
 # Minimum chars before we force a split (safety valve for run-on text)
 FORCE_SPLIT_LENGTH = 300
@@ -132,14 +132,7 @@ class SentenceSplitter:
                 if sentence:
                     return sentence
 
-        # ── Soft endings (only if buffer is long enough) ──────────────────────
-        if len(buf) >= SOFT_SPLIT_MIN_LENGTH:
-            for i, char in enumerate(buf):
-                if char in SOFT_SENTENCE_ENDINGS:
-                    sentence = buf[: i + 1].strip()
-                    self._buffer = buf[i + 1 :].lstrip()
-                    if sentence:
-                        return sentence
+        # Removed Soft endings to ensure we wait for full sentence boundaries
 
         # ── Force split (safety valve) ────────────────────────────────────────
         if len(buf) >= FORCE_SPLIT_LENGTH:

@@ -1,10 +1,5 @@
-"""
-Audio file serving endpoint.
+"""Audio file serving endpoint."""
 
-Canonical location: app.presentation.http.v1.endpoints.audio
-"""
-
-import re
 from pathlib import Path
 from typing import Annotated
 
@@ -14,23 +9,14 @@ from fastapi.responses import FileResponse
 from loguru import logger
 
 from app.domain.user.entities import UserEntity
-from app.infrastructure.db.chat_repository import get_chat_session
-from app.presentation.http.v1.endpoints.auth import _current_user
+from app.presentation.http.v1.dependencies import ChatRepositoryDep, _current_user
+from app.shared.audio_ids import is_safe_path_component, is_valid_audio_message_id
 from app.shared.config import get_settings
+from app.shared.ids import parse_uuid
 
 router = APIRouter()
 
 AUDIO_STORAGE_PATH = Path(get_settings().AUDIO_STORAGE_PATH)
-
-
-def is_safe_path_component(component: str) -> bool:
-    if not component:
-        return False
-    if ".." in component or "/" in component or "\\" in component:
-        return False
-    if not re.match(r"^[a-zA-Z0-9_-]+$", component):
-        return False
-    return True
 
 
 @router.get(
@@ -45,20 +31,25 @@ def is_safe_path_component(component: str) -> bool:
 async def get_audio_file(
     session_id: Annotated[str, PathParam(description="Session identifier")],
     message_id: Annotated[str, PathParam(description="Message identifier")],
+    repo: ChatRepositoryDep,
     user: UserEntity = Depends(_current_user),
 ) -> FileResponse:
-    if not is_safe_path_component(session_id):
-        logger.warning(f"Invalid session_id attempted: {session_id}")
-        raise HTTPException(status_code=400, detail=f"Invalid session_id format: {session_id}")
-
-    if not is_safe_path_component(message_id):
+    if not is_valid_audio_message_id(message_id):
         logger.warning(f"Invalid message_id attempted: {message_id}")
         raise HTTPException(status_code=400, detail=f"Invalid message_id format: {message_id}")
 
-    db_session = await get_chat_session(session_id)
-    if db_session is None or db_session.get("user_id") != str(user.id):
-        logger.warning(f"Session not found or unauthorized for session {session_id}")
-        raise HTTPException(status_code=404, detail="Audio file not found")
+    if session_id == "system":
+        # System fillers bypass DB check
+        pass
+    else:
+        if not is_safe_path_component(session_id) or parse_uuid(session_id) is None:
+            logger.warning(f"Invalid session_id attempted: {session_id}")
+            raise HTTPException(status_code=400, detail=f"Invalid session_id format: {session_id}")
+
+        db_session = await repo.get_chat_session(session_id)
+        if db_session is None or db_session.get("user_id") != str(user.id):
+            logger.warning(f"Session not found or unauthorized for session {session_id}")
+            raise HTTPException(status_code=404, detail="Audio file not found")
 
     file_path = AUDIO_STORAGE_PATH / session_id / f"{message_id}.mp3"
 
@@ -81,7 +72,7 @@ async def get_audio_file(
             raise HTTPException(status_code=400, detail="Invalid file path")
     except Exception as e:
         logger.error(f"Error resolving path {file_path}: {e}")
-        raise HTTPException(status_code=400, detail="Invalid file path")
+        raise HTTPException(status_code=400, detail="Invalid file path") from e
 
     logger.info(f"Serving audio file: {file_path}")
     return FileResponse(path=str(file_path), media_type="audio/mpeg", filename=f"{message_id}.mp3")

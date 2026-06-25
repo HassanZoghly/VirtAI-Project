@@ -2,10 +2,10 @@
 Sliding window rate limiter using Redis sorted sets.
 
 Algorithm:
-  1. Remove all entries older than `window` seconds
-  2. Count remaining entries
-  3. If count >= limit → deny
-  4. Otherwise → add current timestamp + allow
+    1. Remove all entries older than `window` seconds
+    2. Count remaining entries
+    3. If count >= limit → deny
+    4. Otherwise → add current timestamp + allow
 
 The sorted set score is the Unix timestamp in milliseconds,
 which gives sub-second precision.
@@ -22,6 +22,7 @@ from loguru import logger
 
 from app.infrastructure.cache.cache_keys import rate_limit_key
 from app.infrastructure.cache.redis_client import get_redis
+from app.shared.metrics import rate_limit_hits
 
 
 async def check_rate_limit(
@@ -65,6 +66,11 @@ async def check_rate_limit(
 
         allowed = current_count < limit
         if not allowed:
+            # Extract scope from identifier (e.g. 'auth:login:127.0.0.1' -> 'login')
+            parts = identifier.split(":")
+            scope = parts[1] if len(parts) > 1 else "unknown"
+            rate_limit_hits.labels(scope=scope).inc()
+
             logger.warning(
                 f"[RateLimit] DENIED | id={identifier} | count={current_count} | "
                 f"limit={limit} | window={window}s"

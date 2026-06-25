@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -9,7 +10,10 @@ from loguru import logger
 if TYPE_CHECKING:
     from loguru import Record
 
-from app.shared.config import get_settings
+from app.shared.config import Environment, get_settings
+
+_JWT_PATTERN = re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b")
+_BEARER_PATTERN = re.compile(r"Bearer\s+[A-Za-z0-9._-]+", re.IGNORECASE)
 
 
 def _redact_secrets(record: Record) -> None:
@@ -17,6 +21,15 @@ def _redact_secrets(record: Record) -> None:
     settings = get_settings()
     if settings.GROQ_API_KEY and settings.GROQ_API_KEY in record["message"]:
         record["message"] = record["message"].replace(settings.GROQ_API_KEY, "[REDACTED]")
+    record["message"] = _BEARER_PATTERN.sub("Bearer [REDACTED]", record["message"])
+    record["message"] = _JWT_PATTERN.sub("[JWT_REDACTED]", record["message"])
+
+
+def _inject_trace_id(record: Record) -> None:
+    """Inject trace_id from contextvar into log record extra."""
+    from app.shared.request_context import get_trace_id
+
+    record["extra"]["request_id"] = get_trace_id()
 
 
 def setup_logging() -> None:
@@ -25,7 +38,7 @@ def setup_logging() -> None:
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
     effective_level = "DEBUG" if settings.DEBUG else settings.LOG_LEVEL.upper()
-    if settings.ENVIRONMENT == "production" and effective_level == "DEBUG":
+    if Environment.production == settings.ENVIRONMENT and effective_level == "DEBUG":
         effective_level = "INFO"
 
     fmt = (
@@ -33,6 +46,7 @@ def setup_logging() -> None:
         "<level>{level: <8}</level> | "
         "<cyan>{name}</cyan>:<cyan>{line}</cyan> | "
         "<cyan>{function}</cyan> | "
+        "req={extra[request_id]} | "
         "<magenta>PID:{process}</magenta> | "
         "<level>{message}</level>"
     )
@@ -69,11 +83,11 @@ def setup_logging() -> None:
         compression="gz",
         encoding="utf-8",
         enqueue=True,
-        backtrace=True,
+        backtrace=settings.DEBUG,
         diagnose=settings.DEBUG,
     )
 
-    if settings.ENVIRONMENT == "production" or settings.LOG_JSON:
+    if Environment.production == settings.ENVIRONMENT or settings.LOG_JSON:
         json_dir = Path("logs/json")
         json_dir.mkdir(parents=True, exist_ok=True)
         logger.add(
@@ -87,7 +101,11 @@ def setup_logging() -> None:
             enqueue=True,
         )
 
-    logger.configure(patcher=_redact_secrets)
+    def _patcher(record):
+        _inject_trace_id(record)
+        _redact_secrets(record)
+
+    logger.configure(patcher=_patcher, extra={"request_id": "-"})
 
     logger.info(
         f"[*] Logging initialized | env={settings.ENVIRONMENT} | level={effective_level} | json={settings.LOG_JSON}"

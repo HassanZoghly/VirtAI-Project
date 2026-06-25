@@ -10,8 +10,10 @@ Why Groq for LLM?
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import AsyncGenerator, Callable
+from typing import Any, cast
 
 from groq import AsyncGroq
 from loguru import logger
@@ -111,6 +113,7 @@ class GroqLLMProvider(BaseLLMProvider):
         self,
         history: ConversationHistory,
         on_sentence: Callable[[str], None] | None = None,
+        trace_id: str | None = None,
     ) -> AsyncGenerator[LLMChunk, None]:
         """
         Streams tokens from Groq LLM.
@@ -133,21 +136,31 @@ class GroqLLMProvider(BaseLLMProvider):
             f"LLM stream start | "
             f"model={self.model} | "
             f"messages={len(messages)} | "
-            f"history_pairs={history.message_count // 2}"
+            f"history_pairs={history.message_count // 2} | "
+            f"trace_id={trace_id}"
         )
 
         # ── Open Groq stream ──────────────────────────────────────────────────
+        groq_stream: Any = None
         try:
-            groq_stream = await self._client.chat.completions.create(
-                model=self.model,
-                messages=messages,  # type: ignore[arg-type]
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                stream=True,
-            )
+            from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential
+
+            async for attempt in AsyncRetrying(
+                wait=wait_exponential(multiplier=1, min=2, max=10),
+                stop=stop_after_attempt(3),
+                reraise=True
+            ):
+                with attempt:
+                    groq_stream = await self._client.chat.completions.create(
+                        model=self.model,
+                        messages=cast("list[Any]", messages),
+                        max_tokens=self.max_tokens,
+                        temperature=self.temperature,
+                        stream=True,
+                    )
         except Exception as e:
-            logger.error(f"Groq LLM stream init failed: {e}")
-            raise LLMException(f"LLM stream failed: {e!s}")
+            logger.error(f"Groq LLM stream init failed: {e} | trace_id={trace_id}")
+            raise LLMException(f"LLM stream failed: {e!s}") from e
 
         # ── Process stream ────────────────────────────────────────────────────
         try:
@@ -180,9 +193,14 @@ class GroqLLMProvider(BaseLLMProvider):
 
                         yield LLMChunk(token="", sentence=sentence)
 
+        except asyncio.CancelledError:
+            logger.warning(f"LLM stream cancelled mid-generation. Closing Groq stream to save API tokens. | trace_id={trace_id}")
+            if hasattr(groq_stream, "close"):
+                await groq_stream.close()
+            raise
         except Exception as e:
-            logger.error(f"LLM stream error during iteration: {e}")
-            raise LLMException(f"LLM stream error: {e!s}")
+            logger.error(f"LLM stream error during iteration: {e} | trace_id={trace_id}")
+            raise LLMException(f"LLM stream error: {e!s}") from e
 
         # ── Flush remaining buffer ────────────────────────────────────────────
         remainder = splitter.flush()
@@ -200,13 +218,15 @@ class GroqLLMProvider(BaseLLMProvider):
             f"LLM stream done | "
             f"tokens={token_count} | "
             f"elapsed={elapsed_ms:.0f}ms | "
-            f"sentences={sentence_count}"
+            f"sentences={sentence_count} | "
+            f"trace_id={trace_id}"
         )
         yield LLMChunk(token="", is_done=True)
 
     async def complete(
         self,
         history: ConversationHistory,
+        response_format: dict | None = None,
     ) -> LLMResult:
         """
         Non-streaming completion.
@@ -216,17 +236,31 @@ class GroqLLMProvider(BaseLLMProvider):
         messages = history.get_messages()
         start_time = time.perf_counter()
         logger.info(f"LLM complete | model={self.model} | messages={len(messages)}")
+        response: Any = None
         try:
-            response = await self._client.chat.completions.create(
-                model=self.model,
-                messages=messages,  # type: ignore[arg-type]
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                stream=False,
-            )
+            from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential
+
+            async for attempt in AsyncRetrying(
+                wait=wait_exponential(multiplier=1, min=2, max=10),
+                stop=stop_after_attempt(3),
+                reraise=True
+            ):
+                with attempt:
+                    kwargs = {
+                        "model": self.model,
+                        "messages": cast("list[Any]", messages),
+                        "max_tokens": self.max_tokens,
+                        "temperature": self.temperature,
+                        "stream": False,
+                    }
+                    if response_format:
+                        kwargs["response_format"] = response_format
+
+                    response = await self._client.chat.completions.create(**kwargs)
+
         except Exception as e:
             logger.error(f"Groq LLM complete failed: {e}")
-            raise LLMException(f"LLM complete failed: {e!s}")
+            raise LLMException(f"LLM complete failed: {e!s}") from e
         elapsed_ms = (time.perf_counter() - start_time) * 1000
 
         full_text = response.choices[0].message.content or ""
@@ -266,7 +300,7 @@ class GroqLLMProvider(BaseLLMProvider):
     async def is_available(self) -> bool:
         """Quick health check against Groq API."""
         try:
-            history = ConversationHistory(system_prompt="You are a helpful assistant.")
+            history = ConversationHistory(system_prompt="")
             history.add_user_message("Hi")
             result = await self.complete(history)
             return bool(result.full_text)

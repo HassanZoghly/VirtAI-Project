@@ -42,6 +42,44 @@ export class PCMRecorder {
   private sampleRate: number;
   private isRecording: boolean = false;
 
+  private static cachedWorkletUrl: string | null = null;
+  private static cachedAudioContext: AudioContext | null = null;
+  private static prewarmPromise: Promise<void> | null = null;
+
+  /**
+   * Pre-fetches the AudioWorklet script in the background and initializes AudioContext
+   * to eliminate latency when the user first activates the microphone.
+   */
+  public static async preWarmWorklet(sampleRate: number = 16000): Promise<void> {
+    if (this.cachedWorkletUrl || this.prewarmPromise) {
+      return this.prewarmPromise || Promise.resolve();
+    }
+    
+    this.prewarmPromise = (async () => {
+      try {
+        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const ctx = new AudioCtx({ sampleRate });
+        
+        if (ctx.state === 'running') {
+          await ctx.suspend();
+        }
+        
+        const workletUrlModule = await import('./pcmWorklet.ts?url');
+        this.cachedWorkletUrl = workletUrlModule.default;
+        await ctx.audioWorklet.addModule(this.cachedWorkletUrl);
+        
+        this.cachedAudioContext = ctx;
+        
+        if (import.meta.env.DEV) {
+          logger.debug('[PCMRecorder] AudioWorklet pre-warmed and compiled');
+        }
+      } catch (err) {
+        logger.error('[PCMRecorder] Failed to prewarm worklet', err);
+      }
+    })();
+    return this.prewarmPromise;
+  }
+
   /**
    * Create a new PCMRecorder instance
    *
@@ -75,13 +113,22 @@ export class PCMRecorder {
 
     try {
       // Create AudioContext with target sample rate (Requirement 2.1)
-      this.audioContext = new AudioContext({
-        sampleRate: this.sampleRate,
-      });
+      if (PCMRecorder.cachedAudioContext) {
+        this.audioContext = PCMRecorder.cachedAudioContext;
+        PCMRecorder.cachedAudioContext = null;
+        if (this.audioContext.state === 'suspended') {
+          await this.audioContext.resume();
+        }
+      } else {
+        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        this.audioContext = new AudioCtx({
+          sampleRate: this.sampleRate,
+        });
+      }
 
       if (import.meta.env.DEV) {
         logger.debug(
-          `[PCMRecorder] AudioContext created with sample rate: ${this.audioContext.sampleRate}`
+          `[PCMRecorder] AudioContext running with sample rate: ${this.audioContext.sampleRate}`
         );
       }
 
@@ -100,12 +147,32 @@ export class PCMRecorder {
         logger.debug('[PCMRecorder] Microphone access granted');
       }
 
-      // Load AudioWorklet processor module
-      const workletUrl = new URL('./pcmWorklet.js', import.meta.url);
-      await this.audioContext.audioWorklet.addModule(workletUrl.href);
+      // Load AudioWorklet processor module - Vite Production Safe Worker Import
+      if (!PCMRecorder.cachedWorkletUrl) {
+        await PCMRecorder.preWarmWorklet(this.sampleRate);
+      }
+      
+      if (!PCMRecorder.cachedWorkletUrl) {
+        throw new Error('Failed to load AudioWorklet module');
+      }
+      
+      // If we didn't use the cached context, we still need to add the module
+      if (!this.audioContext.audioWorklet) {
+        throw new Error('AudioWorklet not supported');
+      }
+      
+      // We wrap in try/catch because if we used the cached context, it already has the module
+      try {
+        await this.audioContext.audioWorklet.addModule(PCMRecorder.cachedWorkletUrl);
+      } catch (e) {
+        // Module might already be added
+        if (import.meta.env.DEV) {
+          logger.debug('[PCMRecorder] Module already added or error:', e);
+        }
+      }
 
       if (import.meta.env.DEV) {
-        logger.debug('[PCMRecorder] AudioWorklet module loaded');
+        logger.debug('[PCMRecorder] AudioWorklet module ready');
       }
 
       // Create source node from microphone stream
@@ -236,8 +303,15 @@ export class PCMRecorder {
     try {
       // Disconnect worklet node
       if (this.workletNode) {
-        this.workletNode.port.onmessage = null;
-        this.workletNode.disconnect();
+        // Send flush signal to capture remaining audio samples before destruction
+        this.workletNode.port.postMessage({ type: 'flush' });
+        
+        // Delay actual disconnection to allow the final chunk to be sent back
+        const node = this.workletNode;
+        setTimeout(() => {
+          node.port.onmessage = null;
+          node.disconnect();
+        }, 50);
         this.workletNode = null;
       }
 

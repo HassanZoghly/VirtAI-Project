@@ -1,15 +1,30 @@
-"""
-Chat domain entities — pure data classes with no external dependencies.
-
-Extracted from:
-  - app.services.llm.base (MessageRole, ChatMessage, LLMChunk, LLMResult, ConversationHistory)
-  - app.services.pipeline.events (PipelineEventType, PipelineEvent, ev)
-"""
+"""Chat domain entities — pure data classes with no external dependencies."""
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
+from typing import Any, TypedDict
+
+_logger = logging.getLogger(__name__)
+
+
+class ChatMessageDict(TypedDict):
+    id: str
+    session_id: str
+    role: str
+    content: str
+    created_at: str
+
+
+class ChatSessionDict(TypedDict):
+    id: str
+    user_id: str
+    title: str
+    created_at: str
+    last_message_at: str | None
 
 
 # ── Message Roles ─────────────────────────────────────────────────────────────
@@ -59,7 +74,6 @@ class LLMResult:
     def total_chars(self) -> int:
         return len(self.full_text)
 
-
 @dataclass
 class ConversationHistory:
     """
@@ -68,17 +82,39 @@ class ConversationHistory:
     """
 
     system_prompt: str
-    max_messages: int = 20  # max user+assistant pairs to keep
+    max_messages: int = 10  # max user+assistant pairs to keep (sliding window)
+    max_tokens: int = 4096  # safe token limit threshold
     _messages: list[ChatMessage] = field(default_factory=list)
+    sanitizer: Callable[[str], str] | None = None
+    _tokenizer: Any = field(init=False, default=None)
+    _tokenizer_failed: bool = field(init=False, default=False)
+
+    def __post_init__(self) -> None:
+        try:
+            import tiktoken
+            self._tokenizer = tiktoken.get_encoding("cl100k_base")
+        except ImportError:
+            self._tokenizer_failed = True
+            _logger.warning("tiktoken not installed, falling back to char heuristic")
 
     def add_user_message(self, content: str) -> None:
-        from app.domain.chat.policies import PromptSanitizer
-        sanitized_content = PromptSanitizer.sanitize(content)
+        """Add a user message, applying the configured sanitizer if present.
+
+        If no sanitizer was injected, fall back to the existing behavior and
+        import `PromptSanitizer` lazily for backwards compatibility.
+        """
+        if self.sanitizer is not None:
+            sanitized_content = self.sanitizer(content)
+        else:
+            from app.shared.security.prompt_sanitizer import PromptSanitizer
+            sanitized_content = PromptSanitizer.sanitize(content)
+
         self._messages.append(ChatMessage(role=MessageRole.USER, content=sanitized_content))
         self._trim()
 
     def add_assistant_message(self, content: str) -> None:
         self._messages.append(ChatMessage(role=MessageRole.ASSISTANT, content=content))
+        self._trim()
 
     def get_messages(self) -> list[dict[str, str]]:
         """Returns messages formatted for the API"""
@@ -91,12 +127,52 @@ class ConversationHistory:
 
     def _trim(self) -> None:
         """
-        Keeps only the last N message pairs.
+        Keeps only the last N message pairs, and enforces a maximum token limit.
         Always removes in pairs (user + assistant) to keep history consistent.
+        Uses 1 token ≈ 4 characters heuristic.
         """
         max_raw = self.max_messages * 2  # pairs → individual messages
         if len(self._messages) > max_raw:
+            trimmed = len(self._messages) - max_raw
             self._messages = self._messages[-max_raw:]
+            _logger.warning(
+                "History trimmed by pair count | removed=%d messages | remaining=%d | max_pairs=%d",
+                trimmed,
+                len(self._messages),
+                self.max_messages,
+            )
+
+        if self._tokenizer:
+            system_tokens = len(self._tokenizer.encode(self.system_prompt, disallowed_special=()))
+            message_tokens = [len(self._tokenizer.encode(m.content, disallowed_special=())) for m in self._messages]
+            estimated_tokens = system_tokens + sum(message_tokens)
+        else:
+            estimated_tokens = (len(self.system_prompt) + sum(len(m.content) for m in self._messages)) // 4
+
+        while len(self._messages) >= 2 and estimated_tokens > self.max_tokens:
+            if self._tokenizer:
+                dropped_tokens = message_tokens[0] + message_tokens[1]
+                message_tokens = message_tokens[2:]
+                estimated_tokens -= dropped_tokens
+            else:
+                dropped_chars = len(self._messages[0].content) + len(self._messages[1].content)
+                estimated_tokens -= dropped_chars // 4
+
+            self._messages = self._messages[2:]
+            _logger.warning(
+                "History trimmed by token budget | est_tokens=%d | max=%d | remaining=%d",
+                estimated_tokens,
+                self.max_tokens,
+                len(self._messages),
+            )
+
+    def get_estimated_tokens(self) -> int:
+        """Calculates the current estimated token count using the tokenizer or heuristic fallback."""
+        if self._tokenizer:
+            system_tokens = len(self._tokenizer.encode(self.system_prompt, disallowed_special=()))
+            message_tokens = sum(len(self._tokenizer.encode(m.content, disallowed_special=())) for m in self._messages)
+            return system_tokens + message_tokens
+        return (len(self.system_prompt) + sum(len(m.content) for m in self._messages)) // 4
 
     @property
     def message_count(self) -> int:
@@ -142,10 +218,16 @@ class PipelineEventType(Enum):
 @dataclass
 class PipelineEvent:
     type: PipelineEventType
-    data: dict = field(default_factory=dict)
+    data: dict[str, Any] = field(default_factory=dict)
     session_id: str | None = None  # for tracking
+    trace_id: str | None = None  # for distributed tracing
 
 
-def ev(event_type: PipelineEventType, **kwargs) -> PipelineEvent:
-    """Shorthand to create a PipelineEvent"""
-    return PipelineEvent(type=event_type, data=kwargs)
+def ev(
+    event_type: PipelineEventType,
+    session_id: str | None = None,
+    trace_id: str | None = None,
+    **kwargs: Any,
+) -> PipelineEvent:
+    """Shorthand to create a PipelineEvent."""
+    return PipelineEvent(type=event_type, data=kwargs, session_id=session_id, trace_id=trace_id)

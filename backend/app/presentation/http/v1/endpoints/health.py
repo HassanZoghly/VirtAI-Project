@@ -1,57 +1,94 @@
-"""
-Health check endpoints.
+"""Health check endpoints."""
 
-Canonical location: app.presentation.http.v1.endpoints.health
-
-Updated to include MongoDB and Redis connectivity status.
-"""
-
-from fastapi import APIRouter, Depends
+import httpx
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from loguru import logger
+from sqlalchemy import text
 
 from app.application.chat.session_manager import SessionManager
 from app.infrastructure.cache.auth_session_cache import get_auth_session_cache_stats
 from app.infrastructure.cache.token_validation_cache import get_token_validation_cache_stats
 from app.presentation.http.v1.dependencies import get_session_manager, get_ws_connection_manager
 from app.presentation.ws.connection_manager import WSConnectionManager
-from app.shared.config import get_settings
+from app.shared.config import Environment, get_settings
 
 router = APIRouter(prefix="/health", tags=["health"])
 settings = get_settings()
 
 
 @router.get("")
-async def health_check() -> dict:
-    """Basic health check — also verifies MongoDB and Redis connectivity."""
+async def health_check(request: Request) -> dict:
+    """Basic health check — verifies PostgreSQL and Redis connectivity."""
     status = {
         "status": "ok",
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "environment": settings.ENVIRONMENT,
+        "environment": settings.ENVIRONMENT.value,
         "services": {},
     }
 
-    # MongoDB ping
+    # PostgreSQL + pgvector ping
     try:
-        from app.infrastructure.db.mongodb import get_database
+        from app.infrastructure.db.database import engine
 
-        await get_database().command("ping")
-        status["services"]["mongodb"] = "ok"
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+            # Also check if vector extension is enabled
+            result = await conn.execute(
+                text("SELECT extname FROM pg_extension WHERE extname = 'vector'")
+            )
+            has_vector = result.scalar() is not None
+        status["services"]["postgresql"] = "ok"
+        status["services"]["pgvector"] = "ok" if has_vector else "missing"
+        if not has_vector:
+            status["status"] = "degraded"
+            logger.warning("[Health] pgvector extension not found")
     except Exception as e:
-        logger.warning(f"[Health] MongoDB ping failed: {e}")
-        status["services"]["mongodb"] = "unavailable"
+        logger.warning(f"[Health] PostgreSQL ping failed: {e}")
+        status["services"]["postgresql"] = "unavailable"
         status["status"] = "degraded"
 
     # Redis ping
     try:
         from app.infrastructure.cache.redis_client import get_redis
 
-        await get_redis().ping()
+        await get_redis().ping()  # type: ignore[misc]
         status["services"]["redis"] = "ok"
     except Exception as e:
         logger.warning(f"[Health] Redis ping failed: {e}")
         status["services"]["redis"] = "unavailable"
+        status["status"] = "degraded"
+
+    # Embedding provider readiness
+    embedder = getattr(request.app.state, "embedder", None)
+    if embedder is None:
+        status["services"]["embedding_provider"] = "unavailable"
+        status["status"] = "degraded"
+    else:
+        status["services"]["embedding_provider"] = "ok"
+
+    # TTS container readiness
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            response = await client.get("http://virtai-tts:8000/health")
+            response.raise_for_status()
+        status["services"]["tts"] = "ok"
+    except Exception as e:
+        logger.warning(f"[Health] TTS ping failed: {e}")
+        status["services"]["tts"] = "unavailable"
+        status["status"] = "degraded"
+
+    # WebSocket subsystem readiness
+    try:
+        manager = get_ws_connection_manager()
+        status["services"]["websocket"] = {
+            "status": "ok",
+            "active_connections": manager.active_count,
+        }
+    except Exception as e:
+        logger.warning(f"[Health] WebSocket manager unavailable: {e}")
+        status["services"]["websocket"] = "unavailable"
         status["status"] = "degraded"
 
     return status
@@ -63,7 +100,7 @@ async def sessions_info(
     ws_connection_manager: WSConnectionManager = Depends(get_ws_connection_manager),
 ) -> JSONResponse:
     """Returns active session statistics (development only)."""
-    if settings.ENVIRONMENT != "development":
+    if Environment.development != settings.ENVIRONMENT:
         return JSONResponse(status_code=403, content={"error": "Not available in production"})
     stats = await session_manager.get_stats()
     stats["active_ws_connections"] = ws_connection_manager.active_count
@@ -73,9 +110,8 @@ async def sessions_info(
 @router.get("/cache")
 async def cache_info() -> JSONResponse:
     """Returns auth/token cache counters for hit/miss validation (development only)."""
-    if settings.ENVIRONMENT != "development":
+    if Environment.development != settings.ENVIRONMENT:
         return JSONResponse(status_code=403, content={"error": "Not available in production"})
-
     return JSONResponse(
         content={
             "auth_session": get_auth_session_cache_stats(),

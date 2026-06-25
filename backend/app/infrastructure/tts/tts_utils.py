@@ -1,6 +1,4 @@
-"""
-Utilities for TTS Service
-"""
+"""Utilities for TTS Service"""
 
 import base64
 import io
@@ -24,26 +22,39 @@ def base64_to_audio(b64_string: str) -> bytes:
 
 def clean_text_for_tts(text: str) -> str:
     """
-    Clean text before sending to TTS
-    - Remove markdown
-    - Remove excessive emojis
-    - Ensure proper punctuation
+    Clean text before sending to TTS.
+    Unifies formatting, abbreviations, and markdown removal.
     """
-    # Remove markdown bold/italic
-    text = re.sub(r"\*{1,3}(.+?)\*{1,3}", r"\1", text)
+    if not text:
+        return text
 
-    # Remove markdown code blocks
-    text = re.sub(r"`{1,3}[^`]*`{1,3}", "", text)
+    # Expand common abbreviations (case-insensitive)
+    text = re.sub(r"(?i)\bdr\.", "Doctor ", text)
+    text = re.sub(r"(?i)\bmr\.", "Mister ", text)
+    text = re.sub(r"(?i)\bmrs\.", "Missus ", text)
+    text = re.sub(r"(?i)\bprof\.", "Professor ", text)
 
-    # Remove URLs
-    text = re.sub(r"http[s]?://\S+", "", text)
+    # Remove Markdown URLs/Links: [text](url) -> text
+    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
 
-    # Remove emojis (optional)
-    # text = re.sub(r'[^\w\s.,!?؟،؛]', '', text)
+    # Remove Markdown Images: ![alt](url) -> ""
+    text = re.sub(r"!\[[^\]]*\]\([^\)]+\)", "", text)
 
-    # Clean extra whitespace
+    # Remove markdown bold/italic/strikethrough markers, but keep the text
+    text = re.sub(r"(?<!\\)(\*\*|\*|__|_|~~|`)", "", text)
+
+    # Remove markdown headers (# Header -> Header)
+    text = re.sub(r"(?m)^#+\s+", "", text)
+
+    # Remove HTML tags
+    text = re.sub(r"<[^>]+>", "", text)
+
+    # Remove emojis and other non-standard characters
+    # Keeps word characters (letters, digits), spaces, and standard punctuation/symbols
+    text = re.sub(r'[^\w\s.,!?\'"\-;:()$%@&+=/\\<>|]', "", text)
+
+    # Collapse multiple spaces
     text = re.sub(r"\s+", " ", text).strip()
-
     return text
 
 

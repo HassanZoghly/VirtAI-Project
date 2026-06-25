@@ -4,7 +4,7 @@ TTS audio cache — stores synthesised audio bytes in Redis.
 Avoids re-synthesising identical text+voice combinations.
 Audio bytes are stored as binary strings with a configurable TTL.
 
-Key: virtai:tts:cache:{sha256(voice|text)[:32]}
+Key: virtai:tts:cache:{api_voice}:{sha256(text)[:32]}
 TTL: REDIS_TTS_CACHE_TTL seconds (default 24 hours)
 
 Important:

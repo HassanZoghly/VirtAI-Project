@@ -20,7 +20,8 @@ env/
 # ═══════════════════════════════════════════
 .env
 .env.*
-!.env.example
+!*.example
+backend/.env
 
 # ═══════════════════════════════════════════
 #  Testing
@@ -31,6 +32,7 @@ env/
 htmlcov/
 coverage.xml
 __tests__/
+*_reports
 
 # ═══════════════════════════════════════════
 #  Linting & Type Checking
@@ -38,6 +40,7 @@ __tests__/
 .mypy_cache/
 .ruff_cache/
 .dmypy.json
+backend/.cache
 
 # ═══════════════════════════════════════════
 #  Runtime Data & Database
@@ -87,8 +90,12 @@ frontend/.nuxt/
 Thumbs.db
 desktop.ini
 .agents/
-skills-lock.json
-.impeccable-live.json
-PRODUCT.md
-mcp.json
-Notes/
+.playwright-cli
+.npm-cache
+reports_frontend/
+
+# ═══════════════════════════════════════════
+#  Obsidian Files
+# ═══════════════════════════════════════════
+VirtAI-Project/
+bundle-stats.html

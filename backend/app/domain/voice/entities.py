@@ -1,13 +1,8 @@
-"""
-Voice domain entities — pure data classes with no external dependencies.
-
-Extracted from:
-  - app.services.asr.base (WordTimestamp, ASRSegment, ASRResult, StreamingASRResult)
-  - app.services.tts.base (VisemeEvent, WordBoundary, TTSResult, TTSChunk)
-"""
+"""Voice domain entities — pure data classes with no external dependencies."""
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 
@@ -50,7 +45,7 @@ class ASRResult:
 
     @property
     def word_count(self) -> int:
-        return len(self.transcript.split())
+        return len(re.findall(r"\b\w+\b", self.transcript))
 
 
 @dataclass
@@ -103,3 +98,18 @@ class TTSChunk:
     viseme: VisemeEvent | None = None  # None if not viseme
     word_boundary: WordBoundary | None = None  # None if not word
     is_done: bool = False
+
+    def __post_init__(self) -> None:
+        provided = sum(
+            bool(value)
+            for value in (
+                self.audio_data,
+                self.viseme,
+                self.word_boundary,
+                self.is_done,
+            )
+        )
+        if provided > 1:
+            raise ValueError(
+                "TTSChunk must have exactly one of audio_data, viseme, word_boundary, or is_done set."
+            )

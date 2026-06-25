@@ -17,6 +17,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.shared.ids import parse_uuid
+
 
 def _normalize_optional_identifier(value: str | None) -> str | None:
     if value is None:
@@ -24,14 +26,20 @@ def _normalize_optional_identifier(value: str | None) -> str | None:
     normalized = value.strip()
     if not normalized:
         raise ValueError("Identifier cannot be empty")
-    return normalized
+    parsed = parse_uuid(normalized)
+    if parsed is None:
+        raise ValueError("Identifier must be a UUID")
+    return str(parsed)
 
 
 def _normalize_required_identifier(value: str) -> str:
     normalized = value.strip()
     if not normalized:
         raise ValueError("Identifier cannot be empty")
-    return normalized
+    parsed = parse_uuid(normalized)
+    if parsed is None:
+        raise ValueError("Identifier must be a UUID")
+    return str(parsed)
 
 
 # ── Client Messages (Frontend -> Backend) ─────────────────────────────────────
@@ -73,7 +81,7 @@ class AudioChunkMessage(BaseModel):
             if len(decoded) == 0:
                 raise ValueError("Decoded audio data is empty")
         except Exception as e:
-            raise ValueError(f"Invalid base64 audio data: {e!s}")
+            raise ValueError(f"Invalid base64 audio data: {e!s}") from e
 
         return v
 
@@ -112,56 +120,6 @@ class VoiceModeStop(BaseModel):
 
 
 # ── Server Messages (Backend -> Frontend) ─────────────────────────────────────
-
-
-class TranscriptMessage(BaseModel):
-    """
-    Server sends transcribed text from ASR service.
-
-    Includes confidence score and detected language for quality assessment.
-
-    Validates: Requirements 18.5
-    """
-
-    type: Literal["transcript"] = Field(default="transcript", description="Message type identifier")
-    session_id: str = Field(..., description="Session identifier")
-    text: str = Field(..., min_length=1, description="Transcribed text from ASR")
-    confidence: float = Field(
-        ..., ge=0.0, le=1.0, description="Transcription confidence score (0.0-1.0)"
-    )
-    language: str = Field(default="en", description="Detected language (ISO 639-1 code)")
-    is_final: bool = Field(default=True, description="Final transcript flag")
-
-    @field_validator("session_id")
-    @classmethod
-    def validate_identifier_format(cls, v: str) -> str:
-        """Validate identifier format."""
-        return _normalize_required_identifier(v)
-
-    @field_validator("text")
-    @classmethod
-    def validate_text_not_empty(cls, v: str) -> str:
-        """
-        Ensure text is not just whitespace.
-
-        Validates: Requirement 18.5
-        """
-        if not v.strip():
-            raise ValueError("Transcript text cannot be empty or whitespace only")
-        return v
-
-    @field_validator("confidence")
-    @classmethod
-    def validate_confidence_range(cls, v: float) -> float:
-        """
-        Ensure confidence is between 0.0 and 1.0.
-
-        Validates: Requirement 18.5
-        """
-        if not 0.0 <= v <= 1.0:
-            raise ValueError(f"Confidence must be between 0.0 and 1.0, got {v}")
-        return v
-
 
 class VoiceModeError(BaseModel):
     """
@@ -213,21 +171,7 @@ class VoiceModeError(BaseModel):
 # ── Helper Functions ──────────────────────────────────────────────────────────
 
 
-def make_transcript_message(
-    session_id: str,
-    text: str,
-    confidence: float,
-    language: str = "en",
-    is_final: bool = True,
-) -> TranscriptMessage:
-    """Create a TranscriptMessage."""
-    return TranscriptMessage(
-        session_id=session_id,
-        text=text,
-        confidence=confidence,
-        language=language,
-        is_final=is_final,
-    )
+
 
 
 def make_voice_mode_error(

@@ -1,28 +1,15 @@
-# ── Frontend Dockerfile ────────────────────────────────────────────
-# Node 20 Alpine for React + Vite dev server
-# ───────────────────────────────────────────────────────────────────
-
-FROM node:22-alpine
-
+# Stage 1: builder
+FROM node:22-bookworm-slim AS builder
 WORKDIR /app
-
-# ── Install dependencies ─────────────────────────────────────────
-# Copy dependency files first for Docker layer caching
 COPY package*.json ./
-RUN npm config set fetch-retries 5 && \
-    npm config set fetch-retry-mintimeout 20000 && \
-    npm config set fetch-retry-maxtimeout 120000 && \
-    npm config set fetch-timeout 300000 && \
-    npm config set maxsockets 3 && \
-    npm config set prefer-offline true && \
-    npm install --no-audit --no-fund --legacy-peer-deps
-
-# ── Copy application source code ────────────────────────────────
+RUN --mount=type=cache,target=/root/.npm \
+    HUSKY=0 npm install --no-audit --no-fund --legacy-peer-deps
 COPY . .
+RUN npm run build
 
-# ── Expose frontend port ────────────────────────────────────────
-EXPOSE 3000
-
-# ── Start Vite dev server ────────────────────────────────────────
-# --host 0.0.0.0 makes the server accessible outside the container
-CMD ["npx", "vite", "--host", "0.0.0.0", "--port", "3000"]
+# Stage 2: production
+FROM nginxinc/nginx-unprivileged:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 8080
+CMD ["nginx", "-g", "daemon off;"]

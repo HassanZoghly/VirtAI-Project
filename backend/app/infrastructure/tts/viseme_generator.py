@@ -26,7 +26,11 @@ class VisemeGenerator:
     """
 
     def __init__(self) -> None:
-        pass
+        try:
+            import numpy  # noqa: F401
+            import pydub  # noqa: F401
+        except ImportError as e:
+            raise RuntimeError(f"VisemeGenerator requires numpy and pydub: {e}") from e
 
     def _generate_cues(self, audio_path: str) -> list[MouthCue]:
         """

@@ -16,24 +16,20 @@ class AnimationMappingDecision:
     intent_scores: dict[str, float]
 
 
+from app.domain.animation.intent_definitions import INTENT_KEYWORDS
+
+
 class AnimationMapper:
     """Maps text segments to animation intents using weighted keyword signals."""
 
-    _INTENT_KEYWORDS: ClassVar[dict[str, tuple[str, ...]]] = {
-        "question": ("?", "why", "how", "what", "when", "where", "which"),
-        "emphasis": ("important", "must", "always", "never", "key", "critical"),
-        "explanation": ("because", "therefore", "means", "for example", "step", "first"),
-        "reassurance": ("don't worry", "it's okay", "you can", "great", "good job"),
-        "transition": ("next", "then", "now", "finally", "also", "in addition"),
-    }
+    _INTENT_KEYWORDS: ClassVar[dict[str, tuple[str, ...]]] = INTENT_KEYWORDS
 
     @staticmethod
-    def _softmax_distribution(scores: dict[str, float], temperature: float = 0.85) -> dict[str, float]:
+    def _softmax_distribution(
+        scores: dict[str, float], temperature: float = 0.85
+    ) -> dict[str, float]:
         bounded_temperature = max(temperature, 1e-6)
-        exps = {
-            key: math.exp(value / bounded_temperature)
-            for key, value in scores.items()
-        }
+        exps = {key: math.exp(value / bounded_temperature) for key, value in scores.items()}
         total = sum(exps.values()) or 1.0
         return {key: val / total for key, val in exps.items()}
 

@@ -2,14 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <link
-      rel="preload"
-      as="image"
-      href="/assets/images/image.webp"
-      fetchpriority="high"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
     <!-- Primary SEO -->
     <title>VirtAI — Virtual AI Assistant for Speech & Chat</title>
@@ -24,7 +17,7 @@
 
     <!-- UI / PWA -->
     <meta name="theme-color" content="#B4AB8B" />
-    <meta name="color-scheme" content="dark light" />
+    <meta name="color-scheme" content="dark" />
     <link rel="manifest" href="/manifest.json" />
 
     <!-- Favicon -->
@@ -33,21 +26,14 @@
     <link rel="icon" type="image/png" sizes="512x512" href="/assets/icons/icon-512.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/assets/icons/apple-touch-icon.png" />
 
-    <!-- Fonts: non-render-blocking via media="print" swap trick -->
+    <!-- Preload Hero Assets for LCP -->
+    <link rel="preload" as="image" href="/assets/images/image.webp" fetchpriority="high" />
+
+    <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-      media="print"
-      onload="this.media = 'all'"
-    />
-    <noscript>
-      <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-        rel="stylesheet"
-      />
-    </noscript>
+    <link href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@400,500,700,800&f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
     <!-- Social sharing (Open Graph) -->
     <meta property="og:type" content="website" />

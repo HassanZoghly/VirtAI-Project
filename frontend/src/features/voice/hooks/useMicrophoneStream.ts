@@ -1,6 +1,6 @@
-import { useState, useRef, useCallback } from 'react';
-import { PCMRecorder } from '../audio/pcmRecorder';
 import { logger } from '@/shared/utils/logger';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { PCMRecorder } from '../audio/pcmRecorder';
 
 /**
  * Hook interface for microphone stream management
@@ -56,6 +56,10 @@ export function useMicrophoneStream(
 
   const pcmRecorderRef = useRef<PCMRecorder | null>(null);
 
+  const callbackRef = useRef(onAudioChunk);
+  callbackRef.current = onAudioChunk;
+  const isMountedRef = useRef(true);
+
   /**
    * Start capturing audio from user's microphone
    *
@@ -81,11 +85,16 @@ export function useMicrophoneStream(
       setError(null);
 
       // Create PCMRecorder instance with callback (Requirements 2.1, 2.3)
-      const pcmRecorder = new PCMRecorder(onAudioChunk, { sampleRate });
+      const pcmRecorder = new PCMRecorder((chunk) => callbackRef.current(chunk), { sampleRate });
       pcmRecorderRef.current = pcmRecorder;
 
       // Start recording (initializes AudioContext, loads worklet, connects microphone)
       await pcmRecorder.startRecording();
+
+      if (!isMountedRef.current) {
+        pcmRecorder.stopRecording();
+        return;
+      }
 
       // Update state
       setIsListening(true);
@@ -148,6 +157,14 @@ export function useMicrophoneStream(
       setIsListening(false);
     }
   }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      stopListening();
+    };
+  }, [stopListening]);
 
   return {
     isListening,

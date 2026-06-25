@@ -15,6 +15,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.shared.ids import parse_uuid
+
 
 def _normalize_optional_identifier(value: str | None) -> str | None:
     if value is None:
@@ -22,25 +24,27 @@ def _normalize_optional_identifier(value: str | None) -> str | None:
     normalized = value.strip()
     if not normalized:
         raise ValueError("Identifier cannot be empty")
-    return normalized
+    parsed = parse_uuid(normalized)
+    if parsed is None:
+        raise ValueError("Identifier must be a UUID")
+    return str(parsed)
 
 
 def _normalize_required_identifier(value: str) -> str:
     normalized = value.strip()
     if not normalized:
         raise ValueError("Identifier cannot be empty")
-    return normalized
+    parsed = parse_uuid(normalized)
+    if parsed is None:
+        raise ValueError("Identifier must be a UUID")
+    return str(parsed)
 
+
+from typing import Annotated, Union
 
 # ── Message Envelope ──────────────────────────────────────────────────────────
-class WSMessageEnvelope(BaseModel):
-    """
-    Generic WebSocket message envelope.
-    All messages are wrapped in this structure for type-safe routing.
-    """
 
-    type: str = Field(..., description="Message type identifier")
-    data: dict[str, Any] = Field(default_factory=dict, description="Message payload")
+class BaseEnvelope(BaseModel):
     session_id: str | None = Field(None, description="Session identifier")
     message_id: str | None = Field(None, description="Message identifier")
 
@@ -49,6 +53,32 @@ class WSMessageEnvelope(BaseModel):
     def validate_identifier_format(cls, v: str | None) -> str | None:
         """Validate that optional identifiers are non-empty when provided."""
         return _normalize_optional_identifier(v)
+
+class ChatUserMessageEnvelope(BaseEnvelope):
+    type: Literal["chat.user_message"]
+    data: ChatUserMessage
+
+class ChatAbortEnvelope(BaseEnvelope):
+    type: Literal["chat.abort"]
+    data: ChatAbort
+
+class ClientSpeechStoppedEnvelope(BaseEnvelope):
+    type: Literal["client.speech_stopped"]
+    data: ClientSpeechStopped
+
+class TTSRequestEnvelope(BaseEnvelope):
+    type: Literal["tts.request"]
+    data: TTSRequest
+
+WSMessageEnvelope = Annotated[
+    Union[
+        ChatUserMessageEnvelope,
+        ChatAbortEnvelope,
+        ClientSpeechStoppedEnvelope,
+        TTSRequestEnvelope,
+    ],
+    Field(discriminator="type"),
+]
 
 
 # ── Client Messages (Frontend -> Backend) ─────────────────────────────────────
@@ -87,14 +117,20 @@ class ChatAbort(BaseModel):
     Cancels: LLM streaming, TTS generation, and any pending operations
     """
 
-    session_id: str = Field(..., description="Session identifier")
-    message_id: str = Field(..., description="Message identifier to abort")
+    session_id: str | None = Field(None, description="Session identifier")
+    message_id: str | None = Field(None, description="Message identifier to abort")
 
     @field_validator("session_id", "message_id")
     @classmethod
-    def validate_identifier_format(cls, v: str) -> str:
+    def validate_identifier_format(cls, v: str | None) -> str | None:
         """Validate identifier format."""
-        return _normalize_required_identifier(v)
+        return _normalize_optional_identifier(v)
+
+
+class ClientSpeechStopped(BaseModel):
+    """Client signals that speech has stopped (VAD silence)."""
+
+    session_id: str | None = Field(None, description="Session identifier")
 
 
 class TTSRequest(BaseModel):
@@ -127,6 +163,55 @@ class TTSRequest(BaseModel):
 
 
 # ── Server Messages (Backend -> Frontend) ─────────────────────────────────────
+class TranscriptMessage(BaseModel):
+    """
+    Server sends transcribed text from ASR service.
+
+    Includes confidence score and detected language for quality assessment.
+
+    Validates: Requirements 18.5
+    """
+
+    type: Literal["transcript"] = Field(default="transcript", description="Message type identifier")
+    session_id: str = Field(..., description="Session identifier")
+    text: str = Field(..., min_length=1, description="Transcribed text from ASR")
+    confidence: float = Field(
+        ..., ge=0.0, le=1.0, description="Transcription confidence score (0.0-1.0)"
+    )
+    language: str = Field(default="en", description="Detected language (ISO 639-1 code)")
+    is_final: bool = Field(default=True, description="Final transcript flag")
+
+    @field_validator("session_id")
+    @classmethod
+    def validate_identifier_format(cls, v: str) -> str:
+        """Validate identifier format."""
+        return _normalize_required_identifier(v)
+
+    @field_validator("text")
+    @classmethod
+    def validate_text_not_empty(cls, v: str) -> str:
+        """
+        Ensure text is not just whitespace.
+
+        Validates: Requirement 18.5
+        """
+        if not v.strip():
+            raise ValueError("Transcript text cannot be empty or whitespace only")
+        return v
+
+    @field_validator("confidence")
+    @classmethod
+    def validate_confidence_range(cls, v: float) -> float:
+        """
+        Ensure confidence is between 0.0 and 1.0.
+
+        Validates: Requirement 18.5
+        """
+        if not 0.0 <= v <= 1.0:
+            raise ValueError(f"Confidence must be between 0.0 and 1.0, got {v}")
+        return v
+
+
 class ChatDelta(BaseModel):
     """
     Server streams LLM tokens as they are generated.
@@ -150,6 +235,9 @@ class ChatFinal(BaseModel):
     message_id: str = Field(..., description="Message UUID")
     text: str = Field(..., description="Complete response text")
     emotion: str | None = Field(None, description="Detected emotion from AI response")
+    # Phase 2: canonical server timestamp for the persisted assistant message.
+    # Clients that don't read this field yet are unaffected (additive).
+    created_at: str | None = Field(None, description="ISO-8601 UTC timestamp of persisted message")
 
 
 class UserMessageEcho(BaseModel):
@@ -161,6 +249,9 @@ class UserMessageEcho(BaseModel):
     message_id: str = Field(..., description="Message UUID")
     text: str = Field(..., description="User message text")
     conversation_id: str | None = Field(None, description="Conversation identifier")
+    # Phase 2: canonical server timestamp from the persisted message row.
+    # Clients that don't read this field yet are unaffected (additive).
+    created_at: str | None = Field(None, description="ISO-8601 UTC timestamp of persisted message")
 
 
 class PipelineState(BaseModel):
@@ -175,6 +266,7 @@ class PipelineState(BaseModel):
     """
 
     session_id: str = Field(..., description="Session UUID")
+    message_id: str | None = Field(None, description="Message UUID")
     state: Literal["idle", "thinking", "speaking", "error"] = Field(
         ..., description="Current pipeline state"
     )
@@ -333,16 +425,43 @@ class ErrorMessage(BaseModel):
 
 
 # ── Helper Functions ──────────────────────────────────────────────────────────
+def make_transcript_message(
+    session_id: str,
+    text: str,
+    confidence: float,
+    language: str = "en",
+    is_final: bool = True,
+) -> TranscriptMessage:
+    """Create a TranscriptMessage."""
+    return TranscriptMessage(
+        session_id=session_id,
+        text=text,
+        confidence=confidence,
+        language=language,
+        is_final=is_final,
+    )
+
+
 def make_chat_delta(session_id: str, message_id: str, delta: str) -> ChatDelta:
     """Create a ChatDelta message."""
     return ChatDelta(session_id=session_id, message_id=message_id, delta=delta)
 
 
 def make_chat_final(
-    session_id: str, message_id: str, text: str, emotion: str | None = None
+    session_id: str,
+    message_id: str,
+    text: str,
+    emotion: str | None = None,
+    created_at: str | None = None,
 ) -> ChatFinal:
     """Create a ChatFinal message."""
-    return ChatFinal(session_id=session_id, message_id=message_id, text=text, emotion=emotion)
+    return ChatFinal(
+        session_id=session_id,
+        message_id=message_id,
+        text=text,
+        emotion=emotion,
+        created_at=created_at,
+    )
 
 
 def make_user_message_echo(
@@ -350,6 +469,7 @@ def make_user_message_echo(
     message_id: str,
     text: str,
     conversation_id: str | None = None,
+    created_at: str | None = None,
 ) -> UserMessageEcho:
     """Create a UserMessageEcho message."""
     return UserMessageEcho(
@@ -357,14 +477,15 @@ def make_user_message_echo(
         message_id=message_id,
         text=text,
         conversation_id=conversation_id,
+        created_at=created_at,
     )
 
 
 def make_pipeline_state(
-    session_id: str, state: Literal["idle", "thinking", "speaking", "error"]
+    session_id: str, state: Literal["idle", "thinking", "speaking", "error"], message_id: str | None = None
 ) -> PipelineState:
     """Create a PipelineState message."""
-    return PipelineState(session_id=session_id, state=state)
+    return PipelineState(session_id=session_id, state=state, message_id=message_id)
 
 
 def make_tts_ready(session_id: str, message_id: str, audio_url: str, duration_ms: int) -> TTSReady:
@@ -427,106 +548,18 @@ def make_error(
     )
 
 
-# ── Legacy Protocol (Old System) ──────────────────────────────────────────────
-# These are kept for backward compatibility with the existing WebSocket implementation
+class ServerReady(BaseModel):
+    """Server signals it is ready to receive messages."""
 
-import json
-from enum import Enum
-
-
-class ClientMessageType(str, Enum):
-    """Legacy client message types"""
-
-    AUDIO_CHUNK = "audio_chunk"
-    AUDIO_END = "audio_end"
-    TEXT_INPUT = "text_input"
-    PING = "ping"
-    ABORT = "abort"
-    VOICE_MODE_STOP = "voice_mode_stop"
+    session_id: str | None = Field(None, description="Session UUID (if applicable)")
+    avatar_id: str = Field(..., description="Avatar identifier")
+    message: str = Field(..., description="Ready message")
+    resumed: bool = Field(..., description="Whether session was resumed")
+    last_seq: int = Field(..., description="Last sequence number")
+    timestamp: float = Field(..., description="Server timestamp")
 
 
-class ServerMessageType(str, Enum):
-    """Legacy server message types"""
+class ServerPong(BaseModel):
+    """Server responds to client ping (or sends heartbeat)."""
 
-    READY = "ready"
-    STATUS = "status"
-    TRANSCRIPT = "transcript"
-    LLM_START = "llm_start"
-    LLM_CHUNK = "llm_chunk"
-    LLM_END = "llm_end"
-    TTS_START = "tts_start"
-    TTS_CHUNK = "tts_chunk"
-    TTS_END = "tts_end"
-    VISEMES = "visemes"
-    PONG = "pong"
-    ERROR = "error"
-
-
-class AvatarStatus(str, Enum):
-    """Avatar state for legacy protocol"""
-
-    IDLE = "idle"
-    PROCESSING = "processing"
-    THINKING = "thinking"
-    SPEAKING = "speaking"
-
-
-class ServerMessage(BaseModel):
-    """Legacy server message wrapper"""
-
-    type: ServerMessageType
-    data: dict[str, Any] = Field(default_factory=dict)
-
-    def to_json(self) -> str:
-        """Convert to JSON string for WebSocket transmission"""
-        return json.dumps({"type": self.type.value, "data": self.data})
-
-
-class VisemeEvent(BaseModel):
-    """Legacy viseme event"""
-
-    offset_ms: float
-    viseme_id: int
-    duration_ms: float
-
-
-class VisemesData(BaseModel):
-    """Legacy visemes data"""
-
-    events: list[VisemeEvent]
-    audio_duration_ms: float
-
-
-# Legacy helper functions
-def make_error_msg(code: str, message: str) -> ServerMessage:
-    """Create legacy error message"""
-    return ServerMessage(type=ServerMessageType.ERROR, data={"code": code, "message": message})
-
-
-def make_status_msg(status: AvatarStatus) -> ServerMessage:
-    """Create legacy status message"""
-    return ServerMessage(type=ServerMessageType.STATUS, data={"status": status.value})
-
-
-def make_transcript_msg(text: str, is_final: bool = True) -> ServerMessage:
-    """Create legacy transcript message"""
-    return ServerMessage(
-        type=ServerMessageType.TRANSCRIPT, data={"text": text, "is_final": is_final}
-    )
-
-
-def make_tts_chunk_msg(audio_b64: str, chunk_index: int) -> ServerMessage:
-    """Create legacy TTS chunk message"""
-    return ServerMessage(
-        type=ServerMessageType.TTS_CHUNK, data={"audio": audio_b64, "chunk_index": chunk_index}
-    )
-
-
-def make_visemes_msg(visemes_data: VisemesData) -> ServerMessage:
-    """Create legacy visemes message"""
-    return ServerMessage(type=ServerMessageType.VISEMES, data=visemes_data.model_dump())
-
-
-def make_llm_chunk_msg(token: str) -> ServerMessage:
-    """Create legacy LLM chunk message"""
-    return ServerMessage(type=ServerMessageType.LLM_CHUNK, data={"token": token})
+    timestamp: float = Field(..., description="Server timestamp")

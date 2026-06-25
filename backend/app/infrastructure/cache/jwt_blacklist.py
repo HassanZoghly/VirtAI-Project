@@ -45,6 +45,11 @@ async def blacklist_token(jti: str, ttl_seconds: int | None = None) -> None:
         key = jwt_blacklist_key(jti)
         await get_redis().setex(key, ttl, "1")
         await cache_token_status(jti, is_revoked=True, ttl_seconds=min(ttl, 300))
+
+        from app.shared.metrics import auth_token_revocations
+
+        auth_token_revocations.labels(reason="blacklist").inc()
+
         logger.debug(f"[JWTBlacklist] Token blacklisted | jti={jti[:8]}... | ttl={ttl}s")
     except Exception as e:
         logger.error(f"[JWTBlacklist] blacklist_token failed | jti={jti[:8]}... | {e}")
@@ -55,8 +60,13 @@ async def is_blacklisted(jti: str) -> bool:
     Check whether a token JTI has been blacklisted.
 
     Returns:
-        True  → token is blacklisted (reject request)
-        False → token is valid, or Redis error (fail open to avoid locking users out)
+        True  → token is blacklisted (reject request), OR Redis is unavailable
+        False → token is valid (confirmed not in blacklist)
+
+    Failure mode: **Fail Closed** — if Redis cannot be reached the token is
+    treated as revoked.  This ensures a revoked token can *never* slip through
+    during a Redis outage.  Users will need to re-authenticate once Redis
+    recovers, but no compromised session can be exploited.
     """
     try:
         cached = await get_token_status(jti)
@@ -71,10 +81,10 @@ async def is_blacklisted(jti: str) -> bool:
         await cache_token_status(jti, is_revoked=revoked)
         return revoked
     except Exception as e:
-        # Fail open — prefer availability over strict security during Redis outages.
-        # Log at ERROR level so ops teams are alerted.
-        logger.error(f"[JWTBlacklist] is_blacklisted check failed (failing open): {e}")
-        return False
+        # Fail CLOSED — prefer security over availability during Redis outages.
+        # A revoked token must never be accepted.
+        logger.error(f"[JWTBlacklist] is_blacklisted check failed (FAILING CLOSED): {e}")
+        return True
 
 
 async def clear_blacklist_cache(jti: str) -> None:

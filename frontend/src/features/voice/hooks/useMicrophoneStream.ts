@@ -1,5 +1,5 @@
 import { logger } from '@/shared/utils/logger';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { PCMRecorder } from '../audio/pcmRecorder';
 
 /**
@@ -58,6 +58,7 @@ export function useMicrophoneStream(
 
   const callbackRef = useRef(onAudioChunk);
   callbackRef.current = onAudioChunk;
+  const isMountedRef = useRef(true);
 
   /**
    * Start capturing audio from user's microphone
@@ -89,6 +90,11 @@ export function useMicrophoneStream(
 
       // Start recording (initializes AudioContext, loads worklet, connects microphone)
       await pcmRecorder.startRecording();
+
+      if (!isMountedRef.current) {
+        pcmRecorder.stopRecording();
+        return;
+      }
 
       // Update state
       setIsListening(true);
@@ -151,6 +157,14 @@ export function useMicrophoneStream(
       setIsListening(false);
     }
   }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      stopListening();
+    };
+  }, [stopListening]);
 
   return {
     isListening,

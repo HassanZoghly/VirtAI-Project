@@ -19,6 +19,7 @@ export function useGaplessAudioQueue() {
   const flushTokenRef = useRef<number>(0);
   const abortControllerRef = useRef<AbortController>(new AbortController());
   const activeSourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
+  const isMountedRef = useRef(true);
 
   const getAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
@@ -115,6 +116,8 @@ export function useGaplessAudioQueue() {
             signal: abortControllerRef.current.signal,
           });
 
+          if (!isMountedRef.current) return;
+
           if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
           const arrayBuffer = await response.arrayBuffer();
 
@@ -192,7 +195,14 @@ export function useGaplessAudioQueue() {
   );
 
   useEffect(() => {
-    return () => flushQueue();
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      flushQueue();
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close().catch(() => {});
+      }
+    };
   }, [flushQueue]);
 
   useEffect(() => {

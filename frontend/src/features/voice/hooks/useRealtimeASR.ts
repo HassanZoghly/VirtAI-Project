@@ -81,6 +81,15 @@ export function useRealtimeASR(
 
   // Ref for onFinalTranscript to avoid re-subscriptions
   const onFinalRef = useRef(onFinalTranscript);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   useEffect(() => {
     onFinalRef.current = onFinalTranscript;
   }, [onFinalTranscript]);
@@ -99,6 +108,7 @@ export function useRealtimeASR(
     }
 
     const unsubscribe = wsClient.onMessage('transcript', (message: TranscriptMessage) => {
+      if (!isMountedRef.current) return;
       if (message.is_final) {
         setFinalText(message.text);
         setInterimText('');

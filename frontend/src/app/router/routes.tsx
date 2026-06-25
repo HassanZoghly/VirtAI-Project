@@ -53,8 +53,8 @@ export default function AppRoutes() {
   return (
     <Routes>
       {/* Public routes */}
-      <Route path="/auth" element={<AuthPage />} />
-      <Route path="/auth/callback" element={<AuthCallbackHandler />} />
+      <Route path="/auth" element={<RouteErrorBoundary><AuthPage /></RouteErrorBoundary>} />
+      <Route path="/auth/callback" element={<RouteErrorBoundary><AuthCallbackHandler /></RouteErrorBoundary>} />
 
       {/* Protected routes wrapped in AppLayout */}
       <Route element={

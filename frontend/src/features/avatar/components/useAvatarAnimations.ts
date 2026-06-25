@@ -364,11 +364,14 @@ export function useAvatarAnimations(
 
   useEffect(() => {
     return () => {
-      if (mixer) mixer.stopAllAction();
+      if (mixer) {
+        mixer.stopAllAction();
+        mixer.uncacheRoot(scene);
+      }
       stopTimeoutsRef.current.forEach(id => window.clearTimeout(id));
       stopTimeoutsRef.current.clear();
     };
-  }, [mixer]);
+  }, [mixer, scene]);
 
   useEffect(() => {
     if (!movementEnabled) {

@@ -97,7 +97,8 @@ export function useWSConnectionManager(deps: ConnectionManagerDeps) {
         return;
       }
 
-      const delay = reconnectPolicyRef.current.nextDelay();
+      const rawDelay = reconnectPolicyRef.current.nextDelay();
+      const delay = Math.max(1000, rawDelay);
       if (import.meta.env.DEV) {
         console.debug(`[WS] Reconnecting in ${delay}ms (attempt ${reconnectPolicyRef.current.attempt}/5)`);
       }

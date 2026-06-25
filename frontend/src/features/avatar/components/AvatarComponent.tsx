@@ -130,6 +130,14 @@ export function AvatarComponent({
     }
   }, [clone]);
 
+  useEffect(() => {
+    return () => {
+      if (groupRef.current) {
+        groupRef.current.clear();
+      }
+    };
+  }, []);
+
   return (
     <group position={[0, -0.2, 0]}>
       <primitive object={clone} ref={groupRef} />

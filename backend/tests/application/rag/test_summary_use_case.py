@@ -79,14 +79,18 @@ async def test_summary_use_case_map_reduce_single_batch():
         def __init__(self, scalar=None, all_res=None):
             self._scalar = scalar
             self._all_res = all_res
+
         def scalar_one_or_none(self):
             return self._scalar
+
         def scalars(self):
             class Scalars:
                 def __init__(self, items):
                     self.items = items
+
                 def all(self):
                     return self.items
+
             return Scalars(self._all_res)
 
     def db_execute_mock(query):

@@ -101,9 +101,11 @@ class IngestionStateRepository:
         await self.db.execute(stmt)
 
     async def mark_completed(self, document_id: str) -> None:
-        stmt = update(Document).where(
-            Document.id == require_uuid(document_id, field_name="document_id")
-        ).values(completed_at=_now())
+        stmt = (
+            update(Document)
+            .where(Document.id == require_uuid(document_id, field_name="document_id"))
+            .values(completed_at=_now())
+        )
         await self.db.execute(stmt)
 
     async def get_status(self, document_id: str, user_id: str) -> DocumentStatusDict | None:

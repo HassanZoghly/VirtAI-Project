@@ -12,31 +12,46 @@ from app.shared.config import get_settings
 from app.shared.errors import AvatarBaseException
 
 
-def standard_error_response(status_code: int, code: str, message: str, details: dict | None = None) -> JSONResponse:
+def standard_error_response(
+    status_code: int, code: str, message: str, details: dict | None = None
+) -> JSONResponse:
     content = {
         "error": {
             "code": code,
             "message": message,
             "retryable": status_code in [408, 429, 500, 502, 503, 504],
-            "details": details or {}
+            "details": details or {},
         }
     }
     return JSONResponse(status_code=status_code, content=content)
+
 
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.error(f"Global exception caught: {exc}\n{traceback.format_exc()}")
     return standard_error_response(500, "INTERNAL_SERVER_ERROR", "An unexpected error occurred.")
 
+
 async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
     return standard_error_response(exc.status_code, "HTTP_ERROR", str(exc.detail))
 
-async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-    details = {"errors": exc.errors()}
-    return standard_error_response(422, "VALIDATION_ERROR", "Request validation failed.", details=details)
 
-async def pydantic_validation_exception_handler(request: Request, exc: ValidationError) -> JSONResponse:
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
     details = {"errors": exc.errors()}
-    return standard_error_response(422, "VALIDATION_ERROR", "Data validation failed.", details=details)
+    return standard_error_response(
+        422, "VALIDATION_ERROR", "Request validation failed.", details=details
+    )
+
+
+async def pydantic_validation_exception_handler(
+    request: Request, exc: ValidationError
+) -> JSONResponse:
+    details = {"errors": exc.errors()}
+    return standard_error_response(
+        422, "VALIDATION_ERROR", "Data validation failed.", details=details
+    )
+
 
 async def avatar_exception_handler(request: Request, exc: AvatarBaseException) -> JSONResponse:
     if exc.status_code >= 500:
@@ -50,11 +65,9 @@ async def avatar_exception_handler(request: Request, exc: AvatarBaseException) -
     details["path"] = request.url.path
 
     return standard_error_response(
-        status_code=exc.status_code,
-        code=exc.code,
-        message=exc.message,
-        details=details
+        status_code=exc.status_code, code=exc.code, message=exc.message, details=details
     )
+
 
 def setup_error_handlers(app):
     app.add_exception_handler(Exception, global_exception_handler)

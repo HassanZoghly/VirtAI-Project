@@ -44,6 +44,7 @@ async def worker_startup_validation(ctx: dict[Any, Any]) -> None:
         )
     elif settings.EMBEDDING_PROVIDER == "openai":
         from app.infrastructure.rag.openai_embedder import OpenAIEmbedder
+
         embedder = OpenAIEmbedder()
     else:
         raise ValueError(

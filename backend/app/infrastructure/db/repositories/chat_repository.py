@@ -59,7 +59,9 @@ class ChatRepository(ChatRepositoryPort):
         session = result.scalar_one_or_none()
         return self._serialize_session(session) if session else None
 
-    async def update_chat_session_title(self, session_id: str, title: str) -> ChatSessionDict | None:
+    async def update_chat_session_title(
+        self, session_id: str, title: str
+    ) -> ChatSessionDict | None:
         """Update a chat session title."""
         sid = require_uuid(session_id, field_name="session_id")
         cleaned_title = title.strip()[:255]
@@ -131,7 +133,9 @@ class ChatRepository(ChatRepositoryPort):
         # Delete scoped documents associated with this session
         from app.infrastructure.db.models import Document
 
-        stmt_docs = select(Document.storage_key).where(Document.retrieval_scope == "SESSION", Document.scope_id == sid)
+        stmt_docs = select(Document.storage_key).where(
+            Document.retrieval_scope == "SESSION", Document.scope_id == sid
+        )
         result_docs = await self.db.execute(stmt_docs)
         storage_keys = result_docs.scalars().all()
 
@@ -145,7 +149,10 @@ class ChatRepository(ChatRepositoryPort):
                     await self.storage_provider.delete(key)
                 except Exception as e:
                     import logging
-                    logging.getLogger(__name__).warning(f"Failed to delete orphaned file {key}: {e}")
+
+                    logging.getLogger(__name__).warning(
+                        f"Failed to delete orphaned file {key}: {e}"
+                    )
 
         # Delete messages first
         await self.db.execute(delete(Message).where(Message.session_id == sid))
@@ -156,6 +163,7 @@ class ChatRepository(ChatRepositoryPort):
         from typing import cast
 
         from sqlalchemy import CursorResult
+
         return cast("CursorResult", result).rowcount > 0
 
     async def delete_all_user_sessions(self, user_id: str) -> None:
@@ -197,7 +205,10 @@ class ChatRepository(ChatRepositoryPort):
                     await self.storage_provider.delete(key)
                 except Exception as e:
                     import logging
-                    logging.getLogger(__name__).warning(f"Failed to delete orphaned file {key}: {e}")
+
+                    logging.getLogger(__name__).warning(
+                        f"Failed to delete orphaned file {key}: {e}"
+                    )
 
         await self.db.flush()
 
@@ -286,7 +297,9 @@ class ChatRepository(ChatRepositoryPort):
             "updated_at": session.updated_at.isoformat() if session.updated_at else None,
             "message_count": session.message_count,
             # Phase 1: new canonical field.  Always present after Phase 0 backfill.
-            "last_message_at": session.last_message_at.isoformat() if session.last_message_at else None,
+            "last_message_at": (
+                session.last_message_at.isoformat() if session.last_message_at else None
+            ),
         }
 
     def _serialize_message(self, message: Message) -> ChatMessageDict:

@@ -73,7 +73,9 @@ class ProfileSelector:
 
         return self._softmax_pick(candidates)
 
-    def _softmax_pick(self, scored_profiles: list[tuple[AnimationProfile, float]]) -> AnimationProfile:
+    def _softmax_pick(
+        self, scored_profiles: list[tuple[AnimationProfile, float]]
+    ) -> AnimationProfile:
         temperature = 0.85
         exps = [math.exp(score / temperature) for _, score in scored_profiles]
         total = sum(exps)

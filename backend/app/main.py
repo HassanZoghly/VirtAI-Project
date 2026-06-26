@@ -118,12 +118,15 @@ async def lifespan(app: FastAPI):
     # ── Intent Classifier Preload ───────────────────────────────────────────
     try:
         from app.application.rag.intent_classifier import IntentClassifier
+
         logger.info("[IntentClassifier] Preloading Semantic Router V2.0...")
         app.state.intent_classifier = IntentClassifier(embedder)
         await app.state.intent_classifier.initialize()
     except Exception as e:
-        logger.error(f"[IntentClassifier] CRITICAL ERROR: Preload crashed ({type(e).__name__}: {e}). "
-                     f"Semantic router is offline. Gracefully degrading to standard chat/retrieval.")
+        logger.error(
+            f"[IntentClassifier] CRITICAL ERROR: Preload crashed ({type(e).__name__}: {e}). "
+            f"Semantic router is offline. Gracefully degrading to standard chat/retrieval."
+        )
         app.state.intent_classifier = None
 
     redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)
@@ -153,6 +156,7 @@ async def lifespan(app: FastAPI):
     app.state.model_policy.registry.register_tts("openai_tts", openai_tts)
 
     from app.domain.voice.filler_cache import init_filler_cache
+
     init_filler_cache(openai_tts)
 
     def create_asr_service() -> GroqWhisperASR:
@@ -263,14 +267,20 @@ async def lifespan(app: FastAPI):
                 from app.shared.config import utc_now
 
                 async with AsyncSessionLocal() as db:
-                    threshold_dt = utc_now() - timedelta(minutes=settings.STALE_QUEUE_THRESHOLD_MINUTES)
+                    threshold_dt = utc_now() - timedelta(
+                        minutes=settings.STALE_QUEUE_THRESHOLD_MINUTES
+                    )
                     stmt = select(
-                        Document.id, Document.user_id, Document.filename,
-                        Document.file_type, Document.upload_source, Document.storage_key
+                        Document.id,
+                        Document.user_id,
+                        Document.filename,
+                        Document.file_type,
+                        Document.upload_source,
+                        Document.storage_key,
                     ).where(
-                        Document.current_stage == 'QUEUED',
+                        Document.current_stage == "QUEUED",
                         Document.upload_date < threshold_dt,
-                        Document.started_at.is_(None)
+                        Document.started_at.is_(None),
                     )
                     result = await db.execute(stmt)
                     rows = result.fetchall()
@@ -316,6 +326,7 @@ async def lifespan(app: FastAPI):
     if embedder is not None:
         await embedder.close()
     from app.infrastructure.rag.reranker import CrossEncoderReranker
+
     # Only shut down the executor if the real reranker was ever loaded
     if not CrossEncoderReranker._import_failed:
         CrossEncoderReranker.shutdown_executor()
@@ -361,8 +372,8 @@ def create_app() -> FastAPI:
     app.add_middleware(CSRFMiddleware)
 
     from app.shared.error_envelope_middleware import setup_error_handlers
-    setup_error_handlers(app)
 
+    setup_error_handlers(app)
 
     # ── JWKS Endpoint ─────────────────────────────────────────────────────────
     @app.get("/.well-known/jwks.json", tags=["auth"])

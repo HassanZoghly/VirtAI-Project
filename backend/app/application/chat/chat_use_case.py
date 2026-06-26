@@ -11,13 +11,26 @@ from app.domain.rag.task_types import classify_task_type
 class ChatUseCase:
     """Use case for non-streaming REST queries with RAG context injection."""
 
-    def __init__(self, llm_provider: BaseLLMProvider, retrieval_use_case: RetrievalUseCase, intent_classifier: IntentClassifier | None = None, context_cache: ChatContextCachePort | None = None):
+    def __init__(
+        self,
+        llm_provider: BaseLLMProvider,
+        retrieval_use_case: RetrievalUseCase,
+        intent_classifier: IntentClassifier | None = None,
+        context_cache: ChatContextCachePort | None = None,
+    ):
         self.llm = llm_provider
         self.retrieval = retrieval_use_case
         self.intent_classifier = intent_classifier
         self.context_cache = context_cache
 
-    async def execute_rag_query(self, query: str, user_id: str, session_id: str | None = None, document_id: str | None = None, metadata_filter: dict[str, Any] | None = None) -> str:
+    async def execute_rag_query(
+        self,
+        query: str,
+        user_id: str,
+        session_id: str | None = None,
+        document_id: str | None = None,
+        metadata_filter: dict[str, Any] | None = None,
+    ) -> str:
         # Retrieve context
         low_confidence = False
         context = ""
@@ -27,8 +40,15 @@ class ChatUseCase:
 
         if not is_casual:
             from app.domain.rag.entities import RetrievalStatus
+
             task_type = classify_task_type(query)
-            result = await self.retrieval.retrieve(query, user_id=user_id, task_type=task_type, document_id=document_id, metadata_filter=metadata_filter)
+            result = await self.retrieval.retrieve(
+                query,
+                user_id=user_id,
+                task_type=task_type,
+                document_id=document_id,
+                metadata_filter=metadata_filter,
+            )
             if result.status not in (RetrievalStatus.NO_RESULTS, RetrievalStatus.FAILED):
                 if result.status == RetrievalStatus.LOW_CONFIDENCE:
                     low_confidence = True
@@ -42,6 +62,7 @@ class ChatUseCase:
                         max_context_tokens=3000,
                     )
                 from app.application.rag.retrieval_use_case import _get_chunk_text, _source_name
+
                 context_parts = []
                 for chunk in chunks:
                     source = _source_name(chunk.metadata)

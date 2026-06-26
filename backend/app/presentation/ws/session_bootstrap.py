@@ -36,7 +36,9 @@ class SessionBootstrap:
         )
 
         if not session:
-            logger.warning(f"[WS] Session {requested_session_id} not found or does not belong to user. Creating new session.")
+            logger.warning(
+                f"[WS] Session {requested_session_id} not found or does not belong to user. Creating new session."
+            )
             session = await self.session_manager.create_session(
                 user_id=user_id,
                 session_id=requested_session_id,

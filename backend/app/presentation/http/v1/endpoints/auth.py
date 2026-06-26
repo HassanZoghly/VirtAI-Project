@@ -97,9 +97,6 @@ def _extract_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-
-
-
 async def _assert_rate_limit_login(request: Request) -> None:
     settings = get_settings()
     client_ip = _extract_client_ip(request)
@@ -180,13 +177,11 @@ async def _record_login_failure(email: str) -> None:
     redis_client: AsyncRedis = get_redis()
     key = f"virtai:auth:lockout:{email}"
     from redis.asyncio.client import Pipeline
+
     pipe: Pipeline = redis_client.pipeline()
     pipe.incr(key)
     pipe.expire(key, 900)  # 15 minute window
     await pipe.execute()
-
-
-
 
 
 def _refresh_cookie_max_age() -> int:
@@ -454,8 +449,12 @@ async def refresh(
 
         redis_client: AsyncRedis = get_redis()
         try:
-            stored_refresh_bytes: bytes | None = await redis_client.execute_command("GET", auth_refresh_key(str(user_id), family_id))
-            stored_refresh: str | None = stored_refresh_bytes.decode("utf-8") if stored_refresh_bytes else None
+            stored_refresh_bytes: bytes | None = await redis_client.execute_command(
+                "GET", auth_refresh_key(str(user_id), family_id)
+            )
+            stored_refresh: str | None = (
+                stored_refresh_bytes.decode("utf-8") if stored_refresh_bytes else None
+            )
             if stored_refresh is not None and stored_refresh != refresh_token:
                 raise RevokedTokenError("Refresh token has been superseded")
 
@@ -585,15 +584,21 @@ async def list_sessions(user: UserEntity = Depends(_current_user)) -> dict:
         auth_refresh_user_families_key,
     )
 
-    result = await redis_client.execute_command("SMEMBERS", auth_refresh_user_families_key(str(user.id)))
-    raw_families: set[bytes] = result if isinstance(result, set) else set(result) if isinstance(result, list) else set()
+    result = await redis_client.execute_command(
+        "SMEMBERS", auth_refresh_user_families_key(str(user.id))
+    )
+    raw_families: set[bytes] = (
+        result if isinstance(result, set) else set(result) if isinstance(result, list) else set()
+    )
     sessions = []
     for fam_raw in raw_families:
         fam = fam_raw.decode() if isinstance(fam_raw, bytes) else str(fam_raw)
         # Check if family is revoked
         if await is_refresh_family_revoked(str(user.id), fam):
             continue
-        result = await redis_client.execute_command("HGETALL", auth_refresh_family_meta_key(str(user.id), fam))
+        result = await redis_client.execute_command(
+            "HGETALL", auth_refresh_family_meta_key(str(user.id), fam)
+        )
         meta: dict[bytes, bytes] = result if isinstance(result, dict) else {}
         if meta:
 

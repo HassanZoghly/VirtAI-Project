@@ -9,6 +9,7 @@ from app.shared.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+
 async def save_conversation_background_task(session_id: str, query: str, response: str) -> None:
     """Saves conversation to the database using an independent session for zero-latency background execution."""
     async with AsyncSessionLocal() as db_session:

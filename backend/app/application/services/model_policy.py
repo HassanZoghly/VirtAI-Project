@@ -60,7 +60,9 @@ class FallbackLLMChain(BaseLLMProvider):
             except Exception as e:
                 provider_name = provider.__class__.__name__
                 if idx < len(providers) - 1:
-                    logger.warning(f"LLM Provider {provider_name} failed complete(). Falling back. Error: {e}")
+                    logger.warning(
+                        f"LLM Provider {provider_name} failed complete(). Falling back. Error: {e}"
+                    )
                 else:
                     logger.error(f"All LLM providers failed complete(). Last error: {e}")
                     raise e
@@ -104,7 +106,9 @@ class FallbackTTSChain(BaseTTSProvider):
             except Exception as e:
                 provider_name = provider.__class__.__name__
                 if idx < len(providers) - 1:
-                    logger.warning(f"TTS Provider {provider_name} failed synthesize(). Falling back. Error: {e}")
+                    logger.warning(
+                        f"TTS Provider {provider_name} failed synthesize(). Falling back. Error: {e}"
+                    )
                 else:
                     logger.error(f"All TTS providers failed synthesize(). Last error: {e}")
                     raise e
@@ -120,7 +124,9 @@ class FallbackTTSChain(BaseTTSProvider):
             except Exception as e:
                 provider_name = provider.__class__.__name__
                 if idx < len(providers) - 1:
-                    logger.warning(f"TTS Provider {provider_name} failed streaming. Falling back. Error: {e}")
+                    logger.warning(
+                        f"TTS Provider {provider_name} failed streaming. Falling back. Error: {e}"
+                    )
                 else:
                     logger.error(f"All TTS providers failed streaming. Last error: {e}")
                     raise e
@@ -140,9 +146,13 @@ class FallbackTTSChain(BaseTTSProvider):
             except Exception as e:
                 provider_name = provider.__class__.__name__
                 if idx < len(providers) - 1:
-                    logger.warning(f"TTS Provider {provider_name} failed generate(). Falling back. Error: {e} | trace_id={trace_id}")
+                    logger.warning(
+                        f"TTS Provider {provider_name} failed generate(). Falling back. Error: {e} | trace_id={trace_id}"
+                    )
                 else:
-                    logger.error(f"All TTS providers failed generate(). Last error: {e} | trace_id={trace_id}")
+                    logger.error(
+                        f"All TTS providers failed generate(). Last error: {e} | trace_id={trace_id}"
+                    )
                     raise e
         raise RuntimeError("No TTS providers available")
 
@@ -166,14 +176,19 @@ class ModelCapabilities:
 
 class ModelRegistry:
     """Central registry holding instantiated Model Providers and their capabilities."""
+
     def __init__(self):
         self.llm_providers: dict[str, tuple[BaseLLMProvider, ModelCapabilities]] = {}
         self.tts_providers: dict[str, tuple[BaseTTSProvider, ModelCapabilities]] = {}
 
-    def register_llm(self, name: str, provider: BaseLLMProvider, caps: ModelCapabilities | None = None):
+    def register_llm(
+        self, name: str, provider: BaseLLMProvider, caps: ModelCapabilities | None = None
+    ):
         self.llm_providers[name] = (provider, caps or ModelCapabilities())
 
-    def register_tts(self, name: str, provider: BaseTTSProvider, caps: ModelCapabilities | None = None):
+    def register_tts(
+        self, name: str, provider: BaseTTSProvider, caps: ModelCapabilities | None = None
+    ):
         self.tts_providers[name] = (provider, caps or ModelCapabilities())
 
     def get_llm(self, name: str) -> BaseLLMProvider | None:
@@ -197,6 +212,7 @@ class ModelRegistry:
 
 class PolicyRouter:
     """Routes capability requests (e.g. 'fastest') to the right fallback chain."""
+
     def __init__(self, registry: ModelRegistry):
         self.registry = registry
 
@@ -222,6 +238,7 @@ class PolicyRouter:
 
 class ModelPolicyService:
     """Facade for the Model Registry and Policy Router."""
+
     def __init__(self):
         self.registry = ModelRegistry()
         self.router = PolicyRouter(self.registry)

@@ -6,7 +6,9 @@ class AudioFeatureFuser:
     def clamp(value: float, low: float, high: float) -> float:
         return max(low, min(high, value))
 
-    def normalize_time_segments(self, raw_segments: Any, duration_s: float) -> list[dict[str, float]]:
+    def normalize_time_segments(
+        self, raw_segments: Any, duration_s: float
+    ) -> list[dict[str, float]]:
         if not isinstance(raw_segments, list):
             return []
 
@@ -64,7 +66,9 @@ class AudioFeatureFuser:
         marks.sort()
         return marks
 
-    def allocate_segment_windows(self, segments: list[str], duration_s: float) -> list[tuple[float, float]]:
+    def allocate_segment_windows(
+        self, segments: list[str], duration_s: float
+    ) -> list[tuple[float, float]]:
         if not segments:
             return []
 
@@ -97,7 +101,9 @@ class AudioFeatureFuser:
 
         return windows
 
-    def average_energy(self, energy_curve: list[dict[str, float]], start_time: float, end_time: float) -> float:
+    def average_energy(
+        self, energy_curve: list[dict[str, float]], start_time: float, end_time: float
+    ) -> float:
         if not energy_curve:
             return 0.5
 

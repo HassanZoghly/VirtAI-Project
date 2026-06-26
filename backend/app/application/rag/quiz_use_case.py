@@ -21,8 +21,10 @@ class QuizQuestionModel(BaseModel):
     explanation: str
     citations: list[int]
 
+
 class QuizModel(BaseModel):
     questions: list[QuizQuestionModel]
+
 
 QUIZ_SCHEMA = {
     "type": "json_schema",
@@ -37,28 +39,29 @@ QUIZ_SCHEMA = {
                         "type": "object",
                         "properties": {
                             "question_text": {"type": "string"},
-                            "options": {
-                                "type": "array",
-                                "items": {"type": "string"}
-                            },
+                            "options": {"type": "array", "items": {"type": "string"}},
                             "correct_option_index": {"type": "integer"},
                             "explanation": {"type": "string"},
-                            "citations": {
-                                "type": "array",
-                                "items": {"type": "integer"}
-                            }
+                            "citations": {"type": "array", "items": {"type": "integer"}},
                         },
-                        "required": ["question_text", "options", "correct_option_index", "explanation", "citations"],
-                        "additionalProperties": False
-                    }
+                        "required": [
+                            "question_text",
+                            "options",
+                            "correct_option_index",
+                            "explanation",
+                            "citations",
+                        ],
+                        "additionalProperties": False,
+                    },
                 }
             },
             "required": ["questions"],
-            "additionalProperties": False
+            "additionalProperties": False,
         },
-        "strict": True
-    }
+        "strict": True,
+    },
 }
+
 
 class QuizDomainException(RAGException):
     pass
@@ -149,7 +152,7 @@ class QuizUseCase:
         # 3. Save Quiz
         quiz = Quiz(document_id=doc_uuid, user_id=user_uuid)
         db.add(quiz)
-        await db.flush() # get quiz.id
+        await db.flush()  # get quiz.id
 
         # 4. Save QuizQuestions
         for q_data in quiz_data.questions:
@@ -171,12 +174,16 @@ class QuizUseCase:
         quiz_uuid = uuid.UUID(quiz_id)
         user_uuid = uuid.UUID(user_id)
 
-        quiz_query = await db.execute(select(Quiz).where(Quiz.id == quiz_uuid, Quiz.user_id == user_uuid))
+        quiz_query = await db.execute(
+            select(Quiz).where(Quiz.id == quiz_uuid, Quiz.user_id == user_uuid)
+        )
         quiz = quiz_query.scalar_one_or_none()
         if not quiz:
             raise QuizDomainException("Quiz not found or unauthorized.")
 
-        questions_query = await db.execute(select(QuizQuestion).where(QuizQuestion.quiz_id == quiz.id))
+        questions_query = await db.execute(
+            select(QuizQuestion).where(QuizQuestion.quiz_id == quiz.id)
+        )
         questions = questions_query.scalars().all()
 
         return {
@@ -193,5 +200,5 @@ class QuizUseCase:
                     "citations": q.citations,
                 }
                 for q in questions
-            ]
+            ],
         }

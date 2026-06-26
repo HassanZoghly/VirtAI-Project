@@ -148,7 +148,7 @@ class GroqLLMProvider(BaseLLMProvider):
             async for attempt in AsyncRetrying(
                 wait=wait_exponential(multiplier=1, min=2, max=10),
                 stop=stop_after_attempt(3),
-                reraise=True
+                reraise=True,
             ):
                 with attempt:
                     groq_stream = await self._client.chat.completions.create(
@@ -194,7 +194,9 @@ class GroqLLMProvider(BaseLLMProvider):
                         yield LLMChunk(token="", sentence=sentence)
 
         except asyncio.CancelledError:
-            logger.warning(f"LLM stream cancelled mid-generation. Closing Groq stream to save API tokens. | trace_id={trace_id}")
+            logger.warning(
+                f"LLM stream cancelled mid-generation. Closing Groq stream to save API tokens. | trace_id={trace_id}"
+            )
             if hasattr(groq_stream, "close"):
                 await groq_stream.close()
             raise
@@ -243,7 +245,7 @@ class GroqLLMProvider(BaseLLMProvider):
             async for attempt in AsyncRetrying(
                 wait=wait_exponential(multiplier=1, min=2, max=10),
                 stop=stop_after_attempt(3),
-                reraise=True
+                reraise=True,
             ):
                 with attempt:
                     kwargs = {

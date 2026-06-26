@@ -92,27 +92,47 @@ class PromptSanitizer:
 
     _COMPILED_JAILBREAK: ClassVar[list[re.Pattern]] = [
         # Instruction override
-        re.compile(r"(?i)\bignore\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions?|rules?|guidelines?|context|prompt)\b"),
-        re.compile(r"(?i)\bforget\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions?|rules?|guidelines?|context|prompt)\b"),
+        re.compile(
+            r"(?i)\bignore\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions?|rules?|guidelines?|context|prompt)\b"
+        ),
+        re.compile(
+            r"(?i)\bforget\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions?|rules?|guidelines?|context|prompt)\b"
+        ),
         re.compile(r"(?i)\bdisregard\s+(all\s+)?(previous|prior|above|earlier)\b"),
-        re.compile(r"(?i)\boverride\s+(all\s+)?(your\s+)?(instructions?|rules?|behavior|settings?|guidelines?)\b"),
+        re.compile(
+            r"(?i)\boverride\s+(all\s+)?(your\s+)?(instructions?|rules?|behavior|settings?|guidelines?)\b"
+        ),
         # System prompt exposure
-        re.compile(r"(?i)\b(reveal|show|dump|print|output|expose|repeat|display)\b.{0,50}\b(system\s*prompt|developer\s*message|hidden\s*instructions?|internal\s*policy|secret\s*instructions?)\b"),
+        re.compile(
+            r"(?i)\b(reveal|show|dump|print|output|expose|repeat|display)\b.{0,50}\b(system\s*prompt|developer\s*message|hidden\s*instructions?|internal\s*policy|secret\s*instructions?)\b"
+        ),
         # From-now-on style overrides (requires "must/will/should" after)
-        re.compile(r"(?i)\bfrom\s+now\s+on\s+(you\s+)?(must|will|should|are\s+required\s+to|have\s+to)\b"),
-        re.compile(r"(?i)\bstarting\s+(right\s+)?now\s+(you\s+)?(must|will|should|are\s+required\s+to)\b"),
+        re.compile(
+            r"(?i)\bfrom\s+now\s+on\s+(you\s+)?(must|will|should|are\s+required\s+to|have\s+to)\b"
+        ),
+        re.compile(
+            r"(?i)\bstarting\s+(right\s+)?now\s+(you\s+)?(must|will|should|are\s+required\s+to)\b"
+        ),
         # Roleplay injection — only triggers with suspicious context words
-        re.compile(r"(?i)\b(act|pretend|roleplay|play|simulate|behave)\s+(as|like)\s+(an?\s+)?"
-                   r"(unrestricted|unfiltered|different\s+ai|evil|hacked|jailbroken|uncensored|unlimited)\b"),
-        re.compile(r"(?i)\b(act|pretend|roleplay)\s+(as|like)\s+"
-                   r"(DAN|GPT-?[0-9]+|Claude\s*[0-9]*|an?\s+AI\s+without\s+(restrictions?|guidelines?|rules?|policies?))\b"),
+        re.compile(
+            r"(?i)\b(act|pretend|roleplay|play|simulate|behave)\s+(as|like)\s+(an?\s+)?"
+            r"(unrestricted|unfiltered|different\s+ai|evil|hacked|jailbroken|uncensored|unlimited)\b"
+        ),
+        re.compile(
+            r"(?i)\b(act|pretend|roleplay)\s+(as|like)\s+"
+            r"(DAN|GPT-?[0-9]+|Claude\s*[0-9]*|an?\s+AI\s+without\s+(restrictions?|guidelines?|rules?|policies?))\b"
+        ),
         # Developer / admin impersonation
-        re.compile(r"(?i)\b(i\s+am|i'm|this\s+is)\s+(the\s+)?(developer|admin|anthropic|openai|operator|system\s+owner)\b"),
+        re.compile(
+            r"(?i)\b(i\s+am|i'm|this\s+is)\s+(the\s+)?(developer|admin|anthropic|openai|operator|system\s+owner)\b"
+        ),
         re.compile(r"(?i)\bdeveloper\s+(mode|override|access\s+granted|key|token|unlock)\b"),
         re.compile(r"(?i)\badmin\s+(mode|override|access\s+granted|unlock)\b"),
         # Safety bypass
-        re.compile(r"(?i)\b(bypass|circumvent|disable|turn\s+off|deactivate|remove)\s+(all\s+)?"
-                   r"(safety|content\s+filter|moderation|policy|restriction|guardrail)\b"),
+        re.compile(
+            r"(?i)\b(bypass|circumvent|disable|turn\s+off|deactivate|remove)\s+(all\s+)?"
+            r"(safety|content\s+filter|moderation|policy|restriction|guardrail)\b"
+        ),
         # Special token injection (LLM prompt format attacks)
         re.compile(r"(?i)<!--.*?(ignore|forget|override|bypass).*?-->"),
         re.compile(r"(?s)(?i)<\s*system\s*>.*?<\s*/\s*system\s*>"),

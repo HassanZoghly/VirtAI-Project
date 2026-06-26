@@ -77,6 +77,7 @@ class AvatarRepository:
         from typing import cast
 
         from sqlalchemy import CursorResult
+
         return cast("CursorResult", result).rowcount > 0
 
     def _serialize(self, avatar: Avatar) -> AvatarDict:

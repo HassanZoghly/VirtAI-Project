@@ -11,7 +11,9 @@ class PromptSet:
     document: Template
     footer: Template
 
+
 _PROMPT_TABLE: dict[tuple[TaskType, Locale], PromptSet] = {}
+
 
 def _build_table() -> None:
     for locale, module in [(Locale.EN, en), (Locale.AR, ar)]:
@@ -53,7 +55,9 @@ def _build_table() -> None:
             footer=module.diagram_footer_prompt,
         )
 
+
 _build_table()
+
 
 def get_prompt_set(task: TaskType, locale: Locale) -> PromptSet:
     """Returns the correct PromptSet for the given task and locale."""

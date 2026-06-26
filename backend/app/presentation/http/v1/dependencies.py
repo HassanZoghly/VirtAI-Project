@@ -99,10 +99,10 @@ from app.infrastructure.db.repositories.chat_repository import ChatRepository
 
 
 def get_chat_repository(
-    db: AsyncSession = Depends(get_db),
-    storage_provider: StorageProvider = Depends(get_storage)
+    db: AsyncSession = Depends(get_db), storage_provider: StorageProvider = Depends(get_storage)
 ) -> ChatRepositoryPort:
     return ChatRepository(db=db, storage_provider=storage_provider)
+
 
 ChatRepositoryDep = Annotated[ChatRepositoryPort, Depends(get_chat_repository)]
 
@@ -113,6 +113,7 @@ from app.application.rag.token_budget import TokenBudgetManager
 from app.infrastructure.vector.pgvector_store import SessionManagedPGVectorStore
 
 _chat_use_case: ChatUseCase | None = None
+
 
 async def get_chat_use_case(request: Request) -> ChatUseCase:
     """Dependency injection for ChatUseCase."""
@@ -128,11 +129,12 @@ async def get_chat_use_case(request: Request) -> ChatUseCase:
             budget_manager=TokenBudgetManager(),
         )
         from app.infrastructure.cache.chat_context_cache import ChatContextCache
+
         _chat_use_case = ChatUseCase(
             llm_provider=llm,
             retrieval_use_case=retrieval,
             intent_classifier=getattr(request.app.state, "intent_classifier", None),
-            context_cache=ChatContextCache()
+            context_cache=ChatContextCache(),
         )
 
     return _chat_use_case
@@ -154,8 +156,6 @@ def get_user_repository(db: AsyncSession = Depends(get_db)) -> UserRepositoryPor
 UserRepositoryDep = Annotated[UserRepositoryPort, Depends(get_user_repository)]
 
 
-
-
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
@@ -170,6 +170,7 @@ from app.shared.security import decode_auth_token
 
 _bearer = HTTPBearer(auto_error=False)
 
+
 def _parse_dt(raw: str | None) -> datetime:
     if not raw:
         return datetime.now(timezone.utc)
@@ -177,6 +178,7 @@ def _parse_dt(raw: str | None) -> datetime:
         return datetime.fromisoformat(raw)
     except Exception:
         return datetime.now(timezone.utc)
+
 
 def _coerce_provider(value: str | AuthProvider | None) -> AuthProvider:
     if isinstance(value, AuthProvider):
@@ -187,6 +189,7 @@ def _coerce_provider(value: str | AuthProvider | None) -> AuthProvider:
         return AuthProvider(value)
     except ValueError:
         return AuthProvider.LOCAL
+
 
 def _deserialize_cached_user(data: dict) -> UserEntity:
     user_id = parse_uuid(data.get("id"))
@@ -207,6 +210,7 @@ def _deserialize_cached_user(data: dict) -> UserEntity:
         updated_at=_parse_dt(data.get("updated_at")),
     )
 
+
 def _serialize_user_for_cache(user: UserEntity) -> dict:
     return {
         "id": str(user.id),
@@ -221,6 +225,7 @@ def _serialize_user_for_cache(user: UserEntity) -> dict:
         "created_at": user.created_at.isoformat(),
         "updated_at": user.updated_at.isoformat(),
     }
+
 
 async def _current_user(
     request: Request,
@@ -274,7 +279,9 @@ async def _current_user(
         raise RevokedTokenError("Access token is stale")
 
     try:
-        await asyncio.wait_for(cache_auth_session(str(user_id), _serialize_user_for_cache(user)), timeout=0.2)
+        await asyncio.wait_for(
+            cache_auth_session(str(user_id), _serialize_user_for_cache(user)), timeout=0.2
+        )
     except asyncio.TimeoutError:
         logger.warning("Redis timeout writing auth session. Proceeding anyway.")
     except Exception as e:

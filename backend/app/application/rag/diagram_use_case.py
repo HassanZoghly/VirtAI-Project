@@ -19,6 +19,7 @@ class DiagramModel(BaseModel):
     mermaid_code: str
     citations: list[int]
 
+
 DIAGRAM_SCHEMA = {
     "type": "json_schema",
     "json_schema": {
@@ -27,17 +28,15 @@ DIAGRAM_SCHEMA = {
             "type": "object",
             "properties": {
                 "mermaid_code": {"type": "string"},
-                "citations": {
-                    "type": "array",
-                    "items": {"type": "integer"}
-                }
+                "citations": {"type": "array", "items": {"type": "integer"}},
             },
             "required": ["mermaid_code", "citations"],
-            "additionalProperties": False
+            "additionalProperties": False,
         },
-        "strict": True
-    }
+        "strict": True,
+    },
 }
+
 
 class DiagramDomainException(RAGException):
     pass
@@ -59,7 +58,7 @@ class DiagramUseCase:
         # Strip markdown fences
         code = mermaid_code.strip()
         if code.startswith("```mermaid"):
-            code = code[len("```mermaid"):].strip()
+            code = code[len("```mermaid") :].strip()
         elif code.startswith("```"):
             code = code[3:].strip()
         if code.endswith("```"):
@@ -74,21 +73,23 @@ class DiagramUseCase:
         def replace_brackets(match: Any) -> str:
             inner = match.group(1)
             # Remove quotes and parentheses
-            inner_safe = re.sub(r'[\"\'\(\)]', '', inner)
+            inner_safe = re.sub(r"[\"\'\(\)]", "", inner)
             return f"[{inner_safe}]"
 
         # Regex to find [...], but we must be careful not to match too broadly.
         # Match anything between [ and ] that doesn't contain [ or ].
-        code = re.sub(r'\[([^\[\]]+)\]', replace_brackets, code)
+        code = re.sub(r"\[([^\[\]]+)\]", replace_brackets, code)
 
         return code
 
     def _check_node_limit(self, mermaid_code: str) -> None:
         """Count lines. If > 60, raise domain exception."""
-        lines = mermaid_code.split('\n')
+        lines = mermaid_code.split("\n")
         # A simple approximation for node/edge limit
         if len(lines) > 60:
-            raise DiagramDomainException("Generated diagram is too complex (> 60 nodes/lines) and may cause instability.")
+            raise DiagramDomainException(
+                "Generated diagram is too complex (> 60 nodes/lines) and may cause instability."
+            )
 
     async def generate_diagram(
         self,
@@ -105,7 +106,9 @@ class DiagramUseCase:
         uuid.UUID(user_id)
 
         # Check if already exists
-        existing_query = await db.execute(select(DiagramCache).where(DiagramCache.document_id == doc_uuid))
+        existing_query = await db.execute(
+            select(DiagramCache).where(DiagramCache.document_id == doc_uuid)
+        )
         existing = existing_query.scalar_one_or_none()
         if existing:
             return str(existing.id)
@@ -160,13 +163,15 @@ class DiagramUseCase:
                 response_text = res.full_text.strip()
 
                 diagram_data = DiagramModel.model_validate_json(response_text)
-                break # Success
+                break  # Success
             except Exception as e:
                 logger.error(f"Diagram generation parsing failed: {e}")
                 diagram_data = None
 
         if not diagram_data:
-            raise DiagramDomainException("Failed to generate a valid diagram JSON after 3 attempts.")
+            raise DiagramDomainException(
+                "Failed to generate a valid diagram JSON after 3 attempts."
+            )
 
         # 3. Sanitize and Validate
         raw_mermaid = diagram_data.mermaid_code
@@ -176,9 +181,7 @@ class DiagramUseCase:
 
         # 4. Save Diagram
         diagram = DiagramCache(
-            document_id=doc_uuid,
-            mermaid_code=sanitized_mermaid,
-            citations=citations
+            document_id=doc_uuid, mermaid_code=sanitized_mermaid, citations=citations
         )
         db.add(diagram)
         await db.commit()

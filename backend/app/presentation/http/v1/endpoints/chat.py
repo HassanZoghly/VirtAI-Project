@@ -1,6 +1,5 @@
 """Chat session management endpoints."""
 
-
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from loguru import logger
 from pydantic import BaseModel
@@ -26,9 +25,6 @@ class TitleRequest(BaseModel):
 
 class RenameRequest(BaseModel):
     title: str
-
-
-
 
 
 @router.get("/", response_model=list[dict])
@@ -115,6 +111,7 @@ async def generate_session_title(
             raise HTTPException(status_code=404, detail="Session not found")
 
         from app.application.chat.generate_title_use_case import GenerateTitleUseCase
+
         use_case = GenerateTitleUseCase(chat_use_case.llm)
         title = await use_case.execute(message)
 
@@ -168,7 +165,7 @@ async def delete_all_sessions(
     repo: ChatRepositoryDep,
     user: UserEntity = Depends(_current_user),
     db: AsyncSession = Depends(get_db),
-    session_manager = Depends(get_session_manager),
+    session_manager=Depends(get_session_manager),
 ) -> None:
     """Physically delete all sessions and messages for the user."""
     try:
@@ -179,11 +176,12 @@ async def delete_all_sessions(
         import json
 
         from app.infrastructure.cache.redis_client import get_redis
+
         redis = get_redis()
         event_payload = {
             "event": "session_invalidated",
             "user_id": str(user.id),
-            "family_id": "all"
+            "family_id": "all",
         }
         await redis.publish(f"virtai:ws:events:{user.id}", json.dumps(event_payload))
     except Exception as e:
@@ -199,7 +197,7 @@ async def delete_session(
     repo: ChatRepositoryDep,
     user: UserEntity = Depends(_current_user),
     db: AsyncSession = Depends(get_db),
-    session_manager = Depends(get_session_manager),
+    session_manager=Depends(get_session_manager),
 ) -> None:
     """Physically delete a session and its messages."""
     if parse_uuid(session_id) is None:
@@ -215,11 +213,12 @@ async def delete_session(
         import json
 
         from app.infrastructure.cache.redis_client import get_redis
+
         redis = get_redis()
         event_payload = {
             "event": "chat_session_deleted",
             "user_id": str(user.id),
-            "session_id": session_id
+            "session_id": session_id,
         }
         await redis.publish(f"virtai:ws:events:{user.id}", json.dumps(event_payload))
     except HTTPException:
@@ -246,14 +245,16 @@ async def query_rag(
 ) -> dict:
     """REST endpoint to perform a one-off RAG query."""
     try:
-        response = await chat_use_case.execute_rag_query(payload.query, str(user.id), session_id=payload.session_id)
+        response = await chat_use_case.execute_rag_query(
+            payload.query, str(user.id), session_id=payload.session_id
+        )
 
         if payload.session_id:
             background_tasks.add_task(
                 save_conversation_background_task,
                 session_id=payload.session_id,
                 query=payload.query,
-                response=response
+                response=response,
             )
 
         return {"response": response}

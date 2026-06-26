@@ -21,26 +21,31 @@ import numpy as np
 
 class BufferOverflowError(Exception):
     """Raised when audio buffer exceeds maximum allowed size."""
+
     pass
 
 
 class BufferTimeoutError(Exception):
     """Raised when audio buffer accumulation exceeds timeout duration."""
+
     pass
 
 
 class ChunkSizeError(Exception):
     """Raised when a single audio chunk exceeds maximum allowed size."""
+
     pass
 
 
 class RateLimitError(Exception):
     """Raised when rate limit for audio chunks is exceeded."""
+
     pass
 
 
 class AudioSilencedError(Exception):
     """Raised when server-side VAD rejects the audio buffer for being too quiet."""
+
     pass
 
 
@@ -79,6 +84,7 @@ class AudioPipeline:
         self._started_at: float | None = None
         self._last_chunk_at: float | None = None
         from collections import deque
+
         self._chunk_timestamps: deque = deque()
 
     def _check_rate_limit(self) -> None:

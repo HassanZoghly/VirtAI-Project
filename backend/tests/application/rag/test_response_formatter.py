@@ -11,7 +11,11 @@ def test_format_prompt_truncation():
 
     # Create lots of long chunks. High score first.
     chunks = [
-        RetrievedDocument(text="This is a very long text chunk. " * 100, score=0.9 - i*0.01, metadata={"source": f"doc{i}.txt"})
+        RetrievedDocument(
+            text="This is a very long text chunk. " * 100,
+            score=0.9 - i * 0.01,
+            metadata={"source": f"doc{i}.txt"},
+        )
         for i in range(50)
     ]
 
@@ -28,16 +32,17 @@ def test_format_prompt_truncation():
 
     assert (sys_tokens + usr_tokens) <= 2500
 
+
 def test_format_final_citations():
     budget_manager = TokenBudgetManager()
     formatter = ResponseFormatterService(budget_manager=budget_manager)
 
-    chunks = [
-        RetrievedDocument(text="short text", score=0.9, metadata={"source": "book.pdf"})
-    ]
+    chunks = [RetrievedDocument(text="short text", score=0.9, metadata={"source": "book.pdf"})]
 
     # For EXPLANATION, sources block is appended
-    final_text = formatter.format_final("This is the LLM output.", chunks, TaskType.EXPLANATION, Locale.AR)
+    final_text = formatter.format_final(
+        "This is the LLM output.", chunks, TaskType.EXPLANATION, Locale.AR
+    )
 
     assert "المصادر" in final_text
     assert "book.pdf" in final_text

@@ -8,12 +8,13 @@ from app.domain.rag.task_types import Locale
 class DummyChunk:
     metadata: dict
 
+
 def test_build_citations():
     chunks = [
         DummyChunk(metadata={"source": "doc1.pdf", "page": 1, "section": "intro"}),
-        DummyChunk(metadata={"source": "doc1.pdf", "page": 1, "section": "intro"}), # Duplicate
+        DummyChunk(metadata={"source": "doc1.pdf", "page": 1, "section": "intro"}),  # Duplicate
         DummyChunk(metadata={"filename": "doc2.pdf", "page": "2"}),
-        DummyChunk(metadata={})
+        DummyChunk(metadata={}),
     ]
 
     citations = build_citations(chunks)
@@ -22,10 +23,13 @@ def test_build_citations():
     assert citations[1] == Citation(source="doc2.pdf", page="2", section=None)
     assert citations[2] == Citation(source="Unknown", page=None, section=None)
 
+
 def test_format_sources_block():
     citations = [
         Citation(source="doc1.pdf", page="1", section="intro"),
-        Citation(source="Unknown", page=None, section=None) # Should produce empty parts -> no line
+        Citation(
+            source="Unknown", page=None, section=None
+        ),  # Should produce empty parts -> no line
     ]
 
     en_block = format_sources_block(citations, Locale.EN)

@@ -8,7 +8,6 @@ from app.shared.config import get_settings
 settings = get_settings()
 
 
-
 class WorkerSettings:
     functions = [run_ingestion_task]
     redis_settings = RedisSettings.from_dsn(settings.REDIS_URL)

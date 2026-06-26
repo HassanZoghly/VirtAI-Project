@@ -42,12 +42,15 @@ async def test_quiz_use_case_json_parsing_success():
     class ExecResult:
         def __init__(self, all_res=None):
             self._all_res = all_res
+
         def scalars(self):
             class Scalars:
                 def __init__(self, items):
                     self.items = items
+
                 def all(self):
                     return self.items
+
             return Scalars(self._all_res)
 
     db.execute.return_value = ExecResult(all_res=[chunk])
@@ -61,13 +64,11 @@ async def test_quiz_use_case_json_parsing_success():
                 "options": ["A", "B", "C", "D"],
                 "correct_option_index": 0,
                 "explanation": "Exp",
-                "citations": []
+                "citations": [],
             }
         ]
     }
-    llm.complete_mock.return_value = LLMResult(
-        full_text=json.dumps(good_json)
-    )
+    llm.complete_mock.return_value = LLMResult(full_text=json.dumps(good_json))
 
     use_case = QuizUseCase(llm)
     quiz_id = await use_case.generate_quiz(db, str(uuid.uuid4()), str(uuid.uuid4()))
@@ -88,12 +89,15 @@ async def test_quiz_use_case_json_parsing_retry_success():
     class ExecResult:
         def __init__(self, all_res=None):
             self._all_res = all_res
+
         def scalars(self):
             class Scalars:
                 def __init__(self, items):
                     self.items = items
+
                 def all(self):
                     return self.items
+
             return Scalars(self._all_res)
 
     db.execute.return_value = ExecResult(all_res=[chunk])
@@ -103,7 +107,13 @@ async def test_quiz_use_case_json_parsing_retry_success():
     bad_output = "I couldn't generate a quiz."
     good_json = {
         "questions": [
-            {"question_text": "Q1?", "options": ["A","B","C","D"], "correct_option_index": 0, "explanation": "Exp", "citations": []}
+            {
+                "question_text": "Q1?",
+                "options": ["A", "B", "C", "D"],
+                "correct_option_index": 0,
+                "explanation": "Exp",
+                "citations": [],
+            }
         ]
     }
     good_output = json.dumps(good_json)
@@ -111,7 +121,7 @@ async def test_quiz_use_case_json_parsing_retry_success():
     # First fails, second succeeds
     llm.complete_mock.side_effect = [
         LLMResult(full_text=bad_output),
-        LLMResult(full_text=good_output)
+        LLMResult(full_text=good_output),
     ]
 
     use_case = QuizUseCase(llm)
@@ -132,12 +142,15 @@ async def test_quiz_use_case_json_parsing_failure():
     class ExecResult:
         def __init__(self, all_res=None):
             self._all_res = all_res
+
         def scalars(self):
             class Scalars:
                 def __init__(self, items):
                     self.items = items
+
                 def all(self):
                     return self.items
+
             return Scalars(self._all_res)
 
     db.execute.return_value = ExecResult(all_res=[chunk])
@@ -148,7 +161,9 @@ async def test_quiz_use_case_json_parsing_failure():
     llm.complete_mock.return_value = LLMResult(full_text=bad_output)
 
     use_case = QuizUseCase(llm)
-    with pytest.raises(QuizDomainException, match="Failed to generate a valid quiz JSON after 3 attempts."):
+    with pytest.raises(
+        QuizDomainException, match="Failed to generate a valid quiz JSON after 3 attempts."
+    ):
         await use_case.generate_quiz(db, str(uuid.uuid4()), str(uuid.uuid4()))
 
     assert llm.complete_mock.call_count == 3

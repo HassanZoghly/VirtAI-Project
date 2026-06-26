@@ -45,7 +45,5 @@ class GenerateTitleUseCase:
             result = await self.llm.complete(history)
             title = self._clean_generated_title(result.full_text, message)
         except Exception as title_error:
-            logger.warning(
-                f"Falling back to heuristic title due to LLM error: {title_error}"
-            )
+            logger.warning(f"Falling back to heuristic title due to LLM error: {title_error}")
         return title

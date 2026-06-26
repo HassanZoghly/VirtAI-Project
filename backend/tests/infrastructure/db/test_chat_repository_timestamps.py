@@ -3,8 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from app.infrastructure.db.models import ChatSession
-from app.infrastructure.db.models import Message
+from app.infrastructure.db.models import ChatSession, Message
 from app.infrastructure.db.repositories.chat_repository import ChatRepository
 
 

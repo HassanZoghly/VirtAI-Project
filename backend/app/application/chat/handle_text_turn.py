@@ -29,6 +29,7 @@ async def handle_text_turn(
         PipelineEvent objects (THINKING, LLM_TOKEN, TTS_AUDIO, etc.)
     """
     import asyncio
+
     queue: asyncio.Queue[PipelineEvent] = asyncio.Queue()
 
     async def send_callback(event: PipelineEvent) -> None:

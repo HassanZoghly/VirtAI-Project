@@ -1,4 +1,3 @@
-
 # We will test the WebSocket via FastAPI's TestClient
 # We need to mock the DB to provide exactly 3 chunks for the document.
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -21,7 +20,7 @@ async def test_explain_ws_flow(app_fixture, mock_db_session):
     mock_chunks = [
         DocumentChunk(chunk_order=0, chunk_text="Slide 0 Content"),
         DocumentChunk(chunk_order=1, chunk_text="Slide 1 Content"),
-        DocumentChunk(chunk_order=2, chunk_text="Slide 2 Content")
+        DocumentChunk(chunk_order=2, chunk_text="Slide 2 Content"),
     ]
 
     # Mock DB execution
@@ -43,13 +42,16 @@ async def test_explain_ws_flow(app_fixture, mock_db_session):
     # Mock get_redis in the module where it's used
     mock_redis = AsyncMock()
     redis_store = {}
+
     async def mock_get(key):
         return redis_store.get(key)
+
     async def mock_setex(key, ttl, value):
         redis_store[key] = value
+
     mock_redis.get.side_effect = mock_get
     mock_redis.setex.side_effect = mock_setex
-    patch('app.application.explain.explain_use_case.get_redis', return_value=mock_redis).start()
+    patch("app.application.explain.explain_use_case.get_redis", return_value=mock_redis).start()
 
     client = TestClient(app_fixture)
 

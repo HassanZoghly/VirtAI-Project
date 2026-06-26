@@ -121,6 +121,7 @@ class VoiceModeStop(BaseModel):
 
 # ── Server Messages (Backend -> Frontend) ─────────────────────────────────────
 
+
 class VoiceModeError(BaseModel):
     """
     Server reports voice mode specific errors to client.
@@ -169,9 +170,6 @@ class VoiceModeError(BaseModel):
 
 
 # ── Helper Functions ──────────────────────────────────────────────────────────
-
-
-
 
 
 def make_voice_mode_error(

@@ -57,7 +57,7 @@ async def acquire_refresh_rotation_lock(user_id: str, family_id: str) -> str | N
         token,
         "EX",
         settings.REFRESH_ROTATION_LOCK_SECONDS,
-        "NX"
+        "NX",
     )
     return token if acquired else None
 
@@ -87,6 +87,7 @@ async def store_initial_refresh_token(
 ) -> None:
     redis_client: AsyncRedis = get_redis()
     from redis.asyncio.client import Pipeline
+
     pipe: Pipeline = redis_client.pipeline()
     pipe.setex(auth_refresh_key(user_id, family_id), ttl_seconds, refresh_token)
     pipe.setex(auth_refresh_active_jti_key(user_id, family_id), ttl_seconds, refresh_jti)
@@ -126,6 +127,7 @@ async def mark_refresh_rotated(
         }
     )
     from redis.asyncio.client import Pipeline
+
     pipe: Pipeline = redis_client.pipeline()
     pipe.setex(auth_refresh_consumed_jti_key(old_jti), ttl_seconds, consumed_payload)
     pipe.setex(auth_refresh_key(user_id, family_id), ttl_seconds, new_refresh_token)
@@ -144,7 +146,9 @@ async def mark_refresh_rotated(
 async def is_refresh_jti_consumed(jti: str) -> bool:
     try:
         redis_client: AsyncRedis = get_redis()
-        return bool(await redis_client.execute_command("EXISTS", auth_refresh_consumed_jti_key(jti)))
+        return bool(
+            await redis_client.execute_command("EXISTS", auth_refresh_consumed_jti_key(jti))
+        )
     except Exception as e:
         logger.error(f"[RefreshFamily] consumed check failed (FAILING CLOSED): {e}")
         return True
@@ -153,7 +157,11 @@ async def is_refresh_jti_consumed(jti: str) -> bool:
 async def is_refresh_family_revoked(user_id: str, family_id: str) -> bool:
     try:
         redis_client: AsyncRedis = get_redis()
-        return bool(await redis_client.execute_command("EXISTS", auth_refresh_family_revoked_key(user_id, family_id)))
+        return bool(
+            await redis_client.execute_command(
+                "EXISTS", auth_refresh_family_revoked_key(user_id, family_id)
+            )
+        )
     except Exception as e:
         logger.error(f"[RefreshFamily] revoked check failed (FAILING CLOSED): {e}")
         return True
@@ -166,6 +174,7 @@ async def revoke_refresh_family(
     ttl_seconds = settings.REFRESH_REUSE_INCIDENT_TTL_DAYS * 24 * 60 * 60
     redis_client: AsyncRedis = get_redis()
     from redis.asyncio.client import Pipeline
+
     pipe: Pipeline = redis_client.pipeline()
     pipe.delete(auth_refresh_key(user_id, family_id))
     pipe.delete(auth_refresh_active_jti_key(user_id, family_id))
@@ -216,7 +225,9 @@ async def revoke_all_refresh_families(
 ) -> None:
     redis_client: AsyncRedis = get_redis()
     result = await redis_client.execute_command("SMEMBERS", auth_refresh_user_families_key(user_id))
-    raw_families: set[bytes] = result if isinstance(result, set) else set(result) if isinstance(result, list) else set()
+    raw_families: set[bytes] = (
+        result if isinstance(result, set) else set(result) if isinstance(result, list) else set()
+    )
     families = [
         item.decode("utf-8") if isinstance(item, bytes) else str(item) for item in raw_families
     ]

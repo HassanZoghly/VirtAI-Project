@@ -58,13 +58,16 @@ class FillerCache:
                 logger.error(f"Failed to generate filler '{phrase}' for voice '{voice_id}': {e}")
                 return None
 
+
 # Global instance initialized elsewhere
 filler_cache: FillerCache | None = None
+
 
 def init_filler_cache(tts_provider: BaseTTSProvider) -> FillerCache:
     global filler_cache
     filler_cache = FillerCache(tts_provider)
     return filler_cache
+
 
 def get_filler_cache() -> FillerCache | None:
     return filler_cache

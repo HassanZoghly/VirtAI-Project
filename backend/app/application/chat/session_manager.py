@@ -49,7 +49,9 @@ class ConversationSession:
         context_cache: ChatContextCachePort | None = None,
         intent_classifier: IntentClassifier | None = None,
         tts_voice: str | None = None,
-        persist_turn: Callable[[str, str, str, str, str | None], Awaitable["ChatMessageDict | None"]] | None = None,
+        persist_turn: (
+            Callable[[str, str, str, str, str | None], Awaitable[ChatMessageDict | None]] | None
+        ) = None,
     ):
         self.session_id: str = session_id
         self.user_id: str = user_id
@@ -181,7 +183,7 @@ class SessionManager:
         content: str,
         input_type: str,
         tts_cache_key: str | None = None,
-    ) -> "ChatMessageDict | None":
+    ) -> ChatMessageDict | None:
         """Persist a conversation turn to the database.
 
         Phase 2: returns the saved ChatMessageDict so the pipeline can forward
@@ -242,6 +244,7 @@ class SessionManager:
                     raise PermissionError("Cannot attach to another user's session.")
             else:
                 from sqlalchemy.exc import IntegrityError
+
                 try:
                     # Wrap the create_chat_session in a nested transaction (savepoint) to make it atomic
                     async with repo.db.begin_nested():  # type: ignore[attr-defined]
@@ -259,7 +262,9 @@ class SessionManager:
             await self._retrieval_service_factory() if self._retrieval_service_factory else None
         )
         animation = self._animation_stage_factory() if self._animation_stage_factory else None
-        context_cache = self._chat_context_cache_factory() if self._chat_context_cache_factory else None
+        context_cache = (
+            self._chat_context_cache_factory() if self._chat_context_cache_factory else None
+        )
 
         session = ConversationSession(
             session_id=sid,

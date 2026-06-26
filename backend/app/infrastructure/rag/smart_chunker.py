@@ -28,8 +28,6 @@ except ImportError:
     logger.warning("langchain text_splitter not installed — SmartChunker unavailable")
 
 
-
-
 class SmartChunker:
     """
     Markdown-aware chunker that respects document structure.
@@ -63,7 +61,7 @@ class SmartChunker:
         chunk_size: int = 1000,
         overlap_size: int = 200,
         max_tokens: int | None = 512,
-        encoding_name: str = "cl100k_base"
+        encoding_name: str = "cl100k_base",
     ):
         self.chunk_size = chunk_size
         self.overlap_size = overlap_size
@@ -72,6 +70,7 @@ class SmartChunker:
 
         try:
             import tiktoken
+
             self.tokenizer = tiktoken.get_encoding(self.encoding_name)
         except ImportError:
             self.tokenizer = None
@@ -89,8 +88,6 @@ class SmartChunker:
             separators=self.SEPARATORS,
             keep_separator=True,
         )
-
-
 
     def chunk_text(self, raw_text: str) -> list[str]:
         """
@@ -255,8 +252,10 @@ class SmartChunker:
                         safe_chunks.append(sub)
                     else:
                         # Absolute worst case fallback: truncate
-                        logger.warning(f"Chunk still exceeded max_tokens ({len(sub_tokens)} > {self.max_tokens}) after sub-chunking. Truncating.")
-                        truncated_tokens = sub_tokens[:self.max_tokens]
+                        logger.warning(
+                            f"Chunk still exceeded max_tokens ({len(sub_tokens)} > {self.max_tokens}) after sub-chunking. Truncating."
+                        )
+                        truncated_tokens = sub_tokens[: self.max_tokens]
                         safe_chunks.append(self.tokenizer.decode(truncated_tokens))
 
         return safe_chunks

@@ -44,6 +44,7 @@ from typing import Annotated, Union
 
 # ── Message Envelope ──────────────────────────────────────────────────────────
 
+
 class BaseEnvelope(BaseModel):
     session_id: str | None = Field(None, description="Session identifier")
     message_id: str | None = Field(None, description="Message identifier")
@@ -54,21 +55,26 @@ class BaseEnvelope(BaseModel):
         """Validate that optional identifiers are non-empty when provided."""
         return _normalize_optional_identifier(v)
 
+
 class ChatUserMessageEnvelope(BaseEnvelope):
     type: Literal["chat.user_message"]
     data: ChatUserMessage
+
 
 class ChatAbortEnvelope(BaseEnvelope):
     type: Literal["chat.abort"]
     data: ChatAbort
 
+
 class ClientSpeechStoppedEnvelope(BaseEnvelope):
     type: Literal["client.speech_stopped"]
     data: ClientSpeechStopped
 
+
 class TTSRequestEnvelope(BaseEnvelope):
     type: Literal["tts.request"]
     data: TTSRequest
+
 
 WSMessageEnvelope = Annotated[
     Union[
@@ -482,7 +488,9 @@ def make_user_message_echo(
 
 
 def make_pipeline_state(
-    session_id: str, state: Literal["idle", "thinking", "speaking", "error"], message_id: str | None = None
+    session_id: str,
+    state: Literal["idle", "thinking", "speaking", "error"],
+    message_id: str | None = None,
 ) -> PipelineState:
     """Create a PipelineState message."""
     return PipelineState(session_id=session_id, state=state, message_id=message_id)

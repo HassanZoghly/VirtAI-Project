@@ -27,7 +27,7 @@ class NapkinClient(VisualizationProviderPort):
         async with httpx.AsyncClient() as client:
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
             }
 
             # Step 1: Submit job
@@ -36,10 +36,7 @@ class NapkinClient(VisualizationProviderPort):
                 # Since the actual API schema isn't provided, I'll mock a generic pattern:
                 payload = {"text": text, "format": "image/png"}
                 response = await client.post(
-                    f"{self.base_url}/generate",
-                    json=payload,
-                    headers=headers,
-                    timeout=10.0
+                    f"{self.base_url}/generate", json=payload, headers=headers, timeout=10.0
                 )
 
                 if response.status_code == 429:
@@ -68,9 +65,7 @@ class NapkinClient(VisualizationProviderPort):
             while time.time() - start_time < self.timeout_seconds:
                 try:
                     poll_res = await client.get(
-                        f"{self.base_url}/tasks/{task_id}",
-                        headers=headers,
-                        timeout=5.0
+                        f"{self.base_url}/tasks/{task_id}", headers=headers, timeout=5.0
                     )
 
                     if poll_res.status_code == 429:

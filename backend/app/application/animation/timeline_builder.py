@@ -109,7 +109,9 @@ class TimelineBuilder:
             semantic_segments = [text.strip()]
 
         windows = self.audio_fuser.allocate_segment_windows(semantic_segments, duration_s)
-        energy_curve = self.audio_fuser.normalize_energy_curve(audio_features.get("energy_curve"), duration_s)
+        energy_curve = self.audio_fuser.normalize_energy_curve(
+            audio_features.get("energy_curve"), duration_s
+        )
         emphasis_marks = self.audio_fuser.normalize_emphasis(
             audio_features.get("emphasis_timestamps"),
             duration_s,

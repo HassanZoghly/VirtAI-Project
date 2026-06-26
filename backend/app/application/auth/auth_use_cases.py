@@ -165,7 +165,9 @@ async def exchange_google_code(code: str) -> dict[str, Any]:
         return cast(dict[str, Any], info_resp.json())
 
 
-async def get_or_create_google_user(repo: UserRepositoryPort, google_info: dict[str, Any]) -> UserEntity:
+async def get_or_create_google_user(
+    repo: UserRepositoryPort, google_info: dict[str, Any]
+) -> UserEntity:
     """Find or create a user from Google OAuth info."""
     google_id: str = str(google_info["id"])
     email: str = google_info["email"]

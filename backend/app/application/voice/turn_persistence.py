@@ -11,7 +11,9 @@ from app.domain.chat.ports import ChatContextCachePort
 class TurnPersistenceManager:
     def __init__(
         self,
-        persist_turn: Callable[[str, str, str, str, str | None], Awaitable[ChatMessageDict | None]] | None,
+        persist_turn: (
+            Callable[[str, str, str, str, str | None], Awaitable[ChatMessageDict | None]] | None
+        ),
         context_cache: ChatContextCachePort | None,
     ):
         self._persist_turn = persist_turn
@@ -29,9 +31,7 @@ class TurnPersistenceManager:
             if self._persist_turn:
                 saved = await self._persist_turn(session_id, "user", text, "text", None)
         except Exception as e:
-            logger.warning(
-                f"[Pipeline] Failed to persist user message: {e} | trace_id={trace_id}"
-            )
+            logger.warning(f"[Pipeline] Failed to persist user message: {e} | trace_id={trace_id}")
 
         if self._context_cache:
             with suppress(Exception):

@@ -48,8 +48,14 @@ class RetrievalUseCase:
         self.budget_manager = budget_manager
 
     async def retrieve(
-        self, query: str, top_k: int = 5, session_id: str | None = None, user_id: str | UUID | None = None, task_type: TaskType = TaskType.SIMPLE_QA,
-        document_id: str | UUID | None = None, metadata_filter: dict[str, Any] | None = None
+        self,
+        query: str,
+        top_k: int = 5,
+        session_id: str | None = None,
+        user_id: str | UUID | None = None,
+        task_type: TaskType = TaskType.SIMPLE_QA,
+        document_id: str | UUID | None = None,
+        metadata_filter: dict[str, Any] | None = None,
     ) -> RetrievalResult:
         """Retrieves relevant chunks via hybrid search and optional reranking."""
         if not query.strip():
@@ -93,7 +99,9 @@ class RetrievalUseCase:
             if self.reranker:
                 try:
                     # Note: Reranker execution uses run_in_executor safely under the hood
-                    ranked_results = await self.reranker.rerank(query=query, chunks=chunks, top_k=actual_top_k)
+                    ranked_results = await self.reranker.rerank(
+                        query=query, chunks=chunks, top_k=actual_top_k
+                    )
                     results = ranked_results
                     used_reranker = True
                 except Exception as e:
@@ -107,7 +115,7 @@ class RetrievalUseCase:
             for chunk, score in results:
                 source = _source_name(chunk.metadata)
                 count = source_counts.get(source, 0)
-                decayed_score = score * (0.85 ** count)
+                decayed_score = score * (0.85**count)
                 source_counts[source] = count + 1
                 decayed_results.append((chunk, score, decayed_score))
 
@@ -115,18 +123,24 @@ class RetrievalUseCase:
 
             final_chunks = []
             for chunk, original_score, _ in decayed_results[:actual_top_k]:
-                final_chunks.append(RetrievedDocument(
-                    text=chunk.chunk_text,
-                    score=original_score,
-                    metadata=chunk.metadata,
-                    id=str(chunk.id)
-                ))
+                final_chunks.append(
+                    RetrievedDocument(
+                        text=chunk.chunk_text,
+                        score=original_score,
+                        metadata=chunk.metadata,
+                        id=str(chunk.id),
+                    )
+                )
 
             status = RetrievalStatus.SUCCESS
             if len(final_chunks) == 0:
                 status = RetrievalStatus.NO_RESULTS
             else:
-                threshold = sizing.score_threshold if not used_reranker else max(sizing.score_threshold, 0.01)
+                threshold = (
+                    sizing.score_threshold
+                    if not used_reranker
+                    else max(sizing.score_threshold, 0.01)
+                )
                 if final_chunks[0].score < threshold:
                     status = RetrievalStatus.LOW_CONFIDENCE
 
@@ -151,7 +165,15 @@ class RetrievalUseCase:
     ) -> str:
         """Retrieves and formats context chunks, respecting token budgets."""
         try:
-            retrieval_result = await self.retrieve(query, top_k=top_k, session_id=session_id, user_id=user_id, task_type=task_type, document_id=document_id, metadata_filter=metadata_filter)
+            retrieval_result = await self.retrieve(
+                query,
+                top_k=top_k,
+                session_id=session_id,
+                user_id=user_id,
+                task_type=task_type,
+                document_id=document_id,
+                metadata_filter=metadata_filter,
+            )
             if retrieval_result.status in (RetrievalStatus.NO_RESULTS, RetrievalStatus.FAILED):
                 return ""
             chunks = retrieval_result.documents
@@ -214,7 +236,17 @@ class RetrievalUseCase:
             f"Ground your answer in the provided context."
         )
 
-    async def execute(self, query: str, limit: int = 5, session_id: str | None = None, user_id: str | UUID | None = None, history_tokens: int = 0, task_type: TaskType = TaskType.SIMPLE_QA, document_id: str | UUID | None = None, metadata_filter: dict[str, Any] | None = None) -> str:
+    async def execute(
+        self,
+        query: str,
+        limit: int = 5,
+        session_id: str | None = None,
+        user_id: str | UUID | None = None,
+        history_tokens: int = 0,
+        task_type: TaskType = TaskType.SIMPLE_QA,
+        document_id: str | UUID | None = None,
+        metadata_filter: dict[str, Any] | None = None,
+    ) -> str:
         """Retrieves relevant chunks and formats them as a context string."""
         return await self.get_formatted_context(
             query=query,

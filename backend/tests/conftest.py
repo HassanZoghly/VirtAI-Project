@@ -15,6 +15,7 @@ os.environ.setdefault("ENVIRONMENT", "development")
 try:
     import prometheus_client  # noqa: F401
 except ModuleNotFoundError:
+
     class _Metric:
         def __init__(self, *args, **kwargs) -> None:
             pass

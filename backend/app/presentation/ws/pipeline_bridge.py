@@ -37,4 +37,3 @@ class PipelineBridge:
                 pass
             logger.debug("Pipeline task cancelled")
         self.pipeline_task = None
-

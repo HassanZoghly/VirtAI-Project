@@ -18,22 +18,86 @@ class IntentClassifier:
     async def initialize(self) -> None:
         """Initialize the embedding model and anchor embeddings."""
         import logging
+
         try:
             raw_anchors = [
                 # English Anchors
-                "hello", "hi", "hey", "greetings", "good morning", "good evening", "good afternoon",
-                "how are you", "what's up", "how's it going", "how are you doing",
-                "thanks", "thank you", "thanks a lot", "thx", "appreciate it",
-                "ok", "okay", "got it", "makes sense", "understood", "i see", "sure", "alright", "fine",
-                "bye", "goodbye", "see you", "cya", "catch you later",
-                "yes", "no", "yep", "nope", "yeah", "nah",
+                "hello",
+                "hi",
+                "hey",
+                "greetings",
+                "good morning",
+                "good evening",
+                "good afternoon",
+                "how are you",
+                "what's up",
+                "how's it going",
+                "how are you doing",
+                "thanks",
+                "thank you",
+                "thanks a lot",
+                "thx",
+                "appreciate it",
+                "ok",
+                "okay",
+                "got it",
+                "makes sense",
+                "understood",
+                "i see",
+                "sure",
+                "alright",
+                "fine",
+                "bye",
+                "goodbye",
+                "see you",
+                "cya",
+                "catch you later",
+                "yes",
+                "no",
+                "yep",
+                "nope",
+                "yeah",
+                "nah",
                 # Arabic Anchors
-                "مرحبا", "أهلا", "هلا", "سلام", "السلام عليكم", "السلام عليكم ورحمة الله", "صباح الخير", "مساء الخير",
-                "كيفك", "كيف حالك", "شخبارك", "عامل ايه",
-                "شكرا", "شكراً", "يعطيك العافية", "تسلم", "مشكور", "الف شكر",
-                "تمام", "حسنا", "حسناً", "مفهوم", "طيب", "اوكي", "ماشي", "زين",
-                "مع السلامة", "وداعا", "وداعاً", "باي", "الى اللقاء",
-                "نعم", "لا", "اه", "ايوه", "أجل", "كلا", "يا هندسة", "السلام عليكم، يا هندسة"
+                "مرحبا",
+                "أهلا",
+                "هلا",
+                "سلام",
+                "السلام عليكم",
+                "السلام عليكم ورحمة الله",
+                "صباح الخير",
+                "مساء الخير",
+                "كيفك",
+                "كيف حالك",
+                "شخبارك",
+                "عامل ايه",
+                "شكرا",
+                "شكراً",
+                "يعطيك العافية",
+                "تسلم",
+                "مشكور",
+                "الف شكر",
+                "تمام",
+                "حسنا",
+                "حسناً",
+                "مفهوم",
+                "طيب",
+                "اوكي",
+                "ماشي",
+                "زين",
+                "مع السلامة",
+                "وداعا",
+                "وداعاً",
+                "باي",
+                "الى اللقاء",
+                "نعم",
+                "لا",
+                "اه",
+                "ايوه",
+                "أجل",
+                "كلا",
+                "يا هندسة",
+                "السلام عليكم، يا هندسة",
             ]
 
             # The embedder will add the prefix if configured (FastEmbed handles "query:" internally for some models)
@@ -45,7 +109,9 @@ class IntentClassifier:
             self.anchor_embeddings_normalized = anchor_embeddings / norms
             self.is_initialized = True
         except Exception as e:
-            logging.getLogger(__name__).error(f"[IntentClassifier] Initialization failed: {e}. Semantic routing will be disabled.")
+            logging.getLogger(__name__).error(
+                f"[IntentClassifier] Initialization failed: {e}. Semantic routing will be disabled."
+            )
             self.is_initialized = False
 
     async def async_is_casual_chat(self, text: str, threshold: float = 0.82) -> bool:
@@ -66,7 +132,9 @@ class IntentClassifier:
             if not query_embedding_list:
                 return False
 
-            query_embedding: npt.NDArray[np.float64] = np.array(query_embedding_list[0], dtype=np.float64)
+            query_embedding: npt.NDArray[np.float64] = np.array(
+                query_embedding_list[0], dtype=np.float64
+            )
 
             # Normalize the query embedding
             query_norm = np.linalg.norm(query_embedding)

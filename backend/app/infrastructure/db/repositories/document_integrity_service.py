@@ -26,7 +26,8 @@ class DocumentIntegrityService:
         self, doc_id: UUID, version: int, expected_total: int
     ) -> None:
         result = await self.db.execute(
-            text("""
+            text(
+                """
                 SELECT
                     COUNT(*)                                          AS chunk_count,
                     COUNT(*) FILTER (WHERE embedding IS NOT NULL)     AS embedded_count,
@@ -36,7 +37,8 @@ class DocumentIntegrityService:
                 WHERE document_id = :doc_id
                     AND chunk_version = :version
                     AND is_active = FALSE
-            """),
+            """
+            ),
             {"doc_id": doc_id, "version": version},
         )
         row = result.one()
@@ -68,11 +70,13 @@ class DocumentIntegrityService:
         if not lock_result.scalar_one_or_none():
             return 0  # Document is CANCELLED or missing
 
-        stmt = text("""
+        stmt = text(
+            """
             UPDATE document_chunks
             SET is_active = (chunk_version = :new_version)
             WHERE document_id = :doc_id
-        """)
+        """
+        )
         result = await self.db.execute(stmt, {"doc_id": doc_uuid, "new_version": new_version})
 
         # Clear derived caches since document content was updated
@@ -83,6 +87,7 @@ class DocumentIntegrityService:
         from typing import cast
 
         from sqlalchemy import CursorResult
+
         return cast("CursorResult", result).rowcount
 
     async def delete_inactive_chunks(
@@ -112,7 +117,7 @@ class DocumentIntegrityService:
     async def delete_chunks_by_version(self, document_id: str, version: int) -> None:
         stmt = delete(DocumentChunk).where(
             DocumentChunk.document_id == require_uuid(document_id, field_name="document_id"),
-            DocumentChunk.chunk_version == version
+            DocumentChunk.chunk_version == version,
         )
         await self.db.execute(stmt)
 

@@ -6,6 +6,7 @@ from loguru import logger
 if TYPE_CHECKING:
     from app.presentation.ws.gateway import WebSocketHandler
 
+
 class FrameDispatcher:
     def __init__(self, handler: "WebSocketHandler"):
         self.handler = handler

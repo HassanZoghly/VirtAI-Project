@@ -40,15 +40,11 @@ redis_operation_duration = Histogram(
 )
 # Counters
 RAG_REQUESTS_TOTAL = Counter(
-    "rag_requests_total",
-    "Total number of RAG requests",
-    ["task_type", "locale"]
+    "rag_requests_total", "Total number of RAG requests", ["task_type", "locale"]
 )
 
 RAG_ERRORS_TOTAL = Counter(
-    "rag_errors_total",
-    "Total number of RAG errors",
-    ["task_type", "locale"]
+    "rag_errors_total", "Total number of RAG errors", ["task_type", "locale"]
 )
 
 # Histograms
@@ -56,12 +52,10 @@ RAG_LATENCY_SECONDS = Histogram(
     "rag_latency_seconds",
     "Latency of RAG requests in seconds",
     ["task_type", "locale"],
-    buckets=[0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0]
+    buckets=[0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0],
 )
 
 # Gauges
 RAG_ACTIVE_REQUESTS = Gauge(
-    "rag_active_requests",
-    "Currently active RAG requests",
-    ["task_type", "locale"]
+    "rag_active_requests", "Currently active RAG requests", ["task_type", "locale"]
 )

@@ -42,7 +42,9 @@ class TurnContext:
     aborted: bool = False
 
     # 3. Backpressure: Strict LLM-to-TTS pacing using maxsize=3
-    sentence_queue: asyncio.Queue[str | None] = field(default_factory=lambda: asyncio.Queue(maxsize=3))
+    sentence_queue: asyncio.Queue[str | None] = field(
+        default_factory=lambda: asyncio.Queue(maxsize=3)
+    )
     current_sentence: str | None = None
     sentence_index: int = 0
     cancel_event: asyncio.Event = field(default_factory=asyncio.Event)

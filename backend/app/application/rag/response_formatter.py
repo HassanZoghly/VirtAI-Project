@@ -1,4 +1,3 @@
-
 from app.application.rag.token_budget import TokenBudgetManager
 from app.domain.chat.entities import ChatMessage, MessageRole
 from app.domain.rag.citation import build_citations, format_sources_block

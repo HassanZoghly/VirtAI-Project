@@ -106,6 +106,7 @@ class IngestDocumentUseCase:
 
         # 3. CHUNKING
         import asyncio
+
         t_chunk = time.monotonic()
         await progress_callback("CHUNKING", 25, 0, 0)
         if not self.chunker:

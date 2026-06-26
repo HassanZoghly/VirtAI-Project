@@ -42,6 +42,7 @@ class ChatContextCache(ChatContextCachePort):
     async def invalidate(self, session_id: str) -> None:
         return await invalidate(session_id)
 
+
 # Maximum messages stored per session in Redis
 MAX_MESSAGES = 50
 
@@ -115,6 +116,7 @@ async def push_message(
             message.update(extra)
 
         from redis.asyncio.client import Pipeline
+
         pipe: Pipeline = redis_client.pipeline()
         pipe.rpush(key, json.dumps(message))
         pipe.ltrim(key, -MAX_MESSAGES, -1)  # keep last N
@@ -151,6 +153,7 @@ async def rebuild_context(session_id: str) -> list[dict]:
 
         # Rebuild atomically
         from redis.asyncio.client import Pipeline
+
         pipe: Pipeline = redis_client.pipeline()
         pipe.delete(key)
         for msg in messages:

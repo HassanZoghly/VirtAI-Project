@@ -72,7 +72,6 @@ class ChatSession(Base):
     )
 
 
-
 class Message(Base):
     __tablename__ = "messages"
 
@@ -184,7 +183,9 @@ class DocumentChunk(Base):
         ),
         Index("ix_chunks_active", "document_id", "is_active"),
         Index("ix_chunks_version", "document_id", "chunk_version"),
-        Index("ix_chunks_text_gin", func.to_tsvector("english", chunk_text), postgresql_using="gin"),
+        Index(
+            "ix_chunks_text_gin", func.to_tsvector("english", chunk_text), postgresql_using="gin"
+        ),
     )
 
 
@@ -193,7 +194,10 @@ class SummaryCache(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     document_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), unique=True, nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
     )
     summary_text: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
@@ -247,7 +251,10 @@ class DiagramCache(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     document_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), unique=True, nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
     )
     mermaid_code: Mapped[str] = mapped_column(Text, nullable=False)
     citations: Mapped[list | dict] = mapped_column(JSONB, default=list)
@@ -259,10 +266,12 @@ class VisualizationCache(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     message_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("messages.id", ondelete="CASCADE"), unique=True, nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("messages.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
     )
     image_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     unavailable: Mapped[bool] = mapped_column(Boolean, default=False)
     reason: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-

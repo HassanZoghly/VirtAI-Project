@@ -20,7 +20,6 @@ from app.domain.voice.ports import BaseTTSProvider
 from app.schemas.ws_messages import (
     make_animation_timeline_v2,
     make_chat_delta,
-    make_chat_final,
     make_error,
     make_pipeline_state,
     make_tts_ready,
@@ -56,7 +55,12 @@ class BaseStage(ABC):
 
 
 class LLMStage(BaseStage):
-    def __init__(self, llm: BaseLLMProvider | None, retrieval: Any = None, intent_classifier: IntentClassifier | None = None) -> None:
+    def __init__(
+        self,
+        llm: BaseLLMProvider | None,
+        retrieval: Any = None,
+        intent_classifier: IntentClassifier | None = None,
+    ) -> None:
         self._llm = llm
         self._retrieval = retrieval
         self._intent_classifier = intent_classifier
@@ -72,7 +76,9 @@ class LLMStage(BaseStage):
             try:
                 is_casual = False
                 if self._intent_classifier:
-                    is_casual = await self._intent_classifier.async_is_casual_chat(context.text_input)
+                    is_casual = await self._intent_classifier.async_is_casual_chat(
+                        context.text_input
+                    )
 
                 locale = detect_locale(context.text_input)
                 formatter = ResponseFormatterService(TokenBudgetManager())
@@ -91,7 +97,10 @@ class LLMStage(BaseStage):
                 else:
                     history_tokens = context.history.get_estimated_tokens()
                     result = await self._retrieval.retrieve(
-                        context.text_input, session_id=context.session_id, user_id=None, task_type=TaskType.SIMPLE_QA
+                        context.text_input,
+                        session_id=context.session_id,
+                        user_id=None,
+                        task_type=TaskType.SIMPLE_QA,
                     )
 
                     messages = formatter.format_prompt(
@@ -249,6 +258,7 @@ class TTSStage(BaseStage):
                 )
             context.tts_result = None
 
+
 class AnimationStage(BaseStage):
     def __init__(self, animation_service: Any, viseme_generator: Any) -> None:
         self._animation_service = animation_service
@@ -266,7 +276,11 @@ class AnimationStage(BaseStage):
 
         mouth_cues = []
         try:
-            if context.tts_result and getattr(context.tts_result, "audio_ref", None) and self._viseme_generator:
+            if (
+                context.tts_result
+                and getattr(context.tts_result, "audio_ref", None)
+                and self._viseme_generator
+            ):
                 mouth_cues = await self._viseme_generator.generate_from_audio(
                     audio_path=context.tts_result.audio_ref,
                     text=text_to_animate,
@@ -274,7 +288,9 @@ class AnimationStage(BaseStage):
                     message_id=chunk_message_id,
                 )
         except Exception as e:
-            logger.warning(f"Viseme generation failed, falling back to empty cues: {e} | trace_id={context.trace_id}")
+            logger.warning(
+                f"Viseme generation failed, falling back to empty cues: {e} | trace_id={context.trace_id}"
+            )
 
         context.mouth_cues = mouth_cues
 
@@ -306,7 +322,9 @@ class AnimationStage(BaseStage):
             if context.tts_result and context.tts_result.audio_ref
             else chunk_message_id
         )
-        audio_url = f"/api/v1/audio/{context.session_id}/{audio_file_id}.mp3" if context.tts_result else ""
+        audio_url = (
+            f"/api/v1/audio/{context.session_id}/{audio_file_id}.mp3" if context.tts_result else ""
+        )
         duration = int(context.tts_result.audio_duration_ms) if context.tts_result else 0
 
         if context.send_callback:

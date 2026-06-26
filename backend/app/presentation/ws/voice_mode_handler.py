@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 
     from app.application.voice.handle_voice_turn import ConversationPipeline
 
+
 class VoiceModeHandler:
     def __init__(
         self,
@@ -58,10 +59,7 @@ class VoiceModeHandler:
         self._next_sequence_to_process = 1
         self._completed_transcripts: dict[int, str] = {}
 
-        logger.info(
-            f"VoiceModeHandler initialized | "
-            f"session={session_id}"
-        )
+        logger.info(f"VoiceModeHandler initialized | " f"session={session_id}")
 
     def _track_transcription_task(self, task: asyncio.Task) -> None:
         self._transcription_tasks.add(task)
@@ -347,7 +345,9 @@ class VoiceModeHandler:
                     if self.turn_callback:
                         await self.turn_callback(transcript)
                 else:
-                    logger.warning(f"Empty transcript received | session={self.session_id} | seq={current_seq}")
+                    logger.warning(
+                        f"Empty transcript received | session={self.session_id} | seq={current_seq}"
+                    )
 
         except Exception as e:
             # Ensure sequence moves forward even on error
@@ -427,12 +427,13 @@ class VoiceModeHandler:
         """
         try:
             from app.schemas.ws_messages import TranscriptMessage
+
             transcript_msg = TranscriptMessage(
                 session_id=self.session_id,
                 text=text,
                 is_final=True,
                 confidence=confidence,
-                language=language
+                language=language,
             )
             if self.outbound_sender:
                 await self.outbound_sender.send_protocol_message(

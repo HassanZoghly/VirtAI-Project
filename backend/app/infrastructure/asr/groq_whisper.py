@@ -212,9 +212,12 @@ class GroqWhisperASR(BaseASRProvider, StreamingASRService):
 
         # Overall confidence (average of segments, weighted by recognized words)
         if segments:
-            weights = [len(segment.words) or max(1, len(segment.text.split())) for segment in segments]
+            weights = [
+                len(segment.words) or max(1, len(segment.text.split())) for segment in segments
+            ]
             avg_confidence = sum(
-                segment.confidence * weight for segment, weight in zip(segments, weights, strict=False)
+                segment.confidence * weight
+                for segment, weight in zip(segments, weights, strict=False)
             ) / sum(weights)
         else:
             avg_confidence = 1.0

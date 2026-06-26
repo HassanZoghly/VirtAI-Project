@@ -31,6 +31,7 @@ from app.shared.ids import parse_uuid
 router = APIRouter()
 settings = get_settings()
 
+
 async def _verify_session_ownership(
     request: Request,
     session_id_query: str | None = Query(None, alias="session_id"),
@@ -42,6 +43,7 @@ async def _verify_session_ownership(
 
     if session_id:
         from app.presentation.http.v1.dependencies import get_storage
+
         storage = get_storage(request)
         session_repo = ChatRepository(db, storage_provider=storage)
         session_obj = await session_repo.get_chat_session(str(session_id))
@@ -49,16 +51,18 @@ async def _verify_session_ownership(
             raise HTTPException(status_code=403, detail="Forbidden")
     return str(session_id) if session_id else None
 
+
 def sanitize_filename(filename: str | None) -> str:
     """Strip path traversal sequences and special characters."""
     filename = filename or "unnamed_file"
     if not filename:
         return "unnamed_document"
     # Replace anything that isn't alphanumeric, dot, dash, or underscore
-    safe = re.sub(r'[^a-zA-Z0-9_\-\.]', '_', filename)
+    safe = re.sub(r"[^a-zA-Z0-9_\-\.]", "_", filename)
     # Strip any leading dots to prevent hidden files/traversal
-    safe = safe.lstrip('.')
+    safe = safe.lstrip(".")
     return safe or "unnamed_document"
+
 
 ALLOWED_MIME_TYPES = {
     "pdf": {"application/pdf", "application/x-pdf", "application/octet-stream"},
@@ -94,13 +98,14 @@ async def validate_file_magic(file: UploadFile, declared_ext: str) -> None:
                 status_code=400, detail=f"File appears to be {kind.mime}, not text/markdown"
             )
         import codecs
-        decoder = codecs.getincrementaldecoder('utf-8')()
+
+        decoder = codecs.getincrementaldecoder("utf-8")()
         await file.seek(0)
         try:
             while True:
                 chunk = await file.read(65536)
                 if not chunk:
-                    decoder.decode(b'', True)
+                    decoder.decode(b"", True)
                     break
                 decoder.decode(chunk)
         except UnicodeDecodeError:
@@ -158,7 +163,8 @@ async def upload_document(
             file_size += len(chunk)
             if file_size > max_upload_bytes:
                 raise HTTPException(
-                    status_code=413, detail=f"File exceeds maximum size of {settings.MAX_UPLOAD_SIZE_MB}MB"
+                    status_code=413,
+                    detail=f"File exceeds maximum size of {settings.MAX_UPLOAD_SIZE_MB}MB",
                 )
     except asyncio.CancelledError:
         logger.warning("Client disconnected during file upload")
@@ -179,6 +185,7 @@ async def upload_document(
             yield chunk
 
     from app.application.rag.start_ingestion_use_case import StartIngestionUseCase
+
     use_case = StartIngestionUseCase(db, storage, request.app.state.arq_pool)
 
     try:
@@ -189,7 +196,7 @@ async def upload_document(
             file_size=file_size,
             safe_filename=safe_filename,
             ext=ext,
-            file_stream=file_streamer()
+            file_stream=file_streamer(),
         )
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
@@ -230,16 +237,18 @@ async def list_statuses(
                 except ValueError:
                     pass
 
-        results.append({
-            "id": str(d.id),
-            "filename": d.filename,
-            "status": d.status,
-            "current_stage": d.current_stage,
-            "progress_pct": progress_pct,
-            "processed_chunks": d.processed_chunks,
-            "total_chunks": d.total_chunks,
-            "error_message": d.error_message,
-        })
+        results.append(
+            {
+                "id": str(d.id),
+                "filename": d.filename,
+                "status": d.status,
+                "current_stage": d.current_stage,
+                "progress_pct": progress_pct,
+                "processed_chunks": d.processed_chunks,
+                "total_chunks": d.total_chunks,
+                "error_message": d.error_message,
+            }
+        )
 
     return results
 

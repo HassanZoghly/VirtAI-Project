@@ -21,7 +21,10 @@ class LocalStorageProvider(StorageProvider):
         return absolute_path
 
     async def save(
-        self, key: str, data: bytes | AsyncIterable[bytes], content_type: str = "application/octet-stream"
+        self,
+        key: str,
+        data: bytes | AsyncIterable[bytes],
+        content_type: str = "application/octet-stream",
     ) -> str:
         file_path = self._get_absolute_path(key)
         # Create parent directories if needed

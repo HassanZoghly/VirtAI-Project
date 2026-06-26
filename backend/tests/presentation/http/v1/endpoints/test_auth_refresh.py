@@ -26,14 +26,30 @@ def _build_request() -> Request:
     }
     return Request(scope)
 
+
 class MockUserRepository(UserRepositoryPort):
-    async def get_by_id(self, user_id: UUID) -> UserEntity | None: return None
-    async def get_by_email(self, email: str) -> UserEntity | None: return None
-    async def get_by_google_id(self, google_id: str) -> UserEntity | None: return None
-    async def create(self, user: UserEntity) -> UserEntity: return user
-    async def update(self, user: UserEntity) -> UserEntity: return user
-    async def increment_refresh_token_version(self, user_id: UUID, expected_version: int) -> UserEntity | None: return None
-    async def force_increment_refresh_token_version(self, user_id: UUID) -> UserEntity | None: return None
+    async def get_by_id(self, user_id: UUID) -> UserEntity | None:
+        return None
+
+    async def get_by_email(self, email: str) -> UserEntity | None:
+        return None
+
+    async def get_by_google_id(self, google_id: str) -> UserEntity | None:
+        return None
+
+    async def create(self, user: UserEntity) -> UserEntity:
+        return user
+
+    async def update(self, user: UserEntity) -> UserEntity:
+        return user
+
+    async def increment_refresh_token_version(
+        self, user_id: UUID, expected_version: int
+    ) -> UserEntity | None:
+        return None
+
+    async def force_increment_refresh_token_version(self, user_id: UUID) -> UserEntity | None:
+        return None
 
 
 @pytest.mark.asyncio

@@ -71,11 +71,14 @@ class ConversationRepository:
         from typing import cast
 
         from sqlalchemy import CursorResult
+
         return cast("CursorResult", result).rowcount
 
     async def get_all_sessions(self, project_id: int) -> Sequence[str]:
-        stmt = select(Conversation.session_id).where(
-            Conversation.conversation_project_id == project_id
-        ).distinct()
+        stmt = (
+            select(Conversation.session_id)
+            .where(Conversation.conversation_project_id == project_id)
+            .distinct()
+        )
         result = await self.db.execute(stmt)
         return result.scalars().all()

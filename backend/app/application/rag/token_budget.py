@@ -87,7 +87,7 @@ class TokenBudgetManager:
                     "chunks_dropped": len(chunks) - len(fitted_chunks),
                     "budget_used": current_used,
                     "budget_available": available_budget,
-                }
+                },
             )
 
         logger.debug(

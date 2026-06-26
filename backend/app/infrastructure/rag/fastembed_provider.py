@@ -22,7 +22,9 @@ class FastEmbedProvider(EmbeddingProvider):
         if cls._executor is None:
             with cls._init_lock:
                 if cls._executor is None:
-                    cls._executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="fastembed")
+                    cls._executor = ThreadPoolExecutor(
+                        max_workers=4, thread_name_prefix="fastembed"
+                    )
         return cls._executor
 
     @classmethod
@@ -57,6 +59,7 @@ class FastEmbedProvider(EmbeddingProvider):
                 }
             )
             from typing import Any
+
             kwargs: dict[str, Any] = {"model_name": self.model_name}
             signature = inspect.signature(TextEmbedding)
             if "cache_dir" in signature.parameters:

@@ -63,7 +63,9 @@ class PGVectorStore(VectorStore):
         from app.infrastructure.db.models import Document
 
         if not user_id:
-            logger.warning("[VectorStore] search aborted: user_id is required to prevent data leaks.")
+            logger.warning(
+                "[VectorStore] search aborted: user_id is required to prevent data leaks."
+            )
             return []
 
         stmt = (
@@ -93,7 +95,7 @@ class PGVectorStore(VectorStore):
             stmt = stmt.where(
                 or_(
                     ChunkModel.retrieval_scope == "GLOBAL",
-                    (ChunkModel.retrieval_scope == "SESSION") & (ChunkModel.scope_id == scope_id)
+                    (ChunkModel.retrieval_scope == "SESSION") & (ChunkModel.scope_id == scope_id),
                 )
             )
         elif scope:
@@ -157,7 +159,9 @@ class PGVectorStore(VectorStore):
         from app.infrastructure.db.models import Document
 
         if not user_id:
-            logger.warning("[VectorStore] hybrid_search aborted: user_id is required to prevent data leaks.")
+            logger.warning(
+                "[VectorStore] hybrid_search aborted: user_id is required to prevent data leaks."
+            )
             return []
 
         # Dense query
@@ -174,7 +178,9 @@ class PGVectorStore(VectorStore):
             stmt_dense = stmt_dense.where(ChunkModel.document_id == document_id)
         if metadata_filter:
             if "slide_index" in metadata_filter:
-                stmt_dense = stmt_dense.where(ChunkModel.chunk_order == metadata_filter["slide_index"])
+                stmt_dense = stmt_dense.where(
+                    ChunkModel.chunk_order == metadata_filter["slide_index"]
+                )
             else:
                 stmt_dense = stmt_dense.where(ChunkModel.chunk_metadata.contains(metadata_filter))
         from sqlalchemy import or_
@@ -183,7 +189,7 @@ class PGVectorStore(VectorStore):
             stmt_dense = stmt_dense.where(
                 or_(
                     ChunkModel.retrieval_scope == "GLOBAL",
-                    (ChunkModel.retrieval_scope == "SESSION") & (ChunkModel.scope_id == scope_id)
+                    (ChunkModel.retrieval_scope == "SESSION") & (ChunkModel.scope_id == scope_id),
                 )
             )
         elif scope:
@@ -192,7 +198,9 @@ class PGVectorStore(VectorStore):
                 stmt_dense = stmt_dense.where(ChunkModel.scope_id == scope_id)
             else:
                 stmt_dense = stmt_dense.where(ChunkModel.scope_id.is_(None))
-        stmt_dense = stmt_dense.order_by(ChunkModel.embedding.cosine_distance(query_vector)).limit(limit * 2)
+        stmt_dense = stmt_dense.order_by(ChunkModel.embedding.cosine_distance(query_vector)).limit(
+            limit * 2
+        )
 
         # Lexical query
         text_query = func.websearch_to_tsquery("english", query_text)
@@ -211,14 +219,18 @@ class PGVectorStore(VectorStore):
             stmt_lexical = stmt_lexical.where(ChunkModel.document_id == document_id)
         if metadata_filter:
             if "slide_index" in metadata_filter:
-                stmt_lexical = stmt_lexical.where(ChunkModel.chunk_order == metadata_filter["slide_index"])
+                stmt_lexical = stmt_lexical.where(
+                    ChunkModel.chunk_order == metadata_filter["slide_index"]
+                )
             else:
-                stmt_lexical = stmt_lexical.where(ChunkModel.chunk_metadata.contains(metadata_filter))
+                stmt_lexical = stmt_lexical.where(
+                    ChunkModel.chunk_metadata.contains(metadata_filter)
+                )
         if scope == "SESSION" and scope_id:
             stmt_lexical = stmt_lexical.where(
                 or_(
                     ChunkModel.retrieval_scope == "GLOBAL",
-                    (ChunkModel.retrieval_scope == "SESSION") & (ChunkModel.scope_id == scope_id)
+                    (ChunkModel.retrieval_scope == "SESSION") & (ChunkModel.scope_id == scope_id),
                 )
             )
         elif scope:
@@ -227,7 +239,9 @@ class PGVectorStore(VectorStore):
                 stmt_lexical = stmt_lexical.where(ChunkModel.scope_id == scope_id)
             else:
                 stmt_lexical = stmt_lexical.where(ChunkModel.scope_id.is_(None))
-        stmt_lexical = stmt_lexical.order_by(func.ts_rank(text_vector, text_query).desc()).limit(limit * 2)
+        stmt_lexical = stmt_lexical.order_by(func.ts_rank(text_vector, text_query).desc()).limit(
+            limit * 2
+        )
 
         res_dense = await self.db.execute(stmt_dense)
         res_lexical = await self.db.execute(stmt_lexical)
@@ -315,7 +329,16 @@ class SessionManagedPGVectorStore(VectorStore):
     ) -> list[tuple[DocumentChunk, float]]:
         async with AsyncSessionLocal() as db:
             store = PGVectorStore(db)
-            return await store.search(query_vector, limit, document_id, scope, scope_id, min_dense_score, user_id=user_id, metadata_filter=metadata_filter)
+            return await store.search(
+                query_vector,
+                limit,
+                document_id,
+                scope,
+                scope_id,
+                min_dense_score,
+                user_id=user_id,
+                metadata_filter=metadata_filter,
+            )
 
     async def hybrid_search(
         self,
@@ -333,5 +356,14 @@ class SessionManagedPGVectorStore(VectorStore):
         async with AsyncSessionLocal() as db:
             store = PGVectorStore(db)
             return await store.hybrid_search(
-                query_text, query_vector, limit, document_id, scope, scope_id, min_hybrid_score, min_dense_score, user_id=user_id, metadata_filter=metadata_filter
+                query_text,
+                query_vector,
+                limit,
+                document_id,
+                scope,
+                scope_id,
+                min_hybrid_score,
+                min_dense_score,
+                user_id=user_id,
+                metadata_filter=metadata_filter,
             )

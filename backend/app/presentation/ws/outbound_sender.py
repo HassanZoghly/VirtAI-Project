@@ -30,7 +30,6 @@ class OutboundSender:
         self.ws = websocket
         self.connection_manager = connection_manager
 
-
     async def send_binary(self, data: bytes) -> None:
         """Send raw binary data to the client over WebSocket."""
         await self.ws.send_bytes(data)
@@ -102,8 +101,8 @@ class OutboundSender:
                 "type": "error",
                 "data": {
                     "code": "PROTOCOL_ROUTING_ERROR",
-                    "message": f"Critical backend serialization failure: {e!s}"
-                }
+                    "message": f"Critical backend serialization failure: {e!s}",
+                },
             }
             try:
                 await self.ws.send_text(json.dumps(error_payload))

@@ -59,7 +59,9 @@ class ConversationPipeline:
         intent_classifier: IntentClassifier | None = None,
         avatar_id: str = "avatar1",
         tts_voice: str | None = None,
-        persist_turn: Callable[[str, str, str, str, str | None], Awaitable["ChatMessageDict | None"]] | None = None,
+        persist_turn: (
+            Callable[[str, str, str, str, str | None], Awaitable[ChatMessageDict | None]] | None
+        ) = None,
     ):
         self._asr = asr
         self._llm = llm
@@ -75,7 +77,9 @@ class ConversationPipeline:
         self._filler_coordinator = FillerCoordinator(tts_provider=self._tts)
 
         # Stages setup
-        self.llm_stage = LLMStage(llm=self._llm, retrieval=self._retrieval, intent_classifier=self._intent_classifier)
+        self.llm_stage = LLMStage(
+            llm=self._llm, retrieval=self._retrieval, intent_classifier=self._intent_classifier
+        )
         self.sentence_stage = SentenceSegmentationStage()
         self.tts_stage = TTSStage(tts=self._tts)
         self.animation_stage = animation_stage or AnimationStage(
@@ -100,7 +104,12 @@ class ConversationPipeline:
         trace_id: str | None = None,
     ) -> None:
         """Sequential processing using decoupled stages."""
-        from app.schemas.ws_messages import make_chat_final, make_error, make_pipeline_state, make_user_message_echo
+        from app.schemas.ws_messages import (
+            make_chat_final,
+            make_error,
+            make_pipeline_state,
+            make_user_message_echo,
+        )
 
         self._current_message_id = message_id
 
@@ -162,7 +171,9 @@ class ConversationPipeline:
                 try:
                     while not context.aborted:
                         try:
-                            sentence = await asyncio.wait_for(context.sentence_queue.get(), timeout=60.0)
+                            sentence = await asyncio.wait_for(
+                                context.sentence_queue.get(), timeout=60.0
+                            )
                         except asyncio.TimeoutError:
                             break
                         if sentence is None:
@@ -199,7 +210,7 @@ class ConversationPipeline:
                                 self._filler_coordinator.run_filler_task(
                                     context, self._history, self.tts_voice, send_callback
                                 ),
-                                "filler_task"
+                                "filler_task",
                             )
                         )
                         self._running_tasks.append(t3)
@@ -228,7 +239,9 @@ class ConversationPipeline:
                 tts_key = None
                 if self._tts:
                     try:
-                        tts_key = self._tts.generate_cache_key(context.llm_full_response, voice=self.tts_voice)
+                        tts_key = self._tts.generate_cache_key(
+                            context.llm_full_response, voice=self.tts_voice
+                        )
                     except Exception as e:
                         logger.warning(f"Failed to generate TTS cache key: {e}")
 

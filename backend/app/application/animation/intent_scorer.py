@@ -33,7 +33,9 @@ class IntentScorer:
         return result[:16]
 
     @staticmethod
-    def _softmax_distribution(scores: dict[str, float], temperature: float = 0.85) -> dict[str, float]:
+    def _softmax_distribution(
+        scores: dict[str, float], temperature: float = 0.85
+    ) -> dict[str, float]:
         bounded_temperature = max(temperature, 1e-6)
         exps = {key: math.exp(value / bounded_temperature) for key, value in scores.items()}
         total = sum(exps.values()) or 1.0

@@ -23,7 +23,6 @@ from app.shared.errors import IngestionCancelledException
 LOCK_TTL = 620  # job_timeout (600) + 20s buffer
 
 
-
 @asynccontextmanager
 async def get_short_session() -> AsyncGenerator[AsyncSession, None]:
     """Helper to get a short-lived database session without FastAPI dependency injection."""
@@ -65,7 +64,10 @@ async def run_ingestion_task(
 
         try:
             use_case = IngestDocumentUseCase(
-                storage=ctx["storage"], parser=None, chunker=None, embedder=None,
+                storage=ctx["storage"],
+                parser=None,
+                chunker=None,
+                embedder=None,
                 db_session_factory=cast("Any", get_short_session),
                 crud_repo_factory=DocumentCrudRepository,
                 state_repo_factory=IngestionStateRepository,
@@ -163,8 +165,7 @@ async def sweep_stalled_jobs(ctx: dict) -> None:
 
         # Find all documents that are processing but haven't completed within TTL
         stmt = select(Document.id, Document.storage_key).where(
-            Document.current_stage.notin_(terminal),
-            Document.started_at < threshold
+            Document.current_stage.notin_(terminal), Document.started_at < threshold
         )
         result = await db.execute(stmt)
         stalled_docs = result.all()
@@ -175,7 +176,7 @@ async def sweep_stalled_jobs(ctx: dict) -> None:
             await state_repo.mark_failed(
                 str(doc_id),
                 error_msg="Job stalled and timed out (Worker crash/OOM).",
-                is_retryable=False
+                is_retryable=False,
             )
             # Clean up vector DB chunks to prevent orphaned vectors
             await integrity_repo.delete_all_chunks(str(doc_id))
@@ -267,4 +268,3 @@ async def _run_ingestion(
 
     duration_ms = int((time.monotonic() - t0) * 1000)
     logger.info({**log_ctx, "event": "ingestion_complete", "duration_ms": duration_ms})
-

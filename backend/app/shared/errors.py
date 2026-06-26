@@ -35,7 +35,6 @@ class TTSException(AvatarBaseException):
         super().__init__(message=f"TTS Error: {message}", code="TTS_ERROR", details=details)
 
 
-
 class RAGException(AvatarBaseException):
     """Raised when RAG ingestion or retrieval fails."""
 
@@ -64,7 +63,6 @@ class IngestionCancelledException(RAGException):
         super().__init__(message=message, details=details)
 
 
-
 class ChunkLimitExceeded(RAGException):
     def __init__(
         self, message: str = "Document exceeds maximum chunk limit", details: dict | None = None
@@ -81,7 +79,6 @@ class VectorDimensionMismatch(RAGException):
             message=f"Vector dimension mismatch. Expected {expected}, got {actual}",
             details={"expected": expected, "actual": actual},
         )
-
 
 
 class AuthenticationException(AvatarBaseException):
@@ -146,7 +143,6 @@ class InvalidAuthStateError(AuthenticationException):
     ) -> None:
         super().__init__(message=message, details=details)
         self.code = "INVALID_AUTH_STATE"
-
 
 
 class WebSocketException(Exception):

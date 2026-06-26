@@ -10,6 +10,7 @@ class Citation:
     page: str | None
     section: str | None
 
+
 def build_citations(chunks: list[Any]) -> list[Citation]:
     """Builds a deduplicated list of citations from DocumentChunks or RetrievedDocuments."""
     citations = []
@@ -30,6 +31,7 @@ def build_citations(chunks: list[Any]) -> list[Citation]:
             citations.append(cit)
 
     return citations
+
 
 def format_sources_block(citations: list[Citation], locale: Locale) -> str:
     """Formats the citations block in the requested locale."""

@@ -34,6 +34,7 @@ class WebSocketHandler:
     Handles a single WebSocket connection.
     Composed of ProtocolRouter, SessionBootstrap, PipelineBridge, OutboundSender.
     """
+
     _family_id: str | None = None
 
     def __init__(
@@ -83,6 +84,7 @@ class WebSocketHandler:
 
         from app.presentation.ws.connection_lifecycle import ConnectionLifecycle
         from app.presentation.ws.frame_dispatcher import FrameDispatcher
+
         self.connection_lifecycle = ConnectionLifecycle(self)
         self.frame_dispatcher = FrameDispatcher(self)
 
@@ -178,12 +180,16 @@ class WebSocketHandler:
                     if "text" in message:
                         msg_size = len(message["text"].encode("utf-8"))
                         if msg_size > max_size:
-                            await self.frame_dispatcher.close_for_message_too_large(msg_size, max_size, "text")
+                            await self.frame_dispatcher.close_for_message_too_large(
+                                msg_size, max_size, "text"
+                            )
                             break
                     elif "bytes" in message:
                         msg_size = len(message["bytes"])
                         if msg_size > max_size:
-                            await self.frame_dispatcher.close_for_message_too_large(msg_size, max_size, "binary")
+                            await self.frame_dispatcher.close_for_message_too_large(
+                                msg_size, max_size, "binary"
+                            )
                             break
 
                     if "text" in message:

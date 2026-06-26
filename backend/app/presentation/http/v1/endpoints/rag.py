@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +19,7 @@ from app.presentation.http.v1.dependencies import _current_user
 from app.shared.ids import parse_uuid
 
 router = APIRouter()
+
 
 @router.post("/summarize/{document_id}")
 async def summarize_document(
@@ -46,6 +46,7 @@ async def summarize_document(
             yield f"Error: {e!s}"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 
 @router.post("/quiz/{document_id}")
 async def generate_quiz(

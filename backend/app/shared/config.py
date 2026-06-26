@@ -86,7 +86,9 @@ class Settings(BaseSettings):
     # Avatar
     DEFAULT_AVATAR_ID: str = "avatar1"
     VALID_AVATAR_IDS: list[str] = ["avatar1", "avatar2", "avatar3"]
-    ANIMATION_ASSETS_DIR: str = str(BASE_DIR.parent / "frontend" / "public" / "models" / "animations" / "Talk")
+    ANIMATION_ASSETS_DIR: str = str(
+        BASE_DIR.parent / "frontend" / "public" / "models" / "animations" / "Talk"
+    )
 
     # WebSocket
     WS_HEARTBEAT_INTERVAL: int = 30
@@ -254,6 +256,7 @@ class Settings(BaseSettings):
     def validate_production_safety(self):
         if self.HF_TOKEN:
             import os
+
             os.environ["HF_TOKEN"] = self.HF_TOKEN
 
         if Environment.production != self.ENVIRONMENT:

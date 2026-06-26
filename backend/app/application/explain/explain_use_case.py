@@ -32,6 +32,7 @@ class ExplainUseCase:
         raw = await self.redis.get(session_key)
         if raw:
             from typing import cast
+
             return cast(dict[str, Any], json.loads(raw))
         return {"current_slide_index": 0, "state": PresentationState.EXPLAINING.value}
 
@@ -65,7 +66,9 @@ class ExplainUseCase:
         state_data["state"] = PresentationState.EXPLAINING.value
         await self._save_state(session_key, state_data)
 
-        yield SlideStartEvent(slide_index=current_slide_index, total_slides=len(chunks)).model_dump()
+        yield SlideStartEvent(
+            slide_index=current_slide_index, total_slides=len(chunks)
+        ).model_dump()
 
         chunk = chunks[current_slide_index]
         text = chunk.chunk_text or ""
@@ -83,7 +86,9 @@ class ExplainUseCase:
 
         yield AwaitInputEvent().model_dump()
 
-    async def handle_user_input(self, user_id: str, document_id: str, text: str) -> AsyncGenerator[dict, None]:
+    async def handle_user_input(
+        self, user_id: str, document_id: str, text: str
+    ) -> AsyncGenerator[dict, None]:
         session_key = f"explain_{user_id}_{document_id}"
         state_data = await self._get_state(session_key)
 
@@ -104,7 +109,7 @@ class ExplainUseCase:
             user_id=user_id,
             session_id=None,
             document_id=document_id,
-            metadata_filter=metadata_filter
+            metadata_filter=metadata_filter,
         )
 
         yield SlideContentTokens(tokens=response_text).model_dump()
@@ -112,5 +117,7 @@ class ExplainUseCase:
         state_data["state"] = PresentationState.AWAITING.value
         await self._save_state(session_key, state_data)
 
-        yield SlideContentTokens(tokens="\nShould we continue or do you have more questions?").model_dump()
+        yield SlideContentTokens(
+            tokens="\nShould we continue or do you have more questions?"
+        ).model_dump()
         yield AwaitInputEvent().model_dump()

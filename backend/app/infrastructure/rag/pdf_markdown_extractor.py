@@ -114,6 +114,7 @@ class PDFMarkdownExtractor(DocumentParser):
     async def parse(self, file_path: str, file_type: str) -> str:
         """Implements DocumentParser.parse — offloads blocking extraction to a thread."""
         import anyio
+
         pages = await anyio.to_thread.run_sync(self.extract, file_path)
         return "\n\n".join(page.page_content for page in pages)
 

@@ -30,6 +30,7 @@ class DomainDocument:
     retrieval_scope: str
     scope_id: UUID | None
 
+
 def _to_domain(doc: Document) -> DomainDocument:
     return DomainDocument(
         id=doc.id,
@@ -59,8 +60,15 @@ class DocumentCrudRepository:
         self.db = db
 
     async def create(
-        self, user_id: str, filename: str, file_type: str, session_id: str | None = None,
-        id: str | None = None, document_sha256: str | None = None, file_size: int = 0, storage_key: str | None = None
+        self,
+        user_id: str,
+        filename: str,
+        file_type: str,
+        session_id: str | None = None,
+        id: str | None = None,
+        document_sha256: str | None = None,
+        file_size: int = 0,
+        storage_key: str | None = None,
     ) -> DomainDocument:
 
         scope = "SESSION" if session_id else "GLOBAL"
@@ -133,7 +141,7 @@ class DocumentCrudRepository:
         """Deletes a document explicitly. Returns the storage_key to be deleted from storage."""
         stmt = select(Document).where(
             Document.id == require_uuid(document_id, field_name="document_id"),
-            Document.user_id == require_uuid(user_id, field_name="user_id")
+            Document.user_id == require_uuid(user_id, field_name="user_id"),
         )
         result = await self.db.execute(stmt)
         doc = result.scalar_one_or_none()
@@ -160,9 +168,11 @@ class DocumentCrudRepository:
         return result.scalars().first()
 
     async def update_content_hash(self, document_id: str, content_hash: str) -> None:
-        stmt = update(Document).where(
-            Document.id == require_uuid(document_id, field_name="document_id")
-        ).values(normalized_content_hash=content_hash)
+        stmt = (
+            update(Document)
+            .where(Document.id == require_uuid(document_id, field_name="document_id"))
+            .values(normalized_content_hash=content_hash)
+        )
         await self.db.execute(stmt)
 
     async def list_active(self, user_id: str, session_id: str | None = None) -> list[Document]:

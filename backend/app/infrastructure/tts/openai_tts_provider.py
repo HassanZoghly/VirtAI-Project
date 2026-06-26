@@ -98,6 +98,7 @@ class OpenAITTSProvider(BaseTTSProvider):
     def generate_cache_key(self, text: str, voice: str | None = None) -> str:
         from app.infrastructure.cache.cache_keys import tts_cache_key
         from app.infrastructure.tts.tts_utils import clean_text_for_tts
+
         sanitized = clean_text_for_tts(text)
         return tts_cache_key(sanitized, self.resolve_voice(voice or self.voice))
 
@@ -257,10 +258,46 @@ class OpenAITTSProvider(BaseTTSProvider):
 
     async def get_available_voices(self) -> list[dict]:
         return [
-            {"id": "aria", "name": "Aria", "api_voice": "nova", "language": "en-US", "gender": "Female"},
-            {"id": "jenny", "name": "Jenny", "api_voice": "shimmer", "language": "en-US", "gender": "Female"},
-            {"id": "sonia", "name": "Sonia", "api_voice": "alloy", "language": "en-GB", "gender": "Female"},
-            {"id": "guy", "name": "Guy", "api_voice": "onyx", "language": "en-US", "gender": "Male"},
-            {"id": "christopher", "name": "Christopher", "api_voice": "echo", "language": "en-US", "gender": "Male"},
-            {"id": "ryan", "name": "Ryan", "api_voice": "fable", "language": "en-GB", "gender": "Male"},
+            {
+                "id": "aria",
+                "name": "Aria",
+                "api_voice": "nova",
+                "language": "en-US",
+                "gender": "Female",
+            },
+            {
+                "id": "jenny",
+                "name": "Jenny",
+                "api_voice": "shimmer",
+                "language": "en-US",
+                "gender": "Female",
+            },
+            {
+                "id": "sonia",
+                "name": "Sonia",
+                "api_voice": "alloy",
+                "language": "en-GB",
+                "gender": "Female",
+            },
+            {
+                "id": "guy",
+                "name": "Guy",
+                "api_voice": "onyx",
+                "language": "en-US",
+                "gender": "Male",
+            },
+            {
+                "id": "christopher",
+                "name": "Christopher",
+                "api_voice": "echo",
+                "language": "en-US",
+                "gender": "Male",
+            },
+            {
+                "id": "ryan",
+                "name": "Ryan",
+                "api_voice": "fable",
+                "language": "en-GB",
+                "gender": "Male",
+            },
         ]

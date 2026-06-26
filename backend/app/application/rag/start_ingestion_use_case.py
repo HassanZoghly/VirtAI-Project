@@ -44,7 +44,10 @@ class StartIngestionUseCase:
                 upload_dt = existing.upload_date
                 if upload_dt.tzinfo is None:
                     upload_dt = upload_dt.replace(tzinfo=timezone.utc)
-                if datetime.now(timezone.utc) - upload_dt > timedelta(minutes=5) and existing.current_stage != IngestionStage.COMPLETE:
+                if (
+                    datetime.now(timezone.utc) - upload_dt > timedelta(minutes=5)
+                    and existing.current_stage != IngestionStage.COMPLETE
+                ):
                     is_stale = True
 
             if existing.current_stage == IngestionStage.FAILED or is_stale:
@@ -111,11 +114,15 @@ class StartIngestionUseCase:
                     "message": "Document already exists (concurrent upload resolved)",
                     "http_status_code": 200,
                 }
-            raise ValueError("Conflict: A document with this SHA256 already exists in the requested scope.") from e
+            raise ValueError(
+                "Conflict: A document with this SHA256 already exists in the requested scope."
+            ) from e
 
         # 3. Write to storage
         try:
-            await self.storage.save(storage_key, file_stream, content_type="application/octet-stream")
+            await self.storage.save(
+                storage_key, file_stream, content_type="application/octet-stream"
+            )
         except asyncio.CancelledError:
             logger.warning(f"Client disconnected while saving file {doc.id}")
             raise

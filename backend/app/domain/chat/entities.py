@@ -74,6 +74,7 @@ class LLMResult:
     def total_chars(self) -> int:
         return len(self.full_text)
 
+
 @dataclass
 class ConversationHistory:
     """
@@ -92,6 +93,7 @@ class ConversationHistory:
     def __post_init__(self) -> None:
         try:
             import tiktoken
+
             self._tokenizer = tiktoken.get_encoding("cl100k_base")
         except ImportError:
             self._tokenizer_failed = True
@@ -107,6 +109,7 @@ class ConversationHistory:
             sanitized_content = self.sanitizer(content)
         else:
             from app.shared.security.prompt_sanitizer import PromptSanitizer
+
             sanitized_content = PromptSanitizer.sanitize(content)
 
         self._messages.append(ChatMessage(role=MessageRole.USER, content=sanitized_content))
@@ -144,10 +147,15 @@ class ConversationHistory:
 
         if self._tokenizer:
             system_tokens = len(self._tokenizer.encode(self.system_prompt, disallowed_special=()))
-            message_tokens = [len(self._tokenizer.encode(m.content, disallowed_special=())) for m in self._messages]
+            message_tokens = [
+                len(self._tokenizer.encode(m.content, disallowed_special=()))
+                for m in self._messages
+            ]
             estimated_tokens = system_tokens + sum(message_tokens)
         else:
-            estimated_tokens = (len(self.system_prompt) + sum(len(m.content) for m in self._messages)) // 4
+            estimated_tokens = (
+                len(self.system_prompt) + sum(len(m.content) for m in self._messages)
+            ) // 4
 
         while len(self._messages) >= 2 and estimated_tokens > self.max_tokens:
             if self._tokenizer:
@@ -170,7 +178,10 @@ class ConversationHistory:
         """Calculates the current estimated token count using the tokenizer or heuristic fallback."""
         if self._tokenizer:
             system_tokens = len(self._tokenizer.encode(self.system_prompt, disallowed_special=()))
-            message_tokens = sum(len(self._tokenizer.encode(m.content, disallowed_special=())) for m in self._messages)
+            message_tokens = sum(
+                len(self._tokenizer.encode(m.content, disallowed_special=()))
+                for m in self._messages
+            )
             return system_tokens + message_tokens
         return (len(self.system_prompt) + sum(len(m.content) for m in self._messages)) // 4
 

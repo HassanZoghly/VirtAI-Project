@@ -54,7 +54,6 @@ router.include_router(documents_router, prefix="/documents", tags=["documents"])
 router.include_router(rag_router, prefix="/rag", tags=["rag"])
 
 
-
 @router.websocket("/ws/{avatar_id}")
 async def websocket_endpoint(
     websocket: WebSocket,
@@ -275,21 +274,27 @@ async def explain_websocket_endpoint(
     if doc_uuid:
         doc = await db.scalar(select(Document).where(Document.id == doc_uuid))
         if doc and doc.retrieval_scope == "SESSION" and doc.scope_id:
-            session_model = await db.scalar(select(ChatSession).where(ChatSession.id == doc.scope_id))
+            session_model = await db.scalar(
+                select(ChatSession).where(ChatSession.id == doc.scope_id)
+            )
             if session_model and session_model.message_count > 0:
-                await websocket.close(code=1008, reason="Cannot present document: chat already started.")
+                await websocket.close(
+                    code=1008, reason="Cannot present document: chat already started."
+                )
                 return
 
     # Accept the websocket
     await websocket.accept()
-    user_id = "test_user" # Mocked for simplicity since this is an isolated route for the assignment
+    user_id = (
+        "test_user"  # Mocked for simplicity since this is an isolated route for the assignment
+    )
 
     handler = ExplainHandler(
         websocket=websocket,
         document_id=document_id,
         db=db,
         user_id=user_id,
-        chat_use_case=chat_use_case
+        chat_use_case=chat_use_case,
     )
 
     try:

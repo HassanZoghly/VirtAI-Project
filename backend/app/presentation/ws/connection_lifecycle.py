@@ -9,6 +9,7 @@ from app.shared.config import get_settings
 if TYPE_CHECKING:
     from app.presentation.ws.gateway import WebSocketHandler
 
+
 class ConnectionLifecycle:
     def __init__(self, handler: "WebSocketHandler"):
         self.handler = handler
@@ -25,15 +26,19 @@ class ConnectionLifecycle:
 
         try:
             from starlette.websockets import WebSocketState
+
             if self.handler.ws.client_state == WebSocketState.CONNECTED:
                 await self.handler.ws.send_text('{"type":"chat.abort","data":{}}')
         except Exception as e:
             logger.debug(f"[WS] Could not send abort frame during cleanup: {e}")
 
         if self.handler.session and getattr(self.handler.session, "session_id", None):
-            await self.handler.connection_manager.unregister(self.handler.session.session_id, self.handler.ws)
+            await self.handler.connection_manager.unregister(
+                self.handler.session.session_id, self.handler.ws
+            )
 
         from app.shared.metrics import ws_connections_active
+
         ws_connections_active.dec()
 
     async def heartbeat_loop(self) -> None:
@@ -50,6 +55,7 @@ class ConnectionLifecycle:
 
             try:
                 from app.schemas.ws_messages import ServerPong
+
                 await self.handler.outbound_sender.send_protocol_message(
                     ServerPong(timestamp=time.time()),
                     self.handler.session.session_id,

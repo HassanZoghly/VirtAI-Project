@@ -17,6 +17,7 @@ from app.schemas.ws_messages import (
 
 envelope_adapter = TypeAdapter(WSMessageEnvelope)
 
+
 def validate_message(raw_message: dict) -> ChatUserMessage | ChatAbort | ClientSpeechStopped:
     if not isinstance(raw_message, dict):
         raise ValueError("Message must be a dictionary")
@@ -30,7 +31,12 @@ def validate_message(raw_message: dict) -> ChatUserMessage | ChatAbort | ClientS
     except ValidationError as e:
         # Check if it failed because the type wasn't in the union
         msg_type = raw_message.get("type")
-        if msg_type not in ["chat.user_message", "chat.abort", "client.speech_stopped", "tts.request"]:
+        if msg_type not in [
+            "chat.user_message",
+            "chat.abort",
+            "client.speech_stopped",
+            "tts.request",
+        ]:
             raise ValueError(f"Unknown message type: {msg_type}")
         raise e
 
@@ -71,7 +77,6 @@ class ProtocolRouter:
                 connected=self.ctx._connected,
             )
             return
-
 
         msg_type_str = data.get("type", "")
         if not msg_type_str:
@@ -140,7 +145,11 @@ class ProtocolRouter:
         async with self.ctx._turn_lock:
             await self.ctx.pipeline_bridge.cancel_pipeline()
             await self.ctx.outbound_sender.send_protocol_message(
-                make_pipeline_state(self.ctx.session.session_id, "idle", getattr(self.ctx, "_current_message_id", None)),
+                make_pipeline_state(
+                    self.ctx.session.session_id,
+                    "idle",
+                    getattr(self.ctx, "_current_message_id", None),
+                ),
                 self.ctx.session.session_id,
                 self.ctx._session_pending,
                 self.ctx._connected,
@@ -199,7 +208,11 @@ class ProtocolRouter:
         async with self.ctx._turn_lock:
             await self.ctx.pipeline_bridge.cancel_pipeline()
             await self.ctx.outbound_sender.send_protocol_message(
-                make_pipeline_state(self.ctx.session.session_id, "idle", getattr(self.ctx, "_current_message_id", None)),
+                make_pipeline_state(
+                    self.ctx.session.session_id,
+                    "idle",
+                    getattr(self.ctx, "_current_message_id", None),
+                ),
                 self.ctx.session.session_id,
                 self.ctx._session_pending,
                 self.ctx._connected,

@@ -22,8 +22,7 @@ from app.domain.rag.stage_machine import IngestionStage
 from app.domain.user.entities import UserEntity
 from app.infrastructure.db.database import get_db
 from app.infrastructure.db.repositories.chat_repository import ChatRepository
-from app.infrastructure.db.repositories.document_crud_repository import DocumentCrudRepository
-from app.infrastructure.db.repositories.ingestion_state_repository import IngestionStateRepository
+from app.infrastructure.db.repositories.document_repository import DocumentRepository
 from app.presentation.http.v1.dependencies import StorageDep, _current_user
 from app.shared.config import get_settings
 from app.shared.ids import parse_uuid
@@ -68,6 +67,10 @@ ALLOWED_MIME_TYPES = {
     "pdf": {"application/pdf", "application/x-pdf", "application/octet-stream"},
     "txt": {"text/plain", "application/octet-stream"},
     "md": {"text/markdown", "text/plain", "application/octet-stream"},
+    "png": {"image/png"},
+    "jpg": {"image/jpeg"},
+    "jpeg": {"image/jpeg"},
+    "webp": {"image/webp"},
 }
 
 
@@ -79,7 +82,7 @@ def validate_declared_mime(content_type: str | None, declared_ext: str) -> None:
     if normalized and normalized not in allowed:
         raise HTTPException(
             status_code=415,
-            detail="Unsupported file content type. Upload a PDF, TXT, or MD file.",
+            detail="Unsupported file content type. Upload a PDF, TXT, MD, or image file.",
         )
 
 
@@ -91,6 +94,11 @@ async def validate_file_magic(file: UploadFile, declared_ext: str) -> None:
         if kind is None or kind.extension != "pdf":
             raise HTTPException(
                 status_code=400, detail="File content does not match declared type 'pdf'"
+            )
+    elif declared_ext in ("png", "jpg", "jpeg", "webp"):
+        if kind is None or not kind.mime.startswith("image/"):
+            raise HTTPException(
+                status_code=400, detail="File content does not match declared image type"
             )
     elif declared_ext in ("txt", "md"):
         if kind is not None:
@@ -126,9 +134,9 @@ async def upload_document(
     # 1. Validate file type & size early
     safe_filename = sanitize_filename(file.filename)
     ext = safe_filename.split(".")[-1].lower() if "." in safe_filename else ""
-    if ext not in ["pdf", "txt", "md"]:
+    if ext not in ["pdf", "txt", "md", "png", "jpg", "jpeg", "webp"]:
         raise HTTPException(
-            status_code=400, detail="Unsupported file type. Must be pdf, txt, or md."
+            status_code=400, detail="Unsupported file type. Must be pdf, txt, md, or an image."
         )
 
     max_upload_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
@@ -138,7 +146,7 @@ async def upload_document(
         )
     validate_declared_mime(file.content_type, ext)
 
-    state_repo = IngestionStateRepository(db)
+    state_repo = DocumentRepository(db)
 
     # 2. Check per-user active job count
     active_jobs = await state_repo.count_active_jobs(str(user.id))
@@ -217,7 +225,7 @@ async def list_statuses(
     """List statuses for all documents."""
     from app.infrastructure.cache.redis_client import get_redis_or_none
 
-    crud_repo = DocumentCrudRepository(db)
+    crud_repo = DocumentRepository(db)
 
     if active_only:
         docs = await crud_repo.list_active(str(user.id), session_id=session_id)
@@ -247,6 +255,7 @@ async def list_statuses(
                 "processed_chunks": d.processed_chunks,
                 "total_chunks": d.total_chunks,
                 "error_message": d.error_message,
+                "file_size": d.file_size,
             }
         )
 
@@ -264,7 +273,7 @@ async def get_document_status(
 
     if parse_uuid(document_id) is None:
         raise HTTPException(status_code=400, detail="Invalid document_id")
-    state_repo = IngestionStateRepository(db)
+    state_repo = DocumentRepository(db)
     status = await state_repo.get_status(document_id, str(user.id))
     if not status:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -290,7 +299,7 @@ async def cancel_document(
     """Cancel document ingestion."""
     if parse_uuid(document_id) is None:
         raise HTTPException(status_code=400, detail="Invalid document_id")
-    state_repo = IngestionStateRepository(db)
+    state_repo = DocumentRepository(db)
     status = await state_repo.get_status(document_id, str(user.id))
     if not status:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -312,7 +321,7 @@ async def list_documents(
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     """List all documents for the current user."""
-    crud_repo = DocumentCrudRepository(db)
+    crud_repo = DocumentRepository(db)
     docs = await crud_repo.list_by_user(str(user.id), session_id=session_id)
     return [
         {
@@ -323,6 +332,7 @@ async def list_documents(
             "upload_date": d.upload_date.isoformat(),
             "chunk_count": d.chunk_count,
             "file_type": d.file_type,
+            "file_size": getattr(d, "file_size", 0),
         }
         for d in docs
         if d.current_stage not in {IngestionStage.FAILED, IngestionStage.CANCELLED}
@@ -339,7 +349,7 @@ async def delete_document(
     """Delete a document and cascade delete its chunks."""
     if parse_uuid(document_id) is None:
         raise HTTPException(status_code=400, detail="Invalid document_id")
-    crud_repo = DocumentCrudRepository(db)
+    crud_repo = DocumentRepository(db)
     storage_key = await crud_repo.delete_with_cascade(document_id, str(user.id))
     if not storage_key:
         raise HTTPException(status_code=404, detail="Document not found")

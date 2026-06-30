@@ -72,6 +72,39 @@ class DocumentRepository:
         )
         return doc, [event]
 
+    async def create(
+        self,
+        id: str,
+        user_id: str,
+        filename: str,
+        file_type: str,
+        session_id: str | None,
+        document_sha256: str,
+        file_size: int,
+        storage_key: str,
+    ) -> Document:
+        doc = Document(
+            id=require_uuid(id),
+            user_id=require_uuid(user_id),
+            filename=filename,
+            file_type=file_type,
+            document_sha256=document_sha256,
+            file_size=file_size,
+            storage_key=storage_key,
+            status=DocumentStatus.QUEUED.value,
+            current_stage=DocumentStatus.QUEUED.value,
+            upload_date=_now(),
+        )
+        if session_id:
+            doc.scope_id = require_uuid(session_id)
+            doc.retrieval_scope = "SESSION"
+        else:
+            doc.retrieval_scope = "GLOBAL"
+            
+        self.db.add(doc)
+        await self.db.flush()
+        return doc
+
     async def update_status(
         self, document_id: UUID | str, new_status: DocumentStatus
     ) -> tuple[Document, list[DomainEvent]]:
@@ -100,7 +133,7 @@ class DocumentRepository:
         return doc, [event]
 
     async def mark_failed(
-        self, document_id: UUID | str, error_message: str
+        self, document_id: UUID | str, error_message: str, is_retryable: bool = False
     ) -> tuple[Document, list[DomainEvent]]:
         doc_uuid = require_uuid(document_id)
         
@@ -136,10 +169,17 @@ class DocumentRepository:
     async def list_by_user(self, user_id: UUID | str, session_id: str | None = None) -> list[Document]:
         uid = require_uuid(user_id)
         stmt = select(Document).where(Document.user_id == uid)
-        if session_id:
-            stmt = stmt.where(Document.session_id == session_id)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    async def find_by_sha256(self, user_id: UUID | str, file_sha256: str, session_id: str | None = None) -> Document | None:
+        uid = require_uuid(user_id)
+        stmt = select(Document).where(
+            Document.user_id == uid,
+            Document.document_sha256 == file_sha256
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def list_active(self, user_id: UUID | str, session_id: str | None = None) -> list[Document]:
         uid = require_uuid(user_id)
@@ -147,8 +187,6 @@ class DocumentRepository:
             Document.user_id == uid,
             Document.status.in_([DocumentStatus.PENDING.value, DocumentStatus.PROCESSING.value, DocumentStatus.QUEUED.value])
         )
-        if session_id:
-            stmt = stmt.where(Document.session_id == session_id)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
@@ -172,6 +210,39 @@ class DocumentRepository:
             Document.user_id == uid,
             Document.status.in_([DocumentStatus.PENDING.value, DocumentStatus.PROCESSING.value, DocumentStatus.QUEUED.value])
         )
+        result = await self.db.execute(stmt)
+        return result.scalar() or 0
+
+    async def count_active_jobs_in_scope(
+        self, user_id: UUID | str, session_id: str | None = None
+    ) -> int:
+        """Count active ingestion jobs for a user, scoped to a session if provided.
+
+        When session_id is given, counts only SESSION-scoped documents whose
+        scope_id matches the session.  Falls back to the global user-level count
+        when session_id is None.
+        """
+        uid = require_uuid(user_id)
+        active_statuses = [
+            DocumentStatus.PENDING.value,
+            DocumentStatus.PROCESSING.value,
+            DocumentStatus.QUEUED.value,
+        ]
+
+        if session_id:
+            sid = require_uuid(session_id)
+            stmt = select(func.count(Document.id)).where(
+                Document.user_id == uid,
+                Document.retrieval_scope == "SESSION",
+                Document.scope_id == sid,
+                Document.status.in_(active_statuses),
+            )
+        else:
+            stmt = select(func.count(Document.id)).where(
+                Document.user_id == uid,
+                Document.status.in_(active_statuses),
+            )
+
         result = await self.db.execute(stmt)
         return result.scalar() or 0
 
